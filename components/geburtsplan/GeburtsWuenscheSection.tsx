@@ -6,6 +6,8 @@ import { CheckboxOption } from './CheckboxOption';
 import { RadioOption } from './RadioOption';
 import { TextInputField } from './TextInputField';
 import { GeburtsWuensche } from '@/types/geburtsplan';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getBirthPlanOptions, localizeBirthPlanOptionValue, translateBirthPlanText } from '@/lib/birthPlanTranslations';
 
 interface GeburtsWuenscheSectionProps {
   data: GeburtsWuensche;
@@ -15,14 +17,15 @@ interface GeburtsWuenscheSectionProps {
 }
 
 export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateBirthPlanText>[1]) => translateBirthPlanText(locale, key);
   // Geburtspositionen
-  const geburtspositionenOptions = ['Stehend', 'Hocken', 'Vierfüßler', 'im Wasser', 'flexibel'];
+  const geburtspositionenOptions = getBirthPlanOptions(locale, 'positions').map(({ label }) => label);
   
   const toggleGeburtsposition = (option: string) => {
     if (readOnly) return;
-    const newPositionen = data.geburtspositionen.includes(option)
-      ? data.geburtspositionen.filter(pos => pos !== option)
-      : [...data.geburtspositionen, option];
+    const normalized = data.geburtspositionen.map((value) => localizeBirthPlanOptionValue(locale, value));
+    const newPositionen = normalized.includes(option) ? normalized.filter(pos => pos !== option) : [...normalized, option];
     
     onChange({
       ...data,
@@ -31,13 +34,12 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   };
 
   // Schmerzmittel
-  const schmerzmittelOptions = ['Ohne Schmerzmittel', 'PDA', 'TENS', 'Lachgas', 'offen für alles'];
+  const schmerzmittelOptions = getBirthPlanOptions(locale, 'painRelief').map(({ label }) => label);
   
   const toggleSchmerzmittel = (option: string) => {
     if (readOnly) return;
-    const newSchmerzmittel = data.schmerzmittel.includes(option)
-      ? data.schmerzmittel.filter(sm => sm !== option)
-      : [...data.schmerzmittel, option];
+    const normalized = data.schmerzmittel.map((value) => localizeBirthPlanOptionValue(locale, value));
+    const newSchmerzmittel = normalized.includes(option) ? normalized.filter(sm => sm !== option) : [...normalized, option];
     
     onChange({
       ...data,
@@ -46,7 +48,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   };
 
   // Rolle der Begleitperson
-  const rolleOptions = ['Aktiv unterstützen', 'eher passiv', 'jederzeit ansprechbar'];
+  const rolleOptions = getBirthPlanOptions(locale, 'companionRole').map(({ label }) => label);
   
   const selectRolle = (option: string) => {
     if (readOnly) return;
@@ -57,13 +59,12 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   };
 
   // Musik / Atmosphäre
-  const atmosphaereOptions = ['Eigene Musik', 'ruhige Umgebung', 'gedimmtes Licht'];
+  const atmosphaereOptions = getBirthPlanOptions(locale, 'atmosphere').map(({ label }) => label);
   
   const toggleAtmosphaere = (option: string) => {
     if (readOnly) return;
-    const newAtmosphaere = data.musikAtmosphaere.includes(option)
-      ? data.musikAtmosphaere.filter(atm => atm !== option)
-      : [...data.musikAtmosphaere, option];
+    const normalized = data.musikAtmosphaere.map((value) => localizeBirthPlanOptionValue(locale, value));
+    const newAtmosphaere = normalized.includes(option) ? normalized.filter(atm => atm !== option) : [...normalized, option];
     
     onChange({
       ...data,
@@ -72,49 +73,49 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
   };
 
   return (
-    <GeburtsplanSection title="2. Wünsche zur Geburt" containerStyle={containerStyle}>
-      <OptionGroup label="Geburtspositionen">
+    <GeburtsplanSection title={t('section.birthWishes')} containerStyle={containerStyle}>
+      <OptionGroup label={t('birthWishes.positions')}>
         {geburtspositionenOptions.map((option) => (
           <CheckboxOption
             key={option}
             label={option}
-            checked={data.geburtspositionen.includes(option)}
+            checked={data.geburtspositionen.some((value) => localizeBirthPlanOptionValue(locale, value) === option)}
             onToggle={() => toggleGeburtsposition(option)}
             disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
-      <OptionGroup label="Schmerzmittel">
+      <OptionGroup label={t('birthWishes.painRelief')}>
         {schmerzmittelOptions.map((option) => (
           <CheckboxOption
             key={option}
             label={option}
-            checked={data.schmerzmittel.includes(option)}
+            checked={data.schmerzmittel.some((value) => localizeBirthPlanOptionValue(locale, value) === option)}
             onToggle={() => toggleSchmerzmittel(option)}
             disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
-      <OptionGroup label="Rolle der Begleitperson">
+      <OptionGroup label={t('birthWishes.companionRole')}>
         {rolleOptions.map((option) => (
           <RadioOption
             key={option}
             label={option}
-            selected={data.rolleBegleitperson === option}
+            selected={localizeBirthPlanOptionValue(locale, data.rolleBegleitperson) === option}
             onSelect={() => selectRolle(option)}
             disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
-      <OptionGroup label="Musik / Atmosphäre">
+      <OptionGroup label={t('birthWishes.atmosphere')}>
         {atmosphaereOptions.map((option) => (
           <CheckboxOption
             key={option}
             label={option}
-            checked={data.musikAtmosphaere.includes(option)}
+            checked={data.musikAtmosphaere.some((value) => localizeBirthPlanOptionValue(locale, value) === option)}
             onToggle={() => toggleAtmosphaere(option)}
             disabled={readOnly}
           />
@@ -122,7 +123,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
       </OptionGroup>
 
       <TextInputField
-        label="Sonstige Wünsche zur Geburt"
+        label={t('birthWishes.other')}
         value={data.sonstigeWuensche}
         onChangeText={(text) => {
           if (readOnly) return;
@@ -130,7 +131,7 @@ export const GeburtsWuenscheSection: React.FC<GeburtsWuenscheSectionProps> = ({ 
         }}
         multiline
         numberOfLines={3}
-        placeholder="Hier kannst du weitere Wünsche zur Geburt eintragen..."
+        placeholder={t('birthWishes.otherPlaceholder')}
         readOnly={readOnly}
       />
     </GeburtsplanSection>

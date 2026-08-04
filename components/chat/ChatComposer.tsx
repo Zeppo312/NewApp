@@ -20,6 +20,11 @@ import {
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { formatAudioDuration } from '@/lib/chatMessages';
+import {
+  CommunityLocale,
+  DEFAULT_COMMUNITY_LOCALE,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
 
 const MAX_RECORDING_MS = 120_000;
 const CHAT_AUDIO_MIME_TYPE = 'audio/mp4';
@@ -53,6 +58,7 @@ type ChatComposerProps = {
   isDark: boolean;
   bottomInset: number;
   leadingAction?: React.ReactNode;
+  locale?: CommunityLocale;
 };
 
 type RecorderMode = 'idle' | 'recording' | 'recorded' | 'uploading';
@@ -73,7 +79,12 @@ export default function ChatComposer({
   isDark,
   bottomInset,
   leadingAction,
+  locale = DEFAULT_COMMUNITY_LOCALE,
 }: ChatComposerProps) {
+  const t = useCallback(
+    (key: Parameters<typeof translateCommunityText>[1]) => translateCommunityText(locale, key),
+    [locale],
+  );
   const inputRef = useRef<TextInput>(null);
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
@@ -206,7 +217,7 @@ export default function ChatComposer({
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Mikrofon', 'Bitte erlaube den Mikrofonzugriff, um Sprachnachrichten aufzunehmen.');
+        Alert.alert(t('chat.microphoneTitle'), t('chat.microphonePermission'));
         return;
       }
 
@@ -231,10 +242,10 @@ export default function ChatComposer({
     } catch (error) {
       console.error('Failed to start recording:', error);
       await disableRecordingMode();
-      Alert.alert('Sprachnachricht', 'Die Aufnahme konnte nicht gestartet werden.');
+      Alert.alert(t('chat.voiceTitle'), t('chat.recordStartFailed'));
       resetRecording();
     }
-  }, [disableRecordingMode, recorder, recorderMode, resetRecording]);
+  }, [disableRecordingMode, recorder, recorderMode, resetRecording, t]);
 
   const discardRecording = useCallback(async () => {
     if (manualTimerRef.current) {
@@ -266,9 +277,9 @@ export default function ChatComposer({
     } catch (error) {
       console.error('Failed to send voice message:', error);
       setRecorderMode('recorded');
-      Alert.alert('Sprachnachricht', 'Die Sprachnachricht konnte nicht gesendet werden.');
+      Alert.alert(t('chat.voiceTitle'), t('chat.voiceSendFailed'));
     }
-  }, [onSendVoice, recorderMode, recordingDurationMs, recordingUri, resetRecording]);
+  }, [onSendVoice, recorderMode, recordingDurationMs, recordingUri, resetRecording, t]);
 
   const canSendText = draft.trim().length > 0 && !sending && recorderMode === 'idle';
   const recordingTimer = useMemo(() => {
@@ -319,7 +330,7 @@ export default function ChatComposer({
               ]}
               numberOfLines={1}
             >
-              {replyPreviewSender || 'Antwort'}
+              {replyPreviewSender || t('common.reply')}
             </ThemedText>
             <ThemedText
               style={[styles.replyPreviewText, { color: theme.textTertiary }]}
@@ -367,7 +378,7 @@ export default function ChatComposer({
                 style={[styles.input, { color: theme.text }]}
                 value={draft}
                 onChangeText={onChangeDraft}
-                placeholder="Nachricht..."
+                placeholder={t('chat.messagePlaceholder')}
                 placeholderTextColor={theme.textTertiary}
                 multiline
                 onFocus={onInputFocus}
@@ -426,7 +437,7 @@ export default function ChatComposer({
               <View style={[styles.recordingDot, { backgroundColor: recorderMode === 'recording' ? '#FF6B6B' : theme.accent }]} />
               <View style={styles.recordingTextBlock}>
                 <ThemedText style={[styles.recordingTitle, { color: theme.text }]}>
-                  {recorderMode === 'recording' ? 'Aufnahme läuft' : 'Sprachnachricht'}
+                  {recorderMode === 'recording' ? t('chat.recording') : t('chat.voiceTitle')}
                 </ThemedText>
                 <ThemedText style={[styles.recordingTime, { color: theme.textTertiary }]}>
                   {recordingTimer}

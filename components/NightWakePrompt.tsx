@@ -10,6 +10,7 @@ import {
 
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { MIN_WAKE_MINUTES, type NightWakeCandidate } from '@/lib/sleepNightSplit';
+import { useLocale } from '@/contexts/LocaleContext';
 
 const ACCENT = '#4A90E2';
 const QUICK_WAKE_OPTIONS = [5, 10, 15];
@@ -26,9 +27,6 @@ type Props = {
   onDismiss: () => void;
 };
 
-const formatTime = (date: Date) =>
-  date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-
 export default function NightWakePrompt({
   visible,
   candidate,
@@ -39,6 +37,13 @@ export default function NightWakePrompt({
   onDismiss,
 }: Props) {
   const colors = useAdaptiveColors();
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { title: 'Nächtliches Füttern erkannt 🌙', subtitle: (time: string) => `Die Fütterung um ${time} liegt im Nachtschlaf. Wachphase eintragen?`, end: 'Nacht hier beenden', minute: 'Min.', dream: 'Traumfüttern — kein Aufwachen' },
+    en: { title: 'Night feed detected 🌙', subtitle: (time: string) => `The feed at ${time} falls within night sleep. Log an awake period?`, end: 'End the night here', minute: 'min', dream: 'Dream feed — no waking' },
+    es: { title: 'Toma nocturna detectada 🌙', subtitle: (time: string) => `La toma de las ${time} coincide con el sueño nocturno. ¿Registrar un periodo despierto?`, end: 'Terminar aquí la noche', minute: 'min', dream: 'Toma dormido — sin despertar' },
+  }[locale];
+  const formatTime = (date: Date) => date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
 
   const wakeOptions = useMemo(() => {
     if (!candidate || candidate.truncateOnly) return [];
@@ -59,10 +64,10 @@ export default function NightWakePrompt({
       <Pressable style={styles.backdrop} onPress={busy ? undefined : onDismiss}>
         <Pressable style={[styles.sheet, { backgroundColor: colors.cardBackground || '#FFFFFF' }]} onPress={() => {}}>
           <Text style={[styles.title, { color: colors.textPrimary }]}>
-            Nächtliches Füttern erkannt 🌙
+            {c.title}
           </Text>
           <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-            {`Die Fütterung um ${formatTime(feedingStart)} liegt im Nachtschlaf. Wachphase eintragen?`}
+            {c.subtitle(formatTime(feedingStart))}
           </Text>
 
           {candidate.truncateOnly ? (
@@ -72,7 +77,7 @@ export default function NightWakePrompt({
               onPress={onTruncate}
               accessibilityRole="button"
             >
-              <Text style={styles.primaryButtonText}>Nacht hier beenden</Text>
+              <Text style={styles.primaryButtonText}>{c.end}</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.chipRow}>
@@ -92,7 +97,7 @@ export default function NightWakePrompt({
                     accessibilityRole="button"
                   >
                     <Text style={[styles.chipText, { color: isSuggested ? '#FFFFFF' : ACCENT }]}>
-                      {`${minutes} Min.`}
+                      {`${minutes} ${c.minute}`}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -107,7 +112,7 @@ export default function NightWakePrompt({
             accessibilityRole="button"
           >
             <Text style={[styles.dismissText, { color: colors.textSecondary }]}>
-              Traumfüttern — kein Aufwachen
+              {c.dream}
             </Text>
           </TouchableOpacity>
         </Pressable>

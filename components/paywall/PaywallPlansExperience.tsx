@@ -11,6 +11,8 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translatePaywall, type PaywallTranslationKey } from '@/lib/paywallTranslations';
 
 import {
   DEFAULT_PAYWALL_CONTENT,
@@ -67,6 +69,7 @@ type PaywallPlansExperienceProps = {
 };
 
 const TIER_ORDER: PaywallPlansTierId[] = ['premium', 'standard', 'lite'];
+const DEFAULT_SELECTED_TIER: PaywallPlansTierId = 'standard';
 
 type InlineEditableTextProps = {
   editable: boolean;
@@ -138,6 +141,8 @@ export function PaywallPlansExperience({
   onOpenImprint,
   onOpenDataManagement,
 }: PaywallPlansExperienceProps) {
+  const { locale, localeTag } = useLocale();
+  const t = (key: PaywallTranslationKey, params?: Record<string, string | number>) => translatePaywall(locale, key, params);
   const { width } = useWindowDimensions();
   const contentMaxWidth = Math.min(width - 40, 640);
 
@@ -156,7 +161,9 @@ export function PaywallPlansExperience({
   const renderedTiers = editable ? TIER_ORDER : enabledTiers;
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier>(
-    enabledTiers[0],
+    enabledTiers.includes(DEFAULT_SELECTED_TIER)
+      ? DEFAULT_SELECTED_TIER
+      : enabledTiers[0],
   );
   const [interval, setInterval] = useState<SubscriptionInterval>('yearly');
   const selectPulse = React.useState(() => new Animated.Value(1))[0];
@@ -256,12 +263,12 @@ export function PaywallPlansExperience({
   }, [interval, prices, tier]);
 
   const perMonthLabel = (price: PaywallPlanPrice) =>
-    price.amount > 0 ? `${formatEuroAmount(price.amount / 12)} / Monat` : '';
+    price.amount > 0 ? `${formatEuroAmount(price.amount / 12, localeTag)} / ${t('month')}` : '';
 
   const selectedTierContent = plans.tiers[tier];
   const ctaLabel =
     pendingAction === 'purchase'
-      ? 'Einen Moment …'
+      ? t('moment')
       : `${resolveText(selectedTierContent.ctaLabel)} · ${selectedPrice.label}`;
 
   const renderCheck = (included: boolean, emphasized: boolean) => (
@@ -289,6 +296,7 @@ export function PaywallPlansExperience({
   const renderTierCard = (cardTier: PaywallPlansTierId) => {
     const tierContent = plans.tiers[cardTier];
     const isPremium = cardTier === 'premium';
+    const isPopular = cardTier === 'standard';
     const isSelected = tier === cardTier;
     const isHiddenInLive = !tierContent.visible;
     const { monthly, yearly } = tierPrices(cardTier);
@@ -304,12 +312,13 @@ export function PaywallPlansExperience({
         style={[
           styles.tierCard,
           isPremium && styles.tierCardPremium,
+          isPopular && styles.tierCardPopular,
           isSelected && styles.tierCardSelected,
           isSelected && isPremium && styles.tierCardSelectedPremium,
           editable && isHiddenInLive && styles.tierCardHidden,
         ]}
       >
-        {isPremium ? (
+        {isPopular ? (
           <View style={styles.popularBadge}>
             {renderText(
               'plans.popularBadge',
@@ -322,7 +331,7 @@ export function PaywallPlansExperience({
 
         {editable && isHiddenInLive ? (
           <View style={styles.hiddenBadge}>
-            <Text style={styles.hiddenBadgeText}>Ausgeblendet</Text>
+            <Text style={styles.hiddenBadgeText}>{t('hidden')}</Text>
           </View>
         ) : null}
 
@@ -350,13 +359,13 @@ export function PaywallPlansExperience({
         <View style={styles.tierPriceRow}>
           <Text style={styles.tierPrice}>{price.label}</Text>
           <Text style={styles.tierPriceMeta}>
-            {interval === 'yearly' ? 'pro Jahr' : 'pro Monat'}
+            {interval === 'yearly' ? t('perYear') : t('perMonth')}
           </Text>
         </View>
         {interval === 'yearly' ? (
           <Text style={styles.tierPerMonth}>
             {perMonthLabel(price)}
-            {savings > 0 ? `  ·  Spare ${savings} %` : ''}
+            {savings > 0 ? `  ·  ${t('save', { percent: savings })}` : ''}
           </Text>
         ) : null}
 
@@ -432,11 +441,11 @@ export function PaywallPlansExperience({
       <View style={styles.intervalToggle}>
         {(
           [
-            { key: 'monthly', label: 'Monatlich' },
+            { key: 'monthly', label: t('monthly') },
             {
               key: 'yearly',
               label:
-                maxSavings > 0 ? `Jährlich · bis zu −${maxSavings} %` : 'Jährlich',
+                maxSavings > 0 ? t('yearlySavings', { percent: maxSavings }) : t('yearly'),
             },
           ] as { key: SubscriptionInterval; label: string }[]
         ).map((option) => (
@@ -565,7 +574,7 @@ export function PaywallPlansExperience({
         ]}
       >
         {pendingAction === 'restore' ? (
-          <Text style={styles.restoreText}>Aktualisiere …</Text>
+          <Text style={styles.restoreText}>{t('refreshing')}</Text>
         ) : (
           renderText(
             'plans.restoreLabel',
@@ -598,10 +607,10 @@ export function PaywallPlansExperience({
 
       <View style={styles.legalLinksRow}>
         <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenPrivacy}>
-          <Text style={styles.legalLink}>Datenschutz</Text>
+          <Text style={styles.legalLink}>{t('privacy')}</Text>
         </Pressable>
         <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenTerms}>
-          <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
+          <Text style={styles.legalLink}>{t('terms')}</Text>
         </Pressable>
         {showAppleEula ? (
           <Pressable
@@ -613,7 +622,7 @@ export function PaywallPlansExperience({
           </Pressable>
         ) : null}
         <Pressable accessibilityRole="link" hitSlop={8} onPress={onOpenImprint}>
-          <Text style={styles.legalLink}>Impressum</Text>
+          <Text style={styles.legalLink}>{t('imprint')}</Text>
         </Pressable>
         {isTrialExpired ? (
           <Pressable
@@ -621,7 +630,7 @@ export function PaywallPlansExperience({
             hitSlop={8}
             onPress={onOpenDataManagement}
           >
-            <Text style={styles.legalLink}>Konto & Daten verwalten</Text>
+            <Text style={styles.legalLink}>{t('data')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -814,6 +823,8 @@ const styles = StyleSheet.create({
   },
   tierCardPremium: {
     backgroundColor: 'rgba(255,246,234,0.97)',
+  },
+  tierCardPopular: {
     paddingTop: 26,
   },
   tierCardSelected: {

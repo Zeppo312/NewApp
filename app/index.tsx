@@ -6,8 +6,10 @@ import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { getOnboardingCompletionState } from '@/lib/onboarding';
+import { useLocale } from '@/contexts/LocaleContext';
 
 export default function Index() {
+  const { locale } = useLocale();
   const { session, loading, refreshSession } = useAuth();
   const { isBabyBorn, isLoading: isBabyStatusLoading, isResolved: isBabyStatusResolved } = useBabyStatus();
   const adaptiveColors = useAdaptiveColors();
@@ -91,7 +93,9 @@ export default function Index() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
-        <Text style={{ marginTop: 10, color: textColor }}>Lade...</Text>
+        <Text style={{ marginTop: 10, color: textColor }}>
+          {{ de: 'Lade…', en: 'Loading…', es: 'Cargando…' }[locale]}
+        </Text>
       </View>
     );
   }

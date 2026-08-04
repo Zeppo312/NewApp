@@ -1,6 +1,7 @@
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getSettingsLocale, localize } from '../_shared/localization.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -35,7 +36,7 @@ const getDisplayName = (profile?: SenderProfile | null) => {
   if (username) return username;
   const first = profile?.first_name?.trim() || '';
   const last = profile?.last_name?.trim() || '';
-  return `${first} ${last}`.trim() || 'Jemand';
+  return `${first} ${last}`.trim() || null;
 };
 
 serve(async (req: Request) => {
@@ -77,7 +78,7 @@ serve(async (req: Request) => {
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
-      .select('notifications_enabled')
+      .select('notifications_enabled, resolved_language, language_preference')
       .eq('user_id', receiver_id)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -97,7 +98,8 @@ serve(async (req: Request) => {
       );
     }
 
-    let senderName = 'Jemand';
+    const locale = getSettingsLocale(recipientSettings);
+    let senderName = localize(locale, { de: 'Jemand', en: 'Someone', es: 'Alguien' });
 
     const { data: senderProfile } = await supabase
       .from('profiles')
@@ -106,11 +108,11 @@ serve(async (req: Request) => {
       .maybeSingle();
 
     if (senderProfile) {
-      senderName = getDisplayName(senderProfile);
+      senderName = getDisplayName(senderProfile) || senderName;
     } else {
       const { data: rpcProfile } = await supabase.rpc('get_user_profile', { user_id_param: sender_id });
       if (rpcProfile && rpcProfile.length > 0) {
-        senderName = getDisplayName(rpcProfile[0]);
+        senderName = getDisplayName(rpcProfile[0]) || senderName;
       }
     }
 
@@ -136,19 +138,23 @@ serve(async (req: Request) => {
 
     const previewText =
       message_type === 'voice'
-        ? 'Sprachnachricht'
+        ? localize(locale, { de: 'Sprachnachricht', en: 'Voice message', es: 'Mensaje de voz' })
         : content?.trim()
           ? content.length > 140
             ? `${content.slice(0, 137)}...`
             : content
-          : 'Neue Nachricht';
+          : localize(locale, { de: 'Neue Nachricht', en: 'New message', es: 'Nuevo mensaje' });
     const pushPayloads = tokens.map((tokenRecord) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: tokenRecord.token,
-          title: `Neue Nachricht von ${senderName}`,
+          title: localize(locale, {
+            de: `Neue Nachricht von ${senderName}`,
+            en: `New message from ${senderName}`,
+            es: `Nuevo mensaje de ${senderName}`,
+          }),
           body: previewText,
           sound: 'default',
           priority: 'high',

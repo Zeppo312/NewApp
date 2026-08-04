@@ -236,11 +236,11 @@ export const getEventRsvpCounts = (rsvps: GroupChatEventRsvp[] | undefined) => {
   return counts;
 };
 
-export const formatGroupEventDateTime = (startsAt: string) => {
+export const formatGroupEventDateTime = (startsAt: string, locale = 'de-DE') => {
   const date = new Date(startsAt);
   if (Number.isNaN(date.getTime())) return '';
 
-  return date.toLocaleString('de-DE', {
+  return date.toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

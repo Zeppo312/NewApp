@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -38,7 +40,7 @@ import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { createRecipe, fetchRecipes, RecipeRecord } from "@/lib/recipes";
 import {
   getSampleRecipeImage,
-  RECIPE_SAMPLES,
+  getLocalizedRecipeSamples,
   RecipeSample,
 } from "@/lib/recipes-samples";
 import { extractYouTubeVideoId } from "@/lib/recipeVideo";
@@ -74,8 +76,8 @@ const ALLERGEN_OPTIONS: {
   { id: "fish", labelKey: "allergy.fish", hintKey: "allergy.fishHint" },
 ];
 
-const ACTIVE_RECIPE_LOCALE = DEFAULT_RECIPE_LOCALE;
-const RECIPE_LOCALE_TAG = getRecipeLocaleTag(ACTIVE_RECIPE_LOCALE);
+let ACTIVE_RECIPE_LOCALE = DEFAULT_RECIPE_LOCALE;
+let RECIPE_LOCALE_TAG = getRecipeLocaleTag(ACTIVE_RECIPE_LOCALE);
 const t = (
   key: RecipeTranslationKey,
   params?: Record<string, string | number>,
@@ -104,8 +106,6 @@ const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
   }
   return rows;
 };
-
-const SAMPLE_RECIPES: RecipeSample[] = RECIPE_SAMPLES;
 
 const formatAllergens = (allergens: string[] = []) =>
   allergens
@@ -167,6 +167,12 @@ const lightenHex = (hex: string, amount = 0.35) => {
 };
 
 const RecipeGeneratorScreen = () => {
+  ACTIVE_RECIPE_LOCALE = useLocale().locale;
+  RECIPE_LOCALE_TAG = getRecipeLocaleTag(ACTIVE_RECIPE_LOCALE);
+  const sampleRecipes: RecipeSample[] = useMemo(
+    () => getLocalizedRecipeSamples(ACTIVE_RECIPE_LOCALE),
+    [ACTIVE_RECIPE_LOCALE],
+  );
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
   const contentWidth = Math.min(
@@ -508,7 +514,7 @@ const RecipeGeneratorScreen = () => {
       );
       let inserted = 0;
 
-      for (const sample of SAMPLE_RECIPES) {
+      for (const sample of sampleRecipes) {
         if (existingTitles.has(sample.title.toLowerCase())) {
           continue;
         }

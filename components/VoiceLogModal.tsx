@@ -5,7 +5,7 @@
 // Function voice-log-parse transkribiert und extrahiert Einträge, hier
 // werden sie zur Bestätigung angezeigt und erst dann gespeichert.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -38,6 +38,8 @@ import {
   saveVoiceLogEntries,
 } from '@/lib/voiceLog/api';
 import type { VoiceLogParsedEntry } from '@/lib/voiceLog/types';
+import { useLocale } from '@/contexts/LocaleContext';
+import { DailyTranslationKey, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 const MAX_RECORDING_MS = 60_000;
 /** Kürzere Aufnahmen gar nicht erst hochladen (Versehens-Taps kosten sonst API-Calls & Rate-Limit). */
@@ -53,39 +55,39 @@ const ACCENT_DARK = '#CE93D8';
 type Phase = 'idle' | 'recording' | 'processing' | 'review' | 'saving';
 type EditedTimeField = 'start' | 'end';
 
-const ENTRY_TYPE_OPTIONS: { value: VoiceLogParsedEntry['type']; label: string }[] = [
-  { value: 'sleep', label: 'Schlaf' },
-  { value: 'feeding', label: 'Füttern' },
-  { value: 'diaper', label: 'Windel' },
+const ENTRY_TYPE_OPTIONS: { value: VoiceLogParsedEntry['type']; labelKey: DailyTranslationKey }[] = [
+  { value: 'sleep', labelKey: 'voice.sleep' },
+  { value: 'feeding', labelKey: 'voice.feeding' },
+  { value: 'diaper', labelKey: 'voice.diaper' },
 ];
 
 const FEEDING_TYPE_OPTIONS: {
   value: NonNullable<VoiceLogParsedEntry['feeding_type']>;
-  label: string;
+  labelKey: DailyTranslationKey;
 }[] = [
-  { value: 'BREAST', label: 'Stillen' },
-  { value: 'BOTTLE', label: 'Fläschchen' },
-  { value: 'SOLIDS', label: 'Beikost' },
-  { value: 'PUMP', label: 'Abpumpen' },
-  { value: 'WATER', label: 'Wasser/Tee' },
+  { value: 'BREAST', labelKey: 'feeding.breast' },
+  { value: 'BOTTLE', labelKey: 'feeding.bottle' },
+  { value: 'SOLIDS', labelKey: 'feeding.solids' },
+  { value: 'PUMP', labelKey: 'feeding.pump' },
+  { value: 'WATER', labelKey: 'voice.waterTea' },
 ];
 
 const FEEDING_SIDE_OPTIONS: {
   value: NonNullable<VoiceLogParsedEntry['feeding_side']>;
-  label: string;
+  labelKey: DailyTranslationKey;
 }[] = [
-  { value: 'LEFT', label: 'Links' },
-  { value: 'RIGHT', label: 'Rechts' },
-  { value: 'BOTH', label: 'Beide' },
+  { value: 'LEFT', labelKey: 'voice.left' },
+  { value: 'RIGHT', labelKey: 'voice.right' },
+  { value: 'BOTH', labelKey: 'voice.bothSides' },
 ];
 
 const DIAPER_TYPE_OPTIONS: {
   value: NonNullable<VoiceLogParsedEntry['diaper_type']>;
-  label: string;
+  labelKey: DailyTranslationKey;
 }[] = [
-  { value: 'WET', label: 'Nass' },
-  { value: 'DIRTY', label: 'Stuhlgang' },
-  { value: 'BOTH', label: 'Beides' },
+  { value: 'WET', labelKey: 'diaper.wet' },
+  { value: 'DIRTY', labelKey: 'diaper.dirty' },
+  { value: 'BOTH', labelKey: 'diaper.both' },
 ];
 
 const dateToLocalValue = (date: Date): string =>
@@ -95,8 +97,8 @@ const dateToLocalValue = (date: Date): string =>
     date.getMinutes(),
   ).padStart(2, '0')}`;
 
-const formatEditorDate = (date: Date): string =>
-  date.toLocaleString('de-DE', {
+const formatEditorDate = (date: Date, localeTag: string): string =>
+  date.toLocaleString(localeTag, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -127,6 +129,13 @@ const VoiceLogModal: React.FC<Props> = ({
   onClose,
   onSaved,
 }) => {
+  const { locale } = useLocale();
+  const localeTag = getDailyLocaleTag(locale);
+  const t = useCallback((key: DailyTranslationKey, params?: Record<string, string | number>) => translateDailyText(locale, key, params), [locale]);
+  const entryTypeOptions = useMemo(() => ENTRY_TYPE_OPTIONS.map((option) => ({ ...option, label: option.value === 'sleep' ? t('voice.sleep') : option.value === 'feeding' ? t('voice.feeding') : t('voice.diaper') })), [t]);
+  const feedingTypeOptions = useMemo(() => FEEDING_TYPE_OPTIONS.map((option) => ({ ...option, label: option.value === 'BREAST' ? t('feeding.breast') : option.value === 'BOTTLE' ? t('card.bottle') : option.value === 'SOLIDS' ? t('feeding.solids') : option.value === 'PUMP' ? t('feeding.pump') : t('voice.waterTea') })), [t]);
+  const feedingSideOptions = useMemo(() => FEEDING_SIDE_OPTIONS.map((option) => ({ ...option, label: option.value === 'LEFT' ? t('input.left') : option.value === 'RIGHT' ? t('input.right') : t('input.both') })), [t]);
+  const diaperTypeOptions = useMemo(() => DIAPER_TYPE_OPTIONS.map((option) => ({ ...option, label: option.value === 'WET' ? t('diaper.wet') : option.value === 'DIRTY' ? t('voice.dirty') : t('diaper.both') })), [t]);
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
@@ -191,7 +200,7 @@ const VoiceLogModal: React.FC<Props> = ({
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert('Mikrofon', 'Bitte erlaube den Mikrofonzugriff, um Einträge einzusprechen.');
+        Alert.alert(t('voice.microphone'), t('voice.permission'));
         return;
       }
       await setAudioModeAsync({
@@ -207,7 +216,7 @@ const VoiceLogModal: React.FC<Props> = ({
     } catch (error) {
       console.error('Failed to start voice log recording:', error);
       await disableRecordingMode();
-      Alert.alert('Aufnahme', 'Die Aufnahme konnte nicht gestartet werden.');
+      Alert.alert(t('voice.recording'), t('voice.startFailed'));
       setPhase('idle');
     }
   }, [disableRecordingMode, phase, recorder]);
@@ -230,8 +239,8 @@ const VoiceLogModal: React.FC<Props> = ({
 
     if (durationMs < MIN_RECORDING_MS) {
       Alert.alert(
-        'Aufnahme zu kurz',
-        'Halte den Moment kurz fest — sprich z. B. was, wann und wie viel passiert ist.',
+        t('voice.tooShortTitle'),
+        t('voice.tooShortBody'),
       );
       setPhase('idle');
       return;
@@ -239,7 +248,7 @@ const VoiceLogModal: React.FC<Props> = ({
 
     const localUri = recorder.uri || recorderState.url || knownUrlBeforeStop;
     if (!localUri) {
-      Alert.alert('Aufnahme', 'Die Aufnahme konnte nicht gelesen werden.');
+      Alert.alert(t('voice.recording'), t('voice.readFailed'));
       setPhase('idle');
       return;
     }
@@ -250,6 +259,7 @@ const VoiceLogModal: React.FC<Props> = ({
         VOICE_LOG_MIME_TYPE,
         babyName,
         babyId,
+        locale,
       );
       setTranscript(result.transcript);
       setEntries(result.entries);
@@ -260,8 +270,8 @@ const VoiceLogModal: React.FC<Props> = ({
       const message =
         error instanceof Error
           ? error.message
-          : 'Die Aufnahme konnte nicht verarbeitet werden.';
-      Alert.alert('Sprach-Eintrag', message);
+          : t('voice.processFailed');
+      Alert.alert(t('voice.entry'), message);
       setPhase('idle');
     }
   }, [babyId, babyName, disableRecordingMode, phase, recorder, recorderState.url]);
@@ -328,19 +338,19 @@ const VoiceLogModal: React.FC<Props> = ({
     if (editingIndex === null || !editingDraft) return;
     if (editingDraft.type === 'feeding' && editingDraft.feeding_type_needs_confirmation) {
       Alert.alert(
-        'Fütterung auswählen',
-        'Bitte bestätige, ob gestillt oder ein Fläschchen gegeben wurde.',
+        t('voice.chooseFeeding'),
+        t('voice.chooseFeedingBody'),
       );
       return;
     }
     const start = localTimeToDate(editingDraft.start_local);
     const end = localTimeToDate(editingDraft.end_local);
     if (!start) {
-      Alert.alert('Ungültige Zeit', 'Bitte wähle eine gültige Startzeit.');
+      Alert.alert(t('voice.invalidTimeTitle'), t('voice.invalidStart'));
       return;
     }
     if (end && end.getTime() < start.getTime()) {
-      Alert.alert('Ungültige Zeit', 'Die Endzeit darf nicht vor der Startzeit liegen.');
+      Alert.alert(t('voice.invalidTimeTitle'), t('voice.invalidEnd'));
       return;
     }
     const timerRequested =
@@ -358,7 +368,7 @@ const VoiceLogModal: React.FC<Props> = ({
         parsedVolume !== null &&
         (!Number.isFinite(parsedVolume) || parsedVolume <= 0)
       ) {
-        Alert.alert('Ungültige Menge', 'Bitte gib eine gültige Menge in ml ein.');
+        Alert.alert(t('voice.invalidAmountTitle'), t('voice.invalidAmountBody'));
         return;
       }
       normalizedEntry = {
@@ -430,14 +440,14 @@ const VoiceLogModal: React.FC<Props> = ({
 
   const handleSave = async () => {
     if (!userId) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um Einträge zu speichern.');
+      Alert.alert(t('common.notice'), t('voice.login'));
       return;
     }
     if (selectedEntries.length === 0) return;
     if (hasUnconfirmedMilkChoice) {
       Alert.alert(
-        'Fütterung auswählen',
-        'Bitte bestätige zuerst, ob gestillt oder ein Fläschchen gegeben wurde.',
+        t('voice.chooseFeeding'),
+        t('voice.chooseFeedingFirst'),
       );
       return;
     }
@@ -454,10 +464,10 @@ const VoiceLogModal: React.FC<Props> = ({
     }
     if (failedCount > 0) {
       Alert.alert(
-        'Sprach-Eintrag',
+        t('voice.entry'),
         savedCount > 0
-          ? `${savedCount} Einträge gespeichert, ${failedCount} fehlgeschlagen.`
-          : 'Die Einträge konnten nicht gespeichert werden.',
+          ? t('voice.partialSave', { saved: savedCount, failed: failedCount })
+          : t('voice.saveFailed'),
       );
       setPhase(savedCount > 0 ? 'idle' : 'review');
       if (savedCount > 0) onClose();
@@ -470,10 +480,9 @@ const VoiceLogModal: React.FC<Props> = ({
   const renderIdle = () => (
     <View style={styles.centerBlock}>
       <Text style={[styles.hintText, { color: textSecondary }]}>
-        Sprich einfach ein, was passiert ist — z. B.{' '}
+        {t('voice.idleHint')}{' '}
         <Text style={{ fontStyle: 'italic' }}>
-          „{babyName || 'Sie'} hat um halb drei 120 ml Fläschchen getrunken und ich habe sie
-          frisch gewickelt.“
+          “{babyName || ''} {t('voice.example')}”
         </Text>
       </Text>
       <TouchableOpacity
@@ -483,7 +492,7 @@ const VoiceLogModal: React.FC<Props> = ({
       >
         <Text style={styles.micEmoji}>🎙️</Text>
       </TouchableOpacity>
-      <Text style={[styles.microHint, { color: textSecondary }]}>Tippen zum Aufnehmen</Text>
+      <Text style={[styles.microHint, { color: textSecondary }]}>{t('voice.tap')}</Text>
     </View>
   );
 
@@ -493,7 +502,7 @@ const VoiceLogModal: React.FC<Props> = ({
         {formatSeconds(recorderState.durationMillis)}
       </Text>
       <Text style={[styles.microHint, { color: textSecondary }]}>
-        Aufnahme läuft … (max. 1 Minute)
+        {t('voice.running')}
       </Text>
       <View style={styles.recordingActions}>
         <TouchableOpacity
@@ -501,14 +510,14 @@ const VoiceLogModal: React.FC<Props> = ({
           onPress={cancelRecording}
           activeOpacity={0.8}
         >
-          <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>Abbrechen</Text>
+          <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>{t('common.cancel')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: accentColor }]}
           onPress={stopAndProcess}
           activeOpacity={0.8}
         >
-          <Text style={styles.primaryButtonText}>Fertig</Text>
+          <Text style={styles.primaryButtonText}>{t('common.done')}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -532,7 +541,7 @@ const VoiceLogModal: React.FC<Props> = ({
     const inputBackground = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.72)';
 
     const renderOptions = <T extends string>(
-      options: { value: T; label: string }[],
+      options: { value: T; labelKey: DailyTranslationKey }[],
       value: T | null,
       onChange: (next: T) => void,
     ) => (
@@ -555,7 +564,7 @@ const VoiceLogModal: React.FC<Props> = ({
               accessibilityState={{ selected: active }}
             >
               <Text style={[styles.optionChipText, { color: active ? '#FFF' : textPrimary }]}>
-                {option.label}
+                {t(option.labelKey)}
               </Text>
             </TouchableOpacity>
           );
@@ -570,32 +579,32 @@ const VoiceLogModal: React.FC<Props> = ({
             <Text
               style={[styles.sectionTitle, { color: textPrimary, marginBottom: 2 }]}
             >
-              Eintrag ändern
+              {t('voice.edit')}
             </Text>
             <Text
               style={[styles.editorSubtitle, { color: textSecondary }]}
             >
-              Prüfe die Details vor dem Speichern.
+              {t('voice.editHint')}
             </Text>
           </View>
           <TouchableOpacity
             onPress={cancelEditing}
             style={[styles.editorCloseButton, { backgroundColor: sectionBg }]}
             accessibilityRole="button"
-            accessibilityLabel="Bearbeitung schließen"
+            accessibilityLabel={t('voice.closeEdit')}
           >
             <Text style={[styles.editorCloseText, { color: textPrimary }]}>✕</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.fieldLabel, { color: textPrimary }]}>Art</Text>
+        <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.kind')}</Text>
         {renderOptions(
-          ENTRY_TYPE_OPTIONS,
+          entryTypeOptions,
           editingDraft.type,
           updateEntryType,
         )}
 
-        <Text style={[styles.fieldLabel, { color: textPrimary }]}>Startzeit</Text>
+        <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.startTime')}</Text>
         <TouchableOpacity
           style={[
             styles.timeButton,
@@ -604,13 +613,13 @@ const VoiceLogModal: React.FC<Props> = ({
           onPress={() => setEditedTimeField('start')}
           activeOpacity={0.8}
         >
-          <Text style={[styles.timeButtonText, { color: textPrimary }]}>{formatEditorDate(start)}</Text>
-          <Text style={[styles.timeButtonAction, { color: accentColor }]}>Ändern</Text>
+          <Text style={[styles.timeButtonText, { color: textPrimary }]}>{formatEditorDate(start, localeTag)}</Text>
+          <Text style={[styles.timeButtonAction, { color: accentColor }]}>{t('voice.change')}</Text>
         </TouchableOpacity>
 
         {editingDraft.type !== 'diaper' ? (
           <>
-            <Text style={[styles.fieldLabel, { color: textPrimary }]}>Endzeit</Text>
+            <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.endTime')}</Text>
             {end ? (
               <View style={styles.endTimeRow}>
                 <TouchableOpacity
@@ -622,8 +631,8 @@ const VoiceLogModal: React.FC<Props> = ({
                   onPress={() => setEditedTimeField('end')}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.timeButtonText, { color: textPrimary }]}>{formatEditorDate(end)}</Text>
-                  <Text style={[styles.timeButtonAction, { color: accentColor }]}>Ändern</Text>
+                  <Text style={[styles.timeButtonText, { color: textPrimary }]}>{formatEditorDate(end, localeTag)}</Text>
+                  <Text style={[styles.timeButtonAction, { color: accentColor }]}>{t('voice.change')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.removeTimeButton, { borderColor: sectionBorder }]}
@@ -632,7 +641,7 @@ const VoiceLogModal: React.FC<Props> = ({
                     if (editedTimeField === 'end') setEditedTimeField(null);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel="Endzeit entfernen"
+                  accessibilityLabel={t('voice.removeEnd')}
                 >
                   <Text style={[styles.removeTimeText, { color: textSecondary }]}>✕</Text>
                 </TouchableOpacity>
@@ -650,7 +659,7 @@ const VoiceLogModal: React.FC<Props> = ({
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.addTimeText, { color: accentColor }]}>+ Endzeit hinzufügen</Text>
+                <Text style={[styles.addTimeText, { color: accentColor }]}>{t('voice.addEnd')}</Text>
               </TouchableOpacity>
             )}
           </>
@@ -667,7 +676,7 @@ const VoiceLogModal: React.FC<Props> = ({
               value={selectedTime}
               mode="datetime"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              locale="de-DE"
+              locale={localeTag}
               is24Hour
               maximumDate={editedTimeField === 'start' ? new Date() : undefined}
               minimumDate={editedTimeField === 'end' ? start : undefined}
@@ -692,7 +701,7 @@ const VoiceLogModal: React.FC<Props> = ({
                 style={[styles.pickerDoneButton, { backgroundColor: accentColor }]}
                 onPress={() => setEditedTimeField(null)}
               >
-                <Text style={styles.pickerDoneText}>Fertig</Text>
+                <Text style={styles.pickerDoneText}>{t('common.done')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -700,9 +709,9 @@ const VoiceLogModal: React.FC<Props> = ({
 
         {editingDraft.type === 'feeding' ? (
           <>
-            <Text style={[styles.fieldLabel, { color: textPrimary }]}>Fütterung</Text>
+            <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.feeding')}</Text>
             {renderOptions(
-              FEEDING_TYPE_OPTIONS,
+              feedingTypeOptions,
               editingDraft.feeding_type,
               (feedingType) => {
                 updateDraft({
@@ -720,7 +729,7 @@ const VoiceLogModal: React.FC<Props> = ({
             editingDraft.feeding_type === 'PUMP' ||
             editingDraft.feeding_type === 'WATER' ? (
               <>
-                <Text style={[styles.fieldLabel, { color: textPrimary }]}>Menge (optional)</Text>
+                <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.amountOptional')}</Text>
                 <View
                   style={[
                     styles.volumeInputWrap,
@@ -737,7 +746,7 @@ const VoiceLogModal: React.FC<Props> = ({
                     inputMode="numeric"
                     maxLength={4}
                     selectTextOnFocus
-                    accessibilityLabel="Menge in Millilitern"
+                    accessibilityLabel={t('voice.amountA11y')}
                   />
                   <Text style={[styles.volumeUnit, { color: textSecondary }]}>ml</Text>
                 </View>
@@ -746,9 +755,9 @@ const VoiceLogModal: React.FC<Props> = ({
 
             {editingDraft.feeding_type === 'BREAST' || editingDraft.feeding_type === 'PUMP' ? (
               <>
-                <Text style={[styles.fieldLabel, { color: textPrimary }]}>Seite</Text>
+                <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('input.side')}</Text>
                 {renderOptions(
-                  FEEDING_SIDE_OPTIONS,
+                  feedingSideOptions,
                   editingDraft.feeding_side,
                   (feedingSide) => updateDraft({ feeding_side: feedingSide }),
                 )}
@@ -759,16 +768,16 @@ const VoiceLogModal: React.FC<Props> = ({
 
         {editingDraft.type === 'diaper' ? (
           <>
-            <Text style={[styles.fieldLabel, { color: textPrimary }]}>Windel</Text>
+            <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.diaper')}</Text>
             {renderOptions(
-              DIAPER_TYPE_OPTIONS,
+              diaperTypeOptions,
               editingDraft.diaper_type,
               (diaperType) => updateDraft({ diaper_type: diaperType }),
             )}
           </>
         ) : null}
 
-        <Text style={[styles.fieldLabel, { color: textPrimary }]}>Notiz (optional)</Text>
+        <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.noteOptional')}</Text>
         <TextInput
           style={[
             styles.noteInput,
@@ -776,7 +785,7 @@ const VoiceLogModal: React.FC<Props> = ({
           ]}
           value={editingDraft.note ?? ''}
           onChangeText={(note) => updateDraft({ note: note || null })}
-          placeholder="Notiz ergänzen"
+          placeholder={t('voice.notePlaceholder')}
           placeholderTextColor={textSecondary}
           multiline
           textAlignVertical="top"
@@ -789,14 +798,14 @@ const VoiceLogModal: React.FC<Props> = ({
             onPress={cancelEditing}
             activeOpacity={0.8}
           >
-            <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>Abbrechen</Text>
+            <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: accentColor }]}
             onPress={saveEditing}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Änderung übernehmen</Text>
+            <Text style={styles.primaryButtonText}>{t('voice.apply')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -818,22 +827,21 @@ const VoiceLogModal: React.FC<Props> = ({
       {entries.length === 0 ? (
         <View style={styles.centerBlock}>
           <Text style={[styles.hintText, { color: textSecondary }]}>
-            Ich konnte keinen Eintrag erkennen. Versuch es gern noch einmal mit Zeit und
-            Aktivität, z. B. „hat vor einer Stunde geschlafen“.
+            {t('voice.none')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryButton, { backgroundColor: accentColor, marginTop: 16 }]}
             onPress={reset}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>Neue Aufnahme</Text>
+            <Text style={styles.primaryButtonText}>{t('voice.newRecording')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <>
-          <Text style={[styles.sectionTitle, { color: textPrimary }]}>Erkannte Einträge</Text>
+          <Text style={[styles.sectionTitle, { color: textPrimary }]}>{t('voice.detected')}</Text>
           {entries.map((entry, index) => {
-            const { emoji, title, timeText } = describeVoiceLogEntry(entry);
+            const { emoji, title, timeText } = describeVoiceLogEntry(entry, locale);
             const isActive = selected[index];
             const needsMilkChoice =
               entry.type === 'feeding' && entry.feeding_type_needs_confirmation;
@@ -854,7 +862,7 @@ const VoiceLogModal: React.FC<Props> = ({
                   activeOpacity={0.8}
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: isActive }}
-                  accessibilityLabel={`${title} ${isActive ? 'ausgewählt' : 'nicht ausgewählt'}`}
+                  accessibilityLabel={`${title} ${isActive ? t('voice.selected') : t('voice.notSelected')}`}
                 >
                   <Text style={styles.entryEmoji}>{emoji}</Text>
                   <View style={styles.entryTextWrap}>
@@ -885,17 +893,17 @@ const VoiceLogModal: React.FC<Props> = ({
                     <Text
                       style={[styles.milkChoiceTitle, { color: textPrimary }]}
                     >
-                      Stillen oder Fläschchen?
+                      {t('voice.milkQuestion')}
                     </Text>
                     <Text
                       style={[styles.milkChoiceHint, { color: textSecondary }]}
                     >
-                      Die Spracheingabe war nicht eindeutig. Bitte bestätige die Fütterung.
+                      {t('voice.milkHint')}
                     </Text>
                     <View style={styles.milkChoiceActions}>
                       {([
-                        { value: 'BREAST' as const, label: '🤱 Stillen' },
-                        { value: 'BOTTLE' as const, label: '🍼 Fläschchen' },
+                        { value: 'BREAST' as const, label: `🤱 ${t('feeding.breast')}` },
+                        { value: 'BOTTLE' as const, label: `🍼 ${t('card.bottle')}` },
                       ]).map((option) => {
                         const isSuggested = entry.feeding_type === option.value;
                         return (
@@ -915,7 +923,7 @@ const VoiceLogModal: React.FC<Props> = ({
                             accessibilityRole="radio"
                             accessibilityLabel={
                               isSuggested
-                                ? `${option.label}, aus den letzten Einträgen vorgeschlagen`
+                                ? `${option.label}, ${t('voice.suggested')}`
                                 : option.label
                             }
                           >
@@ -928,7 +936,7 @@ const VoiceLogModal: React.FC<Props> = ({
                               <Text
                                 style={[styles.milkChoiceSuggested, { color: accentColor }]}
                               >
-                                Zuletzt häufiger
+                                {t('voice.suggested')}
                               </Text>
                             ) : null}
                           </TouchableOpacity>
@@ -942,9 +950,9 @@ const VoiceLogModal: React.FC<Props> = ({
                   onPress={() => beginEditing(index)}
                   activeOpacity={0.8}
                   accessibilityRole="button"
-                  accessibilityLabel={`${title} ändern`}
+                  accessibilityLabel={t('voice.editA11y', { title })}
                 >
-                  <Text style={[styles.editEntryButtonText, { color: accentColor }]}>✎ Eintrag ändern</Text>
+                  <Text style={[styles.editEntryButtonText, { color: accentColor }]}>✎ {t('voice.edit')}</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -957,7 +965,7 @@ const VoiceLogModal: React.FC<Props> = ({
               activeOpacity={0.8}
             >
               <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>
-                Neue Aufnahme
+                {t('voice.newRecording')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -975,10 +983,10 @@ const VoiceLogModal: React.FC<Props> = ({
             >
               <Text style={styles.primaryButtonText}>
                 {hasUnconfirmedMilkChoice
-                  ? 'Fütterung auswählen'
+                  ? t('voice.chooseFeeding')
                   : selectedEntries.length === 1
-                  ? 'Eintrag speichern'
-                  : `${selectedEntries.length} Einträge speichern`}
+                  ? t('voice.saveOne')
+                  : t('voice.saveMany', { count: selectedEntries.length })}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1017,20 +1025,20 @@ const VoiceLogModal: React.FC<Props> = ({
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>🎙️</Text>
               <View style={styles.headerTitleRow}>
-                <Text style={[styles.headerTitle, { color: textPrimary }]}>Per Sprache eintragen</Text>
+                <Text style={[styles.headerTitle, { color: textPrimary }]}>{t('voice.title')}</Text>
                 <View style={[styles.premiumBadge, { backgroundColor: accentColor }]}>
                   <Text style={styles.premiumBadgeText}>Premium</Text>
                 </View>
               </View>
               <Text style={[styles.headerSubtitle, { color: textSecondary }]}>
-                Schlaf, Füttern & Windeln einfach einsprechen
+                {t('voice.subtitle')}
               </Text>
             </View>
 
             {phase === 'idle' && renderIdle()}
             {phase === 'recording' && renderRecording()}
-            {phase === 'processing' && renderProcessing('Ich höre mir das kurz an …')}
-            {phase === 'saving' && renderProcessing('Einträge werden gespeichert …')}
+            {phase === 'processing' && renderProcessing(t('voice.processing'))}
+            {phase === 'saving' && renderProcessing(t('voice.saving'))}
             {phase === 'review' && renderReview()}
           </ScrollView>
         </BlurView>

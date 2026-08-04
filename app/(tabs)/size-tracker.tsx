@@ -21,7 +21,12 @@ import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { parseSafeDate } from '@/lib/safeDate';
+import {
+  translateGrowthTrackerText,
+  type GrowthTrackerTranslationKey,
+} from '@/lib/growthTrackerTranslations';
 
 const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
@@ -36,8 +41,8 @@ const MIN_VALID_TRACKER_DATE = new Date(2000, 0, 1);
 const isBabySubject = (subject: WeightSubject) => subject === 'baby';
 const getWeightUnit = (_subject: WeightSubject) => 'cm';
 const getDisplayWeightValue = (sizeCm: number, _subject?: WeightSubject) => sizeCm;
-const formatWeightDisplayValue = (sizeCm: number, _subject: WeightSubject) => {
-  const formattedCm = sizeCm.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+const formatWeightDisplayValue = (sizeCm: number, _subject: WeightSubject, localeTag: string) => {
+  const formattedCm = sizeCm.toLocaleString(localeTag, { maximumFractionDigits: 1 });
   return `${formattedCm} cm`;
 };
 const normalizeWeightInput = (value: string, _subject: WeightSubject) => {
@@ -67,10 +72,10 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
-const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
-  'Du bist im Babymodus zur Vorschau. Groessentracking ist erst nach der Geburt moeglich.';
-
 export default function SizeTrackerScreen() {
+  const { locale, localeTag } = useLocale();
+  const t = (key: GrowthTrackerTranslationKey, params?: Record<string, string | number>) =>
+    translateGrowthTrackerText(locale, key, params);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
@@ -97,6 +102,7 @@ export default function SizeTrackerScreen() {
   const insets = useSafeAreaInsets();
   const { activeBaby, activeBabyId, isReady } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
+  const readOnlyPreviewMessage = t('size.previewMessage');
 
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([]);
   const selectedSubject: WeightSubject = 'baby';
@@ -117,7 +123,7 @@ export default function SizeTrackerScreen() {
   const [focusConfig, setFocusConfig] = useState<{ field: 'weight' | 'notes'; label: string; placeholder?: string; multiline?: boolean; keyboardType?: TextInputProps['keyboardType']; inputMode?: TextInputProps['inputMode']; } | null>(null);
   const [focusValue, setFocusValue] = useState('');
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+    Alert.alert(t('common.preview'), readOnlyPreviewMessage);
   };
   const ensureWritableInCurrentMode = () => {
     if (!isReadOnlyPreviewMode) return true;
@@ -125,7 +131,7 @@ export default function SizeTrackerScreen() {
     return false;
   };
 
-  const babyLabel = useMemo(() => activeBaby?.name?.trim() || 'Mini', [activeBaby?.name]);
+  const babyLabel = useMemo(() => activeBaby?.name?.trim() || t('subject.babyFallback'), [activeBaby?.name, locale]);
   const trackerLabel = babyLabel;
 
   useEffect(() => {
@@ -146,7 +152,7 @@ export default function SizeTrackerScreen() {
       setWeightEntries(normalized);
     } catch (error) {
       console.error('Error loading weight entries:', error);
-      Alert.alert('Fehler', 'Beim Laden der Größendaten ist ein Fehler aufgetreten.');
+      Alert.alert(t('common.error'), t('size.loadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -156,12 +162,12 @@ export default function SizeTrackerScreen() {
   const handleDeleteWeightEntry = async (id: string) => {
     if (!ensureWritableInCurrentMode()) return;
     Alert.alert(
-      'Eintrag löschen',
-      'Möchtest du diesen Größeneintrag wirklich löschen?',
+      t('size.deleteTitle'),
+      t('size.deleteConfirm'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             if (!ensureWritableInCurrentMode()) return;
@@ -173,10 +179,10 @@ export default function SizeTrackerScreen() {
               // Lade Größendaten neu
               setIsLoading(true);
               await loadWeightEntries();
-              Alert.alert('Erfolg', 'Dein Größeneintrag wurde erfolgreich gelöscht.');
+              Alert.alert(t('common.success'), t('size.deleted'));
             } catch (error) {
               console.error('Error deleting weight entry:', error);
-              Alert.alert('Fehler', 'Beim Löschen des Größeneintrags ist ein Fehler aufgetreten.');
+              Alert.alert(t('common.error'), t('size.deleteFailed'));
             } finally {
               setIsSaving(false);
               setIsLoading(false);
@@ -190,7 +196,7 @@ export default function SizeTrackerScreen() {
   const openWeightModal = () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
-      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      Alert.alert(t('common.notice'), t('alert.chooseChild'));
       return;
     }
     const today = new Date();
@@ -215,7 +221,7 @@ export default function SizeTrackerScreen() {
   };
 
   const formatDisplayDate = (date: Date) =>
-    date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    date.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const toDateString = (date: Date) => {
     const year = date.getFullYear();
@@ -249,11 +255,11 @@ export default function SizeTrackerScreen() {
     const parsedWeight = parseFloat(normalizedInput);
     const unitLabel = 'cm';
     if (!normalizedInput || Number.isNaN(parsedWeight) || parsedWeight <= 0) {
-      Alert.alert('Hinweis', `Bitte gib eine gültige Größe in ${unitLabel} ein.`);
+      Alert.alert(t('common.notice'), t('size.invalid', { unit: unitLabel }));
       return;
     }
     if (!activeBabyId) {
-      Alert.alert('Hinweis', 'Bitte wähle zuerst ein Kind aus.');
+      Alert.alert(t('common.notice'), t('alert.chooseChild'));
       return;
     }
 
@@ -271,10 +277,10 @@ export default function SizeTrackerScreen() {
       await loadWeightEntries();
       setEditingEntry(null);
       setWeightModalVisible(false);
-      Alert.alert('Erfolg', 'Größeneintrag gespeichert.');
+      Alert.alert(t('common.success'), t('size.saved'));
     } catch (error) {
       console.error('Error saving weight entry:', error);
-      Alert.alert('Fehler', 'Beim Speichern des Größeneintrags ist ein Fehler aufgetreten.');
+      Alert.alert(t('common.error'), t('size.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -338,7 +344,7 @@ export default function SizeTrackerScreen() {
         data: {
           labels: [],
           datasets: [{ data: [] as number[], color: colorFn, strokeWidth: lineStrokeWidth }],
-          legend: [`Größe ${legendLabel}`],
+          legend: [`${t('size.field')} ${legendLabel}`],
         },
         meta: { segments: 5, decimalPlaces: 1 },
       };
@@ -372,7 +378,7 @@ export default function SizeTrackerScreen() {
         data: {
           labels: [],
           datasets: [{ data: [] as number[], color: colorFn, strokeWidth: lineStrokeWidth }],
-          legend: [`Größe ${legendLabel}`],
+          legend: [`${t('size.field')} ${legendLabel}`],
         },
         meta: { segments: 5, decimalPlaces: 1 },
       };
@@ -409,7 +415,7 @@ export default function SizeTrackerScreen() {
       data: {
         labels,
         datasets: [{ data: dataPoints, color: colorFn, strokeWidth: lineStrokeWidth }],
-        legend: [`Größe ${legendLabel}`],
+        legend: [`${t('size.field')} ${legendLabel}`],
       },
       meta: { segments, decimalPlaces },
     };
@@ -464,10 +470,10 @@ export default function SizeTrackerScreen() {
         {/* Range Tabs bleiben immer sichtbar */}
         <View style={styles.topTabsContainer}>
           {([
-            { id: 'week', label: 'Woche' },
-            { id: 'month', label: 'Monat' },
-            { id: 'year', label: 'Jahr' },
-            { id: 'all', label: 'Gesamt' },
+            { id: 'week', label: t('range.week') },
+            { id: 'month', label: t('range.month') },
+            { id: 'year', label: t('range.year') },
+            { id: 'all', label: t('range.all') },
           ] as const).map(t => {
             const isActive = selectedRange === t.id;
             const tabTint = subjectColor;
@@ -571,7 +577,7 @@ export default function SizeTrackerScreen() {
           <LiquidGlassCard style={styles.emptyChartContainer} intensity={26} overlayColor={glassOverlay}>
             <IconSymbol name="chart.line.uptrend.xyaxis" size={40} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
             <ThemedText style={[styles.emptyChartText, { color: textSecondary }]}>
-              Füge mindestens zwei Größeneinträge für {subjectCopyLabel} hinzu, um eine Kurve zu sehen.
+              {t('size.emptyChart')}
             </ThemedText>
           </LiquidGlassCard>
         )}
@@ -582,7 +588,7 @@ export default function SizeTrackerScreen() {
   // Mappe Größeneintrag auf ActivityCard-kompatibles Format
   const convertWeightToDailyEntry = (e: WeightEntry): any => {
     const subject = e.subject ?? 'baby';
-    const displayWeight = formatWeightDisplayValue(e.weight, subject);
+    const displayWeight = formatWeightDisplayValue(e.weight, subject, localeTag);
     const displayDate = formatDisplayDate(parseDateOnly(e.date));
     return {
       id: e.id,
@@ -610,10 +616,10 @@ export default function SizeTrackerScreen() {
           <LiquidGlassCard style={styles.emptyState} intensity={26} overlayColor={glassOverlay}>
           <IconSymbol name="ruler" size={40} color={isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault} />
           <ThemedText style={[styles.emptyStateText, { color: textPrimary }]}>
-            Noch keine Größeneinträge für {subjectLabel}
+            {t('size.emptyTitle')}
           </ThemedText>
           <ThemedText style={[styles.emptyStateSubtext, { color: textSecondary }]}>
-            Füge deinen ersten Größeneintrag hinzu, um die Kurve für {subjectLabel} zu sehen.
+            {t('size.emptyDescription')}
           </ThemedText>
         </LiquidGlassCard>
       );
@@ -625,7 +631,7 @@ export default function SizeTrackerScreen() {
 
     return (
       <View style={styles.timelineSection}>
-        <Text style={[styles.sectionTitleSleepLike, { color: textSecondary }]}>Größeneinträge für {subjectLabel}</Text>
+        <Text style={[styles.sectionTitleSleepLike, { color: textSecondary }]}>{t('size.entries')}</Text>
         <View style={{ alignSelf: 'center', width: contentWidth }}>
           <View style={[styles.entriesContainer, { paddingHorizontal: TIMELINE_INSET }]}>
             {sortedEntries.map((entry) => (
@@ -680,8 +686,8 @@ export default function SizeTrackerScreen() {
               <Text style={[styles.closeHeaderButtonText, { color: headerTextColor }]}>✕</Text>
             </TouchableOpacity>
             <View style={styles.headerCenter}>
-              <Text style={[styles.modalTitle, { color: headerTextColor }]}>{editingEntry ? 'Größe bearbeiten' : 'Größe hinzufügen'}</Text>
-              <Text style={[styles.modalSubtitle, { color: headerTextColor }]}>Für {babyLabel}</Text>
+              <Text style={[styles.modalTitle, { color: headerTextColor }]}>{editingEntry ? t('size.edit') : t('size.add')}</Text>
+              <Text style={[styles.modalSubtitle, { color: headerTextColor }]}>{t('size.modalSubtitle', { baby: babyLabel })}</Text>
             </View>
             <TouchableOpacity
               style={[
@@ -703,7 +709,7 @@ export default function SizeTrackerScreen() {
             contentContainerStyle={styles.modalScrollContent}
           >
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Größe ({getWeightUnit(weightModalSubject)})</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) })}</Text>
               <View
                 style={[
                   styles.pickerBlock,
@@ -725,25 +731,25 @@ export default function SizeTrackerScreen() {
                     onPress={() =>
                       openFocusEditor({
                         field: 'weight',
-                        label: `Größe (${getWeightUnit(weightModalSubject)})`,
+                        label: t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) }),
                         placeholder: isBabySubject(weightModalSubject) ? 'z. B. 52,3' : 'z. B. 165,4',
                         keyboardType: 'decimal-pad',
                         inputMode: 'decimal',
                       })
                     }
                 >
-                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>Größe</Text>
+                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>{t('size.field')}</Text>
                   <Text style={[weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightInput.trim() ? headerTextColor : `${headerTextColor}B3` }]}>
                     {weightInput.trim()
                       ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}`
-                      : 'Tippe zum Eingeben'}
+                      : t('field.tapEnter')}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Datum</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('field.date')}</Text>
               <View
                 style={[
                   styles.pickerBlock,
@@ -754,7 +760,7 @@ export default function SizeTrackerScreen() {
                 ]}
               >
                 <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
-                  <Text style={[styles.pickerLabel, { color: headerTextColor }]}>Messdatum</Text>
+                  <Text style={[styles.pickerLabel, { color: headerTextColor }]}>{t('field.measurementDate')}</Text>
                   <Text style={[styles.selectorValue, { color: headerTextColor }]}>{formatDisplayDate(weightDate)}</Text>
                 </TouchableOpacity>
                 {showDatePicker && Platform.OS !== 'ios' && (
@@ -793,7 +799,7 @@ export default function SizeTrackerScreen() {
                 {Platform.OS === 'ios' && (
                   <IOSBottomDatePicker
                     visible={showDatePicker}
-                    title="Messdatum wählen"
+                    title={t('field.chooseDate')}
                     value={weightDate}
                     mode="date"
                     minimumDate={MIN_VALID_TRACKER_DATE}
@@ -812,7 +818,7 @@ export default function SizeTrackerScreen() {
             </View>
 
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>Notizen</Text>
+              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('field.notes')}</Text>
               <View
                 style={[
                   styles.pickerBlock,
@@ -835,18 +841,18 @@ export default function SizeTrackerScreen() {
                   onPress={() =>
                     openFocusEditor({
                       field: 'notes',
-                      label: 'Notizen',
-                      placeholder: 'z. B. Messzeitpunkt oder besondere Hinweise',
+                      label: t('field.notes'),
+                      placeholder: t('field.notesHint'),
                       multiline: true,
                     })
                   }
                 >
-                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>Details</Text>
+                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>{t('field.details')}</Text>
                   <Text
                     style={[weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightNotes.trim() ? headerTextColor : `${headerTextColor}B3` }]}
                     numberOfLines={3}
                   >
-                    {weightNotes.trim() || 'Tippe zum Hinzufügen'}
+                    {weightNotes.trim() || t('field.tapAdd')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -881,7 +887,7 @@ export default function SizeTrackerScreen() {
           <LiquidGlassCard style={styles.saveView} intensity={26} overlayColor={glassOverlay}>
             <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
             <ThemedText style={[styles.saveViewText, { color: textPrimary }]}>
-              Daten werden gespeichert...
+              {t('state.saving')}
             </ThemedText>
           </LiquidGlassCard>
         </View>
@@ -894,7 +900,7 @@ export default function SizeTrackerScreen() {
   const contentWidth = screenWidth - 2 * LAYOUT_PAD;
   const TIMELINE_INSET = 8;
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
+    ? t('common.previewSubtitle')
     : undefined;
 
   return (
@@ -911,13 +917,13 @@ export default function SizeTrackerScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           
-          <Header title="Größenkurve" subtitle={headerSubtitle} showBackButton />
+          <Header title={t('size.title')} subtitle={headerSubtitle} showBackButton />
 
           {isReadOnlyPreviewMode && (
             <View style={styles.readOnlyPreviewBanner}>
-              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewTitle}>{t('common.previewActive')}</ThemedText>
               <ThemedText style={styles.readOnlyPreviewText}>
-                Du schaust den Babymodus an. Groessentracking ist hier gesperrt.
+                {readOnlyPreviewMessage}
               </ThemedText>
             </View>
           )}
@@ -928,7 +934,7 @@ export default function SizeTrackerScreen() {
             {isLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
-                <ThemedText style={[styles.loadingText, { color: textSecondary }]}>Daten werden geladen...</ThemedText>
+                <ThemedText style={[styles.loadingText, { color: textSecondary }]}>{t('state.loading')}</ThemedText>
               </View>
             ) : (
               <>

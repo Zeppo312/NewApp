@@ -17,6 +17,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { Colors } from '@/constants/Colors';
 import { RADIUS } from '@/constants/DesignGuide';
 import { getSafePickerDate } from '@/lib/safeDate';
+import { useLocale } from '@/contexts/LocaleContext';
 
 const ACCENT_LIGHT = '#8E4EC6';
 const ACCENT_DARK = '#A26BFF';
@@ -37,11 +38,11 @@ type Props = {
   onSave: (entry: SleepQuickEntry) => void;
 };
 
-const formatClockTime = (date: Date) =>
-  date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const formatClockTime = (date: Date, localeTag: string) =>
+  date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
 
-const formatShortDayDate = (date: Date) =>
-  date.toLocaleDateString('de-DE', {
+const formatShortDayDate = (date: Date, localeTag: string) =>
+  date.toLocaleDateString(localeTag, {
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',
@@ -60,6 +61,10 @@ const TimePickerField = ({
   textPrimary,
   textSecondary,
   placeholder,
+  localeTag,
+  cancelLabel,
+  doneLabel,
+  tapLabel,
 }: {
   label: string;
   time: Date | null;
@@ -69,6 +74,10 @@ const TimePickerField = ({
   textPrimary: string;
   textSecondary: string;
   placeholder?: string;
+  localeTag: string;
+  cancelLabel: string;
+  doneLabel: string;
+  tapLabel: string;
 }) => {
   const [showIOS, setShowIOS] = useState(false);
   const [showAndroid, setShowAndroid] = useState(false);
@@ -101,15 +110,15 @@ const TimePickerField = ({
         {time ? (
           <>
             <Text style={[styles.timeCardDay, { color: textSecondary }]}>
-              {formatShortDayDate(time)}
+              {formatShortDayDate(time, localeTag)}
             </Text>
             <Text style={[styles.timeCardValue, { color: accentColor }]}>
-              {formatClockTime(time)}
+              {formatClockTime(time, localeTag)}
             </Text>
           </>
         ) : (
           <Text style={[styles.timeCardPlaceholder, { color: textSecondary }]}>
-            {placeholder ?? 'Tippen zum Eingeben'}
+            {placeholder ?? tapLabel}
           </Text>
         )}
       </TouchableOpacity>
@@ -140,21 +149,21 @@ const TimePickerField = ({
                   onPress={() => setShowIOS(false)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.pickerAction, { color: textSecondary }]}>Abbrechen</Text>
+                  <Text style={[styles.pickerAction, { color: textSecondary }]}>{cancelLabel}</Text>
                 </TouchableOpacity>
                 <Text style={[styles.pickerTitle, { color: textPrimary }]}>{label}</Text>
                 <TouchableOpacity
                   onPress={commit}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.pickerAction, { color: accentColor }]}>Fertig</Text>
+                  <Text style={[styles.pickerAction, { color: accentColor }]}>{doneLabel}</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker
                 value={resolvePickerDate(draft)}
                 mode="datetime"
                 display="spinner"
-                locale="de-DE"
+                locale={localeTag}
                 onChange={(_, d) => { if (d) setDraft(d); }}
                 accentColor={accentColor}
                 themeVariant={isDark ? 'dark' : 'light'}
@@ -188,6 +197,12 @@ const SleepQuickAddModal: React.FC<Props> = ({
   onClose,
   onSave,
 }) => {
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { cancel: 'Abbrechen', done: 'Fertig', tap: 'Tippen zum Eingeben', title: 'Schlaf hinzufügen', subtitle: 'Zeitraum und Qualität festhalten', period: '⏰ Zeitraum', asleep: 'Eingeschlafen', awake: 'Aufgewacht', open: 'Offen', quality: '😴 Schlafqualität', good: 'Gut', medium: 'Mittel', bad: 'Schlecht', notes: '📝 Notizen', notesPlaceholder: 'Optionale Notiz hinzufügen…', save: 'Speichern' },
+    en: { cancel: 'Cancel', done: 'Done', tap: 'Tap to enter', title: 'Add sleep', subtitle: 'Record the time and quality', period: '⏰ Time period', asleep: 'Fell asleep', awake: 'Woke up', open: 'Ongoing', quality: '😴 Sleep quality', good: 'Good', medium: 'Okay', bad: 'Poor', notes: '📝 Notes', notesPlaceholder: 'Add an optional note…', save: 'Save' },
+    es: { cancel: 'Cancelar', done: 'Listo', tap: 'Toca para introducir', title: 'Añadir sueño', subtitle: 'Registra el horario y la calidad', period: '⏰ Periodo', asleep: 'Se durmió', awake: 'Se despertó', open: 'En curso', quality: '😴 Calidad del sueño', good: 'Buena', medium: 'Regular', bad: 'Mala', notes: '📝 Notas', notesPlaceholder: 'Añade una nota opcional…', save: 'Guardar' },
+  }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
@@ -243,48 +258,56 @@ const SleepQuickAddModal: React.FC<Props> = ({
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>😴</Text>
-              <Text style={[styles.headerTitle, { color: textPrimary }]}>Schlaf hinzufügen</Text>
+              <Text style={[styles.headerTitle, { color: textPrimary }]}>{c.title}</Text>
               <Text style={[styles.headerSubtitle, { color: textSecondary }]}>
-                Zeitraum und Qualität festhalten
+                {c.subtitle}
               </Text>
             </View>
 
             {/* Zeit */}
-            <Text style={[styles.sectionTitle, { color: textPrimary }]}>⏰ Zeitraum</Text>
+            <Text style={[styles.sectionTitle, { color: textPrimary }]}>{c.period}</Text>
             <View style={styles.timeRow}>
               <View style={{ flex: 1 }}>
                 <TimePickerField
-                  label="Eingeschlafen"
+                  label={c.asleep}
                   time={startTime}
                   onConfirm={setStartTime}
                   accentColor={accentColor}
                   isDark={isDark}
                   textPrimary={textPrimary}
                   textSecondary={textSecondary}
+                  localeTag={localeTag}
+                  cancelLabel={c.cancel}
+                  doneLabel={c.done}
+                  tapLabel={c.tap}
                 />
               </View>
               <View style={{ flex: 1 }}>
                 <TimePickerField
-                  label="Aufgewacht"
+                  label={c.awake}
                   time={endTime}
                   onConfirm={setEndTime}
                   accentColor={accentColor}
                   isDark={isDark}
                   textPrimary={textPrimary}
                   textSecondary={textSecondary}
-                  placeholder="Offen"
+                  placeholder={c.open}
+                  localeTag={localeTag}
+                  cancelLabel={c.cancel}
+                  doneLabel={c.done}
+                  tapLabel={c.tap}
                 />
               </View>
             </View>
 
             {/* Qualität */}
-            <Text style={[styles.sectionTitle, { color: textPrimary }]}>😴 Schlafqualität</Text>
+            <Text style={[styles.sectionTitle, { color: textPrimary }]}>{c.quality}</Text>
             <View style={styles.qualityRow}>
               {(['good', 'medium', 'bad'] as SleepQuality[]).map((item) => {
                 const isActive = quality === item;
                 const bg = item === 'good' ? '#38A169' : item === 'medium' ? '#F5A623' : '#E53E3E';
                 const icon = item === 'good' ? '😴' : item === 'medium' ? '😐' : '😵';
-                const lbl = item === 'good' ? 'Gut' : item === 'medium' ? 'Mittel' : 'Schlecht';
+                const lbl = item === 'good' ? c.good : item === 'medium' ? c.medium : c.bad;
                 return (
                   <TouchableOpacity
                     key={item ?? 'none'}
@@ -309,7 +332,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
             </View>
 
             {/* Notizen */}
-            <Text style={[styles.sectionTitle, { color: textPrimary }]}>📝 Notizen</Text>
+            <Text style={[styles.sectionTitle, { color: textPrimary }]}>{c.notes}</Text>
             <TextInput
               style={[
                 styles.notesInput,
@@ -321,7 +344,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
               ]}
               value={notes}
               onChangeText={setNotes}
-              placeholder="Optionale Notiz hinzufügen..."
+              placeholder={c.notesPlaceholder}
               placeholderTextColor={textSecondary}
               multiline
             />
@@ -339,14 +362,14 @@ const SleepQuickAddModal: React.FC<Props> = ({
               onPress={onClose}
               activeOpacity={0.7}
             >
-              <Text style={[styles.cancelBtnText, { color: textSecondary }]}>Abbrechen</Text>
+              <Text style={[styles.cancelBtnText, { color: textSecondary }]}>{c.cancel}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.saveBtn, { backgroundColor: accentColor }]}
               onPress={handleSave}
               activeOpacity={0.7}
             >
-              <Text style={styles.saveBtnText}>Speichern</Text>
+              <Text style={styles.saveBtnText}>{c.save}</Text>
             </TouchableOpacity>
           </View>
         </BlurView>

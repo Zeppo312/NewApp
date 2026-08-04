@@ -13,6 +13,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { getCachedUserProfile } from '@/lib/appCache';
 import { exportUserData } from '@/lib/dataExport';
@@ -42,10 +43,9 @@ import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/slee
 import { hasFeatureAccess } from '@/lib/entitlements';
 import {
   AppSettingsTranslationKey,
-  DEFAULT_APP_SETTINGS_LOCALE,
-  getAppSettingsLocaleTag,
   translateAppSettingsText,
 } from '@/lib/appSettingsTranslations';
+import type { LanguagePreference } from '@/lib/localization';
 
 const PRESET_OPTIONS = [
   { id: 'default', labelKey: 'background.preset.default' },
@@ -57,12 +57,15 @@ const PRESET_OPTIONS = [
   { id: 'stone', labelKey: 'background.preset.stone' },
 ] as const;
 
-const ACTIVE_APP_SETTINGS_LOCALE = DEFAULT_APP_SETTINGS_LOCALE;
-const APP_SETTINGS_LOCALE_TAG = getAppSettingsLocaleTag(ACTIVE_APP_SETTINGS_LOCALE);
-const t = (
-  key: AppSettingsTranslationKey,
-  params?: Record<string, string | number>,
-) => translateAppSettingsText(ACTIVE_APP_SETTINGS_LOCALE, key, params);
+const LANGUAGE_OPTIONS: Array<{
+  value: LanguagePreference;
+  labelKey: AppSettingsTranslationKey;
+}> = [
+  { value: 'system', labelKey: 'language.system' },
+  { value: 'de', labelKey: 'language.german' },
+  { value: 'en', labelKey: 'language.english' },
+  { value: 'es', labelKey: 'language.spanish' },
+];
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -70,6 +73,11 @@ export default function AppSettingsScreen() {
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
   const { user, session, signOut } = useAuth();
+  const { locale, localeTag, preference, setPreference } = useLocale();
+  const t = (
+    key: AppSettingsTranslationKey,
+    params?: Record<string, string | number>,
+  ) => translateAppSettingsText(locale, key, params);
   const { activeBabyId } = useActiveBaby();
   const {
     autoDarkModeEnabled,
@@ -83,6 +91,7 @@ export default function AppSettingsScreen() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingLanguage, setIsSavingLanguage] = useState(false);
   const [isSavingAutoDark, setIsSavingAutoDark] = useState(false);
   const [isAutoDarkExpanded, setIsAutoDarkExpanded] = useState(false);
   const [showAutoDarkStartPicker, setShowAutoDarkStartPicker] = useState(false);
@@ -140,7 +149,7 @@ export default function AppSettingsScreen() {
   const trailingIconColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
   const autoDarkTimeTextColor = useLightIcons ? '#FFFFFF' : '#000000';
   const vitaminDTimeLabel = formatVitaminDReminderTime(
-    APP_SETTINGS_LOCALE_TAG,
+    localeTag,
     notifPrefs.vitaminDReminderHour,
     notifPrefs.vitaminDReminderMinute,
   );
@@ -224,7 +233,7 @@ export default function AppSettingsScreen() {
         const status =
           hasValidStart
             ? t('live.activeSince', {
-                time: startDate.toLocaleTimeString(APP_SETTINGS_LOCALE_TAG, {
+                time: startDate.toLocaleTimeString(localeTag, {
                   hour: '2-digit',
                   minute: '2-digit',
                 }),
@@ -646,7 +655,7 @@ export default function AppSettingsScreen() {
       await sleepActivityService.updateSleepActivity(formatElapsedSeconds(elapsedSeconds));
 
       setLiveActivitiesStatusText(t('live.activeSince', {
-        time: startDate.toLocaleTimeString(APP_SETTINGS_LOCALE_TAG, {
+        time: startDate.toLocaleTimeString(localeTag, {
           hour: '2-digit',
           minute: '2-digit',
         }),
@@ -841,6 +850,23 @@ export default function AppSettingsScreen() {
         },
       ],
     );
+  };
+
+  const handleLanguageChange = async (nextPreference: LanguagePreference) => {
+    if (nextPreference === preference || isSavingLanguage) return;
+    setIsSavingLanguage(true);
+    try {
+      await setPreference(nextPreference);
+      setSettings((current) => current ? {
+        ...current,
+        language_preference: nextPreference,
+      } : current);
+    } catch (error) {
+      console.error('Failed to save language preference:', error);
+      Alert.alert(t('common.error'), t('language.saveFailed'));
+    } finally {
+      setIsSavingLanguage(false);
+    }
   };
 
   useEffect(() => {
@@ -1134,6 +1160,42 @@ export default function AppSettingsScreen() {
                         )}
                       </View>
                     )}
+                  </LiquidGlassCard>
+
+                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                    <View style={styles.sectionHeading}>
+                      <IconSymbol name="globe" size={16} color={primaryIconColor} />
+                      <ThemedText style={styles.sectionTitle}>{t('language.section')}</ThemedText>
+                    </View>
+                    <View style={[styles.rowItem, styles.firstRow]}>
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="character.book.closed" size={22} color={primaryIconColor} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>{t('language.title')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{t('language.description')}</ThemedText>
+                      </View>
+                      {isSavingLanguage ? <ActivityIndicator size="small" color={theme.accent} /> : null}
+                    </View>
+                    <View style={styles.languageOptions}>
+                      {LANGUAGE_OPTIONS.map((option) => {
+                        const selected = preference === option.value;
+                        return (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[styles.languageOption, selected && styles.languageOptionSelected]}
+                            onPress={() => void handleLanguageChange(option.value)}
+                            disabled={isSavingLanguage}
+                            activeOpacity={0.8}
+                          >
+                            <ThemedText style={[styles.languageOptionText, selected && styles.languageOptionTextSelected]}>
+                              {t(option.labelKey)}
+                            </ThemedText>
+                            {selected ? <IconSymbol name="checkmark" size={17} color={theme.accent} /> : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </LiquidGlassCard>
 
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
@@ -1878,6 +1940,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 6,
+  },
+  languageOptions: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  languageOption: {
+    minHeight: 46,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  languageOptionSelected: {
+    backgroundColor: 'rgba(157,190,187,0.18)',
+    borderColor: 'rgba(157,190,187,0.72)',
+  },
+  languageOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  languageOptionTextSelected: {
+    fontWeight: '800',
   },
   inlineNote: {
     fontSize: 13,

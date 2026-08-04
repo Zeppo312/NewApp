@@ -33,8 +33,15 @@ import {
   PRIMARY,
 } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  translateDoctorQuestionsText,
+  type DoctorQuestionsTranslationKey,
+} from '@/lib/doctorQuestionsTranslations';
 
 export default function DoctorQuestionsScreen() {
+  const { locale } = useLocale();
+  const t = (key: DoctorQuestionsTranslationKey) => translateDoctorQuestionsText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -63,11 +70,11 @@ export default function DoctorQuestionsScreen() {
   const openQuestions = useMemo(() => questions.filter((q) => !q.is_answered), [questions]);
   const answeredQuestions = useMemo(() => questions.filter((q) => q.is_answered), [questions]);
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Alles Wichtige für den nächsten Termin';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
 
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.');
+    Alert.alert(t('preview.alertTitle'), t('preview.description'));
   };
 
   const ensureWritableInCurrentMode = () => {
@@ -117,7 +124,7 @@ export default function DoctorQuestionsScreen() {
       if (error) {
         console.error('Error loading doctor questions:', error);
         if (!options?.silent) {
-          Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+          Alert.alert(t('common.error'), t('error.load'));
         }
         return;
       }
@@ -128,7 +135,7 @@ export default function DoctorQuestionsScreen() {
     } catch (err) {
       console.error('Failed to load doctor questions:', err);
       if (!options?.silent) {
-        Alert.alert('Fehler', 'Fragen konnten nicht geladen werden.');
+        Alert.alert(t('common.error'), t('error.load'));
       }
     } finally {
       if (!options?.silent) {
@@ -144,12 +151,12 @@ export default function DoctorQuestionsScreen() {
     }
 
     if (!newQuestion.trim()) {
-      Alert.alert('Hinweis', 'Bitte gib eine Frage ein.');
+      Alert.alert(t('common.notice'), t('error.questionRequired'));
       return;
     }
 
     if (!service) {
-      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      Alert.alert(t('common.error'), t('error.service'));
       return;
     }
 
@@ -159,18 +166,18 @@ export default function DoctorQuestionsScreen() {
 
       if (result.primary.error) {
         console.error('Error saving doctor question:', result.primary.error);
-        Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('error.saveQuestion'));
         return;
       }
 
       if (result.primary.data) {
         setNewQuestion('');
         await loadQuestions({ silent: true });
-        showOperationMessage('Frage gespeichert.');
+        showOperationMessage(t('feedback.questionSaved'));
       }
     } catch (err) {
       console.error('Failed to save doctor question:', err);
-      Alert.alert('Fehler', 'Frage konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('error.saveQuestion'));
     } finally {
       setIsSaving(false);
     }
@@ -179,7 +186,7 @@ export default function DoctorQuestionsScreen() {
   const handleToggleAnswered = async (question: DoctorQuestion) => {
     if (!ensureWritableInCurrentMode()) return;
     if (!service) {
-      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      Alert.alert(t('common.error'), t('error.service'));
       return;
     }
 
@@ -194,7 +201,7 @@ export default function DoctorQuestionsScreen() {
 
       if (result.primary.error) {
         console.error('Error updating doctor question:', result.primary.error);
-        Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
+        Alert.alert(t('common.error'), t('error.status'));
         return;
       }
 
@@ -204,11 +211,11 @@ export default function DoctorQuestionsScreen() {
 
       await loadQuestions({ silent: true });
       showOperationMessage(
-        nextIsAnswered ? 'Frage als beantwortet markiert.' : 'Frage als offen markiert.'
+        nextIsAnswered ? t('feedback.markedAnswered') : t('feedback.markedOpen')
       );
     } catch (err) {
       console.error('Failed to update doctor question:', err);
-      Alert.alert('Fehler', 'Status konnte nicht aktualisiert werden.');
+      Alert.alert(t('common.error'), t('error.status'));
     } finally {
       setIsTogglingQuestionId(null);
     }
@@ -216,18 +223,18 @@ export default function DoctorQuestionsScreen() {
 
   const handleDeleteQuestion = async (questionId: string) => {
     if (!ensureWritableInCurrentMode()) return;
-    Alert.alert('Frage löschen', 'Möchtest du diese Frage wirklich löschen?', [
+    Alert.alert(t('delete.title'), t('delete.confirm'), [
       {
-        text: 'Abbrechen',
+        text: t('common.cancel'),
         style: 'cancel',
       },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           if (!ensureWritableInCurrentMode()) return;
           if (!service) {
-            Alert.alert('Fehler', 'Service nicht verfügbar.');
+            Alert.alert(t('common.error'), t('error.service'));
             return;
           }
 
@@ -237,7 +244,7 @@ export default function DoctorQuestionsScreen() {
 
             if (result.primary.error) {
               console.error('Error deleting doctor question:', result.primary.error);
-              Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
+              Alert.alert(t('common.error'), t('error.delete'));
               return;
             }
 
@@ -246,10 +253,10 @@ export default function DoctorQuestionsScreen() {
               setExpandedQuestion(null);
             }
             await loadQuestions({ silent: true });
-            showOperationMessage('Frage gelöscht.');
+            showOperationMessage(t('feedback.deleted'));
           } catch (err) {
             console.error('Failed to delete doctor question:', err);
-            Alert.alert('Fehler', 'Frage konnte nicht gelöscht werden.');
+            Alert.alert(t('common.error'), t('error.delete'));
           } finally {
             setIsDeletingQuestionId(null);
           }
@@ -279,7 +286,7 @@ export default function DoctorQuestionsScreen() {
   const handleSaveAnswer = async (questionId: string) => {
     if (!ensureWritableInCurrentMode()) return;
     if (!service) {
-      Alert.alert('Fehler', 'Service nicht verfügbar.');
+      Alert.alert(t('common.error'), t('error.service'));
       return;
     }
 
@@ -291,7 +298,7 @@ export default function DoctorQuestionsScreen() {
 
       if (result.primary.error) {
         console.error('Error saving answer:', result.primary.error);
-        Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('error.answer'));
         return;
       }
 
@@ -303,10 +310,10 @@ export default function DoctorQuestionsScreen() {
       }
 
       await loadQuestions({ silent: true });
-      showOperationMessage('Antwort gespeichert.');
+      showOperationMessage(t('feedback.answerSaved'));
     } catch (err) {
       console.error('Failed to save answer:', err);
-      Alert.alert('Fehler', 'Antwort konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('error.answer'));
     } finally {
       setIsSavingAnswerId(null);
     }
@@ -359,7 +366,7 @@ export default function DoctorQuestionsScreen() {
                   question.is_answered && styles.statusBadgeTextAnswered,
                 ]}
               >
-                {question.is_answered ? 'Beantwortet' : 'Offen'}
+                {question.is_answered ? t('question.answered') : t('question.open')}
               </ThemedText>
             </View>
             <ThemedText
@@ -405,10 +412,10 @@ export default function DoctorQuestionsScreen() {
                 ]}
               >
                 {isToggling
-                  ? 'Wird aktualisiert...'
+                  ? t('question.updating')
                   : question.is_answered
-                    ? 'Als offen markieren'
-                    : 'Als beantwortet markieren'}
+                    ? t('question.markOpen')
+                    : t('question.markAnswered')}
               </ThemedText>
             </TouchableOpacity>
 
@@ -420,7 +427,7 @@ export default function DoctorQuestionsScreen() {
                   color={theme.accent}
                   style={styles.answerHeaderIcon}
                 />
-                <ThemedText style={[styles.answerHeaderText, { color: textPrimary }]}>Antwort vom Arzt</ThemedText>
+                <ThemedText style={[styles.answerHeaderText, { color: textPrimary }]}>{t('answer.title')}</ThemedText>
               </View>
 
               {editingAnswer === question.id ? (
@@ -429,7 +436,7 @@ export default function DoctorQuestionsScreen() {
                     <TextInput
                       ref={answerInputRef}
                       style={[styles.answerInput, { color: theme.text }]}
-                      placeholder="Notiere hier die Antwort oder eigene Gedanken..."
+                      placeholder={t('answer.placeholder')}
                       placeholderTextColor={theme.tabIconDefault}
                       value={answerText}
                       onChangeText={setAnswerText}
@@ -450,7 +457,7 @@ export default function DoctorQuestionsScreen() {
                         color={TEXT_PRIMARY}
                         style={styles.secondaryButtonIcon}
                       />
-                      <ThemedText style={styles.secondaryButtonText}>Abbrechen</ThemedText>
+                      <ThemedText style={styles.secondaryButtonText}>{t('common.cancel')}</ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.primaryPill, isQuestionActionDisabled && styles.buttonDisabled]}
@@ -468,7 +475,7 @@ export default function DoctorQuestionsScreen() {
                             color="#FFFFFF"
                             style={styles.primaryPillIcon}
                           />
-                          <ThemedText style={styles.primaryPillText}>Speichern</ThemedText>
+                          <ThemedText style={styles.primaryPillText}>{t('common.save')}</ThemedText>
                         </>
                       )}
                     </TouchableOpacity>
@@ -485,8 +492,7 @@ export default function DoctorQuestionsScreen() {
                     <ThemedText
                       style={[question.answer ? styles.answerText : styles.answerPlaceholder, { color: question.answer ? textPrimary : textSecondary }]}
                     >
-                      {question.answer ||
-                        'Tippe, um eine Antwort zu hinterlegen oder Notizen zu ergänzen.'}
+                      {question.answer || t('answer.empty')}
                     </ThemedText>
                   </GlassCard>
                 </TouchableOpacity>
@@ -503,13 +509,13 @@ export default function DoctorQuestionsScreen() {
                 <>
                   <ActivityIndicator size="small" color="#FFFFFF" />
                   <ThemedText style={[styles.deleteButtonText, styles.loadingInlineText]}>
-                    Lösche...
+                    {t('delete.pending')}
                   </ThemedText>
                 </>
               ) : (
                 <>
                   <IconSymbol name="trash" size={15} color="#FFFFFF" style={styles.deleteButtonIcon} />
-                  <ThemedText style={styles.deleteButtonText}>Frage löschen</ThemedText>
+                  <ThemedText style={styles.deleteButtonText}>{t('delete.action')}</ThemedText>
                 </>
               )}
             </TouchableOpacity>
@@ -526,23 +532,23 @@ export default function DoctorQuestionsScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
-            title="Fragen für den Frauenarzt"
+            title={t('screen.title')}
             subtitle={headerSubtitle}
             showBackButton
           />
           {isReadOnlyPreviewMode && (
             <View style={styles.readOnlyPreviewBanner}>
-              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.title')}</ThemedText>
               <ThemedText style={styles.readOnlyPreviewText}>
-                Du schaust den Schwangerschaftsmodus an. Arztfragen sind hier gesperrt.
+                {t('preview.description')}
               </ThemedText>
             </View>
           )}
           <ScrollView contentContainerStyle={styles.scrollContent}>
             <GlassCard style={[styles.fullWidthCard, styles.heroCard]}>
-              <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>Alles parat für den nächsten Besuch</ThemedText>
+              <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>{t('hero.title')}</ThemedText>
               <ThemedText style={[styles.heroSubtitle, { color: textSecondary }]}>
-                Sammle Fragen, halte Antworten fest und geh entspannt in deinen Termin.
+                {t('hero.description')}
               </ThemedText>
             </GlassCard>
 
@@ -562,7 +568,7 @@ export default function DoctorQuestionsScreen() {
                   />
                   <View>
                     <ThemedText style={[styles.statValue, { color: textPrimary }]}>{openCount}</ThemedText>
-                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Offene Fragen</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>{t('stats.open')}</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -581,7 +587,7 @@ export default function DoctorQuestionsScreen() {
                   />
                   <View>
                     <ThemedText style={[styles.statValue, { color: textPrimary }]}>{answeredCount}</ThemedText>
-                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>Beantwortet</ThemedText>
+                    <ThemedText style={[styles.statLabel, { color: textSecondary }]}>{t('stats.answered')}</ThemedText>
                   </View>
                 </View>
               </LiquidGlassCard>
@@ -595,15 +601,15 @@ export default function DoctorQuestionsScreen() {
                   color={PRIMARY}
                   style={styles.newQuestionHeaderIcon}
                 />
-                <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>Neue Frage notieren</ThemedText>
+                <ThemedText style={[styles.cardTitle, { color: textPrimary }]}>{t('new.title')}</ThemedText>
               </View>
               <ThemedText style={[styles.cardSubtitle, { color: textSecondary }]}>
-                Formuliere kurz und klar, damit du beim Termin nichts vergisst.
+                {t('new.description')}
               </ThemedText>
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={[styles.textInput, { color: theme.text }]}
-                  placeholder="Was möchtest du beim nächsten Besuch ansprechen?"
+                  placeholder={t('new.placeholder')}
                   placeholderTextColor={theme.tabIconDefault}
                   value={newQuestion}
                   onChangeText={setNewQuestion}
@@ -624,7 +630,7 @@ export default function DoctorQuestionsScreen() {
                     <>
                       <ActivityIndicator size="small" color="#FFFFFF" />
                       <ThemedText style={[styles.primaryButtonText, styles.loadingInlineText]}>
-                        Speichere...
+                        {t('new.saving')}
                       </ThemedText>
                     </>
                   ) : (
@@ -635,7 +641,7 @@ export default function DoctorQuestionsScreen() {
                         color="#FFFFFF"
                         style={styles.primaryButtonIcon}
                       />
-                      <ThemedText style={styles.primaryButtonText}>Frage sichern</ThemedText>
+                      <ThemedText style={styles.primaryButtonText}>{t('new.save')}</ThemedText>
                     </>
                   )}
                 </View>
@@ -668,7 +674,7 @@ export default function DoctorQuestionsScreen() {
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={theme.accent} />
                   <ThemedText style={[styles.loadingText, { color: textPrimary }]}>
-                    Fragen werden geladen...
+                    {t('state.loading')}
                   </ThemedText>
                 </View>
               </LiquidGlassCard>
@@ -686,9 +692,9 @@ export default function DoctorQuestionsScreen() {
                     color={theme.tabIconDefault}
                     style={styles.emptyIcon}
                   />
-                  <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>Noch keine Fragen gespeichert</ThemedText>
+                  <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>{t('state.emptyTitle')}</ThemedText>
                   <ThemedText style={[styles.emptySubtitle, { color: textSecondary }]}>
-                    Notiere spontan auftauchende Gedanken direkt hier, damit nichts verloren geht.
+                    {t('state.emptyDescription')}
                   </ThemedText>
                 </View>
               </LiquidGlassCard>
@@ -710,9 +716,9 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Offene Fragen</ThemedText>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>{t('stats.open')}</ThemedText>
                           <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
-                            Kläre diese Punkte beim nächsten Termin.
+                            {t('section.openDescription')}
                           </ThemedText>
                         </View>
                       </View>
@@ -737,9 +743,9 @@ export default function DoctorQuestionsScreen() {
                           style={styles.sectionInfoIcon}
                         />
                         <View>
-                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>Bereits beantwortet</ThemedText>
+                          <ThemedText style={[styles.sectionInfoTitle, { color: textPrimary }]}>{t('section.answeredTitle')}</ThemedText>
                           <ThemedText style={[styles.sectionInfoCaption, { color: textSecondary }]}>
-                            Ergänze Notizen oder markiere erneut als offen.
+                            {t('section.answeredDescription')}
                           </ThemedText>
                         </View>
                       </View>

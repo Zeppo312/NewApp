@@ -28,4 +28,26 @@ describe('baby profile translations', () => {
     expect(formatBabyAge('es', age)).toBe('1 año, 2 meses y 3 días');
     expect(getBabyLocaleTag('es')).toBe('es-ES');
   });
+
+  it('formats ages when Intl.ListFormat is unavailable in Hermes', () => {
+    const originalListFormat = Intl.ListFormat;
+    Object.defineProperty(Intl, 'ListFormat', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      const age = { years: 1, months: 2, days: 3 };
+
+      expect(formatBabyAge('de', age)).toBe('1 Jahr, 2 Monate und 3 Tage');
+      expect(formatBabyAge('en', age)).toBe('1 year, 2 months, and 3 days');
+      expect(formatBabyAge('es', age)).toBe('1 año, 2 meses y 3 días');
+      expect(formatBabyAge('de', { years: 0, months: 0, days: 1 })).toBe('1 Tag');
+    } finally {
+      Object.defineProperty(Intl, 'ListFormat', {
+        configurable: true,
+        value: originalListFormat,
+      });
+    }
+  });
 });

@@ -28,6 +28,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { parseSafeDate } from '@/lib/safeDate';
 import {
   BABY_TEETH,
@@ -40,6 +41,12 @@ import {
   ToothSymptom,
   updateToothEntry,
 } from '@/lib/toothData';
+import {
+  getLocalizedBabyTeeth,
+  getToothSymptomOptions,
+  translateToothTrackerText,
+  type ToothTrackerTranslationKey,
+} from '@/lib/toothTrackerTranslations';
 
 type ToothDef = {
   key: ToothPosition;
@@ -334,17 +341,14 @@ const parseDateOnly = (value: string) => {
   return fallback;
 };
 
-const formatDateLabel = (value: string) => {
+const formatDateLabel = (value: string, localeTag: string) => {
   const parsed = parseDateOnly(value);
-  const day = `${parsed.getDate()}`.padStart(2, '0');
-  const month = `${parsed.getMonth() + 1}`.padStart(2, '0');
-  const year = parsed.getFullYear();
-  return `${day}.${month}.${year}`;
+  return new Intl.DateTimeFormat(localeTag, { day: '2-digit', month: '2-digit', year: 'numeric' }).format(parsed);
 };
 
-const formatMonthLabel = (value: string) => {
+const formatMonthLabel = (value: string, localeTag: string) => {
   const parsed = parseDateOnly(value);
-  return new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' }).format(parsed);
+  return new Intl.DateTimeFormat(localeTag, { month: 'long', year: 'numeric' }).format(parsed);
 };
 
 const normalizeEditorDate = (date: Date) => {
@@ -354,6 +358,14 @@ const normalizeEditorDate = (date: Date) => {
 };
 
 export default function ToothTrackerScreen() {
+  const { locale, localeTag } = useLocale();
+  const t = (key: ToothTrackerTranslationKey) => translateToothTrackerText(locale, key);
+  const localizedTeeth = getLocalizedBabyTeeth(locale);
+  const upperTeeth = localizedTeeth.filter((tooth) => tooth.row === 'upper');
+  const lowerTeeth = localizedTeeth.filter((tooth) => tooth.row === 'lower');
+  const allTeeth = [...upperTeeth, ...lowerTeeth];
+  const localizedTeethMap = new Map(localizedTeeth.map((tooth) => [tooth.key, tooth]));
+  const symptomOptions = getToothSymptomOptions(locale);
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
@@ -380,8 +392,8 @@ export default function ToothTrackerScreen() {
   const [notesEditorVisible, setNotesEditorVisible] = useState(false);
   const [formSymptoms, setFormSymptoms] = useState<ToothSymptom[]>([]);
   const showReadOnlyPreviewAlert = useCallback(() => {
-    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
-  }, []);
+    Alert.alert(t('preview.alertTitle'), t('preview.description'));
+  }, [locale]);
   const ensureWritableInCurrentMode = useCallback(() => {
     if (!isReadOnlyPreviewMode) return true;
     showReadOnlyPreviewAlert();
@@ -422,14 +434,14 @@ export default function ToothTrackerScreen() {
 
     return Array.from(groups.entries()).map(([monthKey, items]) => ({
       monthKey,
-      monthLabel: formatMonthLabel(`${monthKey}-01`),
+      monthLabel: formatMonthLabel(`${monthKey}-01`, localeTag),
       items,
     }));
-  }, [timelineEntries]);
+  }, [timelineEntries, localeTag]);
 
   const availableTeeth = useMemo(
-    () => ALL_TEETH.filter((tooth) => !entriesByTooth.has(tooth.key) || tooth.key === selectedTooth),
-    [entriesByTooth, selectedTooth],
+    () => allTeeth.filter((tooth) => !entriesByTooth.has(tooth.key) || tooth.key === selectedTooth),
+    [entriesByTooth, selectedTooth, locale],
   );
 
   const loadEntries = useCallback(async () => {
@@ -448,12 +460,12 @@ export default function ToothTrackerScreen() {
       setEntries(data ?? []);
     } catch (error) {
       console.error('Failed to load tooth entries:', error);
-      Alert.alert('Fehler', 'Die Zahneinträge konnten nicht geladen werden.');
+      Alert.alert(t('common.error'), t('alert.loadFailed'));
       setEntries([]);
     } finally {
       setIsLoading(false);
     }
-  }, [activeBabyId, isReady]);
+  }, [activeBabyId, isReady, locale]);
 
   useEffect(() => {
     loadEntries();
@@ -469,13 +481,13 @@ export default function ToothTrackerScreen() {
   const openCreateModal = useCallback((preferredTooth?: ToothPosition, fromToothTap = false) => {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
-      Alert.alert('Kein Baby ausgewählt', 'Bitte wähle zuerst ein Baby aus.');
+      Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
       return;
     }
 
-    const freeTeeth = ALL_TEETH.filter((tooth) => !entriesByTooth.has(tooth.key));
+    const freeTeeth = allTeeth.filter((tooth) => !entriesByTooth.has(tooth.key));
     if (freeTeeth.length === 0) {
-      Alert.alert('Alles dokumentiert', 'Für dieses Baby sind bereits alle 20 Milchzähne eingetragen.');
+      Alert.alert(t('alert.completeTitle'), t('alert.complete'));
       return;
     }
 
@@ -493,7 +505,7 @@ export default function ToothTrackerScreen() {
     setShowDatePicker(false);
     setNotesEditorVisible(false);
     setEditorVisible(true);
-  }, [activeBabyId, ensureWritableInCurrentMode, entriesByTooth]);
+  }, [activeBabyId, ensureWritableInCurrentMode, entriesByTooth, locale]);
 
   const openEditModal = useCallback((entry: ToothEntry) => {
     if (!ensureWritableInCurrentMode()) return;
@@ -511,7 +523,7 @@ export default function ToothTrackerScreen() {
 
   const handleToothPress = useCallback((toothKey: ToothPosition) => {
     if (!activeBabyId) {
-      Alert.alert('Kein Baby ausgewählt', 'Bitte wähle zuerst ein Baby aus.');
+      Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
       return;
     }
 
@@ -522,7 +534,7 @@ export default function ToothTrackerScreen() {
     }
 
     openCreateModal(toothKey, true);
-  }, [activeBabyId, entriesByTooth, openCreateModal, openEditModal]);
+  }, [activeBabyId, entriesByTooth, openCreateModal, openEditModal, locale]);
 
   const toggleSymptom = (symptom: ToothSymptom) => {
     setFormSymptoms((prev) => {
@@ -536,12 +548,12 @@ export default function ToothTrackerScreen() {
   const handleSave = async () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
-      Alert.alert('Kein Baby ausgewählt', 'Bitte wähle zuerst ein Baby aus.');
+      Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
       return;
     }
 
     if (!selectedTooth) {
-      Alert.alert('Zahn fehlt', 'Bitte wähle einen Zahn aus.');
+      Alert.alert(t('alert.missingToothTitle'), t('alert.missingTooth'));
       return;
     }
 
@@ -549,7 +561,7 @@ export default function ToothTrackerScreen() {
     now.setHours(23, 59, 59, 999);
 
     if (formDate.getTime() > now.getTime()) {
-      Alert.alert('Ungültiges Datum', 'Das Durchbruch-Datum darf nicht in der Zukunft liegen.');
+      Alert.alert(t('alert.invalidDateTitle'), t('alert.invalidDate'));
       return;
     }
 
@@ -582,7 +594,7 @@ export default function ToothTrackerScreen() {
       closeEditor();
     } catch (error) {
       console.error('Failed to save tooth entry:', error);
-      Alert.alert('Fehler', 'Der Zahneintrag konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -592,10 +604,10 @@ export default function ToothTrackerScreen() {
     if (!ensureWritableInCurrentMode()) return;
     if (!editingEntryId) return;
 
-    Alert.alert('Eintrag löschen', 'Möchtest du diesen Zahneintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('delete.title'), t('delete.confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           if (!ensureWritableInCurrentMode()) return;
@@ -608,7 +620,7 @@ export default function ToothTrackerScreen() {
             closeEditor();
           } catch (deleteError) {
             console.error('Failed to delete tooth entry:', deleteError);
-            Alert.alert('Fehler', 'Der Zahneintrag konnte nicht gelöscht werden.');
+            Alert.alert(t('common.error'), t('delete.failed'));
           } finally {
             setIsSaving(false);
           }
@@ -670,14 +682,14 @@ export default function ToothTrackerScreen() {
   const isCtaDisabled = !activeBabyId || !isReady || isLoading || isReadOnlyPreviewMode;
 
   const statsMessage = useMemo(() => {
-    if (eruptedCount === 0) return 'Noch kein Zahn sichtbar';
-    if (eruptedCount === 1) return 'Der erste Zahn ist da 🦷✨';
-    if (eruptedCount >= 20) return 'Komplettes Milchgebiss 🎉';
-    if (eruptedCount >= 8) return 'Halbzeit erreicht';
-    return 'Dein Baby bekommt sein Lächeln 🥹';
-  }, [eruptedCount]);
+    if (eruptedCount === 0) return t('stats.none');
+    if (eruptedCount === 1) return t('stats.first');
+    if (eruptedCount >= 20) return t('stats.complete');
+    if (eruptedCount >= 8) return t('stats.half');
+    return t('stats.progress');
+  }, [eruptedCount, locale]);
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
+    ? t('screen.previewSubtitle')
     : undefined;
 
   return (
@@ -686,13 +698,13 @@ export default function ToothTrackerScreen() {
       <ThemedBackground style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-          <Header title="Zahn-Tracker" subtitle={headerSubtitle} showBackButton />
+          <Header title={t('screen.title')} subtitle={headerSubtitle} showBackButton />
 
           {isReadOnlyPreviewMode && (
             <View style={styles.readOnlyPreviewBanner}>
-              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.title')}</ThemedText>
               <ThemedText style={styles.readOnlyPreviewText}>
-                Du schaust den Babymodus an. Zahntracking ist hier gesperrt.
+                {t('preview.description')}
               </ThemedText>
             </View>
           )}
@@ -706,7 +718,7 @@ export default function ToothTrackerScreen() {
               <View style={styles.statsInner}>
                 <View style={styles.statsStack}>
                   <ThemedText style={[styles.statsNumber, { color: PRIMARY }]}>{eruptedCount}</ThemedText>
-                  <ThemedText style={[styles.statsLabel, { color: textSecondary }]}>von 20 Milchzähnen</ThemedText>
+                  <ThemedText style={[styles.statsLabel, { color: textSecondary }]}>{t('stats.total')}</ThemedText>
                   <ThemedText style={[styles.statsMood, { color: textSecondary }]}>{statsMessage}</ThemedText>
                 </View>
               </View>
@@ -714,15 +726,15 @@ export default function ToothTrackerScreen() {
 
             <LiquidGlassCard style={styles.card} intensity={26} overlayColor={glassOverlay}>
               <View style={styles.chartInner}>
-                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Gebiss-Übersicht</ThemedText>
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('chart.title')}</ThemedText>
                 <ThemedText style={[styles.sectionSubtitle, { color: textSecondary }]}>
                   {!activeBabyId
-                    ? 'Bitte zuerst ein Baby auswählen.'
-                    : 'Tippe auf einen Zahn, um Details zu erfassen.'}
+                    ? t('chart.chooseBaby')
+                    : t('chart.hint')}
                 </ThemedText>
 
                 <View style={styles.jawLabelRow}>
-                  <ThemedText style={[styles.jawLabel, { color: textSecondary }]}>Oberkiefer</ThemedText>
+                  <ThemedText style={[styles.jawLabel, { color: textSecondary }]}>{t('jaw.upper')}</ThemedText>
                 </View>
 
                 <Svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={styles.svg}>
@@ -743,7 +755,7 @@ export default function ToothTrackerScreen() {
                   </Defs>
 
                   <Path d={UPPER_GUM_PATH} fill="url(#gumGradUpper)" />
-                  <G>{renderTeethSvg(UPPER_TEETH, UPPER_SPECS, 'upper')}</G>
+                  <G>{renderTeethSvg(upperTeeth, UPPER_SPECS, 'upper')}</G>
 
                   <Ellipse
                     cx={CX}
@@ -754,25 +766,25 @@ export default function ToothTrackerScreen() {
                   />
 
                   <Path d={LOWER_GUM_PATH} fill="url(#gumGradLower)" />
-                  <G>{renderTeethSvg(LOWER_TEETH, LOWER_SPECS, 'lower')}</G>
+                  <G>{renderTeethSvg(lowerTeeth, LOWER_SPECS, 'lower')}</G>
                 </Svg>
 
                 <View style={styles.jawLabelRow}>
-                  <ThemedText style={[styles.jawLabel, { color: textSecondary }]}>Unterkiefer</ThemedText>
+                  <ThemedText style={[styles.jawLabel, { color: textSecondary }]}>{t('jaw.lower')}</ThemedText>
                 </View>
               </View>
             </LiquidGlassCard>
 
             <LiquidGlassCard style={styles.card} intensity={26} overlayColor={glassOverlay}>
               <View style={styles.timelineInner}>
-                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Eingetragene Zähne</ThemedText>
+                <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('timeline.title')}</ThemedText>
 
                 {isLoading ? (
                   <View style={styles.loadingWrap}>
                     <ActivityIndicator color={PRIMARY} />
                   </View>
                 ) : timelineEntries.length === 0 ? (
-                  <ThemedText style={[styles.emptyText, { color: textSecondary }]}>Noch keine Zähne eingetragen.</ThemedText>
+                  <ThemedText style={[styles.emptyText, { color: textSecondary }]}>{t('timeline.empty')}</ThemedText>
                 ) : (
                   groupedTimeline.map((group) => (
                     <View key={group.monthKey} style={styles.timelineMonthBlock}>
@@ -782,13 +794,13 @@ export default function ToothTrackerScreen() {
                       {group.items.map((entry) => (
                         <View key={entry.id} style={styles.timelineItem}>
                           <View style={[styles.dateBubble, { backgroundColor: `${PRIMARY}20` }]}>
-                            <ThemedText style={[styles.dateText, { color: PRIMARY }]}>{formatDateLabel(entry.eruption_date)}</ThemedText>
+                            <ThemedText style={[styles.dateText, { color: PRIMARY }]}>{formatDateLabel(entry.eruption_date, localeTag)}</ThemedText>
                           </View>
                           <View style={[styles.toothMiniIcon, { backgroundColor: `${PRIMARY}14` }]}>
                             <ThemedText style={styles.toothMiniIconText}>🦷</ThemedText>
                           </View>
                           <ThemedText style={[styles.toothName, { color: textPrimary }]}>
-                            {BABY_TEETH_MAP[entry.tooth_position]?.label ?? entry.tooth_position}
+                            {localizedTeethMap.get(entry.tooth_position)?.label ?? entry.tooth_position}
                           </ThemedText>
                         </View>
                       ))}
@@ -808,7 +820,7 @@ export default function ToothTrackerScreen() {
               onPress={() => openCreateModal()}
               disabled={isCtaDisabled}
             >
-              <ThemedText style={styles.ctaText}>+ Zahn eintragen</ThemedText>
+              <ThemedText style={styles.ctaText}>{t('action.add')}</ThemedText>
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -848,10 +860,10 @@ export default function ToothTrackerScreen() {
 
               <View style={styles.headerCenter}>
                 <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>
-                  {editorMode === 'edit' ? 'Zahn bearbeiten' : 'Zahn eintragen'}
+                  {editorMode === 'edit' ? t('editor.edit') : t('editor.add')}
                 </ThemedText>
                 <ThemedText style={[styles.modalSubtitle, { color: textSecondary }]}>
-                  {editorMode === 'edit' ? 'Eintrag aktualisieren' : 'Details eingeben'}
+                  {editorMode === 'edit' ? t('editor.editSubtitle') : t('editor.addSubtitle')}
                 </ThemedText>
               </View>
 
@@ -879,14 +891,14 @@ export default function ToothTrackerScreen() {
                     <ThemedText style={styles.selectedToothHeroIconText}>🦷</ThemedText>
                   </View>
                   <ThemedText style={[styles.selectedToothHeroLabel, { color: textPrimary }]}>
-                    {BABY_TEETH_MAP[selectedTooth]?.label ?? selectedTooth}
+                    {localizedTeethMap.get(selectedTooth)?.label ?? selectedTooth}
                   </ThemedText>
                 </View>
               )}
 
               {editorMode === 'create' && showToothPicker && (
                 <View style={styles.modalSection}>
-                  <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Zahn auswählen</ThemedText>
+                  <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.chooseTooth')}</ThemedText>
                   <View style={styles.toothChipWrap}>
                     {availableTeeth.map((tooth) => {
                       const active = selectedTooth === tooth.key;
@@ -922,7 +934,7 @@ export default function ToothTrackerScreen() {
               )}
 
               <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Durchbruch-Datum</ThemedText>
+                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.date')}</ThemedText>
                 <View
                   style={[
                     styles.dateContainer,
@@ -933,7 +945,7 @@ export default function ToothTrackerScreen() {
                   ]}
                 >
                   <TouchableOpacity style={styles.dateHeader} onPress={() => setShowDatePicker((prev) => !prev)}>
-                    <ThemedText style={[styles.dateValue, { color: textPrimary }]}>{formatDateLabel(toDateOnly(formDate))}</ThemedText>
+                    <ThemedText style={[styles.dateValue, { color: textPrimary }]}>{formatDateLabel(toDateOnly(formDate), localeTag)}</ThemedText>
                     <View style={[styles.calendarPill, { backgroundColor: `${PRIMARY}18` }]}>
                       <ThemedText style={[styles.calendarPillIcon, { color: PRIMARY }]}>📅</ThemedText>
                     </View>
@@ -966,7 +978,7 @@ export default function ToothTrackerScreen() {
                   {Platform.OS === 'ios' && (
                     <IOSBottomDatePicker
                       visible={showDatePicker}
-                      title="Durchbruch-Datum wählen"
+                      title={t('editor.chooseDate')}
                       value={formDate}
                       mode="date"
                       minimumDate={MIN_VALID_TOOTH_DATE}
@@ -983,9 +995,9 @@ export default function ToothTrackerScreen() {
               </View>
 
               <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Symptome</ThemedText>
+                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.symptoms')}</ThemedText>
                 <View style={styles.symptomWrap}>
-                  {SYMPTOM_OPTIONS.map((option) => {
+                  {symptomOptions.map((option) => {
                     const active = formSymptoms.includes(option.key);
                     return (
                       <TouchableOpacity
@@ -1017,7 +1029,7 @@ export default function ToothTrackerScreen() {
               </View>
 
               <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>Notizen</ThemedText>
+                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.notes')}</ThemedText>
                 <TouchableOpacity
                   style={[
                     styles.notesInput,
@@ -1043,7 +1055,7 @@ export default function ToothTrackerScreen() {
                     ]}
                     numberOfLines={4}
                   >
-                    {formNotes.trim() || 'Optional: Beobachtungen oder Hinweise'}
+                    {formNotes.trim() || t('editor.notesPlaceholder')}
                   </ThemedText>
                 </TouchableOpacity>
               </View>
@@ -1055,15 +1067,15 @@ export default function ToothTrackerScreen() {
                   disabled={isSaving}
                   activeOpacity={0.85}
                 >
-                  <ThemedText style={styles.deleteActionButtonText}>🗑️ Eintrag löschen</ThemedText>
+                  <ThemedText style={styles.deleteActionButtonText}>{t('editor.delete')}</ThemedText>
                 </TouchableOpacity>
               )}
             </ScrollView>
             <TextInputOverlay
               visible={notesEditorVisible}
-              label="Notizen"
+              label={t('editor.notes')}
               value={formNotes}
-              placeholder="Optional: Beobachtungen oder Hinweise"
+              placeholder={t('editor.notesPlaceholder')}
               multiline
               accentColor={PRIMARY}
               onClose={() => setNotesEditorVisible(false)}

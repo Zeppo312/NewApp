@@ -6,6 +6,8 @@ import { CheckboxOption } from './CheckboxOption';
 import { RadioOption } from './RadioOption';
 import { TextInputField } from './TextInputField';
 import { NachDerGeburt } from '@/types/geburtsplan';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getBirthPlanOptions, localizeBirthPlanOptionValue, translateBirthPlanText } from '@/lib/birthPlanTranslations';
 
 interface NachDerGeburtSectionProps {
   data: NachDerGeburt;
@@ -15,6 +17,8 @@ interface NachDerGeburtSectionProps {
 }
 
 export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateBirthPlanText>[1]) => translateBirthPlanText(locale, key);
   // Bonding
   const toggleBonding = () => {
     if (readOnly) return;
@@ -34,11 +38,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   };
 
   // Plazenta
-  const plazentaOptions = [
-    'Natürlich gebären',
-    'keine Routine-Injektion',
-    'Nach medizinischer Empfehlung'
-  ];
+  const plazentaOptions = getBirthPlanOptions(locale, 'placenta').map(({ label }) => label);
   
   const selectPlazenta = (option: string) => {
     if (readOnly) return;
@@ -49,7 +49,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   };
 
   // Vitamin-K-Gabe
-  const vitaminKOptions = ['Ja', 'Nein', 'Besprechen'];
+  const vitaminKOptions = getBirthPlanOptions(locale, 'yesNoDiscuss').map(({ label }) => label);
   
   const selectVitaminK = (option: string) => {
     if (readOnly) return;
@@ -60,43 +60,43 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
   };
 
   return (
-    <GeburtsplanSection title="4. Nach der Geburt" containerStyle={containerStyle}>
-      <OptionGroup label="Bonding">
+    <GeburtsplanSection title={t('section.afterBirth')} containerStyle={containerStyle}>
+      <OptionGroup label={t('afterBirth.bonding')}>
         <CheckboxOption
-          label="Haut-zu-Haut-Kontakt direkt nach Geburt"
+          label={t('afterBirth.skinToSkin')}
           checked={data.bonding}
           onToggle={toggleBonding}
           disabled={readOnly}
         />
       </OptionGroup>
 
-      <OptionGroup label="Stillen">
+      <OptionGroup label={t('afterBirth.breastfeeding')}>
         <CheckboxOption
-          label="Sofortiges Stillen, Unterstützung erwünscht"
+          label={t('afterBirth.breastfeedingImmediate')}
           checked={data.stillen}
           onToggle={toggleStillen}
           disabled={readOnly}
         />
       </OptionGroup>
 
-      <OptionGroup label="Plazenta">
+      <OptionGroup label={t('afterBirth.placenta')}>
         {plazentaOptions.map((option) => (
           <RadioOption
             key={option}
             label={option}
-            selected={data.plazenta === option}
+            selected={localizeBirthPlanOptionValue(locale, data.plazenta) === option}
             onSelect={() => selectPlazenta(option)}
             disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
-      <OptionGroup label="Vitamin-K-Gabe fürs Baby">
+      <OptionGroup label={t('afterBirth.vitaminK')}>
         {vitaminKOptions.map((option) => (
           <RadioOption
             key={option}
             label={option}
-            selected={data.vitaminKGabe === option}
+            selected={localizeBirthPlanOptionValue(locale, data.vitaminKGabe) === option}
             onSelect={() => selectVitaminK(option)}
             disabled={readOnly}
           />
@@ -104,7 +104,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
       </OptionGroup>
 
       <TextInputField
-        label="Sonstige Wünsche nach der Geburt"
+        label={t('afterBirth.other')}
         value={data.sonstigeWuensche}
         onChangeText={(text) => {
           if (readOnly) return;
@@ -112,7 +112,7 @@ export const NachDerGeburtSection: React.FC<NachDerGeburtSectionProps> = ({ data
         }}
         multiline
         numberOfLines={3}
-        placeholder="Hier kannst du weitere Wünsche für die Zeit nach der Geburt eintragen..."
+        placeholder={t('afterBirth.otherPlaceholder')}
         readOnly={readOnly}
       />
     </GeburtsplanSection>

@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -76,7 +78,7 @@ const EMPTY_STATE: SubscriptionViewState = {
   willRenew: null,
 };
 
-const ACTIVE_SUBSCRIPTION_LOCALE = DEFAULT_SUBSCRIPTION_LOCALE;
+let ACTIVE_SUBSCRIPTION_LOCALE = DEFAULT_SUBSCRIPTION_LOCALE;
 const t = (
   key: SubscriptionTranslationKey,
   params?: Record<string, string | number>,
@@ -94,6 +96,7 @@ const formatDate = (date: string | null) => {
 };
 
 export default function SubscriptionScreen() {
+  ACTIVE_SUBSCRIPTION_LOCALE = useLocale().locale;
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, user } = useAuth();

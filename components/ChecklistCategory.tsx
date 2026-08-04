@@ -7,6 +7,8 @@ import { Collapsible } from './Collapsible';
 import { ProgressCircle } from './ProgressCircle';
 import { TEXT_PRIMARY } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translatePregnancyChecklistText } from '@/lib/pregnancyChecklistTranslations';
 
 interface ChecklistCategoryProps {
   title: string;
@@ -21,6 +23,7 @@ export const ChecklistCategory: React.FC<ChecklistCategoryProps> = ({
   onToggleItem,
   onDeleteItem,
 }) => {
+  const { locale } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
@@ -56,7 +59,7 @@ export const ChecklistCategory: React.FC<ChecklistCategoryProps> = ({
       <View style={styles.container}>
         {items.length === 0 ? (
           <ThemedText style={[styles.emptyText, { color: textSecondary }]}>
-            Keine Einträge in dieser Kategorie
+            {translatePregnancyChecklistText(locale, 'state.categoryEmpty')}
           </ThemedText>
         ) : (
           items.map(item => (

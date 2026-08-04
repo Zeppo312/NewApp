@@ -11,6 +11,12 @@ import { babySizeData, BabySizeData } from '@/lib/baby-size-data';
 import { useAuth } from '@/contexts/AuthContext';
 import { getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  getLocalizedBabySizeData,
+  translateBabySizeText,
+  type BabySizeTranslationKey,
+} from '@/lib/babySizeTranslations';
 import {
   LiquidGlassCard,
   LAYOUT_PAD,
@@ -102,6 +108,10 @@ export default function BabySizePage() {
 }
 
 function BabySizeContent() {
+  const { locale } = useLocale();
+  const t = (key: BabySizeTranslationKey, params?: Record<string, string | number>) =>
+    translateBabySizeText(locale, key, params);
+  const localizedBabySizeData = useMemo(() => getLocalizedBabySizeData(locale), [locale]);
   const router = useRouter();
   const params = useLocalSearchParams<{ week?: string | string[] }>();
   const weekParam = params.week;
@@ -202,8 +212,8 @@ function BabySizeContent() {
   const currentWeek = weekFromParams ?? dueWeek ?? 1;
 
   const babyData = useMemo<BabySizeData>(() => {
-    return babySizeData.find((item) => item.week === currentWeek) ?? babySizeData[0];
-  }, [currentWeek]);
+    return localizedBabySizeData.find((item) => item.week === currentWeek) ?? localizedBabySizeData[0];
+  }, [currentWeek, localizedBabySizeData]);
 
   useEffect(() => {
     setImageError(false);
@@ -221,7 +231,7 @@ function BabySizeContent() {
   const quickStats = [
     {
       key: 'length',
-      label: 'Größe',
+      label: t('metric.length'),
       value: babyData.length,
       icon: 'person.fill' as const,
       accent: pastelPaletteResolved.sky,
@@ -229,7 +239,7 @@ function BabySizeContent() {
     },
     {
       key: 'weight',
-      label: 'Gewicht',
+      label: t('metric.weight'),
       value: babyData.weight,
       icon: 'chart.bar.fill' as const,
       accent: pastelPaletteResolved.rose,
@@ -241,8 +251,8 @@ function BabySizeContent() {
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <Header
-          title="Babygröße"
-          subtitle={`Woche ${babyData.week}`}
+          title={t('screen.title')}
+          subtitle={t('screen.weekSubtitle', { week: babyData.week })}
           showBackButton
         />
 
@@ -265,13 +275,13 @@ function BabySizeContent() {
                   adjustsFontSizeToFit
                   minimumFontScale={0.75}
                 >
-                  Schwangerschaftswoche
+                  {t('hero.week', { week: babyData.week })}
                 </ThemedText>
 
                 <View style={styles.heroContentRow}>
                   <View style={styles.heroTextBlock}>
                     <ThemedText style={[styles.heroSubline, { color: textSecondary }]}>
-                      Diese Woche ist dein Baby so groß wie {article ? `${article}` : ''}
+                      {t('hero.comparison', { comparison: article }).trim()}
                     </ThemedText>
                     <ThemedText
                       style={[styles.heroFruit, { color: textPrimary }]}
@@ -307,7 +317,7 @@ function BabySizeContent() {
 
               <View style={[styles.descriptionBlock, styles.glassSurface, glassSurfaceStyle]}>
                 <GlassLayer tint={pastelPaletteResolved.peach} sheenOpacity={descriptionSheen} />
-                <ThemedText style={[styles.descriptionTitle, { color: textPrimary }]}>Entwicklung in dieser Woche</ThemedText>
+                <ThemedText style={[styles.descriptionTitle, { color: textPrimary }]}>{t('development.title')}</ThemedText>
                 <ThemedText style={[styles.descriptionText, { color: textSecondary }]}>{babyData.description}</ThemedText>
               </View>
             </View>
@@ -315,13 +325,13 @@ function BabySizeContent() {
 
           <LiquidGlassCard style={styles.glassCard} overlayColor={glassOverlay} borderColor={glassBorder}>
             <View style={styles.glassInner}>
-              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>Andere Wochen entdecken</ThemedText>
+              <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('weeks.title')}</ThemedText>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.weekChips}
               >
-                {babySizeData.map((data) => {
+                {localizedBabySizeData.map((data) => {
                   const isSelected = data.week === babyData.week;
                   return (
                     <TouchableOpacity
@@ -334,6 +344,7 @@ function BabySizeContent() {
                       ]}
                       activeOpacity={0.85}
                       onPress={() => router.setParams({ week: data.week.toString() })}
+                      accessibilityLabel={t('week.accessibility', { week: data.week })}
                     >
                       <GlassLayer
                         tint={isSelected ? pastelPaletteResolved.lavender : neutralChipTint}

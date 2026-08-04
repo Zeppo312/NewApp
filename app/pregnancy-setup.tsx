@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -24,8 +26,21 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { createBaby, saveBabyInfo } from '@/lib/baby';
 import { updateDueDateAndSync } from '@/lib/supabase';
+import {
+  DEFAULT_PREGNANCY_SETUP_LOCALE,
+  getPregnancySetupLocaleTag,
+  PregnancySetupTranslationKey,
+  translatePregnancySetupText,
+} from '@/lib/pregnancySetupTranslations';
 
 type GenderOption = 'male' | 'female' | 'unknown';
+
+let ACTIVE_PREGNANCY_SETUP_LOCALE = DEFAULT_PREGNANCY_SETUP_LOCALE;
+let PREGNANCY_SETUP_LOCALE_TAG = getPregnancySetupLocaleTag(ACTIVE_PREGNANCY_SETUP_LOCALE);
+const t = (
+  key: PregnancySetupTranslationKey,
+  params?: Record<string, string | number>,
+) => translatePregnancySetupText(ACTIVE_PREGNANCY_SETUP_LOCALE, key, params);
 
 const makeDefaultDueDate = () => {
   const date = new Date();
@@ -34,6 +49,8 @@ const makeDefaultDueDate = () => {
 };
 
 export default function PregnancySetupScreen() {
+  ACTIVE_PREGNANCY_SETUP_LOCALE = useLocale().locale;
+  PREGNANCY_SETUP_LOCALE_TAG = getPregnancySetupLocaleTag(ACTIVE_PREGNANCY_SETUP_LOCALE);
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -77,8 +94,8 @@ export default function PregnancySetupScreen() {
   }, [babyIdParam]);
 
   const formattedDueDate = useMemo(() => {
-    if (!dueDate) return 'ET auswählen';
-    return dueDate.toLocaleDateString('de-DE');
+    if (!dueDate) return t('dueDate.placeholder');
+    return dueDate.toLocaleDateString(PREGNANCY_SETUP_LOCALE_TAG);
   }, [dueDate]);
 
   const openDatePicker = () => {
@@ -102,11 +119,11 @@ export default function PregnancySetupScreen() {
   const handleCreatePregnancy = async () => {
     if (isSaving) return;
     if (!user) {
-      Alert.alert('Fehler', 'Bitte melde dich an.');
+      Alert.alert(t('common.error'), t('validation.signIn'));
       return;
     }
     if (!dueDate) {
-      Alert.alert('Fehlt', 'Bitte gib zuerst den ET an.');
+      Alert.alert(t('common.missing'), t('validation.dueDate'));
       return;
     }
 
@@ -115,7 +132,7 @@ export default function PregnancySetupScreen() {
       let resolvedBabyId = targetBabyId;
       const trimmedName = babyName.trim();
       if (!resolvedBabyId) {
-        const fallbackName = trimmedName || 'Schwangerschaft';
+        const fallbackName = trimmedName || t('fallback.name');
         const { data, error } = await createBaby({
           name: fallbackName,
           baby_gender: gender,
@@ -128,14 +145,14 @@ export default function PregnancySetupScreen() {
 
         const created = Array.isArray(data) ? data[0] : data;
         if (!created?.id) {
-          throw new Error('Kind konnte nicht angelegt werden.');
+          throw new Error(t('error.createBaby'));
         }
 
         resolvedBabyId = created.id;
         setTargetBabyId(created.id);
       }
       if (!resolvedBabyId) {
-        throw new Error('Kein Kind für die Schwangerschaft ausgewählt.');
+        throw new Error(t('error.noBaby'));
       }
 
       await refreshBabies();
@@ -143,7 +160,7 @@ export default function PregnancySetupScreen() {
 
       const dueDateResult = await updateDueDateAndSync(user.id, dueDate);
       if (!dueDateResult?.success) {
-        throw dueDateResult?.error ?? new Error('ET konnte nicht gespeichert werden.');
+        throw dueDateResult?.error ?? new Error(t('error.saveDueDate'));
       }
 
       const updates: { baby_gender: GenderOption; birth_date: null; name?: string } = {
@@ -171,7 +188,7 @@ export default function PregnancySetupScreen() {
       router.replace('/(tabs)/pregnancy-home' as any);
     } catch (error) {
       console.error('Error creating pregnancy:', error);
-      Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht angelegt werden.');
+      Alert.alert(t('common.error'), t('error.createPregnancy'));
     } finally {
       setIsSaving(false);
     }
@@ -182,15 +199,15 @@ export default function PregnancySetupScreen() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
-          title="Schwangerschaft anlegen"
-          subtitle="Nur die wichtigsten Angaben"
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
           showBackButton
           onBackPress={() => router.back()}
         />
 
         <ScrollView contentContainerStyle={styles.content}>
           <View style={[styles.card, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
-            <ThemedText style={[styles.label, { color: textPrimary }]}>Errechneter Termin (ET)</ThemedText>
+            <ThemedText style={[styles.label, { color: textPrimary }]}>{t('dueDate.label')}</ThemedText>
             <TouchableOpacity
               style={[styles.dateButton, { borderColor: inputBorder }]}
               onPress={openDatePicker}
@@ -215,11 +232,14 @@ export default function PregnancySetupScreen() {
             {Platform.OS === 'ios' && (
               <IOSBottomDatePicker
                 visible={showDatePicker}
-                title="Entbindungstermin auswählen"
+                title={t('dueDate.pickerTitle')}
                 value={tempDueDate}
                 mode="date"
                 minimumDate={minDueDate}
                 maximumDate={maxDueDate}
+                confirmLabel={t('common.done')}
+                cancelLabel={t('common.cancel')}
+                locale={PREGNANCY_SETUP_LOCALE_TAG}
                 onClose={() => setShowDatePicker(false)}
                 onConfirm={(date) => {
                   setTempDueDate(date);
@@ -233,7 +253,7 @@ export default function PregnancySetupScreen() {
 
           <View style={[styles.card, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
             <ThemedText style={[styles.label, { color: textPrimary }]}>
-              Geschlecht (optional, falls bekannt)
+              {t('gender.label')}
             </ThemedText>
             <View style={styles.genderRow}>
               <TouchableOpacity
@@ -241,35 +261,35 @@ export default function PregnancySetupScreen() {
                 onPress={() => setGender('male')}
                 disabled={isSaving}
               >
-                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>Junge</ThemedText>
+                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>{t('gender.boy')}</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.genderButton, gender === 'female' && styles.genderButtonActive]}
                 onPress={() => setGender('female')}
                 disabled={isSaving}
               >
-                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>Mädchen</ThemedText>
+                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>{t('gender.girl')}</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.genderButton, gender === 'unknown' && styles.genderButtonActive]}
                 onPress={() => setGender('unknown')}
                 disabled={isSaving}
               >
-                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>Unbekannt</ThemedText>
+                <ThemedText style={[styles.genderButtonText, { color: textPrimary }]}>{t('gender.unknown')}</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={[styles.card, { backgroundColor: inputBackground, borderColor: inputBorder }]}>
             <ThemedText style={[styles.label, { color: textPrimary }]}>
-              Habt ihr schon einen Namen? (optional)
+              {t('name.label')}
             </ThemedText>
             <TextInput
               style={[styles.nameInput, { borderColor: inputBorder, color: textPrimary }]}
               value={babyName}
               onChangeText={setBabyName}
               editable={!isSaving}
-              placeholder="Name eingeben"
+              placeholder={t('name.placeholder')}
               placeholderTextColor={textSecondary}
               autoCapitalize="words"
               returnKeyType="done"
@@ -282,7 +302,7 @@ export default function PregnancySetupScreen() {
             disabled={isSaving}
           >
             <ThemedText style={[styles.submitButtonText, { color: textPrimary }]}>
-              {isSaving ? 'Wird angelegt...' : 'Schwangerschaft anlegen'}
+              {isSaving ? t('submit.saving') : t('submit.idle')}
             </ThemedText>
           </TouchableOpacity>
         </ScrollView>

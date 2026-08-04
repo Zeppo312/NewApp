@@ -23,6 +23,13 @@ import {
   type NightWindowSettings,
 } from '@/lib/nightWindowSettings';
 import { parseSafeDate, getSafePickerDate } from '@/lib/safeDate';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
+import { DEFAULT_SLEEP_TRACKER_LOCALE, getSleepTrackerLocaleTag, SleepTrackerTranslationKey, translateSleepTrackerText } from '@/lib/sleepTrackerTranslations';
+
+let ACTIVE_NIGHT_EDITOR_LOCALE = DEFAULT_SLEEP_TRACKER_LOCALE;
+let NIGHT_EDITOR_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_NIGHT_EDITOR_LOCALE);
+const t = (key: SleepTrackerTranslationKey, params?: Record<string, string | number>) => translateSleepTrackerText(ACTIVE_NIGHT_EDITOR_LOCALE, key, params);
 
 // ─── Constants ──────────────────────────────────────────────
 const PICKER_MIN_DATE = new Date(2020, 0, 1);
@@ -61,36 +68,36 @@ type NightSleepEditorProps = {
 
 // ─── Helpers ────────────────────────────────────────────────
 const formatClockTime = (date: Date) =>
-  date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  date.toLocaleTimeString(NIGHT_EDITOR_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' });
 
 const minutesToHMM = (mins: number) => {
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
-  if (h <= 0) return `${m} Min`;
+  if (h <= 0) return `${m} ${t('unit.min')}`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m.toString().padStart(2, '0')}m`;
 };
 
 const formatWakeDuration = (seconds: number) => {
-  if (seconds < 60) return `${seconds} Sek`;
+  if (seconds < 60) return `${seconds} ${t('unit.sec')}`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   if (minutes < 60) {
-    return remainingSeconds > 0 ? `${minutes} Min ${remainingSeconds} Sek` : `${minutes} Min`;
+    return remainingSeconds > 0 ? `${minutes} ${t('unit.min')} ${remainingSeconds} ${t('unit.sec')}` : `${minutes} ${t('unit.min')}`;
   }
 
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   if (remainingSeconds > 0) {
     return m > 0
-      ? `${h}h ${m.toString().padStart(2, '0')}m ${remainingSeconds} Sek`
-      : `${h}h ${remainingSeconds} Sek`;
+      ? `${h}h ${m.toString().padStart(2, '0')}m ${remainingSeconds} ${t('unit.sec')}`
+      : `${h}h ${remainingSeconds} ${t('unit.sec')}`;
   }
   return m > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${h}h`;
 };
 
 const formatShortDayDate = (date: Date) =>
-  date.toLocaleDateString('de-DE', {
+  date.toLocaleDateString(NIGHT_EDITOR_LOCALE_TAG, {
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',
@@ -258,6 +265,9 @@ export const MiniNightTimeline = ({
   isDark: boolean;
   showLabels?: boolean;
 }) => {
+  const { locale } = useLocale();
+  ACTIVE_NIGHT_EDITOR_LOCALE = locale;
+  NIGHT_EDITOR_LOCALE_TAG = getSleepTrackerLocaleTag(locale);
   const anchor = getNightAnchor(nightGroup, nightWindowSettings);
   const segments = nightGroup.segments;
   if (segments.length === 0) return null;
@@ -550,7 +560,7 @@ const TimePickerRow = ({
                       onPress={() => setShowIOS(false)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
                     <TouchableOpacity
@@ -560,7 +570,7 @@ const TimePickerRow = ({
                       }}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>{t('common.done')}</Text>
                     </TouchableOpacity>
                   </View>
                   {/* iOS Spinner – nur mounten wenn sichtbar, damit der native Picker
@@ -660,11 +670,11 @@ const TimePickerRow = ({
                 <View style={[rowStyles.iosModalCard, { backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}>
                   <View style={rowStyles.iosModalHeader}>
                     <TouchableOpacity onPress={() => setShowIOS(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
                     <TouchableOpacity onPress={() => { commitIOSDraft(); setShowIOS(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>{t('common.done')}</Text>
                     </TouchableOpacity>
                   </View>
                   {showIOS && (
@@ -785,7 +795,7 @@ const TimePickerRow = ({
                       onPress={() => setShowIOS(false)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>Abbrechen</Text>
+                      <Text style={[rowStyles.iosActionText, { color: textSecondary }]}>{t('common.cancel')}</Text>
                     </TouchableOpacity>
                     <Text style={[rowStyles.iosModalTitle, { color: textPrimary }]}>{label}</Text>
                     <TouchableOpacity
@@ -795,7 +805,7 @@ const TimePickerRow = ({
                       }}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
-                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>Fertig</Text>
+                      <Text style={[rowStyles.iosActionText, { color: accentColor }]}>{t('common.done')}</Text>
                     </TouchableOpacity>
                   </View>
                   {showIOS && (
@@ -975,6 +985,9 @@ export default function NightSleepEditor({
   onDeleteNightGroup,
   isSaving,
 }: NightSleepEditorProps) {
+  const { locale } = useLocale();
+  ACTIVE_NIGHT_EDITOR_LOCALE = locale;
+  NIGHT_EDITOR_LOCALE_TAG = getSleepTrackerLocaleTag(locale);
   const router = useRouter();
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -1283,12 +1296,12 @@ export default function NightSleepEditor({
     if (minutesBucket(fixedEnd) === minutesBucket(endReference)) return;
 
     Alert.alert(
-      'Nachtschlaf korrigieren',
-      `Aufgewacht wird auf ${formatShortDayDate(fixedEnd)} ${formatClockTime(fixedEnd)} gesetzt.`,
+      t('editor.fixTitle'),
+      t('editor.fixBody', { date: `${formatShortDayDate(fixedEnd)} ${formatClockTime(fixedEnd)}` }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Korrigieren',
+          text: t('editor.fix'),
           onPress: () => {
             boundaryReferenceTimesRef.current[endKey] = fixedEnd;
             scheduleBoundaryAdjust(endKey, lastEntry, 'end_time', fixedEnd);
@@ -1357,12 +1370,12 @@ export default function NightSleepEditor({
 
   const handleDeleteWake = useCallback((phase: WakePhase) => {
     Alert.alert(
-      'Wachphase entfernen',
-      `${formatShortDayDate(phase.start)} ${formatClockTime(phase.start)} – ${formatShortDayDate(phase.end)} ${formatClockTime(phase.end)} (${formatWakeDuration(phase.durationSeconds)}) entfernen und Schlaf verbinden?`,
+      t('editor.removeWakeTitle'),
+      t('editor.removeWakeBody', { range: `${formatShortDayDate(phase.start)} ${formatClockTime(phase.start)} – ${formatShortDayDate(phase.end)} ${formatClockTime(phase.end)} (${formatWakeDuration(phase.durationSeconds)})` }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Entfernen',
+          text: t('editor.remove'),
           style: 'destructive',
           onPress: async () => {
             const currentEntries = entries;
@@ -1420,12 +1433,12 @@ export default function NightSleepEditor({
               if (didApplyOptimisticMerge) {
                 setOptimisticEntries(currentEntries);
               }
-              Alert.alert('Konnte nicht löschen', 'Die Wachphase konnte nicht entfernt werden.');
+              Alert.alert(t('editor.cannotDelete'), t('editor.cannotDeleteBody'));
             } catch {
               if (didApplyOptimisticMerge) {
                 setOptimisticEntries(currentEntries);
               }
-              Alert.alert('Konnte nicht löschen', 'Die Wachphase konnte nicht entfernt werden.');
+              Alert.alert(t('editor.cannotDelete'), t('editor.cannotDeleteBody'));
             }
           },
         },
@@ -1441,17 +1454,17 @@ export default function NightSleepEditor({
       .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
     if (entryIds.length === 0) {
-      Alert.alert('Nicht möglich', 'Für diesen Nachtschlaf wurden keine gültigen Segmente gefunden.');
+      Alert.alert(t('alert.notPossible'), t('editor.noSegments'));
       return;
     }
 
     Alert.alert(
-      'Nachtschlaf löschen',
-      `Möchtest du den gesamten Nachtschlaf wirklich löschen? (${entryIds.length} Segment${entryIds.length === 1 ? '' : 'e'})`,
+      t('editor.deleteNightTitle'),
+      t('editor.deleteNightBody', { count: entryIds.length, segments: t(entryIds.length === 1 ? 'editor.segmentsOne' : 'editor.segmentsMany') }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Alles löschen',
+          text: t('editor.allDelete'),
           style: 'destructive',
           onPress: async () => {
             const didDelete = await onDeleteNightGroup(entryIds);
@@ -1512,8 +1525,8 @@ export default function NightSleepEditor({
 
     if (!targetEntry) {
       Alert.alert(
-        'Nicht speicherbar',
-        'Die gewählte Startzeit liegt außerhalb der Schlafphase. Bitte passe "Von" an.'
+        t('alert.notSaveable'),
+        t('editor.notSaveableBody')
       );
       return;
     }
@@ -1530,7 +1543,7 @@ export default function NightSleepEditor({
       });
 
       if (!savedSplit) {
-        Alert.alert('Konnte nicht speichern', 'Bitte versuche es erneut.');
+        Alert.alert(t('editor.cannotSave'), t('editor.retry'));
         return;
       }
 
@@ -1552,7 +1565,7 @@ export default function NightSleepEditor({
       setNewWakeStart(null);
       hapticLight();
     } catch {
-      Alert.alert('Konnte nicht speichern', 'Beim Speichern ist ein Fehler aufgetreten.');
+      Alert.alert(t('editor.cannotSave'), t('editor.saveError'));
     } finally {
       isSubmittingWakeRef.current = false;
       setIsSubmittingWake(false);
@@ -1619,7 +1632,7 @@ export default function NightSleepEditor({
             <View style={styles.header}>
               <Text style={[styles.headerEmoji]}>🌙</Text>
               <Text style={[styles.headerTitle, { color: textPrimary }]}>
-                Nachtschlaf bearbeiten
+                {t('editor.title')}
               </Text>
               <TouchableOpacity
                 style={[
@@ -1633,7 +1646,7 @@ export default function NightSleepEditor({
                 activeOpacity={0.7}
               >
                 <Text style={[styles.headerSettingsBtnText, { color: accentColor }]}>
-                  ✏️ Nachtschlaffenster anpassen
+                  {t('editor.window')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1641,12 +1654,12 @@ export default function NightSleepEditor({
             {/* Summary */}
             <View style={[styles.summaryCard, { backgroundColor: cardBg }]}>
               <View style={styles.summaryRow}>
-                <Text style={[styles.summaryLabel, { color: textSecondary }]}>Schlaf</Text>
+                <Text style={[styles.summaryLabel, { color: textSecondary }]}>{t('editor.sleep')}</Text>
                 <Text style={[styles.summaryValue, { color: accentColor }]}>{minutesToHMM(totalSleepMin)}</Text>
               </View>
               {totalWakeSeconds > 0 && (
                 <View style={styles.summaryRow}>
-                  <Text style={[styles.summaryLabel, { color: textSecondary }]}>Wach</Text>
+                  <Text style={[styles.summaryLabel, { color: textSecondary }]}>{t('editor.awake')}</Text>
                   <Text style={[styles.summaryValue, { color: wakeColor }]}>{formatWakeDuration(totalWakeSeconds)}</Text>
                 </View>
               )}
@@ -1656,9 +1669,9 @@ export default function NightSleepEditor({
             <View style={[styles.heroDuoCard, { backgroundColor: cardBg }]}>
               {/* Eingeschlafen */}
               <View style={styles.heroDuoSide}>
-                <Text style={[styles.heroLabel, { color: textSecondary }]}>Eingeschlafen</Text>
+                <Text style={[styles.heroLabel, { color: textSecondary }]}>{t('editor.fellAsleep')}</Text>
                 <TimePickerRow
-                  label="Eingeschlafen"
+                  label={t('editor.fellAsleep')}
                   time={nightStart}
                   onChange={handleChangeNightStart}
                   accentColor={accentColor}
@@ -1675,9 +1688,9 @@ export default function NightSleepEditor({
 
               {/* Aufgewacht */}
               <View style={styles.heroDuoSide}>
-                <Text style={[styles.heroLabel, { color: textSecondary }]}>Aufgewacht</Text>
+                <Text style={[styles.heroLabel, { color: textSecondary }]}>{t('editor.wokeUp')}</Text>
                 <TimePickerRow
-                  label="Aufgewacht"
+                  label={t('editor.wokeUp')}
                   time={nightEnd}
                   onChange={handleChangeNightEnd}
                   accentColor={accentColor}
@@ -1702,7 +1715,7 @@ export default function NightSleepEditor({
               >
                 <View style={styles.anomalyHeader}>
                   <Text style={[styles.anomalyTitle, { color: textPrimary }]}>
-                    Unplausible Dauer erkannt
+                    {t('editor.anomalyTitle')}
                   </Text>
                   <TouchableOpacity
                     style={[
@@ -1717,7 +1730,7 @@ export default function NightSleepEditor({
                   </TouchableOpacity>
                 </View>
                 <Text style={[styles.anomalyText, { color: textSecondary }]}>
-                  Dieser Nachtschlaf läuft aktuell über {Math.floor(nightSpanMinutes / ONE_DAY_MINUTES)} Tage.
+                  {t('editor.anomalyBody', { days: Math.floor(nightSpanMinutes / ONE_DAY_MINUTES) })}
                 </Text>
                 <TouchableOpacity
                   style={[styles.anomalyBtn, { backgroundColor: wakeColor }]}
@@ -1726,7 +1739,7 @@ export default function NightSleepEditor({
                   activeOpacity={0.75}
                 >
                   <Text style={styles.anomalyBtnText}>
-                    {isSaving ? 'Speichert...' : 'Automatisch korrigieren'}
+                    {isSaving ? t('editor.saving') : t('editor.autoFix')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1734,14 +1747,14 @@ export default function NightSleepEditor({
 
             {/* Wake phases */}
             <View style={styles.wakeSection}>
-              <Text style={[styles.wakeSectionTitle, { color: textPrimary }]}>Wachphasen</Text>
+              <Text style={[styles.wakeSectionTitle, { color: textPrimary }]}>{t('editor.wakePhases')}</Text>
               {!addingWake && (
                 <TouchableOpacity
                   style={[styles.wakeAddInlineBtn, { backgroundColor: isDark ? 'rgba(232,160,130,0.15)' : 'rgba(232,160,130,0.12)' }]}
                   onPress={handleStartAddWake}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.wakeAddInlineBtnText, { color: wakeColor }]}>+ Hinzufügen</Text>
+                  <Text style={[styles.wakeAddInlineBtnText, { color: wakeColor }]}>{t('editor.add')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1767,9 +1780,9 @@ export default function NightSleepEditor({
                 {/* Von / Bis nebeneinander — wie die Eingeschlafen/Aufgewacht-Karte */}
                 <View style={styles.wakeCardDuo}>
                   <View style={styles.wakeCardDuoSide}>
-                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Von</Text>
+                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>{t('editor.from')}</Text>
                     <TimePickerRow
-                      label="Von"
+                      label={t('editor.from')}
                       time={phase.start}
                       onChange={(d) => handleChangeWakeStart(phase, d)}
                       accentColor={wakeColor}
@@ -1781,9 +1794,9 @@ export default function NightSleepEditor({
                   </View>
                   <View style={[styles.wakeCardDuoDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} />
                   <View style={styles.wakeCardDuoSide}>
-                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>Bis</Text>
+                    <Text style={[styles.wakeCardDuoLabel, { color: textSecondary }]}>{t('editor.to')}</Text>
                     <TimePickerRow
-                      label="Bis"
+                      label={t('editor.to')}
                       time={phase.end}
                       onChange={(d) => handleChangeWakeEnd(phase, d)}
                       accentColor={wakeColor}
@@ -1799,7 +1812,7 @@ export default function NightSleepEditor({
 
             {wakePhases.length === 0 && !addingWake && (
               <Text style={[styles.noWakeText, { color: textSecondary }]}>
-                Keine Wachphasen eingetragen
+                {t('editor.none')}
               </Text>
             )}
 
@@ -1810,10 +1823,10 @@ export default function NightSleepEditor({
                 {/* Von — zwei Spalten: Label + kompakter Datum/Zeit-Picker */}
                 <View style={styles.newWakeVonRow}>
                   <View>
-                    <Text style={[styles.newWakeFormLabel, { color: textSecondary }]}>Von</Text>
+                    <Text style={[styles.newWakeFormLabel, { color: textSecondary }]}>{t('editor.from')}</Text>
                   </View>
                   <TimePickerRow
-                    label="Von"
+                    label={t('editor.from')}
                     time={newWakeStart}
                     onChange={handleChangeNewWakeStart}
                     accentColor={wakeColor}
@@ -1829,7 +1842,7 @@ export default function NightSleepEditor({
 
                 {/* Dauer stepper */}
                 <View style={styles.newWakeStepper}>
-                  <Text style={[styles.newWakeStepperLabel, { color: textSecondary }]}>Dauer</Text>
+                  <Text style={[styles.newWakeStepperLabel, { color: textSecondary }]}>{t('editor.duration')}</Text>
                   <View style={styles.newWakeStepperControls}>
                     <TouchableOpacity
                       style={[styles.newWakeStepBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
@@ -1839,7 +1852,7 @@ export default function NightSleepEditor({
                     >
                       <Text style={[styles.newWakeStepBtnText, { color: wakeColor }]}>−</Text>
                     </TouchableOpacity>
-                    <Text style={[styles.newWakeStepValue, { color: textPrimary }]}>{newWakeDurationMin} Min</Text>
+                    <Text style={[styles.newWakeStepValue, { color: textPrimary }]}>{newWakeDurationMin} {t('unit.min')}</Text>
                     <TouchableOpacity
                       style={[styles.newWakeStepBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
                       onPress={() => setNewWakeDurationMin((d) => Math.min(240, d + 1))}
@@ -1858,7 +1871,7 @@ export default function NightSleepEditor({
                     onPress={() => setAddingWake(false)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.newWakeCancelText, { color: textSecondary }]}>Abbrechen</Text>
+                    <Text style={[styles.newWakeCancelText, { color: textSecondary }]}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.newWakeConfirmBtn, { backgroundColor: wakeColor }]}
@@ -1867,7 +1880,7 @@ export default function NightSleepEditor({
                     activeOpacity={0.7}
                   >
                     <Text style={styles.newWakeConfirmText}>
-                      {isSaving || isSubmittingWake ? 'Speichert…' : 'Hinzufügen'}
+                      {isSaving || isSubmittingWake ? t('editor.saving') : t('editor.add').replace(/^\+\s*/, '')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1885,7 +1898,7 @@ export default function NightSleepEditor({
               activeOpacity={0.7}
             >
               <Text style={styles.deleteNightBtnText}>
-                {isSaving ? 'Speichert...' : 'Gesamten Nachtschlaf löschen'}
+                {isSaving ? t('editor.saving') : t('editor.deleteNight')}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -1912,20 +1925,20 @@ export default function NightSleepEditor({
                 ]}
               >
                 <Text style={[styles.infoModalTitle, { color: textPrimary }]}>
-                  Was macht die Korrektur?
+                  {t('editor.infoTitle')}
                 </Text>
                 <Text style={[styles.infoModalText, { color: textSecondary }]}>
-                  Es wird nur der Zeitpunkt „Aufgewacht“ angepasst.
+                  {t('editor.infoOnlyWake')}
                 </Text>
                 <Text style={[styles.infoModalText, { color: textSecondary }]}>
-                  Die aktuelle Aufgewacht-Uhrzeit bleibt erhalten und der Tag wird automatisch so gewählt, dass die Nachtdauer plausibel ist.
+                  {t('editor.infoDay')}
                 </Text>
                 <Text style={[styles.infoModalText, { color: textSecondary }]}>
-                  Sehr lange Mehrtages-Dauern werden dabei verworfen.
+                  {t('editor.infoDiscard')}
                 </Text>
                 {autoFixPreview && (
                   <Text style={[styles.infoModalHint, { color: textSecondary }]}>
-                    Aktueller Vorschlag: {formatShortDayDate(autoFixPreview.fixedEnd)} {formatClockTime(autoFixPreview.fixedEnd)}
+                    {t('editor.infoSuggestion', { date: `${formatShortDayDate(autoFixPreview.fixedEnd)} ${formatClockTime(autoFixPreview.fixedEnd)}` })}
                   </Text>
                 )}
                 <TouchableOpacity
@@ -1933,7 +1946,7 @@ export default function NightSleepEditor({
                   onPress={() => setShowAutoFixInfoModal(false)}
                   activeOpacity={0.75}
                 >
-                  <Text style={styles.infoModalCloseBtnText}>Verstanden</Text>
+                  <Text style={styles.infoModalCloseBtnText}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1946,7 +1959,7 @@ export default function NightSleepEditor({
               onPress={() => !isSaving && onClose()}
               activeOpacity={0.7}
             >
-              <Text style={styles.doneBtnText}>Fertig</Text>
+              <Text style={styles.doneBtnText}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>
         </BlurView>

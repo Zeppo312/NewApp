@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useCallback } from 'react';
 import {
   StyleSheet,
@@ -28,6 +30,17 @@ import { Notification } from '@/lib/community';
 import { navigateToNotificationTarget } from '@/lib/notificationService';
 import { type GroupChatSummary, getGroupChatSummaries } from '@/lib/groupChat';
 import Header from '@/components/Header';
+import {
+  DEFAULT_NOTIFICATIONS_LOCALE,
+  getNotificationsLocaleTag,
+  NotificationsTranslationKey,
+  translateNotificationsText,
+} from '@/lib/notificationsTranslations';
+
+let ACTIVE_NOTIFICATIONS_LOCALE = DEFAULT_NOTIFICATIONS_LOCALE;
+let NOTIFICATIONS_LOCALE_TAG = getNotificationsLocaleTag(ACTIVE_NOTIFICATIONS_LOCALE);
+const t = (key: NotificationsTranslationKey, params?: Record<string, string | number>) =>
+  translateNotificationsText(ACTIVE_NOTIFICATIONS_LOCALE, key, params);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -71,7 +84,7 @@ const getDisplayName = (profile?: NameProfile | null) => {
   if (username) return username;
   const first = profile?.first_name?.trim() || '';
   const last = profile?.last_name?.trim() || '';
-  return `${first} ${last}`.trim() || 'Benutzer';
+  return `${first} ${last}`.trim() || t('common.user');
 };
 
 const normalizeSearchValue = (value?: string | null) => value?.trim().toLowerCase() || '';
@@ -80,23 +93,23 @@ const formatDate = (dateString: string) => {
   const date = new Date(dateString);
   const now = new Date();
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-  if (diffInMinutes < 1) return 'Gerade eben';
-  if (diffInMinutes < 60) return `vor ${diffInMinutes} Min`;
-  if (diffInMinutes < 1440) return `vor ${Math.floor(diffInMinutes / 60)} Std`;
-  return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
+  if (diffInMinutes < 1) return t('date.now');
+  if (diffInMinutes < 60) return t('date.minutes', { count: diffInMinutes });
+  if (diffInMinutes < 1440) return t('date.hours', { count: Math.floor(diffInMinutes / 60) });
+  return date.toLocaleDateString(NOTIFICATIONS_LOCALE_TAG, { day: 'numeric', month: 'short' });
 };
 
 const NOTIFICATION_META: Record<
   string,
   { icon: string; color: string; label: string }
 > = {
-  like_post: { icon: 'heart.fill', color: '#FF6B6B', label: 'hat deinen Beitrag geliked' },
-  like_comment: { icon: 'heart.fill', color: '#FF6B6B', label: 'hat deinen Kommentar geliked' },
-  like_nested_comment: { icon: 'heart.fill', color: '#FF6B6B', label: 'hat deinen Kommentar geliked' },
-  comment: { icon: 'bubble.left.fill', color: '#4DABF7', label: 'hat auf deinen Beitrag geantwortet' },
-  reply: { icon: 'bubble.left.fill', color: '#4DABF7', label: 'hat auf deinen Kommentar geantwortet' },
-  follow: { icon: 'person.badge.plus', color: '#9775FA', label: 'folgt dir jetzt' },
-  message: { icon: 'envelope.fill', color: '#C89F81', label: 'hat dir eine Nachricht gesendet' },
+  like_post: { icon: 'heart.fill', color: '#FF6B6B', label: t('activity.likePost') },
+  like_comment: { icon: 'heart.fill', color: '#FF6B6B', label: t('activity.likeComment') },
+  like_nested_comment: { icon: 'heart.fill', color: '#FF6B6B', label: t('activity.likeComment') },
+  comment: { icon: 'bubble.left.fill', color: '#4DABF7', label: t('activity.comment') },
+  reply: { icon: 'bubble.left.fill', color: '#4DABF7', label: t('activity.reply') },
+  follow: { icon: 'person.badge.plus', color: '#9775FA', label: t('activity.follow') },
+  message: { icon: 'envelope.fill', color: '#C89F81', label: t('activity.message') },
 };
 
 // ── Pastel avatar palette for group chats ────────────────────────
@@ -142,27 +155,27 @@ type TabConfig = {
 const TAB_LIST: TabConfig[] = [
   {
     key: TABS.MESSAGES,
-    label: 'Nachrichten',
+    label: t('tab.messages'),
     icon: 'envelope.fill',
     emptyIcon: 'envelope',
-    emptyTitle: 'Keine Nachrichten',
-    emptySubtitle: 'Wenn dir jemand schreibt, erscheint es hier',
+    emptyTitle: t('empty.messagesTitle'),
+    emptySubtitle: t('empty.messagesSubtitle'),
   },
   {
     key: TABS.ACTIVITY,
-    label: 'Aktivität',
+    label: t('tab.activity'),
     icon: 'heart.fill',
     emptyIcon: 'heart',
-    emptyTitle: 'Keine Aktivitäten',
-    emptySubtitle: 'Wenn jemand deine Beiträge mag, erscheint es hier',
+    emptyTitle: t('empty.activityTitle'),
+    emptySubtitle: t('empty.activitySubtitle'),
   },
   {
     key: TABS.COMMENTS,
-    label: 'Kommentare',
+    label: t('tab.comments'),
     icon: 'bubble.left.fill',
     emptyIcon: 'bubble.left',
-    emptyTitle: 'Keine Kommentare',
-    emptySubtitle: 'Wenn jemand auf deine Beiträge antwortet, erscheint es hier',
+    emptyTitle: t('empty.commentsTitle'),
+    emptySubtitle: t('empty.commentsSubtitle'),
   },
 ];
 
@@ -199,7 +212,7 @@ async function resolveProfile(userId: string): Promise<ResolvedProfile> {
     };
   }
 
-  return { name: 'Benutzer', avatarUrl: null };
+  return { name: t('common.user'), avatarUrl: null };
 }
 
 // ===========================================================================
@@ -207,6 +220,8 @@ async function resolveProfile(userId: string): Promise<ResolvedProfile> {
 // ===========================================================================
 
 export default function NotificationsScreen() {
+  ACTIVE_NOTIFICATIONS_LOCALE = useLocale().locale;
+  NOTIFICATIONS_LOCALE_TAG = getNotificationsLocaleTag(ACTIVE_NOTIFICATIONS_LOCALE);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -601,9 +616,9 @@ export default function NotificationsScreen() {
   // ---- Message row (direct) ----
   const renderMessageRow = (item: DirectMessage) => {
     const isFromSelf = user && item.sender_id === user.id;
-    const partnerName = isFromSelf ? item.receiver_name || 'Benutzer' : item.sender_name || 'Benutzer';
+    const partnerName = isFromSelf ? item.receiver_name || t('common.user') : item.sender_name || t('common.user');
     const previewText = getMessagePreviewText(item);
-    const preview = isFromSelf ? `Du: ${previewText}` : previewText;
+    const preview = isFromSelf ? t('message.self', { preview: previewText }) : previewText;
     const unreadCount = item.unread_count || 0;
     const unread = unreadCount > 0;
 
@@ -656,10 +671,10 @@ export default function NotificationsScreen() {
   // ---- Group chat row ----
   const renderGroupChatRow = (item: GroupChatSummary) => {
     const c = avatarColor(item.group_name, isDark);
-    const senderName = item.latest_message_sender_name || 'Jemand';
+    const senderName = item.latest_message_sender_name || t('common.someone');
     const preview = item.latest_message_preview
       ? `${senderName}: ${item.latest_message_preview}`
-      : 'Noch keine Nachrichten';
+      : t('message.none');
     const unread = item.unread_count > 0;
 
     return (
@@ -726,7 +741,7 @@ export default function NotificationsScreen() {
       >
         {renderAvatar(
           item.sender_avatar_url,
-          item.sender_name || 'Benutzer',
+          item.sender_name || t('common.user'),
           'person.badge.plus',
           '#9775FA',
           isDark ? 'rgba(151,117,250,0.2)' : '#F0EBFF',
@@ -741,7 +756,7 @@ export default function NotificationsScreen() {
               ]}
               numberOfLines={1}
             >
-              {item.sender_name || 'Benutzer'}
+              {item.sender_name || t('common.user')}
             </ThemedText>
             <Text style={[styles.rowTime, unread ? { color: '#9775FA', fontWeight: '600' } : { color: textTertiary }]}>
               {formatDate(item.created_at)}
@@ -753,12 +768,12 @@ export default function NotificationsScreen() {
               unread ? { color: textPrimary, fontWeight: '600' } : { color: textSecondary },
             ]}
           >
-            folgt dir jetzt
+            {t('activity.follow')}
           </ThemedText>
         </View>
         {unread && (
           <View style={[styles.unreadCountBadge, { backgroundColor: '#9775FA' }]}>
-            <Text style={styles.unreadCountText}>Neu</Text>
+            <Text style={styles.unreadCountText}>{t('common.new')}</Text>
           </View>
         )}
       </GlassRow>
@@ -778,7 +793,7 @@ export default function NotificationsScreen() {
       >
         {renderAvatar(
           item.sender_avatar_url,
-          item.sender_name || 'Benutzer',
+          item.sender_name || t('common.user'),
           meta.icon,
           meta.color,
           isDark ? `${meta.color}22` : `${meta.color}18`,
@@ -793,7 +808,7 @@ export default function NotificationsScreen() {
               ]}
               numberOfLines={1}
             >
-              {item.sender_name || 'Benutzer'}
+              {item.sender_name || t('common.user')}
             </ThemedText>
             <Text style={[styles.rowTime, unread ? { color: meta.color, fontWeight: '600' } : { color: textTertiary }]}>
               {formatDate(item.created_at)}
@@ -818,7 +833,7 @@ export default function NotificationsScreen() {
         </View>
         {unread && (
           <View style={[styles.unreadCountBadge, { backgroundColor: meta.color }]}>
-            <Text style={styles.unreadCountText}>Neu</Text>
+            <Text style={styles.unreadCountText}>{t('common.new')}</Text>
           </View>
         )}
       </GlassRow>
@@ -854,11 +869,11 @@ export default function NotificationsScreen() {
         <IconSymbol name={activeTabConfig.emptyIcon as any} size={32} color={textTertiary} />
       </View>
       <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>
-        {isSearchingMessages ? 'Keine Chats gefunden' : activeTabConfig.emptyTitle}
+        {isSearchingMessages ? t('search.emptyTitle') : activeTabConfig.emptyTitle}
       </ThemedText>
       <ThemedText style={[styles.emptySubtitle, { color: textTertiary }]}>
         {isSearchingMessages
-          ? 'Für deine Suche wurden keine Nachrichten, Gruppen oder Kontakte gefunden.'
+          ? t('search.emptySubtitle')
           : activeTabConfig.emptySubtitle}
       </ThemedText>
     </View>
@@ -874,8 +889,8 @@ export default function NotificationsScreen() {
         <Stack.Screen options={{ headerShown: false }} />
 
         <Header
-          title="Benachrichtigungen"
-          subtitle="Nachrichten und Aktivitäten"
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
           showBackButton
           onBackPress={() => router.push('/(tabs)/community')}
         />
@@ -897,7 +912,7 @@ export default function NotificationsScreen() {
               <TextInput
                 value={messageQuery}
                 onChangeText={setMessageQuery}
-                placeholder="Chats suchen"
+                placeholder={t('search.placeholder')}
                 placeholderTextColor={textTertiary}
                 autoCapitalize="none"
                 autoCorrect={false}

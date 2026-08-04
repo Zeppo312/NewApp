@@ -14,39 +14,20 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { isUserAdmin } from '@/lib/supabase/recommendations';
-
-// Fallback-Daten für Babynamen, falls die Datenbank nicht verfügbar ist
-const FALLBACK_NAMES = {
-  male: [
-    { name: 'Noah', meaning: 'Ruhe, Trost', origin: 'Hebräisch', gender: 'male' as const },
-    { name: 'Leon', meaning: 'Löwe', origin: 'Lateinisch', gender: 'male' as const },
-    { name: 'Paul', meaning: 'Der Kleine, der Bescheidene', origin: 'Lateinisch', gender: 'male' as const },
-    { name: 'Ben', meaning: 'Sohn', origin: 'Hebräisch', gender: 'male' as const },
-    { name: 'Finn', meaning: 'Der Blonde, der Helle', origin: 'Irisch', gender: 'male' as const },
-  ],
-  female: [
-    { name: 'Emma', meaning: 'Die Große, die Starke', origin: 'Germanisch', gender: 'female' as const },
-    { name: 'Mia', meaning: 'Mein', origin: 'Italienisch', gender: 'female' as const },
-    { name: 'Hannah', meaning: 'Die Anmutige', origin: 'Hebräisch', gender: 'female' as const },
-    { name: 'Emilia', meaning: 'Die Eifrige, die Fleißige', origin: 'Lateinisch', gender: 'female' as const },
-    { name: 'Lina', meaning: 'Die Zarte, die Milde', origin: 'Arabisch', gender: 'female' as const },
-  ],
-  unisex: [
-    { name: 'Alex', meaning: 'Der Beschützer', origin: 'Griechisch', gender: 'unisex' as const },
-    { name: 'Charlie', meaning: 'Die Freie', origin: 'Germanisch', gender: 'unisex' as const },
-    { name: 'Robin', meaning: 'Der Glänzende', origin: 'Germanisch', gender: 'unisex' as const },
-    { name: 'Kim', meaning: 'Der Kühne', origin: 'Englisch', gender: 'unisex' as const },
-    { name: 'Noel', meaning: 'Weihnachten', origin: 'Französisch', gender: 'unisex' as const },
-  ]
-};
+import {
+  getLocalizedFallbackBabyNames,
+  translateBabyNamesText,
+  type BabyNamesTranslationKey,
+} from '@/lib/babyNamesTranslations';
 
 // Kategorien für die Filterung
 const CATEGORIES = [
-  { id: 'all', name: 'Alle Namen', icon: 'list.bullet' },
-  { id: 'male', name: 'Jungennamen', icon: 'figure.boy' },
-  { id: 'female', name: 'Mädchennamen', icon: 'figure.girl' },
-  { id: 'favorites', name: 'Favoriten', icon: 'heart.fill' },
+  { id: 'all', labelKey: 'category.all', icon: 'list.bullet' },
+  { id: 'male', labelKey: 'category.male', icon: 'figure.boy' },
+  { id: 'female', labelKey: 'category.female', icon: 'figure.girl' },
+  { id: 'favorites', labelKey: 'category.favorites', icon: 'heart.fill' },
 ];
 
 const LETTER_FILTERS = ['all', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Ä', 'Ö', 'Ü'];
@@ -79,6 +60,9 @@ type FocusConfig = {
 };
 
 export default function BabyNamesScreen() {
+  const { locale } = useLocale();
+  const t = (key: BabyNamesTranslationKey, params?: Record<string, string | number>) =>
+    translateBabyNamesText(locale, key, params);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -101,8 +85,8 @@ export default function BabyNamesScreen() {
   const { user } = useAuth();
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Finde den perfekten Namen für dein Baby';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -137,7 +121,7 @@ export default function BabyNamesScreen() {
   const PAGE_SIZE = 40;
 
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Babynamen sind hier gesperrt.');
+    Alert.alert(t('preview.alertTitle'), t('preview.description'));
   };
 
   const ensureWritableInCurrentMode = () => {
@@ -152,7 +136,7 @@ export default function BabyNamesScreen() {
     }
     checkAdminStatus();
     resetAndLoadNames();
-  }, [user]);
+  }, [user, locale]);
 
   useEffect(() => {
     resetAndLoadNames();
@@ -193,34 +177,21 @@ export default function BabyNamesScreen() {
 
       if (error) {
         console.error('Error loading favorites:', error);
-        Alert.alert('Fehler', 'Favoriten konnten nicht geladen werden.');
+        Alert.alert(t('common.error'), t('favorite.loadFailed'));
       } else if (data) {
         const favoriteNames = data.map(item => item.name);
         setFavorites(favoriteNames);
       }
     } catch (err) {
       console.error('Failed to load favorites:', err);
-      Alert.alert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
+      Alert.alert(t('common.error'), t('error.unexpected'));
     }
   };
 
   const getFallbackNames = () => {
-    let fallback: Name[] = [];
-    if (selectedCategory === 'all') {
-      fallback = [
-        ...FALLBACK_NAMES.male,
-        ...FALLBACK_NAMES.female,
-        ...FALLBACK_NAMES.unisex,
-      ];
-    } else if (selectedCategory === 'favorites') {
-      fallback = [
-        ...FALLBACK_NAMES.male,
-        ...FALLBACK_NAMES.female,
-        ...FALLBACK_NAMES.unisex,
-      ].filter(name => favorites.includes(name.name));
-    } else {
-      fallback = FALLBACK_NAMES[selectedCategory as keyof typeof FALLBACK_NAMES] ?? [];
-    }
+    let fallback: Name[] = getLocalizedFallbackBabyNames(locale);
+    if (selectedCategory === 'favorites') fallback = fallback.filter(name => favorites.includes(name.name));
+    else if (selectedCategory !== 'all') fallback = fallback.filter(name => name.gender === selectedCategory);
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -280,6 +251,29 @@ export default function BabyNamesScreen() {
     return merged;
   };
 
+  const loadLocalizedNamesPage = async (offset: number) => {
+    const { data, error } = await supabase.rpc('search_localized_baby_names', {
+      p_locale: locale,
+      p_gender:
+        selectedCategory === 'male' || selectedCategory === 'female'
+          ? selectedCategory
+          : null,
+      p_search: searchQuery.trim() || null,
+      p_letter: letterFilter === 'all' ? null : letterFilter,
+      p_favorite_names: selectedCategory === 'favorites' ? favorites : null,
+      p_limit: PAGE_SIZE,
+      p_offset: offset,
+    });
+
+    if (!error) return { data, error: null };
+
+    // Keep older deployments usable until the localization migration is applied.
+    console.warn('Localized baby-name query unavailable, using source fields:', error.message);
+    const legacyQuery = buildNamesQuery();
+    if (!legacyQuery) return { data: [] as Name[], error: null };
+    return legacyQuery.range(offset, offset + PAGE_SIZE - 1);
+  };
+
   const fetchNamesPage = async (reset = false) => {
     const fetchId = (namesFetchIdRef.current += 1);
     if (reset) {
@@ -291,8 +285,7 @@ export default function BabyNamesScreen() {
       setIsLoadingMore(true);
     }
 
-    const query = buildNamesQuery();
-    if (!query) {
+    if (selectedCategory === 'favorites' && favorites.length === 0) {
       setNames([]);
       setIsLoading(false);
       setIsLoadingMore(false);
@@ -303,7 +296,7 @@ export default function BabyNamesScreen() {
 
     try {
       const offset = reset ? 0 : nameOffset;
-      const { data, error } = await query.range(offset, offset + PAGE_SIZE - 1);
+      const { data, error } = await loadLocalizedNamesPage(offset);
       if (fetchId !== namesFetchIdRef.current) return;
 
       if (error) {
@@ -313,7 +306,7 @@ export default function BabyNamesScreen() {
         setHasMore(false);
         setUsingFallback(true);
       } else {
-        const next = (data ?? []).map(item => ({
+        const next = (data ?? []).map((item: Omit<Name, 'isFavorite'>) => ({
           ...item,
           isFavorite: favorites.includes(item.name),
         }));
@@ -508,7 +501,7 @@ export default function BabyNamesScreen() {
     if (tuples.length === 0) {
       return {
         entries: [] as BulkEntry[],
-        errorMessage: 'Keine gültigen Werte gefunden. Bitte das INSERT-VALUES-Format prüfen.',
+        errorMessage: t('admin.invalidSql'),
         errorIndex: null as number | null,
       };
     }
@@ -518,7 +511,7 @@ export default function BabyNamesScreen() {
       let error: string | null = null;
 
       if (fields.length !== 6) {
-        error = `Erwartet 6 Werte, gefunden ${fields.length}.`;
+        error = t('admin.expectedValues', { count: fields.length });
       }
 
       const nameParsed = parseSqlLiteral(fields[1] ?? '');
@@ -533,13 +526,13 @@ export default function BabyNamesScreen() {
 
       if (!error) {
         if (nameParsed.type !== 'string' || !nameValue.trim()) {
-          error = 'Name fehlt oder ist nicht als Text angegeben.';
+          error = t('admin.nameNotText');
         } else if (meaningParsed.type === 'raw') {
-          error = 'Bedeutung muss Text (in einfachen Anführungszeichen) oder NULL sein.';
+          error = t('admin.meaningNotText');
         } else if (originParsed.type === 'raw') {
-          error = 'Herkunft muss Text (in einfachen Anführungszeichen) oder NULL sein.';
+          error = t('admin.originNotText');
         } else if (genderParsed.type !== 'string') {
-          error = 'Geschlecht muss als Text angegeben werden.';
+          error = t('admin.genderNotText');
         }
       }
 
@@ -556,7 +549,7 @@ export default function BabyNamesScreen() {
     const firstErrorIndex = entries.findIndex(entry => entry.error);
     const errorMessage =
       firstErrorIndex >= 0
-        ? `Fehler bei "${entries[firstErrorIndex].name || 'Unbekannt'}": ${entries[firstErrorIndex].error}`
+        ? t('admin.errorAt', { name: entries[firstErrorIndex].name || t('admin.unknown'), error: entries[firstErrorIndex].error || '' })
         : null;
 
     return {
@@ -584,15 +577,15 @@ export default function BabyNamesScreen() {
         issues.push(entry.error);
       }
       if (!nameValue) {
-        issues.push('Name fehlt.');
+        issues.push(t('admin.nameMissing'));
       }
       if (!genderValue) {
-        issues.push('Geschlecht fehlt.');
+        issues.push(t('admin.genderMissing'));
       } else if (!['male', 'female', 'unisex'].includes(genderValue)) {
-        issues.push('Geschlecht muss female, male oder unisex sein.');
+        issues.push(t('admin.genderInvalid'));
       }
       if (nameValue && (counts.get(nameValue.toLowerCase()) ?? 0) > 1) {
-        issues.push('Name ist in der Liste doppelt.');
+        issues.push(t('admin.listDuplicate'));
       }
 
       return {
@@ -604,7 +597,7 @@ export default function BabyNamesScreen() {
     const firstErrorIndex = nextEntries.findIndex(entry => entry.error);
     const errorMessage =
       firstErrorIndex >= 0
-        ? `Fehler bei "${nextEntries[firstErrorIndex].name || 'Unbekannt'}": ${nextEntries[firstErrorIndex].error}`
+        ? t('admin.errorAt', { name: nextEntries[firstErrorIndex].name || t('admin.unknown'), error: nextEntries[firstErrorIndex].error || '' })
         : null;
 
     return {
@@ -615,7 +608,7 @@ export default function BabyNamesScreen() {
   };
 
   const formatSupabaseError = (error: any) => {
-    const message = typeof error?.message === 'string' ? error.message : 'Unbekannter Fehler';
+    const message = typeof error?.message === 'string' ? error.message : t('admin.unknownError');
     const details = typeof error?.details === 'string' ? error.details : '';
     const hint = typeof error?.hint === 'string' ? error.hint : '';
     const parts = [message];
@@ -652,7 +645,7 @@ export default function BabyNamesScreen() {
   const toggleFavorite = async (name: string) => {
     if (!ensureWritableInCurrentMode()) return;
     if (!user) {
-      Alert.alert('Hinweis', 'Du musst angemeldet sein, um Favoriten zu speichern.');
+      Alert.alert(t('common.notice'), t('favorite.signIn'));
       return;
     }
 
@@ -669,7 +662,7 @@ export default function BabyNamesScreen() {
 
         if (error) {
           console.error('Error removing favorite:', error);
-          Alert.alert('Fehler', 'Favorit konnte nicht entfernt werden.');
+          Alert.alert(t('common.error'), t('favorite.removeFailed'));
         } else {
           // Lokale Favoriten aktualisieren
           setFavorites(favorites.filter(n => n !== name));
@@ -685,7 +678,7 @@ export default function BabyNamesScreen() {
 
         if (error) {
           console.error('Error adding favorite:', error);
-          Alert.alert('Fehler', 'Favorit konnte nicht hinzugefügt werden.');
+          Alert.alert(t('common.error'), t('favorite.addFailed'));
         } else {
           // Lokale Favoriten aktualisieren
           setFavorites([...favorites, name]);
@@ -693,7 +686,7 @@ export default function BabyNamesScreen() {
       }
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
-      Alert.alert('Fehler', 'Ein unerwarteter Fehler ist aufgetreten.');
+      Alert.alert(t('common.error'), t('error.unexpected'));
     } finally {
       setIsSaving(false);
     }
@@ -729,12 +722,12 @@ export default function BabyNamesScreen() {
     if (!ensureWritableInCurrentMode()) return;
     if (!item.id) return;
     Alert.alert(
-      'Name löschen',
-      `Möchtest du "${item.name}" wirklich entfernen?`,
+      t('delete.title'),
+      t('delete.confirm', { name: item.name }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             if (!ensureWritableInCurrentMode()) return;
@@ -744,10 +737,10 @@ export default function BabyNamesScreen() {
               if (error) throw error;
               await resetAndLoadNames();
               setShowCreateModal(false);
-              Alert.alert('Erfolg', 'Der Name wurde gelöscht.');
+              Alert.alert(t('common.success'), t('delete.success'));
             } catch (err) {
               console.error('Error deleting baby name:', err);
-              Alert.alert('Fehler', 'Der Name konnte nicht gelöscht werden.');
+              Alert.alert(t('common.error'), t('delete.failed'));
             } finally {
               setIsCreatingName(false);
             }
@@ -760,13 +753,13 @@ export default function BabyNamesScreen() {
   const handleCreateName = async () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!isAdmin) {
-      Alert.alert('Hinweis', 'Nur Admins können Babynamen hinzufügen.');
+      Alert.alert(t('common.notice'), t('admin.onlyAdmins'));
       return;
     }
 
     if (createMode === 'bulk') {
       if (!bulkSql.trim() && bulkEntries.length === 0) {
-        setBulkError('Bitte zuerst das SQL-Skript einfügen.');
+        setBulkError(t('admin.sqlRequired'));
         return;
       }
 
@@ -806,19 +799,19 @@ export default function BabyNamesScreen() {
           const nextEntriesWithErrors = validation.entries.map(entry => {
             const isDuplicate = existingSet.has(entry.name.trim().toLowerCase());
             return isDuplicate
-              ? { ...entry, error: 'Name existiert bereits in der Datenbank.' }
+              ? { ...entry, error: t('admin.databaseDuplicate') }
               : entry;
           });
           const firstDuplicateIndex = nextEntriesWithErrors.findIndex(entry => entry.error);
           const duplicateMessage =
             firstDuplicateIndex >= 0
-              ? `Fehler bei "${nextEntriesWithErrors[firstDuplicateIndex].name}": ${nextEntriesWithErrors[firstDuplicateIndex].error}`
-              : 'Mindestens ein Name existiert bereits in der Datenbank.';
+              ? t('admin.errorAt', { name: nextEntriesWithErrors[firstDuplicateIndex].name, error: nextEntriesWithErrors[firstDuplicateIndex].error || '' })
+              : t('admin.atLeastOneDuplicate');
 
           setBulkEntries(nextEntriesWithErrors);
           setBulkError(duplicateMessage);
           setBulkErrorIndex(firstDuplicateIndex >= 0 ? firstDuplicateIndex : null);
-          Alert.alert('Fehler', duplicateMessage);
+          Alert.alert(t('common.error'), duplicateMessage);
           return;
         }
 
@@ -836,18 +829,18 @@ export default function BabyNamesScreen() {
             if (index >= 0) {
               setBulkEntries(prev =>
                 prev.map((entry, idx) =>
-                  idx === index ? { ...entry, error: 'Name existiert bereits in der Datenbank.' } : entry
+                  idx === index ? { ...entry, error: t('admin.databaseDuplicate') } : entry
                 )
               );
               setBulkErrorIndex(index);
-              scopedMessage = `Fehler bei "${validation.entries[index].name}": Name existiert bereits in der Datenbank.`;
+              scopedMessage = t('admin.errorAt', { name: validation.entries[index].name, error: t('admin.databaseDuplicate') });
             } else {
-              scopedMessage = `Fehler bei "${duplicateName}": ${errorMessage}`;
+              scopedMessage = t('admin.errorAt', { name: duplicateName, error: errorMessage });
             }
           }
 
           setBulkError(scopedMessage);
-          Alert.alert('Fehler', scopedMessage);
+          Alert.alert(t('common.error'), scopedMessage);
           return;
         }
 
@@ -856,12 +849,12 @@ export default function BabyNamesScreen() {
         setShowCreateModal(false);
         setSelectedCategory('all');
         setSearchQuery('');
-        Alert.alert('Erfolg', `${payload.length} Namen wurden hinzugefügt.`);
+        Alert.alert(t('common.success'), t('admin.added', { count: payload.length }));
       } catch (err) {
         console.error('Failed to create baby names from SQL:', err);
         const message = formatSupabaseError(err);
         setBulkError(message);
-        Alert.alert('Fehler', message);
+        Alert.alert(t('common.error'), message);
       } finally {
         setIsCreatingName(false);
       }
@@ -871,7 +864,7 @@ export default function BabyNamesScreen() {
 
     const nameValue = newName.trim();
     if (!nameValue) {
-      Alert.alert('Fehler', 'Bitte gib einen Namen ein.');
+      Alert.alert(t('common.error'), t('admin.nameRequired'));
       return;
     }
 
@@ -879,7 +872,7 @@ export default function BabyNamesScreen() {
     if (!editingNameId || originalName !== nameValue.toLowerCase()) {
       const existingNames = await findExistingNames([nameValue]);
       if (existingNames.length > 0) {
-        Alert.alert('Hinweis', 'Dieser Name existiert bereits.');
+        Alert.alert(t('common.notice'), t('admin.duplicate'));
         return;
       }
     }
@@ -907,10 +900,10 @@ export default function BabyNamesScreen() {
       setSearchQuery('');
       setEditingNameId(null);
       setEditingOriginalName(null);
-      Alert.alert('Erfolg', editingNameId ? 'Der Name wurde aktualisiert.' : 'Der Name wurde hinzugefügt.');
+      Alert.alert(t('common.success'), editingNameId ? t('admin.savedUpdated') : t('admin.savedAdded'));
     } catch (err) {
       console.error('Failed to create baby name:', err);
-      Alert.alert('Fehler', formatSupabaseError(err));
+      Alert.alert(t('common.error'), formatSupabaseError(err));
     } finally {
       setIsCreatingName(false);
     }
@@ -942,7 +935,7 @@ export default function BabyNamesScreen() {
   const handleParseBulkSql = () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!bulkSql.trim()) {
-      setBulkError('Bitte zuerst das SQL-Skript einfügen.');
+      setBulkError(t('admin.sqlRequired'));
       return;
     }
 
@@ -978,7 +971,7 @@ export default function BabyNamesScreen() {
       >
         <View style={styles.bulkEntryHeader}>
           <ThemedText style={[styles.bulkEntryTitle, { color: textPrimary }, hasError && styles.bulkEntryTitleError]}>
-            {index + 1}. {item.name || 'Unbenannt'}
+            {index + 1}. {item.name || t('admin.unnamed')}
           </ThemedText>
           <TouchableOpacity
             onPress={() => handleRemoveBulkEntry(index)}
@@ -990,36 +983,36 @@ export default function BabyNamesScreen() {
         </View>
         {hasError && <ThemedText style={styles.bulkEntryErrorText}>{item.error}</ThemedText>}
         <View style={styles.bulkField}>
-          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Name</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>{t('field.name')}</ThemedText>
           {renderInlineField(
             item.name,
-            'z.B. Mila',
+            t('admin.namePlaceholder'),
             () =>
               openFocusEditor(
                 {
                   mode: 'bulk',
                   field: 'name',
                   index,
-                  label: 'Name',
-                  placeholder: 'z.B. Mila',
+                  label: t('field.name'),
+                  placeholder: t('admin.namePlaceholder'),
                 },
                 item.name
               )
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Bedeutung</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>{t('field.meaning')}</ThemedText>
           {renderInlineField(
             item.meaning,
-            'z.B. Wunder, Hoffnung',
+            t('admin.meaningPlaceholder'),
             () =>
               openFocusEditor(
                 {
                   mode: 'bulk',
                   field: 'meaning',
                   index,
-                  label: 'Bedeutung',
-                  placeholder: 'z.B. Wunder, Hoffnung',
+                  label: t('field.meaning'),
+                  placeholder: t('admin.meaningPlaceholder'),
                   multiline: true,
                 },
                 item.meaning
@@ -1028,25 +1021,25 @@ export default function BabyNamesScreen() {
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Herkunft</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>{t('field.origin')}</ThemedText>
           {renderInlineField(
             item.origin,
-            'z.B. Hebräisch',
+            t('admin.originPlaceholder'),
             () =>
               openFocusEditor(
                 {
                   mode: 'bulk',
                   field: 'origin',
                   index,
-                  label: 'Herkunft',
-                  placeholder: 'z.B. Hebräisch',
+                  label: t('field.origin'),
+                  placeholder: t('admin.originPlaceholder'),
                 },
                 item.origin
               )
           )}
         </View>
         <View style={styles.bulkField}>
-          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>Geschlecht</ThemedText>
+          <ThemedText style={[styles.bulkFieldLabel, { color: textSecondary }]}>{t('field.gender')}</ThemedText>
           {renderInlineField(
             item.gender,
             'female, male, unisex',
@@ -1056,7 +1049,7 @@ export default function BabyNamesScreen() {
                   mode: 'bulk',
                   field: 'gender',
                   index,
-                  label: 'Geschlecht',
+                  label: t('field.gender'),
                   placeholder: 'female, male, unisex',
                 },
                 item.gender
@@ -1085,7 +1078,7 @@ export default function BabyNamesScreen() {
         >
           <IconSymbol name={item.icon as any} size={20} color={isActive ? accentColor : iconMutedColor} />
           <ThemedText style={[styles.categoryText, { color: isActive ? accentColor : textPrimary }]}>
-            {item.name}
+            {t(item.labelKey as BabyNamesTranslationKey)}
           </ThemedText>
         </View>
       </TouchableOpacity>
@@ -1109,7 +1102,7 @@ export default function BabyNamesScreen() {
           ]}
         >
           <ThemedText style={[styles.letterText, { color: textSecondary }, isActive && { color: accentColor }]}>
-            {item === 'all' ? 'Alle' : item}
+            {item === 'all' ? t('filter.allLetters') : item}
           </ThemedText>
         </View>
       </TouchableOpacity>
@@ -1123,8 +1116,8 @@ export default function BabyNamesScreen() {
   };
 
   const renderNameItem = ({ item }: { item: Name }) => {
-    const originText = item.origin || 'Herkunft unbekannt';
-    const meaningText = item.meaning || 'Keine Bedeutung hinterlegt.';
+    const originText = item.origin || t('value.unknownOrigin');
+    const meaningText = item.meaning || t('value.unknownMeaning');
     return (
       <LiquidGlassCard
         style={[styles.fullWidthCard, styles.glassCard]}
@@ -1185,15 +1178,15 @@ export default function BabyNamesScreen() {
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header 
-            title="Babynamen" 
+            title={t('screen.title')}
             subtitle={headerSubtitle}
             showBackButton 
           />
           {isReadOnlyPreviewMode && (
             <View style={styles.readOnlyPreviewBanner}>
-              <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+              <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.title')}</ThemedText>
               <ThemedText style={styles.readOnlyPreviewText}>
-                Du schaust den Schwangerschaftsmodus an. Babynamen sind hier gesperrt.
+                {t('preview.description')}
               </ThemedText>
             </View>
           )}
@@ -1219,7 +1212,7 @@ export default function BabyNamesScreen() {
                     <IconSymbol name="magnifyingglass" size={20} color={iconMutedColor} />
                     <TextInput
                       style={[styles.searchInput, { color: inputTextColor }]}
-                      placeholder="Suche nach Namen..."
+                      placeholder={t('search.placeholder')}
                       placeholderTextColor={inputPlaceholderColor}
                       value={searchQuery}
                       onChangeText={setSearchQuery}
@@ -1264,7 +1257,7 @@ export default function BabyNamesScreen() {
                 <LiquidGlassCard style={[styles.fullWidthCard, styles.glassCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={accentColor} />
-                    <ThemedText style={[styles.loadingText, { color: textPrimary }]}>Lade Namen...</ThemedText>
+                    <ThemedText style={[styles.loadingText, { color: textPrimary }]}>{t('state.loading')}</ThemedText>
                   </View>
                 </LiquidGlassCard>
               ) : (
@@ -1273,15 +1266,15 @@ export default function BabyNamesScreen() {
                     <IconSymbol name="magnifyingglass" size={40} color={iconMutedColor} />
                     <ThemedText style={[styles.emptyText, { color: textPrimary }]}>
                       {selectedCategory === 'favorites'
-                        ? 'Du hast noch keine Favoriten gespeichert.'
-                        : 'Keine Namen gefunden.'}
+                        ? t('state.noFavorites')
+                        : t('state.noResults')}
                     </ThemedText>
                     {selectedCategory === 'favorites' && (
                       <TouchableOpacity
                         style={styles.emptyButton}
                         onPress={() => setSelectedCategory('all')}
                       >
-                        <ThemedText style={styles.emptyButtonText}>Alle Namen anzeigen</ThemedText>
+                        <ThemedText style={styles.emptyButtonText}>{t('action.showAll')}</ThemedText>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1350,7 +1343,7 @@ export default function BabyNamesScreen() {
                     </View>
                     <View style={styles.headerCenter}>
                       <ThemedText style={[styles.modalTitle, { color: modalAccent }]}>
-                        {editingNameId ? 'Name bearbeiten' : 'Neuen Namen hinzufügen'}
+                        {editingNameId ? t('admin.editTitle') : t('admin.addTitle')}
                       </ThemedText>
                     </View>
                     <View style={styles.headerRight}>
@@ -1398,7 +1391,7 @@ export default function BabyNamesScreen() {
                           createMode === 'single' && { color: modalAccent },
                         ]}
                       >
-                        Einzeln
+                        {t('admin.single')}
                       </ThemedText>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -1432,7 +1425,7 @@ export default function BabyNamesScreen() {
                           createMode === 'bulk' && { color: modalAccent },
                         ]}
                       >
-                        SQL-Import
+                        {t('admin.bulk')}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>
@@ -1446,17 +1439,17 @@ export default function BabyNamesScreen() {
                       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                         <View>
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Name</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.name')}</ThemedText>
                             {renderInlineField(
                               newName,
-                              'z.B. Mila',
+                              t('admin.namePlaceholder'),
                               () =>
                                 openFocusEditor(
                                   {
                                     mode: 'single',
                                     field: 'name',
-                                    label: 'Name',
-                                    placeholder: 'z.B. Mila',
+                                    label: t('field.name'),
+                                    placeholder: t('admin.namePlaceholder'),
                                   },
                                   newName
                                 )
@@ -1464,17 +1457,17 @@ export default function BabyNamesScreen() {
                           </View>
 
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Bedeutung</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.meaning')}</ThemedText>
                             {renderInlineField(
                               persistedMeaning,
-                              'z.B. Wunder, Hoffnung',
+                              t('admin.meaningPlaceholder'),
                               () =>
                                 openFocusEditor(
                                   {
                                     mode: 'single',
                                     field: 'meaning',
-                                    label: 'Bedeutung',
-                                    placeholder: 'z.B. Wunder, Hoffnung',
+                                    label: t('field.meaning'),
+                                    placeholder: t('admin.meaningPlaceholder'),
                                     multiline: true,
                                   },
                                   persistedMeaning
@@ -1484,17 +1477,17 @@ export default function BabyNamesScreen() {
                           </View>
 
                           <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>Herkunft</ThemedText>
+                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.origin')}</ThemedText>
                             {renderInlineField(
                               persistedOrigin,
-                              'z.B. Hebräisch',
+                              t('admin.originPlaceholder'),
                               () =>
                                 openFocusEditor(
                                   {
                                     mode: 'single',
                                     field: 'origin',
-                                    label: 'Herkunft',
-                                    placeholder: 'z.B. Hebräisch',
+                                    label: t('field.origin'),
+                                    placeholder: t('admin.originPlaceholder'),
                                   },
                                   persistedOrigin
                                 )
@@ -1522,7 +1515,7 @@ export default function BabyNamesScreen() {
                         <View>
                           <View style={styles.modalField}>
                             <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
-                              SQL-Skript
+                              {t('admin.sql')}
                             </ThemedText>
                             <TextInput
                               style={[
@@ -1562,7 +1555,7 @@ export default function BabyNamesScreen() {
                               onPress={handleParseBulkSql}
                               disabled={isReadOnlyPreviewMode}
                             >
-                              <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>SQL prüfen</ThemedText>
+                              <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>{t('admin.validateSql')}</ThemedText>
                             </TouchableOpacity>
                           </View>
                           {bulkError && (
@@ -1570,7 +1563,7 @@ export default function BabyNamesScreen() {
                           )}
                           {bulkEntries.length > 0 && (
                             <ThemedText style={[styles.bulkHintText, { color: textSecondary }]}>
-                              Prüfe die Einträge, passe sie an und speichere.
+                              {t('admin.bulkHint')}
                             </ThemedText>
                           )}
                         </View>

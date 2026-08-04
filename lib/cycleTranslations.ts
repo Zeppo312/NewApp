@@ -1,17 +1,13 @@
 /**
- * Zyklus-Tracker – Übersetzungskatalog (Deutsch/Englisch).
+ * Zyklus-Tracker – Übersetzungskatalog (Deutsch/Englisch/Spanisch).
  *
  * Dieser Katalog ist die i18n-Grenze des Zyklus-Trackers. Sichtbare Texte
  * werden im Screen, in der Prognose-Engine und in den Erinnerungen nur noch
- * über diese Keys bezogen. Deutsch bleibt vorerst die aktive App-Sprache;
- * weitere Sprachen können später an einen globalen Locale-Provider gehängt
- * werden, ohne die Fachlogik erneut anzufassen.
- *
- * Sobald i18n eingeführt wird (Empfehlung: expo-localization + i18next),
- * können die Keys 1:1 übernommen werden. Platzhalter im Format {{name}}.
+ * über diese Keys bezogen. Die aktive Sprache kommt aus dem globalen
+ * Locale-Provider. Platzhalter verwenden das Format {{name}}.
  */
 
-export type CycleLocale = 'de' | 'en';
+export type CycleLocale = 'de' | 'en' | 'es';
 
 export const DEFAULT_CYCLE_LOCALE: CycleLocale = 'de';
 
@@ -91,6 +87,7 @@ const de: Catalog = {
   'daily.status.saved': 'Gespeichert',
   'daily.status.empty': 'Noch leer',
   'daily.noBleeding': 'Keine Blutung',
+  'daily.spotting': 'Schmierblutung',
   'daily.noSymptoms': 'Keine Symptome',
   'daily.symptomCount': '{{count}} Symptome',
   'daily.noTemperature': 'Keine Temperatur',
@@ -98,6 +95,14 @@ const de: Catalog = {
   'daily.add': 'Diesen Tag eintragen',
   'daily.predictionLegend':
     'Umrandet = prognostiziert · ausgefüllt = tatsächlich eingetragen',
+  'daily.logged': 'Erfasst',
+  'daily.symptoms': 'Symptome',
+  'daily.primaryInput': 'Primäre Eingabe', 'daily.bleedingPeriod': 'Blutung / Periode', 'daily.bleedingIntensity': 'Blutungsstärke', 'daily.moreEntries': 'Weitere Einträge', 'daily.symptomsHint': 'Müdigkeit, Krämpfe oder Blähungen festhalten',
+  'daily.primaryToday': 'Heute als wichtigste Eingabe', 'daily.active': 'Aktiv', 'daily.open': 'Offen', 'daily.currentStatus': 'Aktueller Status', 'daily.notLogged': 'Nicht eingetragen', 'daily.testResult': 'Testergebnis', 'daily.openToday': 'Heute offen', 'daily.sex': 'Sex', 'daily.alreadyLogged': 'Bereits eingetragen', 'daily.yes': 'Ja', 'daily.no': 'Nein', 'daily.stillOpen': 'Noch offen', 'daily.temperature': 'Temperatur', 'daily.lastValue': 'Letzter Wert', 'daily.noValue': 'Kein Wert', 'daily.temperaturePlaceholder': 'z. B. 36,50', 'daily.cyclePhase': 'Zyklustag {{day}} · {{phase}}', 'daily.symptomsLogged.one': '1 Symptom erfasst', 'daily.symptomsLogged.other': '{{count}} Symptome erfasst', 'daily.symptomsLogged.none': 'Noch keine Symptome erfasst',
+  'daily.logUpper': 'EINTRAGEN',
+  'phase.period': 'Periode', 'phase.follicular': 'Follikelphase', 'phase.fertile': 'Fruchtbares Fenster', 'phase.luteal': 'Lutealphase',
+  'value.bleeding.none': 'Keine Blutung', 'value.bleeding.light': 'Leicht', 'value.bleeding.medium': 'Mittel', 'value.bleeding.heavy': 'Stark', 'value.mucus.none': 'Keine Angabe', 'value.mucus.dry': 'Trocken', 'value.mucus.sticky': 'Klebrig', 'value.mucus.creamy': 'Cremig', 'value.mucus.watery': 'Wässrig', 'value.mucus.eggwhite': 'Eiklar', 'value.lh.none': 'Kein Test', 'value.lh.negative': 'Negativ', 'value.lh.high': 'Hoch', 'value.lh.peak': 'Peak',
+  'symptom.breastTenderness': 'Brustspannen', 'symptom.bloating': 'Blähungen', 'symptom.cramps': 'Krämpfe', 'symptom.headache': 'Kopfschmerzen', 'symptom.irritable': 'Reizbar', 'symptom.fatigue': 'Müdigkeit', 'symptom.highLibido': 'Libido hoch', 'symptom.allGood': 'Alles gut',
 
   // Faktoren-Karte
   'factors.title': 'Warum gerade diese Prognose?',
@@ -324,6 +329,7 @@ const en: Catalog = {
   'daily.status.saved': 'Saved',
   'daily.status.empty': 'Still empty',
   'daily.noBleeding': 'No bleeding',
+  'daily.spotting': 'Spotting',
   'daily.noSymptoms': 'No symptoms',
   'daily.symptomCount': '{{count}} symptoms',
   'daily.noTemperature': 'No temperature',
@@ -331,6 +337,14 @@ const en: Catalog = {
   'daily.add': 'Log this day',
   'daily.predictionLegend':
     'Outlined = predicted · filled = actually logged',
+  'daily.logged': 'Logged',
+  'daily.symptoms': 'Symptoms',
+  'daily.primaryInput': 'Primary input', 'daily.bleedingPeriod': 'Bleeding / period', 'daily.bleedingIntensity': 'Bleeding intensity', 'daily.moreEntries': 'More entries', 'daily.symptomsHint': 'Log fatigue, cramps, or bloating',
+  'daily.primaryToday': 'Today’s primary input', 'daily.active': 'Active', 'daily.open': 'Open', 'daily.currentStatus': 'Current status', 'daily.notLogged': 'Not logged', 'daily.testResult': 'Test result', 'daily.openToday': 'Open today', 'daily.sex': 'Sex', 'daily.alreadyLogged': 'Already logged', 'daily.yes': 'Yes', 'daily.no': 'No', 'daily.stillOpen': 'Still open', 'daily.temperature': 'Temperature', 'daily.lastValue': 'Latest value', 'daily.noValue': 'No value', 'daily.temperaturePlaceholder': 'e.g. 36.50', 'daily.cyclePhase': 'Cycle day {{day}} · {{phase}}', 'daily.symptomsLogged.one': '1 symptom logged', 'daily.symptomsLogged.other': '{{count}} symptoms logged', 'daily.symptomsLogged.none': 'No symptoms logged yet',
+  'daily.logUpper': 'LOG',
+  'phase.period': 'Period', 'phase.follicular': 'Follicular phase', 'phase.fertile': 'Fertile window', 'phase.luteal': 'Luteal phase',
+  'value.bleeding.none': 'No bleeding', 'value.bleeding.light': 'Light', 'value.bleeding.medium': 'Medium', 'value.bleeding.heavy': 'Heavy', 'value.mucus.none': 'Not specified', 'value.mucus.dry': 'Dry', 'value.mucus.sticky': 'Sticky', 'value.mucus.creamy': 'Creamy', 'value.mucus.watery': 'Watery', 'value.mucus.eggwhite': 'Egg white', 'value.lh.none': 'No test', 'value.lh.negative': 'Negative', 'value.lh.high': 'High', 'value.lh.peak': 'Peak',
+  'symptom.breastTenderness': 'Breast tenderness', 'symptom.bloating': 'Bloating', 'symptom.cramps': 'Cramps', 'symptom.headache': 'Headache', 'symptom.irritable': 'Irritable', 'symptom.fatigue': 'Fatigue', 'symptom.highLibido': 'High libido', 'symptom.allGood': 'Feeling good',
 
   // Factors card
   'factors.title': 'Why this forecast?',
@@ -479,7 +493,39 @@ const en: Catalog = {
     'Predictions are estimates and do not replace medical advice. If your cycles fluctuate strongly, you bleed between periods or you have been trying to conceive for a long time, please see a doctor.',
 };
 
-export const CYCLE_TRANSLATIONS: Record<CycleLocale, Catalog> = { de, en };
+const es: Catalog = {
+  'common.error': 'Error', 'common.today': 'Hoy', 'common.todayUpper': 'HOY', 'common.later': 'Más tarde', 'common.save': 'Aplicar', 'common.saving': 'Guardando…', 'common.settings': 'Ajustes',
+  'screen.title': 'Ciclo', 'screen.loadError': 'No se pudieron cargar los datos del ciclo.', 'screen.settings.open': 'Abrir ajustes del ciclo', 'screen.settings.close': 'Cerrar ajustes',
+  'hero.backToToday': 'Volver a hoy', 'hero.ringDayOf': 'de {{cycleLength}}', 'hero.ringOpen': 'Ciclo en curso', 'hero.extended': 'Día {{day}} del ciclo · ciclo prolongado actualmente', 'hero.dataError': 'Las tablas aún no están disponibles o no hay datos: {{error}}', 'hero.legend.period': 'Regla', 'hero.legend.fertile': 'Fértil', 'hero.legend.ovulation': 'Ovulación', 'hero.legend.luteal': 'Lútea',
+  'quickPeriod.logged': 'La regla está registrada', 'quickPeriod.startToday': 'La regla ha empezado hoy', 'quickPeriod.edit': '{{intensity}} · toca para editar', 'quickPeriod.helper': 'Regístrala rápidamente y añade la intensidad',
+  'section.glance.title': 'De un vistazo', 'section.glance.subtitle': 'Tus fechas principales según la previsión, como intervalos y no como días exactos.', 'section.glance.footnote': 'Todos los intervalos son estimaciones con un margen aproximado de ±{{uncertaintyDays}} días. La confianza indica la estabilidad de tus ciclos anteriores.',
+  'section.calendar.title': 'Calendario y registro', 'section.calendar.subtitle': 'Elige un día y registra sangrado, síntomas y señales corporales; Lotti guarda automáticamente.', 'section.forecast.title': 'Entender la previsión', 'section.forecast.subtitle': 'Qué hay detrás de la predicción y cómo hacerla más precisa.', 'section.history.title': 'Tu historial', 'section.history.subtitle': 'Así de regulares han sido tus últimos ciclos.', 'section.settings.title': 'Recordatorios y ajustes', 'section.settings.subtitle': 'Todo es opcional: tú decides cómo te ayuda Lotti.',
+  'pill.nextPeriod': 'Próxima regla', 'pill.ovulationWindow': 'Ventana de ovulación', 'pill.fertileWindow': 'Ventana fértil', 'pill.confidence': 'Confianza de la previsión', 'pill.currentlyOpen': 'Abierta actualmente', 'pill.currentlyUncertain': 'Incierta actualmente', 'forecast.windowHint': 'Intervalos en lugar de días exactos · desviación posible de unos ±{{uncertaintyDays}} días', 'forecast.confidence': 'Confianza de la previsión: {{confidence}} % · mejora con cada ciclo',
+  'monthLauncher.title': 'Vista mensual', 'monthLauncher.label': 'Vista mensual · {{month}}', 'monthLauncher.subtitle': 'Abre el calendario y selecciona los días directamente.', 'monthLauncher.selectDays': 'Seleccionar días',
+  'section.outlook': 'Tu previsión', 'section.dailyLog': 'Registro diario', 'section.analysis': 'Análisis',
+  'daily.selectedDay': 'DÍA SELECCIONADO', 'daily.status.saving': 'Guardando', 'daily.status.saved': 'Guardado', 'daily.status.empty': 'Aún vacío', 'daily.noBleeding': 'Sin sangrado', 'daily.spotting': 'Manchado', 'daily.noSymptoms': 'Sin síntomas', 'daily.symptomCount': '{{count}} síntomas', 'daily.noTemperature': 'Sin temperatura', 'daily.edit': 'Editar registro', 'daily.add': 'Registrar este día', 'daily.predictionLegend': 'Contorno = previsto · relleno = registrado', 'daily.logged': 'Registrado', 'daily.symptoms': 'Síntomas', 'daily.primaryInput': 'Entrada principal', 'daily.bleedingPeriod': 'Sangrado / periodo', 'daily.bleedingIntensity': 'Intensidad del sangrado', 'daily.moreEntries': 'Más registros', 'daily.symptomsHint': 'Registra fatiga, calambres o hinchazón',
+  'daily.primaryToday': 'Entrada principal de hoy', 'daily.active': 'Activo', 'daily.open': 'Pendiente', 'daily.currentStatus': 'Estado actual', 'daily.notLogged': 'No registrado', 'daily.testResult': 'Resultado del test', 'daily.openToday': 'Pendiente hoy', 'daily.sex': 'Sexo', 'daily.alreadyLogged': 'Ya registrado', 'daily.yes': 'Sí', 'daily.no': 'No', 'daily.stillOpen': 'Aún pendiente', 'daily.temperature': 'Temperatura', 'daily.lastValue': 'Último valor', 'daily.noValue': 'Sin valor', 'daily.temperaturePlaceholder': 'p. ej., 36,50', 'daily.cyclePhase': 'Día {{day}} del ciclo · {{phase}}', 'daily.symptomsLogged.one': '1 síntoma registrado', 'daily.symptomsLogged.other': '{{count}} síntomas registrados', 'daily.symptomsLogged.none': 'Aún no hay síntomas registrados',
+  'daily.logUpper': 'REGISTRAR',
+  'phase.period': 'Periodo', 'phase.follicular': 'Fase folicular', 'phase.fertile': 'Ventana fértil', 'phase.luteal': 'Fase lútea',
+  'value.bleeding.none': 'Sin sangrado', 'value.bleeding.light': 'Ligero', 'value.bleeding.medium': 'Medio', 'value.bleeding.heavy': 'Intenso', 'value.mucus.none': 'Sin datos', 'value.mucus.dry': 'Seco', 'value.mucus.sticky': 'Pegajoso', 'value.mucus.creamy': 'Cremoso', 'value.mucus.watery': 'Acuoso', 'value.mucus.eggwhite': 'Clara de huevo', 'value.lh.none': 'Sin test', 'value.lh.negative': 'Negativo', 'value.lh.high': 'Alto', 'value.lh.peak': 'Pico',
+  'symptom.breastTenderness': 'Sensibilidad mamaria', 'symptom.bloating': 'Hinchazón', 'symptom.cramps': 'Calambres', 'symptom.headache': 'Dolor de cabeza', 'symptom.irritable': 'Irritabilidad', 'symptom.fatigue': 'Fatiga', 'symptom.highLibido': 'Libido alta', 'symptom.allGood': 'Todo bien',
+  'factors.title': '¿Por qué esta previsión?', 'factors.patternTitle': '✨ Tu patrón', 'factors.showDetails': '¿Por qué esta previsión? Mostrar detalles', 'factors.hideDetails': 'Ocultar detalles', 'factors.subtitle': 'La previsión combina cuatro señales. Cuantas más registres, más precisa será.', 'factors.calendar': 'Calendario', 'factors.lh': 'Test de LH', 'factors.mucus': 'Moco cervical', 'factors.bbt': 'Temperatura basal',
+  'timeline.title': 'Evolución del ciclo', 'timeline.subtitle': 'Así se distribuyen las fases del ciclo actual: rojo para la regla y morado para la ventana fértil y la ovulación.', 'timeline.hint': '◀ Desliza para ver todo el ciclo',
+  'history.title': 'Tus últimos ciclos', 'history.subtitle': 'Cada barra representa un ciclo: la parte roja es la regla y la longitud llega hasta la siguiente. Cuanto más se parezcan, más fiable será la previsión.', 'history.currentDay': 'Día {{day}}', 'history.lengthDays': '{{days}} días', 'history.statsAverage': 'Media: {{days}} días', 'history.statsVariability': 'Variación ±{{days}} días', 'history.statsRange': '{{min}}–{{max}} días', 'history.shortSubtitle': 'La parte roja es la regla; cuanto más se parezcan las barras, más fiable será la previsión.',
+  'reminders.title': 'Recordatorios', 'reminders.subtitle': 'Lotti te avisa con tiempo para que no tengas que calcularlo.', 'reminders.period.label': 'La regla se acerca', 'reminders.period.helper': '2 días antes del inicio previsto', 'reminders.fertile.label': 'Ventana fértil', 'reminders.fertile.helper': '1 día antes de que empiece tu ventana', 'reminders.discreet.label': 'Notificaciones discretas', 'reminders.discreet.helper': 'Texto neutro en la pantalla de bloqueo', 'reminders.permissionHint': 'Las notificaciones están desactivadas en los ajustes del sistema; los recordatorios no podrán llegar.', 'reminders.permissionAlert.title': 'Notificaciones desactivadas', 'reminders.permissionAlert.body': 'Permite las notificaciones de Lotti en los ajustes del sistema para recibir los recordatorios del ciclo.',
+  'notification.period.title': 'Tu regla se acerca', 'notification.period.body': 'Se prevé que tu regla llegue en unos {{days}} días. Puedes ir preparando lo que necesites.', 'notification.fertile.title': 'Tu ventana fértil empieza pronto', 'notification.fertile.body': 'Según la previsión, tu ventana fértil empieza mañana.', 'notification.discreet.title': 'Pequeño recordatorio 🌸', 'notification.discreet.body': 'Echa hoy un vistazo a Lotti.',
+  'lifePhase.title': 'Tu etapa vital', 'lifePhase.subtitle': 'Para mantener una previsión honesta, Lotti usa intervalos más amplios en vez de una falsa precisión.', 'lifePhase.postpartum.label': 'Posparto', 'lifePhase.postpartum.helper': 'Tu ciclo está volviendo a regularse', 'lifePhase.breastfeeding.label': 'Estoy dando el pecho', 'lifePhase.breastfeeding.helper': 'La lactancia puede retrasar la ovulación', 'lifePhase.perimenopause.label': 'Perimenopausia', 'lifePhase.perimenopause.helper': 'Los ciclos pueden ser más irregulares', 'lifePhase.saveError.title': 'Error', 'lifePhase.saveError.body': 'No se pudo guardar el ajuste. Inténtalo de nuevo.',
+  'settings.subtitle': 'Ciclo y recordatorios', 'settings.remindersGroup': 'RECORDATORIOS', 'settings.lifePhaseGroup': 'ETAPA VITAL · PARA UNA PREVISIÓN HONESTA',
+  'setup.title': '¿Cuándo empezó tu última regla?', 'setup.body': 'Con esta fecha, el seguimiento puede estimar una primera ventana menstrual y fértil.', 'setup.hint': 'Empezamos con un ciclo de 28 días, 5 días de sangrado y una fase lútea de 14 días. Podrás afinarlo después con tus datos reales.', 'setup.dateLabel': 'La última regla empezó el', 'setup.pickerTitle': 'Inicio de la última regla', 'setup.saveError': 'No se pudo guardar el inicio de la última regla.',
+  'mode.breastfeeding': 'Modo lactancia: la ovulación puede desplazarse bastante mientras das el pecho, por lo que Lotti usa intervalos más amplios. Las variaciones son normales.', 'mode.postpartum': 'Modo posparto: el ciclo necesita tiempo para regularse tras el parto, por lo que Lotti usa intervalos más amplios. Las variaciones son normales.', 'mode.perimenopause': 'Modo perimenopausia: los ciclos pueden ser más irregulares y la previsión utiliza intervalos más amplios de forma intencionada.',
+  'engine.headline.notEnoughData': 'Aún faltan datos del ciclo', 'engine.headline.peak': 'Pico de fertilidad hoy', 'engine.headline.high': 'Fertilidad alta hoy', 'engine.headline.medium': 'Fertilidad moderada hoy', 'engine.headline.periodSoon': 'La regla se acerca', 'engine.headline.fertileOver': 'La ventana fértil probablemente ha terminado', 'engine.headline.low': 'Fertilidad más bien baja hoy',
+  'engine.subline.default': 'Registra el inicio de la regla, los días de sangrado y las señales corporales', 'engine.subline.ovulationInDays': 'Día {{day}} del ciclo · ovulación probable en {{days}} días', 'engine.subline.ovulationTomorrow': 'Día {{day}} del ciclo · ovulación probable mañana', 'engine.subline.ovulationToday': 'Día {{day}} del ciclo · ovulación probable hoy', 'engine.subline.ovulationYesterday': 'Día {{day}} del ciclo · ovulación probable ayer', 'engine.subline.nextPeriodInDays': 'Día {{day}} del ciclo · próxima regla en unos {{days}} días',
+  'engine.caption.default': 'Las predicciones mejoran mucho con 2 o 3 ciclos registrados.', 'engine.caption.fertileOpen': 'Tu ventana fértil está abierta ahora.', 'engine.caption.likelyFertile': 'Probablemente estás en tu ventana fértil.', 'engine.caption.ovulationConfirmed': 'La curva de temperatura indica que la ovulación ya se produjo.', 'engine.caption.nextPeriodUncertainty': 'La próxima regla se estima con un margen de unos {{days}} días.',
+  'engine.insight.notEnoughData': 'Guarda primero el inicio de la última regla y algunos días de sangrado para personalizar la previsión.', 'engine.insight.stable': 'Tus últimos ciclos parecen bastante estables, por lo que los datos del calendario pueden tener más peso.', 'engine.insight.variable': 'La duración de tus ciclos varía bastante. Los test de LH y el moco cervical deberían tener más peso en la previsión.', 'engine.insight.usable': 'Los datos del calendario son útiles, pero las señales corporales mejoran mucho la estimación de la ovulación.', 'engine.insight.fewCycles': 'La previsión aún se basa en pocos ciclos. De forma predeterminada se usa una fase lútea de unos {{days}} días.',
+  'engine.factor.calendar.history': 'Previsión basada en {{cycles}} ciclos detectados, con un margen de unos {{days}} días.', 'engine.factor.calendar.none': 'Aún no hay historial menstrual.', 'engine.factor.lh.peak': 'Pico de LH registrado; la ovulación suele producirse en las siguientes 24–48 horas.', 'engine.factor.lh.high': 'La LH está subiendo, por lo que la ventana fértil es más probable.', 'engine.factor.lh.negative': 'Aún no se ha registrado una subida de LH.', 'engine.factor.lh.none': 'No hay un test de LH guardado para hoy.', 'engine.factor.mucus.eggwhite': 'El moco tipo clara de huevo encaja muy bien con la ventana de ovulación.', 'engine.factor.mucus.watery': 'El moco acuoso indica fertilidad alta.', 'engine.factor.mucus.creamy': 'El moco cremoso representa una señal de fertilidad moderada.', 'engine.factor.mucus.sticky': 'El moco pegajoso suele asociarse con menor fertilidad.', 'engine.factor.mucus.dry': 'La sequedad apunta más bien a una fertilidad baja.', 'engine.factor.mucus.none': 'Aún no hay un registro de moco cervical para hoy.', 'engine.factor.bbt.none': 'Aún no hay una señal de ovulación basada en la temperatura.', 'engine.factor.bbt.confirmedRecent': 'La subida de temperatura confirma la ovulación de forma retrospectiva.', 'engine.factor.bbt.confirmedPast': 'La curva de temperatura indica que la ovulación ya se produjo.', 'engine.factor.bbt.unconfirmed': 'Hay temperatura registrada, pero aún no se confirma una subida durante 3 días.',
+  'log.saveError': 'No se pudo guardar el registro del ciclo para este día.', 'disclaimer': 'Las predicciones son estimaciones y no sustituyen el consejo médico. Si tus ciclos varían mucho, tienes sangrado entre reglas o llevas mucho tiempo intentando concebir, consulta con un profesional sanitario.',
+};
+export const CYCLE_TRANSLATIONS: Record<CycleLocale, Catalog> = { de, en, es };
 
 /**
  * Mini-Helfer für die spätere Anbindung: Text zu einem Key inkl.

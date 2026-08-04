@@ -6,29 +6,18 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function BlurTabBarBackground() {
   const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark';
 
-  // Nur bei dunklem Hintergrundbild: angepassten Blur verwenden
-  if (adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground) {
-    return (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: adaptiveColors.tabBarBackground }]}>
-        <BlurView
-          tint="dark"
-          intensity={80}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-    );
-  }
-
-  // Standard (auch bei hellem custom Hintergrund): System Chrome Material
+  // Der Blur muss dem App-Theme folgen. `systemChromeMaterial` richtet sich
+  // stattdessen nach dem iOS-Theme und kann dadurch im App-Nachtmodus hell sein.
   return (
-    <BlurView
-      // System chrome material automatically adapts to the system's theme
-      // and matches the native tab bar appearance on iOS.
-      tint="systemChromeMaterial"
-      intensity={100}
-      style={StyleSheet.absoluteFill}
-    />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: adaptiveColors.tabBarBackground }]}>
+      <BlurView
+        tint={isDark ? 'dark' : 'light'}
+        intensity={isDark ? 80 : 100}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
   );
 }
 

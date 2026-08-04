@@ -73,6 +73,9 @@ export interface DailySignals {
     /** Persönlicher Median der Wachphasen zwischen Tagesschläfen. */
     typicalWakeMinutes: number | null;
     wakeSampleCount: number;
+    /** Persönlicher Median der bisherigen Tagesschlaf-Dauer. */
+    typicalNapMinutes: number | null;
+    napSampleCount: number;
     lastNightMinutes: number | null;
     typicalNightMinutes: number | null;
     nightSampleDays: number;

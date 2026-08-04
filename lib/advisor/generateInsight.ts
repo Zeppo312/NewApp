@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import type { AppLocale } from '@/lib/localization';
 
 import { localDateString } from './advisorStorage';
 import type { AdvisorInsight, DailySignals } from './types';
@@ -25,11 +26,13 @@ export interface RemoteInsight {
 export const generateAdvisorInsight = async (
   babyId: string,
   signals: DailySignals,
+  locale: AppLocale = 'de',
 ): Promise<RemoteInsight | null> => {
   try {
     const { data, error } = await supabase.functions.invoke('advisor-generate', {
       body: {
         babyId,
+        locale,
         localDate: localDateString(),
         signals: {
           babyName: signals.babyName,

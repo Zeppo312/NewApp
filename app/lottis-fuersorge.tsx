@@ -28,7 +28,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { CareAnalyticsSection } from '@/components/CareAnalyticsSection';
+import { CareDayTimeline } from '@/components/advisor/CareDayTimeline';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import {
   fetchAdvisorSettings,
@@ -58,6 +61,7 @@ import {
 import { generateAdvisorInsight } from '@/lib/advisor/generateInsight';
 import { buildMockAnalysis } from '@/lib/advisor/mockInsights';
 import { buildCareHorizon } from '@/lib/advisor/care-horizon';
+import { buildCareDayTimeline } from '@/lib/advisor/day-timeline';
 import type {
   AdvisorAnalysis,
   AdvisorInsight,
@@ -65,6 +69,8 @@ import type {
   AnalysisCard,
   DailySignals,
 } from '@/lib/advisor/types';
+import { localizeAdvisorAnalysis, localizeStoredAdvisorInsight, translateAdvisor, type AdvisorTranslationKey } from '@/lib/advisor/advisorTranslations';
+import { usePlannerDay } from '@/services/planner';
 
 const BRAND_PURPLE = '#5E3DB3';
 const BRAND_PURPLE_SOFT = '#8E4EC6';
@@ -80,25 +86,36 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TILE_PROPS = {
-  frostColor: 'rgba(255,255,255,0.55)',
-  borderColor: 'rgba(255,255,255,0.9)',
-  innerBorderColor: 'rgba(255,255,255,0.5)',
-  highlightStrength: 'strong' as const,
-  glossOpacity: 0.5,
-  grainOpacity: 0.04,
-  shadeOpacity: 0.5,
+type AdvisorTheme = {
+  isDark: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  textTertiary: string;
+  accent: string;
+  accentStrong: string;
+  accentSoft: string;
+  accentSurface: string;
+  divider: string;
+  skeleton: string;
+  elevatedSurface: string;
+  controlSurface: string;
+  controlBorder: string;
+  switchTrack: string;
+  limitTitle: string;
+  limitText: string;
+  limitSurface: string;
+  limitBorder: string;
 };
 
 /** Themen-Chips, optional aus dem Haupt-Hinweis abgeleitet. */
-const TOPIC_CHIPS: Record<AnalysisCard['key'], { emoji: string; label: string }> = {
-  sleep: { emoji: '💤', label: 'Schlaf' },
-  feeding: { emoji: '🍼', label: 'Ernährung' },
-  diaper: { emoji: '💧', label: 'Windeln' },
-  weather: { emoji: '🌤️', label: 'Wetter' },
+const TOPIC_CHIPS: Record<AnalysisCard['key'], { emoji: string; key: AdvisorTranslationKey }> = {
+  sleep: { emoji: '💤', key: 'sleep' },
+  feeding: { emoji: '🍼', key: 'feeding' },
+  diaper: { emoji: '💧', key: 'diaper' },
+  weather: { emoji: '🌤️', key: 'weather' },
 };
 
-const chipsForInsight = (id: string): { emoji: string; label: string }[] => {
+const chipsForInsight = (id: string, locale: 'de' | 'en' | 'es'): { emoji: string; label: string }[] => {
   const keys: AnalysisCard['key'][] = [];
   if (id.includes('feeding')) keys.push('feeding');
   if (id.includes('sleep')) keys.push('sleep');
@@ -112,54 +129,41 @@ const chipsForInsight = (id: string): { emoji: string; label: string }[] => {
   }
   if (id === 'all_good') keys.push('sleep', 'feeding');
   // Duplikate raus, max. zwei kompakte Chips.
-  return Array.from(new Set(keys)).slice(0, 2).map((k) => TOPIC_CHIPS[k]);
+  return Array.from(new Set(keys)).slice(0, 2).map((k) => ({ emoji: TOPIC_CHIPS[k].emoji, label: translateAdvisor(locale, TOPIC_CHIPS[k].key) }));
 };
-
-const THEME_OPTIONS: { key: AdvisorCategory; emoji: string; label: string }[] = [
-  { key: 'weather', emoji: '🌤️', label: 'Wetter' },
-  { key: 'sleep', emoji: '💤', label: 'Schlaf' },
-  { key: 'feeding', emoji: '🍼', label: 'Ernährung' },
-  { key: 'motivation', emoji: '🌿', label: 'Motivation' },
-];
-
-const FREQUENCY_OPTIONS: { key: AdvisorFrequency; label: string }[] = [
-  { key: 'daily', label: 'Täglich' },
-  { key: 'critical_only', label: 'Nur Wichtiges' },
-  { key: 'off', label: 'Aus' },
-];
 
 /** „Heute" / „Gestern" / 24.06. für Verlaufskarten. */
-const formatHistoryDate = (localDate: string): string => {
-  if (localDate === localDateString()) return 'Heute';
+const formatHistoryDate = (localDate: string, locale: 'de' | 'en' | 'es', localeTag: string): string => {
+  if (localDate === localDateString()) return translateAdvisor(locale, 'today');
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (localDate === localDateString(yesterday)) return 'Gestern';
+  if (localDate === localDateString(yesterday)) return translateAdvisor(locale, 'yesterday');
   const d = new Date(`${localDate}T12:00:00`);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  return d.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit' });
 };
 
-const toneAccent = (tone: AdvisorTone): { dot: string; soft: string } => {
+const toneAccent = (tone: AdvisorTone, isDark: boolean): { dot: string; soft: string } => {
   switch (tone) {
     case 'positive':
-      return { dot: '#5FAE96', soft: 'rgba(95, 174, 150, 0.16)' };
+      return { dot: isDark ? '#8ED6C0' : '#5FAE96', soft: 'rgba(95, 174, 150, 0.16)' };
     case 'gentle':
-      return { dot: '#E0925F', soft: 'rgba(224, 146, 95, 0.16)' };
+      return { dot: isDark ? '#F4B488' : '#E0925F', soft: 'rgba(224, 146, 95, 0.16)' };
     default:
-      return { dot: BRAND_PURPLE_SOFT, soft: 'rgba(142, 78, 198, 0.13)' };
+      return { dot: isDark ? '#C8B3FF' : BRAND_PURPLE_SOFT, soft: 'rgba(142, 78, 198, 0.16)' };
   }
 };
 
-const cardAccent = (key: AnalysisCard['key']): { color: string; soft: string } => {
+const cardAccent = (key: AnalysisCard['key'], isDark: boolean): { color: string; soft: string } => {
   switch (key) {
     case 'sleep':
-      return { color: '#6C5CE0', soft: 'rgba(108, 92, 224, 0.14)' };
+      return { color: isDark ? '#B8ADFF' : '#6C5CE0', soft: 'rgba(108, 92, 224, 0.16)' };
     case 'feeding':
-      return { color: '#DB6F9C', soft: 'rgba(219, 111, 156, 0.15)' };
+      return { color: isDark ? '#F2A7C5' : '#DB6F9C', soft: 'rgba(219, 111, 156, 0.17)' };
     case 'diaper':
-      return { color: '#3FA294', soft: 'rgba(63, 162, 148, 0.15)' };
+      return { color: isDark ? '#83D4C8' : '#3FA294', soft: 'rgba(63, 162, 148, 0.17)' };
     default:
-      return { color: '#D88A3C', soft: 'rgba(216, 138, 60, 0.16)' };
+      return { color: isDark ? '#F1B778' : '#D88A3C', soft: 'rgba(216, 138, 60, 0.18)' };
   }
 };
 
@@ -171,11 +175,13 @@ function Skeleton({
   width,
   height,
   radius = 8,
+  color = 'rgba(74,58,51,0.10)',
   style,
 }: {
   width: number | string;
   height: number;
   radius?: number;
+  color?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const v = React.useState(() => new Animated.Value(0.45))[0];
@@ -193,7 +199,7 @@ function Skeleton({
   return (
     <Animated.View
       style={[
-        { width: width as any, height, borderRadius: radius, backgroundColor: 'rgba(74,58,51,0.10)', opacity: v },
+        { width: width as any, height, borderRadius: radius, backgroundColor: color, opacity: v },
         style,
       ]}
     />
@@ -201,7 +207,17 @@ function Skeleton({
 }
 
 /* Balken, der sich beim Erscheinen aufbaut. */
-function AnimatedBar({ progress, color, play }: { progress: number; color: string; play: boolean }) {
+function AnimatedBar({
+  progress,
+  color,
+  play,
+  trackColor,
+}: {
+  progress: number;
+  color: string;
+  play: boolean;
+  trackColor: string;
+}) {
   const w = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
     if (!play) return;
@@ -218,8 +234,8 @@ function AnimatedBar({ progress, color, play }: { progress: number; color: strin
 
   const width = w.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
   return (
-    <View style={styles.barTrack}>
-      <Animated.View style={[styles.barFill, { width, backgroundColor: color }]} />
+    <View style={{ height: 6, borderRadius: 999, backgroundColor: trackColor, marginTop: 10, overflow: 'hidden' }}>
+      <Animated.View style={{ width, height: 6, borderRadius: 999, backgroundColor: color }} />
     </View>
   );
 }
@@ -265,6 +281,64 @@ function FadeInUp({
 export default function LottisFuersorgeScreen() {
   const router = useRouter();
   const { activeBaby } = useActiveBaby();
+  const { locale, localeTag } = useLocale();
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const theme = useMemo<AdvisorTheme>(
+    () => ({
+      isDark,
+      textPrimary: isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY,
+      textSecondary: isDark ? adaptiveColors.textSecondary : TEXT_SECONDARY,
+      textTertiary: isDark ? adaptiveColors.textTertiary : TEXT_TERTIARY,
+      accent: isDark ? '#C8B3FF' : BRAND_PURPLE,
+      accentStrong: isDark ? '#A98BFA' : BRAND_PURPLE_SOFT,
+      accentSoft: isDark ? 'rgba(200,179,255,0.16)' : 'rgba(94,61,179,0.10)',
+      accentSurface: isDark ? 'rgba(142,78,198,0.18)' : 'rgba(142,78,198,0.12)',
+      divider: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(74,58,51,0.12)',
+      skeleton: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(74,58,51,0.10)',
+      elevatedSurface: isDark ? 'rgba(255,255,255,0.10)' : '#FFFFFF',
+      controlSurface: isDark ? 'rgba(255,255,255,0.075)' : 'rgba(94,61,179,0.09)',
+      controlBorder: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(94,61,179,0.20)',
+      switchTrack: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(74,58,51,0.18)',
+      limitTitle: isDark ? '#F4B7D4' : '#74335B',
+      limitText: isDark ? '#DCA0BD' : '#95617A',
+      limitSurface: isDark ? 'rgba(201,104,146,0.14)' : 'rgba(161,77,116,0.08)',
+      limitBorder: isDark ? 'rgba(242,167,197,0.30)' : 'rgba(161,77,116,0.22)',
+    }),
+    [adaptiveColors, isDark],
+  );
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  const tileProps = useMemo(
+    () =>
+      isDark
+        ? {
+            tint: 'dark' as const,
+            intensity: 38,
+            frostColor: 'rgba(18,15,24,0.78)',
+            toneColor: 'rgba(72,51,101,0.16)',
+            borderColor: 'rgba(255,255,255,0.17)',
+            innerBorderColor: 'rgba(255,255,255,0.07)',
+            highlightStrength: 'subtle' as const,
+            highlightOpacity: 0.55,
+            glossOpacity: 0.12,
+            grainOpacity: 0.025,
+            shadeOpacity: 0.75,
+          }
+        : {
+            tint: 'light' as const,
+            frostColor: 'rgba(255,255,255,0.55)',
+            borderColor: 'rgba(255,255,255,0.9)',
+            innerBorderColor: 'rgba(255,255,255,0.5)',
+            highlightStrength: 'strong' as const,
+            highlightOpacity: 1,
+            glossOpacity: 0.5,
+            grainOpacity: 0.04,
+            shadeOpacity: 0.5,
+          },
+    [isDark],
+  );
+  const t = (key: AdvisorTranslationKey, params?: Record<string, string | number>) => translateAdvisor(locale, key, params);
   // In Erprobung: nur Premiumtester/Admins (später zusätzlich Premium-Abo).
   const access = useAdvisorAccess();
 
@@ -278,6 +352,12 @@ export default function LottisFuersorgeScreen() {
   const [mamaEnergy, setMamaEnergy] = useState<MamaEnergy | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => new Date());
+  const plannerDateKey = `${clockNow.getFullYear()}-${clockNow.getMonth()}-${clockNow.getDate()}`;
+  const plannerDate = useMemo(() => {
+    const [year, month, day] = plannerDateKey.split('-').map(Number);
+    return new Date(year, month, day, 12, 0, 0, 0);
+  }, [plannerDateKey]);
+  const todayPlanner = usePlannerDay(plannerDate, { ensureDay: false });
 
   const runIdRef = useRef(0);
   const ready = !!analysis;
@@ -332,7 +412,7 @@ export default function LottisFuersorgeScreen() {
     let result: AdvisorAnalysis = buildMockAnalysis(signals);
     if (!alive()) return;
     // Lokales Ergebnis sofort zeigen …
-    setAnalysis(result);
+    setAnalysis(localizeAdvisorAnalysis(locale, result, signals));
 
     // … dann Server-Analyse nachziehen (Regel-Engine + KI-Formulierung).
     // Der Server persistiert den Hinweis selbst; klappt es nicht, bleibt
@@ -341,13 +421,13 @@ export default function LottisFuersorgeScreen() {
     let messageId: string | null = null;
     const babyId = activeBaby?.id;
     if (babyId) {
-      const remote = await generateAdvisorInsight(babyId, signals);
+      const remote = await generateAdvisorInsight(babyId, signals, locale);
       if (!alive()) return;
       if (remote) {
         result = { ...result, main: remote.main, reasons: remote.reasons };
         persistedByServer = remote.persisted;
         messageId = remote.messageId;
-        setAnalysis(result);
+        setAnalysis(localizeAdvisorAnalysis(locale, result, signals));
       }
     }
 
@@ -362,7 +442,7 @@ export default function LottisFuersorgeScreen() {
         fetchTodayMamaCheckin(babyId),
       ]);
       if (!alive()) return;
-      setHistory(dbHistory);
+      setHistory(dbHistory?.map((item) => localizeStoredAdvisorInsight(locale, item)) ?? dbHistory);
       setSettings(dbSettings);
       setTodayState(
         dbTodayState ??
@@ -386,7 +466,7 @@ export default function LottisFuersorgeScreen() {
       setTodayState(null);
       setMamaEnergy(null);
     }
-  }, [activeBaby]);
+  }, [activeBaby, locale]);
 
   useFocusEffect(
     useCallback(() => {
@@ -443,8 +523,8 @@ export default function LottisFuersorgeScreen() {
       const token = await registerForPushNotificationsAsync();
       if (!token) {
         Alert.alert(
-          'Mitteilungen nicht möglich',
-          'Bitte erlaube Lotti Benachrichtigungen in den Systemeinstellungen. Ohne Erlaubnis kann Lotti dir keine Tageshinweise schicken.',
+          t('notificationTitle'),
+          t('notificationMessage'),
         );
         return;
       }
@@ -475,16 +555,28 @@ export default function LottisFuersorgeScreen() {
   };
 
   const main = analysis?.main;
-  const chips = useMemo(() => (main ? chipsForInsight(main.id) : []), [main]);
+  const chips = useMemo(() => (main ? chipsForInsight(main.id, locale) : []), [locale, main]);
   const summary = main?.headline ?? main?.title ?? '';
   const whyLine = analysis?.reasons?.[0] ?? '';
   const atLimit = mamaEnergy === 'low';
   const careHorizon = useMemo(
     () =>
       dailySignals
-        ? buildCareHorizon(dailySignals, { now: clockNow, atLimit })
+        ? buildCareHorizon(dailySignals, { now: clockNow, atLimit, locale })
         : null,
-    [atLimit, clockNow, dailySignals],
+    [atLimit, clockNow, dailySignals, locale],
+  );
+  const dayTimeline = useMemo(
+    () =>
+      dailySignals
+        ? buildCareDayTimeline({
+            signals: dailySignals,
+            plannerBlocks: todayPlanner.blocks,
+            now: clockNow,
+            locale,
+          })
+        : [],
+    [clockNow, dailySignals, locale, todayPlanner.blocks],
   );
 
   const haptic = () => {
@@ -499,7 +591,7 @@ export default function LottisFuersorgeScreen() {
     setActionBusy(true);
     try {
       const result = await Share.share({
-        title: 'Übergabe für Lotti',
+        title: t('shareTitle'),
         message: careHorizon.handoffMessage,
       });
       if (result.action === Share.sharedAction && todayState?.id) {
@@ -507,7 +599,7 @@ export default function LottisFuersorgeScreen() {
         setTodayState({ ...todayState, sharedAt: new Date().toISOString() });
       }
     } catch {
-      Alert.alert('Teilen nicht möglich', 'Die Übergabe konnte gerade nicht geöffnet werden.');
+      Alert.alert(t('shareFailedTitle'), t('shareFailedMessage'));
     } finally {
       setActionBusy(false);
     }
@@ -533,19 +625,19 @@ export default function LottisFuersorgeScreen() {
 
   /* ---- Tagesbriefing-Karte: Struktur steht sofort, Text per Skeleton ---- */
   const renderBriefing = () => (
-    <GlassCard {...TILE_PROPS} radius={28} style={styles.briefingShadow} contentStyle={styles.briefingContent}>
+    <GlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.briefingContent}>
       {/* Kopfzeile: Titel */}
       <View style={styles.briefingHeader}>
         <View style={styles.briefingTitleRow}>
           <View style={styles.briefingIcon}>
-            <IconSymbol name="sparkles" size={15} color={BRAND_PURPLE} />
+            <IconSymbol name="sparkles" size={15} color={theme.accent} />
           </View>
           <View>
             <ThemedText adaptive={false} style={styles.briefingTitle}>
-              Tagesbriefing
+              {t('briefing')}
             </ThemedText>
             <ThemedText adaptive={false} style={styles.briefingDate}>
-              Heute · von Lotti
+              {t('todayByLotti')}
             </ThemedText>
           </View>
         </View>
@@ -554,7 +646,7 @@ export default function LottisFuersorgeScreen() {
       {/* „Heute entdeckt"-Badge */}
       <View style={styles.discoverBadgeRow}>
         <View style={styles.discoverBadge}>
-          <Text style={styles.discoverBadgeText}>✨ Heute entdeckt</Text>
+          <Text style={styles.discoverBadgeText}>{t('discovered')}</Text>
         </View>
       </View>
 
@@ -567,14 +659,14 @@ export default function LottisFuersorgeScreen() {
             </ThemedText>
           </View>
           <ThemedText adaptive={false} style={styles.heroReason}>
-            Lotti hat Schlaf, Ernährung und Wetter zusammengeführt.
+            {t('combined')}
           </ThemedText>
         </Animated.View>
       ) : (
         <View style={styles.summarySkeleton}>
-          <Skeleton width="92%" height={22} />
-          <Skeleton width="64%" height={22} />
-          <Skeleton width="80%" height={13} style={{ marginTop: 6 }} />
+          <Skeleton width="92%" height={22} color={theme.skeleton} />
+          <Skeleton width="64%" height={22} color={theme.skeleton} />
+          <Skeleton width="80%" height={13} color={theme.skeleton} style={{ marginTop: 6 }} />
         </View>
       )}
 
@@ -589,8 +681,8 @@ export default function LottisFuersorgeScreen() {
             ))
           : (
             <>
-              <Skeleton width={84} height={28} radius={999} />
-              <Skeleton width={96} height={28} radius={999} />
+              <Skeleton width={84} height={28} radius={999} color={theme.skeleton} />
+              <Skeleton width={96} height={28} radius={999} color={theme.skeleton} />
             </>
           )}
       </View>
@@ -600,7 +692,7 @@ export default function LottisFuersorgeScreen() {
       {/* Warum? */}
       <View style={styles.whyBlock}>
         <ThemedText adaptive={false} style={styles.whyLabel}>
-          Warum?
+          {t('why')}
         </ThemedText>
         {ready ? (
           <ThemedText adaptive={false} style={styles.whyText}>
@@ -608,8 +700,8 @@ export default function LottisFuersorgeScreen() {
           </ThemedText>
         ) : (
           <View style={styles.whySkeleton}>
-            <Skeleton width="100%" height={13} />
-            <Skeleton width="48%" height={13} />
+            <Skeleton width="100%" height={13} color={theme.skeleton} />
+            <Skeleton width="48%" height={13} color={theme.skeleton} />
           </View>
         )}
       </View>
@@ -622,12 +714,12 @@ export default function LottisFuersorgeScreen() {
         style={styles.detailsToggle}
       >
         <ThemedText adaptive={false} style={styles.detailsToggleText}>
-          Details
+          {t('details')}
         </ThemedText>
         <IconSymbol
           name={detailsOpen ? 'chevron.up' : 'chevron.down'}
           size={14}
-          color={BRAND_PURPLE}
+          color={theme.accent}
         />
       </TouchableOpacity>
 
@@ -640,7 +732,7 @@ export default function LottisFuersorgeScreen() {
             {analysis.reasons.map((reason, index) => (
               <View key={index} style={styles.reasonRow}>
                 <View style={styles.reasonCheck}>
-                  <IconSymbol name="checkmark" size={10} color={BRAND_PURPLE} />
+                  <IconSymbol name="checkmark" size={10} color={theme.accent} />
                 </View>
                 <ThemedText adaptive={false} style={styles.reasonText}>
                   {reason}
@@ -655,13 +747,13 @@ export default function LottisFuersorgeScreen() {
   );
 
   const renderCareHorizon = () => (
-    <GlassCard {...TILE_PROPS} radius={28} style={styles.horizonShadow} contentStyle={styles.horizonContent}>
+    <GlassCard {...tileProps} radius={28} style={styles.horizonShadow} contentStyle={styles.horizonContent}>
       {!careHorizon ? (
         <View style={styles.horizonSkeleton}>
-          <Skeleton width={128} height={25} radius={999} />
-          <Skeleton width="82%" height={28} radius={8} />
-          <Skeleton width="100%" height={74} radius={16} />
-          <Skeleton width="100%" height={48} radius={999} />
+          <Skeleton width={128} height={25} radius={999} color={theme.skeleton} />
+          <Skeleton width="82%" height={28} radius={8} color={theme.skeleton} />
+          <Skeleton width="100%" height={74} radius={16} color={theme.skeleton} />
+          <Skeleton width="100%" height={48} radius={999} color={theme.skeleton} />
         </View>
       ) : (
         <>
@@ -674,10 +766,10 @@ export default function LottisFuersorgeScreen() {
           >
             <Text style={styles.horizonBadgeText}>
               {atLimit
-                ? '🫶 Am-Limit-Modus'
+                ? t('limitMode')
                 : careHorizon.roughNight
-                  ? '🌙 Kurze Nacht erkannt'
-                  : '✨ Aus eurem Rhythmus'}
+                  ? t('shortNight')
+                  : t('rhythm')}
             </Text>
           </View>
 
@@ -687,14 +779,14 @@ export default function LottisFuersorgeScreen() {
 
           {atLimit ? (
             <ThemedText adaptive={false} style={styles.horizonLimitText}>
-              Lotti hat den aktuellen Stand schon in eine konkrete Übergabe gepackt. Du musst nichts erklären oder zusätzlich dokumentieren.
+              {t('limitText')}
             </ThemedText>
           ) : (
             <View style={styles.horizonRows}>
               {[
-                { emoji: '●', label: 'Jetzt', text: careHorizon.nowText },
-                { emoji: '→', label: 'Als Nächstes', text: careHorizon.nextText },
-                { emoji: '○', label: 'Dein Fenster', text: careHorizon.windowText },
+                { emoji: '●', label: t('now'), text: careHorizon.nowText },
+                { emoji: '→', label: t('next'), text: careHorizon.nextText },
+                { emoji: '○', label: t('yourWindow'), text: careHorizon.windowText },
               ].map((row) => (
                 <View key={row.label} style={styles.horizonRow}>
                   <View style={styles.horizonRowIcon}>
@@ -726,7 +818,13 @@ export default function LottisFuersorgeScreen() {
             style={styles.horizonPrimaryWrap}
           >
             <LinearGradient
-              colors={atLimit ? ['#A14D74', '#74335B'] : [BRAND_PURPLE_SOFT, BRAND_PURPLE]}
+              colors={
+                atLimit
+                  ? ['#A14D74', '#74335B']
+                  : isDark
+                    ? ['#A98BFA', '#6F4CC3']
+                    : [BRAND_PURPLE_SOFT, BRAND_PURPLE]
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[styles.horizonPrimary, actionBusy && styles.ctaButtonDisabled]}
@@ -743,7 +841,7 @@ export default function LottisFuersorgeScreen() {
               onPress={leaveLimitMode}
               style={styles.horizonQuietButton}
             >
-              <Text style={styles.horizonQuietButtonText}>Normalen Überblick anzeigen</Text>
+              <Text style={styles.horizonQuietButtonText}>{t('normalOverview')}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -754,10 +852,10 @@ export default function LottisFuersorgeScreen() {
             >
               <Text style={styles.limitButtonEmoji}>🫶</Text>
               <View style={styles.limitButtonTextColumn}>
-                <Text style={styles.limitButtonTitle}>Ich bin am Limit</Text>
-                <Text style={styles.limitButtonHint}>Alles ausblenden und sofort Ablösung anfragen</Text>
+                <Text style={styles.limitButtonTitle}>{t('atLimit')}</Text>
+                <Text style={styles.limitButtonHint}>{t('limitHint')}</Text>
               </View>
-              <IconSymbol name="chevron.right" size={14} color="#8A4165" />
+              <IconSymbol name="chevron.right" size={14} color={theme.limitTitle} />
             </TouchableOpacity>
           )}
         </>
@@ -773,10 +871,10 @@ export default function LottisFuersorgeScreen() {
         </View>
         <View style={styles.copilotHeadingText}>
           <ThemedText adaptive={false} style={styles.copilotTitle}>
-            Dein Eltern-Copilot
+            {t('copilot')}
           </ThemedText>
           <ThemedText adaptive={false} style={styles.copilotHint}>
-            Lotti ordnet Babys Tag ein und sagt dir, was jetzt wichtig ist.
+            {t('copilotHint')}
           </ThemedText>
         </View>
       </View>
@@ -785,32 +883,55 @@ export default function LottisFuersorgeScreen() {
     </View>
   );
 
+  const renderDayTimeline = () => (
+    <GlassCard {...tileProps} radius={28} contentStyle={styles.timelineContent}>
+      <CareDayTimeline
+        items={dayTimeline}
+        loading={!dailySignals || todayPlanner.loading}
+        colors={{
+          textPrimary: theme.textPrimary,
+          textSecondary: theme.textSecondary,
+          textTertiary: theme.textTertiary,
+          accent: theme.accent,
+          accentSurface: theme.accentSurface,
+          divider: theme.divider,
+          skeleton: theme.skeleton,
+          warning: isDark ? '#F4B488' : '#A85D2A',
+          warningSurface: isDark
+            ? 'rgba(244,180,136,0.14)'
+            : 'rgba(216,138,60,0.12)',
+        }}
+        onOpenPlanner={() => router.push('/planner')}
+      />
+    </GlassCard>
+  );
+
   const renderCards = () => (
     <View style={styles.cardGrid}>
       {(analysis ? analysis.cards : ([0, 1, 2, 3] as const)).map((card, index) => {
         if (typeof card === 'number') {
           return (
             <View key={card} style={styles.miniCardWrap}>
-              <GlassCard {...TILE_PROPS} radius={22} contentStyle={styles.miniContent}>
-                <Skeleton width={38} height={38} radius={13} />
-                <Skeleton width="70%" height={22} radius={8} style={{ marginTop: 12 }} />
-                <Skeleton width="55%" height={14} radius={7} style={{ marginTop: 6 }} />
-                <Skeleton width="100%" height={6} radius={999} style={{ marginTop: 12 }} />
+              <GlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
+                <Skeleton width={38} height={38} radius={13} color={theme.skeleton} />
+                <Skeleton width="70%" height={22} radius={8} color={theme.skeleton} style={{ marginTop: 12 }} />
+                <Skeleton width="55%" height={14} radius={7} color={theme.skeleton} style={{ marginTop: 6 }} />
+                <Skeleton width="100%" height={6} radius={999} color={theme.skeleton} style={{ marginTop: 12 }} />
               </GlassCard>
             </View>
           );
         }
-        const accent = cardAccent(card.key);
+        const accent = cardAccent(card.key, isDark);
         return (
           <FadeInUp key={card.key} delay={120 + index * 70} style={styles.miniCardWrap}>
-            <GlassCard {...TILE_PROPS} radius={22} contentStyle={styles.miniContent}>
+            <GlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
               <View style={styles.miniHeader}>
                 <View style={[styles.miniIconChip, { backgroundColor: accent.soft }]}>
                   <Text style={styles.miniEmoji}>{card.emoji}</Text>
                 </View>
                 {!card.isReal ? (
                   <View style={styles.exampleBadge}>
-                    <Text style={styles.exampleBadgeText}>Beispiel</Text>
+                    <Text style={styles.exampleBadgeText}>{t('example')}</Text>
                   </View>
                 ) : (
                   <View style={[styles.liveDot, { backgroundColor: accent.color }]} />
@@ -828,7 +949,12 @@ export default function LottisFuersorgeScreen() {
               <ThemedText adaptive={false} style={styles.miniLabel}>
                 {card.label}
               </ThemedText>
-              <AnimatedBar progress={card.progress} color={accent.color} play={ready} />
+              <AnimatedBar
+                progress={card.progress}
+                color={accent.color}
+                play={ready}
+                trackColor={theme.divider}
+              />
               <ThemedText adaptive={false} numberOfLines={1} style={styles.miniCaption}>
                 {card.caption}
               </ThemedText>
@@ -842,13 +968,13 @@ export default function LottisFuersorgeScreen() {
   /** Echter Verlauf aus Supabase – mit Datum und „Erledigt"-Haken. */
   const renderRealHistory = (items: AdvisorHistoryItem[]) => (
     <View style={styles.historySection}>
-      <ThemedText style={styles.historyHeading}>Frühere Hinweise</ThemedText>
+      <ThemedText style={styles.historyHeading}>{t('previous')}</ThemedText>
       {items.map((item, index) => {
-        const accent = toneAccent(item.tone);
+        const accent = toneAccent(item.tone, isDark);
         const acted = !!item.actedAt;
         return (
           <FadeInUp key={item.id} delay={260 + index * 70}>
-            <GlassCard {...TILE_PROPS} radius={20} contentStyle={styles.historyContent}>
+            <GlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
               <View style={[styles.historyEmojiBubble, { backgroundColor: accent.soft }]}>
                 <Text style={styles.historyEmoji}>{item.emoji}</Text>
               </View>
@@ -857,7 +983,7 @@ export default function LottisFuersorgeScreen() {
                   <ThemedText adaptive={false} style={styles.historyCardTitle}>
                     {item.headline || item.title}
                   </ThemedText>
-                  <Text style={styles.historyDate}>{formatHistoryDate(item.localDate)}</Text>
+                  <Text style={styles.historyDate}>{formatHistoryDate(item.localDate, locale, localeTag)}</Text>
                 </View>
                 <ThemedText adaptive={false} style={styles.historyCardBody}>
                   {item.body}
@@ -872,7 +998,7 @@ export default function LottisFuersorgeScreen() {
                 <IconSymbol
                   name="checkmark"
                   size={13}
-                  color={acted ? '#FFFFFF' : BRAND_PURPLE}
+                  color={acted ? '#FFFFFF' : theme.accent}
                 />
               </TouchableOpacity>
             </GlassCard>
@@ -884,12 +1010,12 @@ export default function LottisFuersorgeScreen() {
 
   const renderHistory = (history: AdvisorInsight[]) => (
     <View style={styles.historySection}>
-      <ThemedText style={styles.historyHeading}>Weitere Hinweise</ThemedText>
+      <ThemedText style={styles.historyHeading}>{t('more')}</ThemedText>
       {history.map((item, index) => {
-        const accent = toneAccent(item.tone);
+        const accent = toneAccent(item.tone, isDark);
         return (
           <FadeInUp key={item.id} delay={260 + index * 70}>
-            <GlassCard {...TILE_PROPS} radius={20} contentStyle={styles.historyContent}>
+            <GlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
               <View style={[styles.historyEmojiBubble, { backgroundColor: accent.soft }]}>
                 <Text style={styles.historyEmoji}>{item.emoji}</Text>
               </View>
@@ -913,12 +1039,17 @@ export default function LottisFuersorgeScreen() {
     if (!settings) return null;
     return (
       <View style={styles.settingsSection}>
-        <ThemedText style={styles.historyHeading}>Einstellungen</ThemedText>
-        <GlassCard {...TILE_PROPS} radius={22} contentStyle={styles.settingsContent}>
+        <ThemedText style={styles.historyHeading}>{t('settings')}</ThemedText>
+        <GlassCard {...tileProps} radius={22} contentStyle={styles.settingsContent}>
           <ThemedText adaptive={false} style={styles.settingsGroupLabel}>
-            Themen
+            {t('topics')}
           </ThemedText>
-          {THEME_OPTIONS.map((option, index) => (
+          {([
+            { key: 'weather', emoji: '🌤️', label: t('weather') },
+            { key: 'sleep', emoji: '💤', label: t('sleep') },
+            { key: 'feeding', emoji: '🍼', label: t('feeding') },
+            { key: 'motivation', emoji: '🌿', label: t('motivation') },
+          ] as { key: AdvisorCategory; emoji: string; label: string }[]).map((option, index) => (
             <View
               key={option.key}
               style={[styles.settingsRow, index > 0 && styles.settingsRowBorder]}
@@ -930,7 +1061,7 @@ export default function LottisFuersorgeScreen() {
               <Switch
                 value={settings.themes.includes(option.key)}
                 onValueChange={() => toggleTheme(option.key)}
-                trackColor={{ false: 'rgba(74,58,51,0.18)', true: BRAND_PURPLE_SOFT }}
+                trackColor={{ false: theme.switchTrack, true: theme.accentStrong }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -940,24 +1071,23 @@ export default function LottisFuersorgeScreen() {
             adaptive={false}
             style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
           >
-            Mitteilungen
+            {t('notifications')}
           </ThemedText>
           <View style={styles.settingsRow}>
             <Text style={styles.settingsEmoji}>🔔</Text>
             <View style={styles.settingsLabelColumn}>
               <ThemedText adaptive={false} style={styles.settingsLabel}>
-                Push für wichtige Hinweise
+                {t('push')}
               </ThemedText>
               <ThemedText adaptive={false} style={styles.settingsHint}>
-                Max. 1 Nachricht am Tag, morgens gegen 8 Uhr – nie in deinen
-                stillen Zeiten ({settings.quietHoursStart}–{settings.quietHoursEnd} Uhr).
+                {t('pushHint', { start: settings.quietHoursStart, end: settings.quietHoursEnd })}
               </ThemedText>
             </View>
             <Switch
               value={settings.pushEnabled}
               disabled={pushBusy}
               onValueChange={togglePush}
-              trackColor={{ false: 'rgba(74,58,51,0.18)', true: BRAND_PURPLE_SOFT }}
+              trackColor={{ false: theme.switchTrack, true: theme.accentStrong }}
               thumbColor="#FFFFFF"
             />
           </View>
@@ -966,10 +1096,14 @@ export default function LottisFuersorgeScreen() {
             adaptive={false}
             style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
           >
-            Häufigkeit
+            {t('frequency')}
           </ThemedText>
           <View style={styles.frequencyRow}>
-            {FREQUENCY_OPTIONS.map((option) => {
+            {([
+              { key: 'daily', label: t('daily') },
+              { key: 'critical_only', label: t('importantOnly') },
+              { key: 'off', label: t('off') },
+            ] as { key: AdvisorFrequency; label: string }[]).map((option) => {
               const active = settings.frequency === option.key;
               return (
                 <TouchableOpacity
@@ -994,17 +1128,10 @@ export default function LottisFuersorgeScreen() {
           {/* Datenschutz-Hinweis: was Lottis Fürsorge wohin überträgt. */}
           <View style={styles.privacyBlock}>
             <ThemedText adaptive={false} style={styles.privacyTitle}>
-              🛡️ Deine Daten
+              {t('privacyTitle')}
             </ThemedText>
             <ThemedText adaptive={false} style={styles.privacyText}>
-              Wenn du den Am-Limit-Modus aktivierst, wird diese Auswahl in
-              deinem Konto gespeichert, aber nicht an den KI-Dienst übertragen.{' '}
-              Für den Wetterteil wird dein ungefährer Standort (auf ca. 1 km
-              gerundet) gespeichert und an den Wetterdienst Open-Meteo
-              übertragen – nie deine genaue Position. Für die persönliche
-              Formulierung gehen die Tageswerte (Schlaf, Mahlzeiten, Windeln,
-              Wetter) sowie Vorname und Alter deines Babys an einen
-              KI-Dienst. Alles lässt sich hier jederzeit abschalten.
+              {t('privacyText')}
             </ThemedText>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -1012,9 +1139,9 @@ export default function LottisFuersorgeScreen() {
               style={styles.privacyLink}
             >
               <ThemedText adaptive={false} style={styles.privacyLinkText}>
-                Mehr in der Datenschutzerklärung
+                {t('privacyLink')}
               </ThemedText>
-              <IconSymbol name="chevron.right" size={12} color={BRAND_PURPLE} />
+              <IconSymbol name="chevron.right" size={12} color={theme.accent} />
             </TouchableOpacity>
           </View>
         </GlassCard>
@@ -1028,24 +1155,22 @@ export default function LottisFuersorgeScreen() {
     return (
       <ThemedBackground style={styles.background}>
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar barStyle="dark-content" />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
-            title="Lottis Fürsorge"
-            subtitle="Eine Sache weniger im Kopf"
+            title={t('title')}
+            subtitle={t('subtitle')}
             showBackButton
             showBabySwitcher={false}
           />
           {access === false ? (
             <View style={styles.gateWrap}>
-              <GlassCard {...TILE_PROPS} radius={22} contentStyle={styles.gateContent}>
+              <GlassCard {...tileProps} radius={22} contentStyle={styles.gateContent}>
                 <Text style={styles.gateEmoji}>🔒</Text>
                 <ThemedText adaptive={false} style={styles.gateTitle}>
-                  Noch nicht freigeschaltet
+                  {t('locked')}
                 </ThemedText>
                 <ThemedText adaptive={false} style={styles.gateText}>
-                  Lottis Fürsorge ist aktuell in Erprobung und nur für
-                  Premiumtester verfügbar. Bald öffnen wir das Feature für
-                  Premium-Mitglieder.
+                  {t('lockedText')}
                 </ThemedText>
               </GlassCard>
             </View>
@@ -1058,10 +1183,10 @@ export default function LottisFuersorgeScreen() {
   return (
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
-          title="Lottis Fürsorge"
-          subtitle="Eine Sache weniger im Kopf"
+          title={t('title')}
+          subtitle={t('subtitle')}
           showBackButton
           showBabySwitcher={false}
         />
@@ -1072,6 +1197,7 @@ export default function LottisFuersorgeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {renderCareHorizon()}
+          {!atLimit ? renderDayTimeline() : null}
           {renderCopilotBriefing()}
           {!atLimit ? (
             <>
@@ -1086,14 +1212,9 @@ export default function LottisFuersorgeScreen() {
           ) : null}
 
           <View style={styles.disclaimerWrap}>
-            <IconSymbol name="info.circle" size={14} color={TEXT_TERTIARY} />
+            <IconSymbol name="info.circle" size={14} color={theme.textTertiary} />
             <ThemedText style={styles.disclaimerText}>
-              Lottis Hinweise sind allgemeine Alltagstipps und ersetzen keinen
-              medizinischen Rat, keine Diagnose und keine Behandlung. Bei
-              Fieber, Trinkverweigerung, Teilnahmslosigkeit oder wenn du dir
-              unsicher bist: wende dich an deine Hebamme, Kinderarztpraxis
-              oder den ärztlichen Bereitschaftsdienst (116 117), im Notfall an
-              den Notruf 112.
+              {t('disclaimer')}
             </ThemedText>
           </View>
         </ScrollView>
@@ -1103,7 +1224,7 @@ export default function LottisFuersorgeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
   background: { flex: 1 },
   safeArea: { flex: 1 },
 
@@ -1116,7 +1237,7 @@ const styles = StyleSheet.create({
 
   /* Tagesbriefing */
   briefingShadow: {
-    shadowColor: BRAND_PURPLE,
+    shadowColor: theme.accent,
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.18,
     shadowRadius: 26,
@@ -1137,28 +1258,28 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: 'rgba(142,78,198,0.12)',
+    backgroundColor: theme.accentSurface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  briefingTitle: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY, letterSpacing: -0.2 },
-  briefingDate: { fontSize: 11.5, fontWeight: '600', color: TEXT_TERTIARY, marginTop: 1 },
+  briefingTitle: { fontSize: 17, fontWeight: '800', color: theme.textPrimary, letterSpacing: -0.2 },
+  briefingDate: { fontSize: 11.5, fontWeight: '600', color: theme.textTertiary, marginTop: 1 },
 
   summarySkeleton: { gap: 8, marginTop: 18, marginBottom: 2 },
 
   /* Hero-Empfehlung */
   discoverBadgeRow: { flexDirection: 'row', marginTop: 16 },
   discoverBadge: {
-    backgroundColor: 'rgba(142,78,198,0.12)',
+    backgroundColor: theme.accentSurface,
     paddingHorizontal: 11,
     paddingVertical: 5,
     borderRadius: 999,
   },
-  discoverBadgeText: { fontSize: 12, fontWeight: '800', color: BRAND_PURPLE, letterSpacing: 0.2 },
+  discoverBadgeText: { fontSize: 12, fontWeight: '800', color: theme.accent, letterSpacing: 0.2 },
   heroGlow: {
     marginTop: 10,
     alignSelf: 'flex-start',
-    shadowColor: BRAND_PURPLE,
+    shadowColor: theme.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.28,
     shadowRadius: 16,
@@ -1167,27 +1288,27 @@ const styles = StyleSheet.create({
     fontSize: 23,
     lineHeight: 29,
     fontWeight: '800',
-    color: TEXT_PRIMARY,
+    color: theme.textPrimary,
     letterSpacing: -0.4,
   },
-  heroReason: { fontSize: 13.5, lineHeight: 19, color: TEXT_SECONDARY, marginTop: 8 },
+  heroReason: { fontSize: 13.5, lineHeight: 19, color: theme.textSecondary, marginTop: 8 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(142,78,198,0.10)',
+    backgroundColor: theme.accentSurface,
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
   },
   chipEmoji: { fontSize: 13 },
-  chipLabel: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  chipLabel: { fontSize: 12.5, fontWeight: '700', color: theme.accent },
 
   briefingDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(74,58,51,0.12)',
+    backgroundColor: theme.divider,
     marginTop: 16,
   },
 
@@ -1195,12 +1316,12 @@ const styles = StyleSheet.create({
   whyLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: BRAND_PURPLE,
+    color: theme.accent,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 5,
   },
-  whyText: { fontSize: 13.5, lineHeight: 19, color: TEXT_SECONDARY },
+  whyText: { fontSize: 13.5, lineHeight: 19, color: theme.textSecondary },
   whySkeleton: { gap: 7, marginTop: 2 },
 
   detailsToggle: {
@@ -1211,21 +1332,21 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingVertical: 2,
   },
-  detailsToggleText: { fontSize: 13.5, fontWeight: '700', color: BRAND_PURPLE },
+  detailsToggleText: { fontSize: 13.5, fontWeight: '700', color: theme.accent },
   detailsBody: { marginTop: 12, gap: 12 },
-  detailsParagraph: { fontSize: 13.5, lineHeight: 20, color: TEXT_SECONDARY },
+  detailsParagraph: { fontSize: 13.5, lineHeight: 20, color: theme.textSecondary },
   reasonList: { gap: 10 },
   reasonRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   reasonCheck: {
     width: 20,
     height: 20,
     borderRadius: 7,
-    backgroundColor: 'rgba(94,61,179,0.12)',
+    backgroundColor: theme.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
   },
-  reasonText: { flex: 1, fontSize: 13, lineHeight: 18, color: TEXT_SECONDARY },
+  reasonText: { flex: 1, fontSize: 13, lineHeight: 18, color: theme.textSecondary },
 
   ctaWrap: { marginTop: 18 },
   ctaButton: {
@@ -1236,7 +1357,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 13,
     borderRadius: 999,
-    shadowColor: BRAND_PURPLE,
+    shadowColor: theme.accent,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.32,
     shadowRadius: 14,
@@ -1256,42 +1377,44 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 14,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(94,61,179,0.09)',
+    backgroundColor: theme.controlSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(94,61,179,0.2)',
+    borderColor: theme.controlBorder,
   },
   secondaryActionEmoji: { fontSize: 14 },
-  secondaryActionText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  secondaryActionText: { fontSize: 12.5, fontWeight: '700', color: theme.accent },
   reminderPanel: {
     gap: 9,
     marginTop: 10,
     padding: 12,
     borderRadius: 16,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(142,78,198,0.08)',
+    backgroundColor: theme.controlSurface,
   },
-  reminderLabel: { fontSize: 12.5, fontWeight: '700', color: TEXT_SECONDARY },
+  reminderLabel: { fontSize: 12.5, fontWeight: '700', color: theme.textSecondary },
   reminderChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   reminderChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.elevatedSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(94,61,179,0.22)',
+    borderColor: theme.controlBorder,
   },
-  reminderChipText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  reminderChipText: { fontSize: 12.5, fontWeight: '700', color: theme.accent },
   reminderScheduledText: {
     marginTop: 10,
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
-    color: TEXT_SECONDARY,
+    color: theme.textSecondary,
   },
 
   /* Jetzt – Als Nächstes – Dein Fenster */
   horizonShadow: {
-    boxShadow: '0 10px 30px rgba(94, 61, 179, 0.13)',
+    boxShadow: theme.isDark
+      ? '0 10px 30px rgba(0, 0, 0, 0.34)'
+      : '0 10px 30px rgba(94, 61, 179, 0.13)',
   },
   horizonContent: { padding: 20, gap: 14 },
   horizonSkeleton: { gap: 13 },
@@ -1300,24 +1423,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(94,61,179,0.10)',
+    backgroundColor: theme.accentSoft,
   },
   horizonBadgeNight: { backgroundColor: 'rgba(83,73,145,0.13)' },
   horizonBadgeLimit: { backgroundColor: 'rgba(161,77,116,0.13)' },
   horizonBadgeText: {
     fontSize: 11.5,
     fontWeight: '800',
-    color: BRAND_PURPLE,
+    color: theme.accent,
     letterSpacing: 0.15,
   },
   horizonTitle: {
     fontSize: 25,
     lineHeight: 30,
     fontWeight: '800',
-    color: TEXT_PRIMARY,
+    color: theme.textPrimary,
     letterSpacing: -0.45,
   },
-  horizonLimitText: { fontSize: 14.5, lineHeight: 21, color: TEXT_SECONDARY },
+  horizonLimitText: { fontSize: 14.5, lineHeight: 21, color: theme.textSecondary },
   horizonRows: { gap: 4 },
   horizonRow: {
     flexDirection: 'row',
@@ -1325,7 +1448,7 @@ const styles = StyleSheet.create({
     gap: 11,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(74,58,51,0.10)',
+    borderBottomColor: theme.divider,
   },
   horizonRowIcon: {
     width: 28,
@@ -1334,19 +1457,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(94,61,179,0.09)',
+    backgroundColor: theme.controlSurface,
   },
-  horizonRowIconText: { fontSize: 14, fontWeight: '800', color: BRAND_PURPLE },
+  horizonRowIconText: { fontSize: 14, fontWeight: '800', color: theme.accent },
   horizonRowText: { flex: 1, gap: 3 },
   horizonRowLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: BRAND_PURPLE,
+    color: theme.accent,
     letterSpacing: 0.45,
     textTransform: 'uppercase',
   },
-  horizonRowBody: { fontSize: 14, lineHeight: 20, color: TEXT_PRIMARY },
-  horizonConfidence: { fontSize: 11.5, lineHeight: 16, color: TEXT_TERTIARY },
+  horizonRowBody: { fontSize: 14, lineHeight: 20, color: theme.textPrimary },
+  horizonConfidence: { fontSize: 11.5, lineHeight: 16, color: theme.textTertiary },
   horizonPrimaryWrap: { paddingTop: 2 },
   horizonPrimary: {
     minHeight: 48,
@@ -1360,7 +1483,8 @@ const styles = StyleSheet.create({
   },
   horizonPrimaryText: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '800' },
   horizonQuietButton: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6 },
-  horizonQuietButtonText: { fontSize: 12.5, fontWeight: '700', color: TEXT_TERTIARY },
+  horizonQuietButtonText: { fontSize: 12.5, fontWeight: '700', color: theme.textTertiary },
+  timelineContent: { padding: 20 },
   limitButton: {
     minHeight: 58,
     flexDirection: 'row',
@@ -1370,14 +1494,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(161,77,116,0.08)',
+    backgroundColor: theme.limitSurface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(161,77,116,0.22)',
+    borderColor: theme.limitBorder,
   },
   limitButtonEmoji: { fontSize: 20 },
   limitButtonTextColumn: { flex: 1, gap: 2 },
-  limitButtonTitle: { fontSize: 13.5, fontWeight: '800', color: '#74335B' },
-  limitButtonHint: { fontSize: 11.5, lineHeight: 15, color: '#95617A' },
+  limitButtonTitle: { fontSize: 13.5, fontWeight: '800', color: theme.limitTitle },
+  limitButtonHint: { fontSize: 11.5, lineHeight: 15, color: theme.limitText },
 
   /* Sichtbarer Eltern-Copilot: Orientierung und Tagesbriefing gehören zusammen. */
   copilotSection: { gap: 14 },
@@ -1394,12 +1518,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 15,
     borderCurve: 'continuous',
-    backgroundColor: 'rgba(94,61,179,0.10)',
+    backgroundColor: theme.accentSoft,
   },
   copilotEmoji: { fontSize: 21 },
   copilotHeadingText: { flex: 1, gap: 2 },
-  copilotTitle: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
-  copilotHint: { fontSize: 12.5, lineHeight: 17, color: TEXT_TERTIARY },
+  copilotTitle: { fontSize: 17, fontWeight: '800', color: theme.textPrimary },
+  copilotHint: { fontSize: 12.5, lineHeight: 17, color: theme.textTertiary },
 
   /* Mini cards */
   cardGrid: {
@@ -1426,23 +1550,15 @@ const styles = StyleSheet.create({
   miniEmoji: { fontSize: 20 },
   liveDot: { width: 8, height: 8, borderRadius: 5 },
   exampleBadge: {
-    backgroundColor: 'rgba(94,61,179,0.12)',
+    backgroundColor: theme.accentSoft,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
   },
-  exampleBadgeText: { fontSize: 10, fontWeight: '700', color: BRAND_PURPLE },
+  exampleBadgeText: { fontSize: 10, fontWeight: '700', color: theme.accent },
   miniValue: { fontSize: 23, fontWeight: '800', letterSpacing: -0.3 },
-  miniLabel: { fontSize: 14.5, fontWeight: '700', color: TEXT_PRIMARY, marginTop: 3 },
-  barTrack: {
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(74,58,51,0.12)',
-    marginTop: 10,
-    overflow: 'hidden',
-  },
-  barFill: { height: 6, borderRadius: 999 },
-  miniCaption: { fontSize: 11.5, lineHeight: 15, color: TEXT_TERTIARY, marginTop: 8 },
+  miniLabel: { fontSize: 14.5, fontWeight: '700', color: theme.textPrimary, marginTop: 3 },
+  miniCaption: { fontSize: 11.5, lineHeight: 15, color: theme.textTertiary, marginTop: 8 },
 
   /* History */
   historySection: { gap: 14 },
@@ -1463,22 +1579,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  historyCardTitle: { fontSize: 14.5, fontWeight: '700', color: TEXT_PRIMARY, flexShrink: 1 },
-  historyDate: { fontSize: 11.5, fontWeight: '600', color: TEXT_TERTIARY },
-  historyCardBody: { fontSize: 13, lineHeight: 18, color: TEXT_SECONDARY, marginTop: 2 },
+  historyCardTitle: { fontSize: 14.5, fontWeight: '700', color: theme.textPrimary, flexShrink: 1 },
+  historyDate: { fontSize: 11.5, fontWeight: '600', color: theme.textTertiary },
+  historyCardBody: { fontSize: 13, lineHeight: 18, color: theme.textSecondary, marginTop: 2 },
   actedToggle: {
     width: 26,
     height: 26,
     borderRadius: 9,
-    backgroundColor: 'rgba(94,61,179,0.10)',
+    backgroundColor: theme.accentSoft,
     borderWidth: 1,
-    borderColor: 'rgba(94,61,179,0.25)',
+    borderColor: theme.controlBorder,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actedToggleOn: {
-    backgroundColor: BRAND_PURPLE,
-    borderColor: BRAND_PURPLE,
+    backgroundColor: theme.accentStrong,
+    borderColor: theme.accentStrong,
   },
 
   /* Einstellungen */
@@ -1487,7 +1603,7 @@ const styles = StyleSheet.create({
   settingsGroupLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: BRAND_PURPLE,
+    color: theme.accent,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
     marginBottom: 4,
@@ -1501,33 +1617,33 @@ const styles = StyleSheet.create({
   },
   settingsRowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(74,58,51,0.12)',
+    borderTopColor: theme.divider,
   },
   settingsEmoji: { fontSize: 17 },
-  settingsLabel: { flex: 1, fontSize: 14.5, fontWeight: '600', color: TEXT_PRIMARY },
+  settingsLabel: { flex: 1, fontSize: 14.5, fontWeight: '600', color: theme.textPrimary },
   settingsLabelColumn: { flex: 1, gap: 2 },
-  settingsHint: { fontSize: 11.5, lineHeight: 15, color: TEXT_TERTIARY },
+  settingsHint: { fontSize: 11.5, lineHeight: 15, color: theme.textTertiary },
   frequencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   frequencyChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(94,61,179,0.10)',
+    backgroundColor: theme.accentSoft,
   },
-  frequencyChipActive: { backgroundColor: BRAND_PURPLE },
-  frequencyChipText: { fontSize: 13, fontWeight: '700', color: BRAND_PURPLE },
-  frequencyChipTextActive: { color: '#FFFFFF' },
+  frequencyChipActive: { backgroundColor: theme.accentStrong },
+  frequencyChipText: { fontSize: 13, fontWeight: '700', color: theme.accent },
+  frequencyChipTextActive: { color: theme.isDark ? '#211A2B' : '#FFFFFF' },
 
   /* Datenschutz-Hinweis in den Einstellungen */
   privacyBlock: {
     marginTop: 18,
     paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(74,58,51,0.12)',
+    borderTopColor: theme.divider,
     gap: 6,
   },
-  privacyTitle: { fontSize: 12.5, fontWeight: '800', color: TEXT_PRIMARY },
-  privacyText: { fontSize: 12, lineHeight: 17, color: TEXT_SECONDARY },
+  privacyTitle: { fontSize: 12.5, fontWeight: '800', color: theme.textPrimary },
+  privacyText: { fontSize: 12, lineHeight: 17, color: theme.textSecondary },
   privacyLink: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1535,17 +1651,17 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginTop: 2,
   },
-  privacyLinkText: { fontSize: 12.5, fontWeight: '700', color: BRAND_PURPLE },
+  privacyLinkText: { fontSize: 12.5, fontWeight: '700', color: theme.accent },
 
   /* Zugriffs-Gate */
   gateWrap: { paddingHorizontal: 20, paddingTop: 24 },
   gateContent: { alignItems: 'center', padding: 24, gap: 8 },
   gateEmoji: { fontSize: 34 },
-  gateTitle: { fontSize: 17, fontWeight: '800', color: TEXT_PRIMARY },
+  gateTitle: { fontSize: 17, fontWeight: '800', color: theme.textPrimary },
   gateText: {
     fontSize: 13.5,
     lineHeight: 19,
-    color: TEXT_SECONDARY,
+    color: theme.textSecondary,
     textAlign: 'center',
   },
 

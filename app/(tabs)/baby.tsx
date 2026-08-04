@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, BackHandler, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -60,8 +62,8 @@ import {
   type PreparedBabyPhoto,
 } from '@/lib/babyPhoto';
 
-const ACTIVE_BABY_LOCALE = DEFAULT_BABY_LOCALE;
-const BABY_LOCALE_TAG = getBabyLocaleTag(ACTIVE_BABY_LOCALE);
+let ACTIVE_BABY_LOCALE = DEFAULT_BABY_LOCALE;
+let BABY_LOCALE_TAG = getBabyLocaleTag(ACTIVE_BABY_LOCALE);
 const t = (key: BabyTranslationKey, params?: Record<string, string | number>) =>
   translateBabyText(ACTIVE_BABY_LOCALE, key, params);
 
@@ -170,6 +172,8 @@ const GlassLayer = ({
 );
 
 export default function BabyScreen() {
+  ACTIVE_BABY_LOCALE = useLocale().locale;
+  BABY_LOCALE_TAG = getBabyLocaleTag(ACTIVE_BABY_LOCALE);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();

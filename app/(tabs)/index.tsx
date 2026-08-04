@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, RefreshControl, Dimensions, Animated, Text, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -21,6 +23,16 @@ import {
   formatTime as formatBackgroundTime
 } from '@/lib/background-tasks';
 import Header from '@/components/Header';
+import {
+  ContractionTranslationKey,
+  DEFAULT_CONTRACTION_LOCALE,
+  getContractionLocaleTag,
+  translateContractionText,
+} from '@/lib/contractionTranslations';
+
+let ACTIVE_CONTRACTION_LOCALE = DEFAULT_CONTRACTION_LOCALE;
+let CONTRACTION_LOCALE_TAG = getContractionLocaleTag(ACTIVE_CONTRACTION_LOCALE);
+const t = (key: ContractionTranslationKey) => translateContractionText(ACTIVE_CONTRACTION_LOCALE, key);
 import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, TIMELINE_INSET, LAYOUT_PAD, RADIUS, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, PRIMARY } from '@/constants/DesignGuide';
 import { BlurView } from 'expo-blur';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -80,7 +92,7 @@ const formatSecondsCompact = (seconds?: number | null) => {
 const formatAgo = (start?: Date | null) => {
   if (!start) return '—';
   const diffMinutes = Math.max(0, Math.floor((Date.now() - start.getTime()) / 60000));
-  if (diffMinutes < 1) return 'Gerade eben';
+  if (diffMinutes < 1) return t('common.justNow');
   if (diffMinutes < 60) return `${diffMinutes}m`;
   const hours = Math.floor(diffMinutes / 60);
   if (hours < 24) return `${hours}h`;
@@ -112,6 +124,8 @@ const INTENSITY_STYLES = {
 } as const;
 
 export default function HomeScreen() {
+  ACTIVE_CONTRACTION_LOCALE = useLocale().locale;
+  CONTRACTION_LOCALE_TAG = getContractionLocaleTag(ACTIVE_CONTRACTION_LOCALE);
   const router = useRouter();
   const [contractions, setContractions] = useState<Contraction[]>([]);
   const [currentContraction, setCurrentContraction] = useState<Contraction | null>(null);
@@ -211,13 +225,13 @@ export default function HomeScreen() {
   }, [selectedDate, selectedTab]);
 
   const rangeTitle =
-    selectedTab === 'week' ? 'Wochenansicht' : selectedTab === 'month' ? 'Monatsansicht' : 'Tagesansicht';
+    selectedTab === 'week' ? t('screen.week') : selectedTab === 'month' ? t('screen.month') : t('screen.day');
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Verfolge deine Wehen bis zur Geburt';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
 
   const showReadOnlyPreviewAlert = () => {
-    Alert.alert('Nur Vorschau', 'Du schaust den Schwangerschaftsmodus an. Der Wehen-Tracker ist hier gesperrt.');
+    Alert.alert(t('screen.preview'), t('preview.description'));
   };
 
   const ensureWritableInCurrentMode = () => {
@@ -232,12 +246,12 @@ export default function HomeScreen() {
       const end = endOfWeek(selectedDate);
       const displayEnd = new Date(end);
       displayEnd.setDate(end.getDate() - 1);
-      return `${start.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} – ${displayEnd.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })}`;
+      return `${start.toLocaleDateString(CONTRACTION_LOCALE_TAG, { day: '2-digit', month: 'short' })} – ${displayEnd.toLocaleDateString(CONTRACTION_LOCALE_TAG, { day: '2-digit', month: 'short' })}`;
     }
     if (selectedTab === 'month') {
-      return selectedDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+      return selectedDate.toLocaleDateString(CONTRACTION_LOCALE_TAG, { month: 'long', year: 'numeric' });
     }
-    return selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' });
+    return selectedDate.toLocaleDateString(CONTRACTION_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' });
   }, [selectedDate, selectedTab]);
 
   const changeRange = (direction: 'prev' | 'next') => {
@@ -354,23 +368,23 @@ export default function HomeScreen() {
   const showIntensityDialog = (completedContraction: Contraction) => {
     // Erstellen eines benutzerdefinierten Dialogs mit farbigen Buttons
     Alert.alert(
-      'Intensität der Wehe',
-      'Wie stark war die Wehe?',
+      t('intensity.title'),
+      t('intensity.question'),
       [
         {
-          text: '🟢 Schwach',
+          text: t('intensity.weakEmoji'),
           onPress: () => saveContractionWithIntensity(completedContraction, 'schwach')
         },
         {
-          text: '🟠 Mittel',
+          text: t('intensity.mediumEmoji'),
           onPress: () => saveContractionWithIntensity(completedContraction, 'mittel')
         },
         {
-          text: '🔴 Stark',
+          text: t('intensity.strongEmoji'),
           onPress: () => saveContractionWithIntensity(completedContraction, 'stark')
         },
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel',
           onPress: () => saveContractionWithIntensity(completedContraction, null)
         }
@@ -408,12 +422,12 @@ export default function HomeScreen() {
 
       if (error) {
         console.error('Error saving contraction:', error);
-        let errorMessage = 'Wehe konnte nicht gespeichert werden.';
+        let errorMessage = t('alert.saveFailed');
         if (error.message) {
           errorMessage += ` Grund: ${error.message}`;
           console.error('Detailed error message:', error.message);
         }
-        Alert.alert('Fehler', errorMessage);
+        Alert.alert(t('common.error'), errorMessage);
 
         // Bei Fehler die Wehen neu laden, um den lokalen Zustand zu aktualisieren
         loadContractions();
@@ -435,7 +449,7 @@ export default function HomeScreen() {
       }
     } catch (err) {
       console.error('Failed to save contraction:', err);
-      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('common.unknownError'));
       // Bei Fehler die Wehen neu laden
       loadContractions();
     }
@@ -570,9 +584,9 @@ export default function HomeScreen() {
     // Wenn alle Kriterien erfüllt sind, zeige die Warnung an
     if (correctFrequency && correctDuration) {
       Alert.alert(
-        "Geburtsbeginn fortgeschritten",
-        "Deine Wehen zeigen ein konstantes Muster: Sie treten etwa alle 5 Minuten auf und halten jeweils etwa 1 Minute an. Dieses Muster besteht seit mindestens einer Stunde. Der Geburtsbeginn ist wahrscheinlich so weit fortgeschritten, dass du besser jetzt ins Krankenhaus fahren solltest.",
-        [{ text: "Verstanden" }]
+        t('alert.laborTitle'),
+        t('alert.laborMessage'),
+        [{ text: t('common.understood') }]
       );
     }
   };
@@ -592,7 +606,7 @@ export default function HomeScreen() {
       // Prüfen, ob die ID ein gültiges Format hat
       if (!contractionId || typeof contractionId !== 'string') {
         console.error('Invalid contraction ID:', contractionId);
-        Alert.alert('Fehler', 'Ungültige Wehen-ID. Bitte versuchen Sie es erneut.');
+        Alert.alert(t('common.error'), t('alert.invalidId'));
         return;
       }
 
@@ -600,7 +614,7 @@ export default function HomeScreen() {
       const contractionExists = contractions.some(c => c.id === contractionId);
       if (!contractionExists) {
         console.error('Contraction not found in local state:', contractionId);
-        Alert.alert('Fehler', 'Die Wehe konnte nicht gefunden werden.');
+        Alert.alert(t('common.error'), t('alert.notFound'));
         return;
       }
 
@@ -616,13 +630,13 @@ export default function HomeScreen() {
           console.error('Error deleting contraction:', error);
 
           // Detailliertere Fehlermeldung
-          let errorMessage = 'Wehe konnte nicht gelöscht werden.';
+          let errorMessage = t('alert.deleteFailed');
           if (error.message) {
             errorMessage += ` Grund: ${error.message}`;
             console.error('Detailed error message:', error.message);
           }
 
-          Alert.alert('Fehler', errorMessage);
+          Alert.alert(t('common.error'), errorMessage);
 
           // Bei Fehler die Wehen neu laden
           loadContractions();
@@ -632,13 +646,13 @@ export default function HomeScreen() {
       }).catch(err => {
         console.error('Failed to delete contraction:', err);
         // Bei Fehler die Wehen neu laden
-        Alert.alert('Fehler', `Wehe konnte nicht gelöscht werden. Fehler: ${err.message || 'Unbekannter Fehler'}`);
+        Alert.alert(t('common.error'), `${t('alert.deleteFailed')} ${err.message || t('common.unknownError')}`);
         loadContractions();
       });
     } catch (err) {
       console.error('Failed to delete contraction:', err);
       // Bei Fehler die Wehen neu laden
-      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('common.unknownError'));
       loadContractions();
     }
   };
@@ -652,7 +666,7 @@ export default function HomeScreen() {
       // Prüfen, ob die ID ein gültiges Format hat
       if (!contractionId || typeof contractionId !== 'string') {
         console.error('Invalid contraction ID:', contractionId);
-        Alert.alert('Fehler', 'Ungültige Wehen-ID. Bitte versuchen Sie es erneut.');
+        Alert.alert(t('common.error'), t('alert.invalidId'));
         return;
       }
 
@@ -660,7 +674,7 @@ export default function HomeScreen() {
       const contractionToUpdate = contractions.find(c => c.id === contractionId);
       if (!contractionToUpdate) {
         console.error('Contraction not found in local state:', contractionId);
-        Alert.alert('Fehler', 'Die Wehe konnte nicht gefunden werden.');
+        Alert.alert(t('common.error'), t('alert.notFound'));
         return;
       }
 
@@ -683,24 +697,24 @@ export default function HomeScreen() {
         console.error('Error updating contraction:', error);
 
         // Detailliertere Fehlermeldung
-        let errorMessage = 'Wehe konnte nicht aktualisiert werden.';
+        let errorMessage = t('alert.updateFailed');
         if (error.message) {
           errorMessage += ` Grund: ${error.message}`;
           console.error('Detailed error message:', error.message);
         }
 
-        Alert.alert('Fehler', errorMessage);
+        Alert.alert(t('common.error'), errorMessage);
 
         // Bei Fehler die Wehen neu laden
         loadContractions();
       } else {
         console.log('Successfully updated contraction with ID:', contractionId);
-        Alert.alert('Erfolg', 'Die Intensität der Wehe wurde erfolgreich aktualisiert.');
+        Alert.alert(t('common.success'), t('alert.updated'));
       }
     } catch (err) {
       console.error('Failed to update contraction:', err);
       // Bei Fehler die Wehen neu laden
-      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('common.unknownError'));
       loadContractions();
     }
   };
@@ -715,7 +729,7 @@ export default function HomeScreen() {
 
       if (error) {
         console.error('Error loading contractions:', error);
-        Alert.alert('Fehler', 'Wehen konnten nicht geladen werden.');
+        Alert.alert(t('common.error'), t('alert.loadFailed'));
         return;
       }
 
@@ -826,7 +840,7 @@ export default function HomeScreen() {
 
       if (!result.success) {
         console.error('Error syncing all existing contractions:', result.error);
-        Alert.alert('Fehler', `Wehen konnten nicht synchronisiert werden: ${result.error || 'Unbekannter Fehler'}`);
+        Alert.alert(t('common.error'), String(result.error || t('common.unknownError')));
         return;
       }
 
@@ -841,11 +855,11 @@ export default function HomeScreen() {
       if (result.syncedCount > 0) {
         const linkedUserNames = result.linkedUsers && result.linkedUsers.length > 0
           ? result.linkedUsers.map((user: any) => user.firstName).join(', ')
-          : 'deinem Partner';
+          : t('sync.partner');
 
         Alert.alert(
-          'Synchronisierung erfolgreich',
-          `${result.syncedCount} Wehen wurden erfolgreich mit ${linkedUserNames} synchronisiert.`
+          t('sync.success'),
+          translateContractionText(ACTIVE_CONTRACTION_LOCALE, 'sync.successBody', { count: result.syncedCount, name: linkedUserNames })
         );
       } else {
         console.log('No contractions needed to be synced');
@@ -855,7 +869,7 @@ export default function HomeScreen() {
       await loadContractions();
     } catch (err) {
       console.error('Failed to sync contractions:', err);
-      Alert.alert('Fehler', `Ein unerwarteter Fehler ist aufgetreten: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('common.unknownError'));
     } finally {
       setIsSyncing(false);
     }
@@ -896,7 +910,7 @@ export default function HomeScreen() {
   const handleManualSave = async () => {
     if (!ensureWritableInCurrentMode()) return;
     if (safeManualEndTime <= safeManualStartTime) {
-      Alert.alert('Fehler', 'Die Endzeit muss nach der Startzeit liegen.');
+      Alert.alert(t('common.error'), t('alert.endAfterStart'));
       return;
     }
 
@@ -934,7 +948,7 @@ export default function HomeScreen() {
             activeOpacity={0.85}
           >
             <Text style={[styles.topTabText, { color: textSecondary }, selectedTab === tab && styles.activeTopTabText]}>
-              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+              {tab === 'day' ? t('range.day') : tab === 'week' ? t('range.week') : t('range.month')}
             </Text>
           </TouchableOpacity>
         </GlassCard>
@@ -953,7 +967,7 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="waveform.path.ecg" size={12} color="#8E4EC6" />
-            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Wehen</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>{t('stats.count')}</Text>
           </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>{stats.count}</Text>
         </GlassCard>
@@ -966,7 +980,7 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="timer" size={12} color="#FF8C42" />
-            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Ø Dauer</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>{t('stats.duration')}</Text>
           </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatSecondsCompact(stats.avgDuration)}
@@ -983,7 +997,7 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="clock.fill" size={12} color="#A8C4A2" />
-            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Ø Intervall</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>{t('stats.interval')}</Text>
           </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatSecondsCompact(stats.avgInterval)}
@@ -998,7 +1012,7 @@ export default function HomeScreen() {
         >
           <View style={styles.kpiHeaderRow}>
             <IconSymbol name="heart.fill" size={12} color="#FF9B9B" />
-            <Text style={[styles.kpiTitle, { color: textSecondary }]}>Letzte Wehe</Text>
+            <Text style={[styles.kpiTitle, { color: textSecondary }]}>{t('stats.last')}</Text>
           </View>
           <Text style={[styles.kpiValue, styles.kpiValueCentered, { color: textPrimary }]}>
             {formatAgo(stats.lastStart)}
@@ -1053,8 +1067,8 @@ export default function HomeScreen() {
               >
                 <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
               </View>
-              <Text style={[styles.cardTitle, { color: textSecondary }]}>Wehe beenden</Text>
-              <Text style={[styles.cardDescription, { color: textSecondary }]}>Timer stoppen</Text>
+              <Text style={[styles.cardTitle, { color: textSecondary }]}>{t('timer.stop')}</Text>
+              <Text style={[styles.cardDescription, { color: textSecondary }]}>{t('timer.stopHint')}</Text>
             </View>
           </BlurView>
         </TouchableOpacity>
@@ -1086,8 +1100,8 @@ export default function HomeScreen() {
                 >
                   <IconSymbol name="waveform.path.ecg" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.cardTitle, { color: textSecondary }]}>Wehe starten</Text>
-                <Text style={[styles.cardDescription, { color: textSecondary }]}>Timer beginnen</Text>
+                <Text style={[styles.cardTitle, { color: textSecondary }]}>{t('timer.start')}</Text>
+                <Text style={[styles.cardDescription, { color: textSecondary }]}>{t('timer.startHint')}</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1118,8 +1132,8 @@ export default function HomeScreen() {
                 >
                   <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                 </View>
-                <Text style={[styles.cardTitle, { color: textSecondary }]}>Manuell</Text>
-                <Text style={[styles.cardDescription, { color: textSecondary }]}>Eintrag hinzufügen</Text>
+                <Text style={[styles.cardTitle, { color: textSecondary }]}>{t('timer.manual')}</Text>
+                <Text style={[styles.cardDescription, { color: textSecondary }]}>{t('timer.add')}</Text>
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -1134,7 +1148,7 @@ export default function HomeScreen() {
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header 
-          title="Wehen-Tracker" 
+          title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/pregnancy-home')}
@@ -1142,9 +1156,9 @@ export default function HomeScreen() {
 
         {isReadOnlyPreviewMode && (
           <View style={styles.readOnlyPreviewBanner}>
-            <ThemedText style={styles.readOnlyPreviewTitle}>Nur Vorschau aktiv</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.active')}</ThemedText>
             <ThemedText style={styles.readOnlyPreviewText}>
-              Du schaust den Schwangerschaftsmodus an. Der Wehen-Tracker ist hier gesperrt.
+              {t('preview.description')}
             </ThemedText>
           </View>
         )}
@@ -1165,7 +1179,7 @@ export default function HomeScreen() {
           {isSyncing && (
             <View style={styles.syncingContainer}>
               <ActivityIndicator color={theme.accent} size="small" />
-              <ThemedText style={styles.syncingText}>Synchronisiere...</ThemedText>
+              <ThemedText style={styles.syncingText}>{t('sync.active')}</ThemedText>
             </View>
           )}
           
@@ -1230,15 +1244,15 @@ export default function HomeScreen() {
 
                         <View pointerEvents="none" style={styles.lowerContent}>
                           <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
-                            {timerRunning ? 'Wehe läuft' : 'Bereit'}
+                            {timerRunning ? t('timer.running') : t('timer.ready')}
                           </Text>
                           {timerRunning ? (
                             <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
-                              Timer läuft auch im Hintergrund weiter
+                              {t('timer.background')}
                             </Text>
                           ) : (
                             <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
-                              Tippe unten, um eine neue Wehe zu starten
+                              {t('timer.startPrompt')}
                             </Text>
                           )}
                         </View>
@@ -1250,7 +1264,7 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.captureSection}>
-              <Text style={[styles.sectionTitle, { color: textSecondary }]}>Wehenerfassung</Text>
+              <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('capture.title')}</Text>
               {ActionButtons()}
             </View>
 
@@ -1262,7 +1276,7 @@ export default function HomeScreen() {
                   lightColor="#5C4033"
                   darkColor="#F2E6DD"
                 >
-                  Wehenverlauf
+                  {t('history.title')}
                 </ThemedText>
               </View>
 
@@ -1270,7 +1284,7 @@ export default function HomeScreen() {
                 <LiquidGlassCard style={styles.fullWidthCard} intensity={26} overlayColor={glassOverlay}>
                   <View style={{ padding: 12 }}>
                     <ThemedText style={[styles.syncInfoText, { color: textSecondary }]}>
-                      Deine Wehen werden automatisch mit {linkedUsers.map(user => user.firstName).join(', ')} synchronisiert.
+                      {t('history.syncPrefix')} {linkedUsers.map(user => user.firstName).join(', ')}{t('history.syncSuffix')}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
@@ -1292,7 +1306,7 @@ export default function HomeScreen() {
                   <View style={styles.emptyInner}>
                     <ActivityIndicator size="large" color={isDark ? adaptiveColors.accent : theme.accent} />
                     <ThemedText style={{marginTop: 10, color: textSecondary}}>
-                      {isSyncing ? 'Wehen werden synchronisiert...' : 'Wehen werden geladen...'}
+                      {isSyncing ? t('sync.contractions') : t('history.loading')}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
@@ -1300,7 +1314,7 @@ export default function HomeScreen() {
                 <LiquidGlassCard style={[styles.emptyGlass, styles.fullWidthCard]} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.emptyInner}>
                     <ThemedText style={{ color: textSecondary }}>
-                      Noch keine Wehen im Zeitraum aufgezeichnet
+                      {t('history.empty')}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
@@ -1323,8 +1337,8 @@ export default function HomeScreen() {
                     <Text style={styles.manualHeaderButtonText}>✕</Text>
                   </TouchableOpacity>
                   <View style={styles.manualHeaderCenter}>
-                    <Text style={[styles.manualTitle, { color: textSecondary }]}>Manuelle Wehe</Text>
-                    <Text style={[styles.manualSubtitle, { color: textSecondary }]}>Trage Start- und Endzeit ein</Text>
+                    <Text style={[styles.manualTitle, { color: textSecondary }]}>{t('manual.title')}</Text>
+                    <Text style={[styles.manualSubtitle, { color: textSecondary }]}>{t('manual.subtitle')}</Text>
                   </View>
                   <TouchableOpacity style={[styles.manualHeaderButton, styles.manualSaveButton]} onPress={handleManualSave}>
                     <Text style={styles.manualSaveButtonText}>✓</Text>
@@ -1334,15 +1348,15 @@ export default function HomeScreen() {
                 <ScrollView style={styles.manualScroll} showsVerticalScrollIndicator={false}>
                   <View style={styles.manualContent}>
                     <View style={styles.manualSection}>
-                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>⏰ Zeitraum</Text>
+                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>{t('manual.period')}</Text>
                       <View style={styles.manualTimeRow}>
                         <TouchableOpacity
                           style={styles.manualTimeButton}
                           onPress={() => setShowManualStartPicker(true)}
                         >
-                          <Text style={styles.manualTimeLabel}>Start</Text>
+                          <Text style={styles.manualTimeLabel}>{t('manual.start')}</Text>
                           <Text style={styles.manualTimeValue}>
-                            {safeManualStartTime.toLocaleString('de-DE', {
+                            {safeManualStartTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
                               hour: '2-digit',
                               minute: '2-digit',
                               day: '2-digit',
@@ -1354,9 +1368,9 @@ export default function HomeScreen() {
                           style={styles.manualTimeButton}
                           onPress={() => setShowManualEndPicker(true)}
                         >
-                          <Text style={styles.manualTimeLabel}>Ende</Text>
+                          <Text style={styles.manualTimeLabel}>{t('manual.end')}</Text>
                           <Text style={styles.manualTimeValue}>
-                            {safeManualEndTime.toLocaleString('de-DE', {
+                            {safeManualEndTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
                               hour: '2-digit',
                               minute: '2-digit',
                               day: '2-digit',
@@ -1386,7 +1400,7 @@ export default function HomeScreen() {
                             style={styles.manualPickerDone}
                             onPress={() => setShowManualStartPicker(false)}
                           >
-                            <Text style={styles.manualPickerDoneText}>Fertig</Text>
+                            <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
                           </TouchableOpacity>
                         </View>
                       )}
@@ -1400,7 +1414,7 @@ export default function HomeScreen() {
                             onChange={(_, date) => {
                               if (date) {
                                 if (date <= safeManualStartTime) {
-                                  Alert.alert('Hinweis', 'Die Endzeit muss nach der Startzeit liegen.');
+                                  Alert.alert(t('common.notice'), t('alert.endAfterStart'));
                                 } else {
                                   setManualEndTime(date);
                                 }
@@ -1412,14 +1426,14 @@ export default function HomeScreen() {
                             style={styles.manualPickerDone}
                             onPress={() => setShowManualEndPicker(false)}
                           >
-                            <Text style={styles.manualPickerDoneText}>Fertig</Text>
+                            <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
                           </TouchableOpacity>
                         </View>
                       )}
                     </View>
 
                     <View style={styles.manualSection}>
-                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>💪 Intensität</Text>
+                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>{t('manual.intensity')}</Text>
                       <View style={styles.manualIntensityRow}>
                         {(['schwach', 'mittel', 'stark'] as const).map(level => (
                           <TouchableOpacity
@@ -1439,7 +1453,7 @@ export default function HomeScreen() {
                                 manualIntensity === level && { color: INTENSITY_STYLES[level].text },
                               ]}
                             >
-                              {level === 'schwach' ? 'Schwach' : level === 'mittel' ? 'Mittel' : 'Stark'}
+                              {level === 'schwach' ? t('intensity.weak') : level === 'mittel' ? t('intensity.medium') : t('intensity.strong')}
                             </Text>
                           </TouchableOpacity>
                         ))}

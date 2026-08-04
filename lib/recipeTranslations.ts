@@ -136,6 +136,7 @@ const de = {
   "video.subtitle": "Im Hochformat eingebettet und mit reduzierter Steuerung.",
   "video.start": "Start",
   "video.stop": "Stopp",
+  "my.title": "Meine Rezepte", "my.subtitle": "Bearbeite und verwalte deine eigenen Rezepte", "my.emptyTitle": "Noch keine eigenen Rezepte", "my.emptyText": "Erstelle dein erstes Rezept im Rezept-Generator!", "my.updated": "Dein Rezept wurde aktualisiert.", "my.updateFailed": "Das Rezept konnte nicht aktualisiert werden.", "my.deleteTitle": "Rezept löschen", "my.deleteQuestion": "Möchtest du dieses Rezept wirklich löschen?", "my.deleted": "Das Rezept wurde gelöscht.", "my.deleteFailed": "Das Rezept konnte nicht gelöscht werden.", "my.edit": "Bearbeiten", "my.delete": "Löschen", "my.editTitle": "Rezept bearbeiten", "my.editSubtitle": "Aktualisiere dein Rezept",
 } as const;
 
 export type RecipeTranslationKey = keyof typeof de;
@@ -268,6 +269,7 @@ const en: RecipeCatalog = {
   "video.subtitle": "Embedded in portrait format with minimal controls.",
   "video.start": "Play",
   "video.stop": "Stop",
+  "my.title": "My recipes", "my.subtitle": "Edit and manage your own recipes", "my.emptyTitle": "No personal recipes yet", "my.emptyText": "Create your first recipe in the recipe generator!", "my.updated": "Your recipe was updated.", "my.updateFailed": "The recipe could not be updated.", "my.deleteTitle": "Delete recipe", "my.deleteQuestion": "Do you really want to delete this recipe?", "my.deleted": "The recipe was deleted.", "my.deleteFailed": "The recipe could not be deleted.", "my.edit": "Edit", "my.delete": "Delete", "my.editTitle": "Edit recipe", "my.editSubtitle": "Update your recipe",
 };
 
 const es: RecipeCatalog = {
@@ -401,6 +403,7 @@ const es: RecipeCatalog = {
   "video.subtitle": "Integrado en formato vertical y con controles mínimos.",
   "video.start": "Iniciar",
   "video.stop": "Parar",
+  "my.title": "Mis recetas", "my.subtitle": "Edita y gestiona tus propias recetas", "my.emptyTitle": "Aún no tienes recetas propias", "my.emptyText": "¡Crea tu primera receta en el generador!", "my.updated": "Tu receta se ha actualizado.", "my.updateFailed": "No se pudo actualizar la receta.", "my.deleteTitle": "Eliminar receta", "my.deleteQuestion": "¿Seguro que quieres eliminar esta receta?", "my.deleted": "La receta se ha eliminado.", "my.deleteFailed": "No se pudo eliminar la receta.", "my.edit": "Editar", "my.delete": "Eliminar", "my.editTitle": "Editar receta", "my.editSubtitle": "Actualiza tu receta",
 };
 
 export const RECIPE_TRANSLATIONS: Record<RecipeLocale, RecipeCatalog> = {

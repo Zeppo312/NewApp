@@ -9,6 +9,91 @@ export type CountdownLocale = 'de' | 'en' | 'es';
 
 export const DEFAULT_COUNTDOWN_LOCALE: CountdownLocale = 'de';
 
+export const getLocalizedPregnancyInfo = (
+  locale: CountdownLocale,
+  week: number,
+  audience: 'baby' | 'mother' | 'partner',
+  germanFallback: string,
+) => {
+  if (locale === 'de') return germanFallback;
+  const phase = week <= 12 ? 1 : week <= 27 ? 2 : week <= 36 ? 3 : 4;
+  const en = {
+    baby: [
+      `Week ${week}: Your baby's organs and body structures are beginning to form. Development is especially rapid during these early weeks.`,
+      `Week ${week}: Your baby is growing quickly, practicing movements, and developing senses and body systems.`,
+      `Week ${week}: Your baby's brain, lungs, and other organs continue to mature while weight and fat stores increase.`,
+      `Week ${week}: Your baby is now considered full term or close to it and is preparing for life outside the womb.`,
+    ],
+    mother: [
+      `Week ${week}: Hormonal changes may bring tiredness, nausea, breast tenderness, or changing emotions. Rest whenever you need to.`,
+      `Week ${week}: Energy may improve as your uterus and belly continue to grow. Gentle movement and regular breaks can feel good.`,
+      `Week ${week}: The growing belly can make sleep, breathing, digestion, and movement more demanding. Take things at your own pace.`,
+      `Week ${week}: Your body is preparing for birth. Notice changes, rest often, and contact your maternity care team whenever you are unsure.`,
+    ],
+    partner: [
+      `Week ${week}: Offer practical support, listen without trying to fix everything, and learn about the changes of early pregnancy together.`,
+      `Week ${week}: Join appointments when possible, help create calm routines, and make space for conversations about needs and expectations.`,
+      `Week ${week}: Take over everyday tasks, help prepare for birth, and make sure important plans and bags are ready.`,
+      `Week ${week}: Stay available, calm, and flexible. Review the route, contacts, documents, and birth preferences together.`,
+    ],
+  } as const;
+  const es = {
+    baby: [
+      `Semana ${week}: Los órganos y las estructuras del cuerpo de tu bebé empiezan a formarse. El desarrollo es especialmente rápido en estas primeras semanas.`,
+      `Semana ${week}: Tu bebé crece deprisa, practica movimientos y desarrolla sus sentidos y sistemas corporales.`,
+      `Semana ${week}: El cerebro, los pulmones y otros órganos siguen madurando mientras aumenta el peso y la reserva de grasa.`,
+      `Semana ${week}: Tu bebé ya está a término o muy cerca y se prepara para la vida fuera del útero.`,
+    ],
+    mother: [
+      `Semana ${week}: Los cambios hormonales pueden causar cansancio, náuseas, sensibilidad en el pecho o cambios emocionales. Descansa cuando lo necesites.`,
+      `Semana ${week}: Puede que tengas más energía mientras el útero y el vientre siguen creciendo. El movimiento suave y las pausas pueden sentarte bien.`,
+      `Semana ${week}: El crecimiento del vientre puede dificultar el sueño, la respiración, la digestión y el movimiento. Ve a tu ritmo.`,
+      `Semana ${week}: Tu cuerpo se prepara para el parto. Observa los cambios, descansa y contacta con tu equipo de maternidad si tienes dudas.`,
+    ],
+    partner: [
+      `Semana ${week}: Ofrece ayuda práctica, escucha sin intentar resolverlo todo y descubrid juntos los cambios del inicio del embarazo.`,
+      `Semana ${week}: Acompaña a las citas cuando puedas, ayuda a crear rutinas tranquilas y reservad espacio para hablar de necesidades y expectativas.`,
+      `Semana ${week}: Encárgate de tareas cotidianas, ayuda a preparar el parto y comprobad que los planes y las bolsas estén listos.`,
+      `Semana ${week}: Mantente disponible, tranquilo/a y flexible. Revisad la ruta, los contactos, documentos y preferencias de parto.`,
+    ],
+  } as const;
+  return (locale === 'en' ? en : es)[audience][phase - 1];
+};
+
+export const getLocalizedPregnancySymptoms = (locale: CountdownLocale, week: number, germanFallback: string[]) => {
+  if (locale === 'de') return germanFallback;
+  const phase = week <= 12 ? 1 : week <= 27 ? 2 : week <= 36 ? 3 : 4;
+  const en = [
+    ['Tiredness', 'Nausea or food aversions', 'Breast tenderness', 'Frequent urination', 'Emotional changes'],
+    ['Growing belly', 'Round-ligament pulling', 'Changes in appetite', 'Back discomfort', 'First movements may be felt'],
+    ['Shortness of breath', 'Heartburn', 'Back or pelvic discomfort', 'Sleep changes', 'Braxton Hicks contractions'],
+    ['Pelvic pressure', 'More discharge', 'Frequent urination', 'Braxton Hicks or early contractions', 'Tiredness and restlessness'],
+  ];
+  const es = [
+    ['Cansancio', 'Náuseas o rechazo de alimentos', 'Sensibilidad en el pecho', 'Micción frecuente', 'Cambios emocionales'],
+    ['Crecimiento del vientre', 'Tirantez de ligamentos', 'Cambios de apetito', 'Molestias de espalda', 'Pueden notarse los primeros movimientos'],
+    ['Falta de aire', 'Acidez', 'Molestias de espalda o pelvis', 'Cambios en el sueño', 'Contracciones de Braxton Hicks'],
+    ['Presión pélvica', 'Más flujo', 'Micción frecuente', 'Contracciones preparatorias o iniciales', 'Cansancio e inquietud'],
+  ];
+  return (locale === 'en' ? en : es)[phase - 1];
+};
+
+export const getLocalizedOverdueInfo = (locale: CountdownLocale, days: number) => {
+  if (locale === 'en') return {
+    baby: `Your baby is fully developed and continues to be monitored closely ${days} ${days === 1 ? 'day' : 'days'} after the due date. Keep noticing your baby's usual movements and contact your care team if they change.`,
+    mother: 'Waiting can be physically and emotionally demanding. Rest, drink regularly, and stay in close contact with your midwife or maternity care team about checks and next steps.',
+    partner: 'Be available and take over practical tasks. Keep bags, documents, transport, and important phone numbers ready, and support decisions without adding pressure.',
+    symptoms: ['Pelvic pressure', 'Increased discharge', 'Braxton Hicks or regular contractions', 'Back discomfort', 'Tiredness', 'Emotional tension'],
+  };
+  if (locale === 'es') return {
+    baby: `Tu bebé está completamente desarrollado y seguirá bajo control cercano ${days} ${days === 1 ? 'día' : 'días'} después de la fecha prevista. Sigue observando sus movimientos habituales y contacta con el equipo si cambian.`,
+    mother: 'La espera puede ser exigente física y emocionalmente. Descansa, bebe con regularidad y mantén el contacto con tu matrona o equipo de maternidad sobre los controles y próximos pasos.',
+    partner: 'Mantente disponible y encárgate de tareas prácticas. Ten preparadas las bolsas, documentos, transporte y teléfonos importantes, y apoya las decisiones sin presionar.',
+    symptoms: ['Presión pélvica', 'Más flujo', 'Contracciones preparatorias o regulares', 'Molestias de espalda', 'Cansancio', 'Tensión emocional'],
+  };
+  return null;
+};
+
 const de = {
   'common.error': 'Fehler',
   'common.notice': 'Hinweis',

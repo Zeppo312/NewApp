@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		A10C4E8D2F1A4B6C8D0E1234 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10C4E8D2F1A4B6C8D0E1235 /* InfoPlist.strings */; };
 		3B13410C349FE9F63787BCA7 /* libPods-LottiBaby.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3763EF32BDE8A469F863FE0D /* libPods-LottiBaby.a */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		4841D85380B247408E21ACC1 /* LiveActivityModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E9783DA9314FD783D88BA1 /* LiveActivityModule.swift */; };
@@ -53,6 +54,9 @@
 		13B07F961A680F5B00A75B9A /* LottiBaby.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; fileEncoding = 4; includeInIndex = 0; path = LottiBaby.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = LottiBaby/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = Info.plist; path = LottiBaby/Info.plist; sourceTree = "<group>"; };
+		A10C4E8D2F1A4B6C8D0E1236 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = LottiBaby/de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A10C4E8D2F1A4B6C8D0E1237 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = LottiBaby/en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		A10C4E8D2F1A4B6C8D0E1238 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = LottiBaby/es.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		3763EF32BDE8A469F863FE0D /* libPods-LottiBaby.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-LottiBaby.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4487C111EFE335A832120056 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-LottiBaby/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		6002F8638245459FBC90ECC3 /* SleepActivityAttributes.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = SleepActivityAttributes.swift; path = LottiBaby/SleepActivityAttributes.swift; sourceTree = "<group>"; };
@@ -128,6 +132,7 @@
 				F11748442D0722820044C1D9 /* LottiBaby-Bridging-Header.h */,
 				BB2F792B24A3F905000567C9 /* Supporting */,
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
+				A10C4E8D2F1A4B6C8D0E1235 /* InfoPlist.strings */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
 				F3E2BEE7C1974C7D84C90DD1 /* PrivacyInfo.xcprivacy */,
@@ -300,6 +305,8 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				de,
+				es,
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
@@ -318,6 +325,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10C4E8D2F1A4B6C8D0E1234 /* InfoPlist.strings in Resources */,
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
@@ -333,6 +341,19 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		A10C4E8D2F1A4B6C8D0E1235 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A10C4E8D2F1A4B6C8D0E1236 /* de */,
+				A10C4E8D2F1A4B6C8D0E1237 /* en */,
+				A10C4E8D2F1A4B6C8D0E1238 /* es */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXShellScriptBuildPhase section */
 		00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */ = {

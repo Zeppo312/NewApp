@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,10 +10,20 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { invalidateAllCaches } from '@/lib/appCache';
 import { getOnboardingCompletionState } from '@/lib/onboarding';
+import {
+  AuthTranslationKey,
+  DEFAULT_AUTH_LOCALE,
+  translateAuthText,
+} from '@/lib/authTranslations';
+
+let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
+const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
+  translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
 
 export default function Callback() {
+  ACTIVE_AUTH_LOCALE = useLocale().locale;
   const router = useRouter();
-  const [status, setStatus] = useState('Bestätigung wird verarbeitet...');
+  const [status, setStatus] = useState(t('callback.confirming'));
   const searchParams = useLocalSearchParams();
   const rawUrl = Linking.useURL();
 
@@ -71,7 +83,7 @@ export default function Callback() {
         const codeOrToken = code ?? token;
 
         if (codeOrToken) {
-          setStatus('Link wird verarbeitet...');
+          setStatus(t('callback.processingLink'));
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeOrToken);
 
           if (exchangeError) {
@@ -87,13 +99,13 @@ export default function Callback() {
               } else {
                 console.error('Auth code exchange error:', exchangeError);
                 console.error('Auth token hash verify error:', verifyError);
-                setStatus('Fehler bei der Bestätigung');
+                setStatus(t('callback.confirmationErrorStatus'));
                 Alert.alert(
-                  'Bestätigung fehlgeschlagen',
-                  'Der Link ist ungültig oder abgelaufen. Bitte fordere ihn erneut an.',
+                  t('callback.failedTitle'),
+                  t('callback.invalidLinkMessage'),
                   [
                     {
-                      text: 'Zurück zum Login',
+                      text: t('common.backToLogin'),
                       onPress: () => router.replace('/(auth)/login'),
                     },
                   ],
@@ -102,13 +114,13 @@ export default function Callback() {
               }
             } else {
               console.error('Auth code exchange error:', exchangeError);
-              setStatus('Fehler bei der Bestätigung');
+              setStatus(t('callback.confirmationErrorStatus'));
               Alert.alert(
-                'Bestätigung fehlgeschlagen',
-                'Der Link ist ungültig oder abgelaufen. Bitte fordere ihn erneut an.',
+                t('callback.failedTitle'),
+                t('callback.invalidLinkMessage'),
                 [
                   {
-                    text: 'Zurück zum Login',
+                    text: t('common.backToLogin'),
                     onPress: () => router.replace('/(auth)/login'),
                   },
                 ],
@@ -119,20 +131,20 @@ export default function Callback() {
         }
         // Manche Provider liefern Tokens direkt im URL-Hash statt `code`.
         else if (accessToken && refreshToken) {
-          setStatus('Link wird verarbeitet...');
+          setStatus(t('callback.processingLink'));
           const { error: setSessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
           if (setSessionError) {
             console.error('Auth token session error:', setSessionError);
-            setStatus('Fehler bei der Bestätigung');
+            setStatus(t('callback.confirmationErrorStatus'));
             Alert.alert(
-              'Bestätigung fehlgeschlagen',
-              'Der Link ist ungültig oder abgelaufen. Bitte fordere ihn erneut an.',
+              t('callback.failedTitle'),
+              t('callback.invalidLinkMessage'),
               [
                 {
-                  text: 'Zurück zum Login',
+                  text: t('common.backToLogin'),
                   onPress: () => router.replace('/(auth)/login'),
                 },
               ],
@@ -143,7 +155,7 @@ export default function Callback() {
 
         // Recovery-Link: direkt zur Passwort-Änderung weiterleiten
         if (type?.toLowerCase() === 'recovery') {
-          setStatus('Passwort-Reset wird vorbereitet...');
+          setStatus(t('callback.preparingReset'));
           router.replace('/auth/reset-password' as any);
           return;
         }
@@ -153,13 +165,13 @@ export default function Callback() {
         
         if (error) {
           console.error('Auth callback error:', error);
-          setStatus('Fehler bei der Bestätigung');
+          setStatus(t('callback.confirmationErrorStatus'));
           Alert.alert(
-            'Bestätigung fehlgeschlagen',
-            'Die E-Mail-Bestätigung konnte nicht verarbeitet werden.',
+            t('callback.failedTitle'),
+            t('callback.emailFailedMessage'),
             [
               { 
-                text: 'Zurück zum Login', 
+                text: t('common.backToLogin'),
                 onPress: () => router.replace('/(auth)/login')
               }
             ]
@@ -168,7 +180,7 @@ export default function Callback() {
         }
 
         if (session?.user) {
-          setStatus('E-Mail erfolgreich bestätigt!');
+          setStatus(t('callback.emailConfirmed'));
 
           await invalidateAllCaches();
           const onboardingComplete = await getOnboardingCompletionState();
@@ -184,14 +196,14 @@ export default function Callback() {
             }
           }, 2000);
         } else {
-          setStatus('Keine gültige Session gefunden');
+          setStatus(t('callback.noSession'));
           setTimeout(() => {
             router.replace('/(auth)/login');
           }, 2000);
         }
       } catch (err) {
         console.error('Callback processing error:', err);
-        setStatus('Unerwarteter Fehler');
+        setStatus(t('callback.unexpectedError'));
         setTimeout(() => {
           router.replace('/(auth)/login');
         }, 2000);
@@ -208,7 +220,7 @@ export default function Callback() {
         <View style={styles.content}>
           <ThemedText style={styles.icon}>✅</ThemedText>
           <ThemedText type="title" style={styles.title}>
-            E-Mail-Bestätigung
+            {t('callback.title')}
           </ThemedText>
           <ThemedText style={styles.status}>
             {status}

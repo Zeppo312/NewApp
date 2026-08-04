@@ -45,6 +45,8 @@ const signals = (overrides: Partial<DailySignals> = {}): DailySignals => ({
     currentAwakeMinutes: 75,
     typicalWakeMinutes: 120,
     wakeSampleCount: 8,
+    typicalNapMinutes: 75,
+    napSampleCount: 6,
     lastNightMinutes: 510,
     typicalNightMinutes: 530,
     nightSampleDays: 5,

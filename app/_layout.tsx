@@ -27,6 +27,8 @@ import { NavigationProvider } from '@/contexts/NavigationContext';
 import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
 import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
+import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
+import { getDeviceAppLocale } from '@/lib/localization';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 import { useFeedingReminderNotifications } from '@/hooks/useFeedingReminderNotifications';
@@ -110,6 +112,12 @@ function RootLayoutNav() {
   const segments = useSegments();
   const colorScheme = useColorScheme();
   const { loading, user } = useAuth();
+  const { isLocaleReady, locale } = useLocale();
+  const layoutCopy = locale === 'en'
+    ? { error: 'Error', startupFailed: 'The message could not be confirmed. Please try again.', loading: 'Loading …' }
+    : locale === 'es'
+      ? { error: 'Error', startupFailed: 'No se pudo confirmar el mensaje. Inténtalo de nuevo.', loading: 'Cargando …' }
+      : { error: 'Fehler', startupFailed: 'Die Nachricht konnte gerade nicht bestätigt werden. Bitte versuche es erneut.', loading: 'Lade …' };
   const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
   const { isResolved: isBabyStatusResolved } = useBabyStatus();
@@ -271,8 +279,8 @@ function RootLayoutNav() {
     } catch (error) {
       console.error('Failed to acknowledge startup message:', error);
       Alert.alert(
-        'Fehler',
-        'Die Nachricht konnte gerade nicht bestätigt werden. Bitte versuche es erneut.',
+        layoutCopy.error,
+        layoutCopy.startupFailed,
       );
     } finally {
       setIsAcknowledgingStartupMessage(false);
@@ -627,18 +635,18 @@ function RootLayoutNav() {
   // Splash-Screen erst ausblenden, wenn Auth UND Baby-Status aufgelöst sind.
   // Verhindert das kurze Aufblitzen des Schwangerschafts-Modus beim App-Start.
   useEffect(() => {
-    if (!loading && isBabyStatusResolved) {
+    if (!loading && isBabyStatusResolved && isLocaleReady) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loading, isBabyStatusResolved]);
+  }, [loading, isBabyStatusResolved, isLocaleReady]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || !initialRoute) {
+  if (loading || !initialRoute || !isLocaleReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
         <View style={{ marginTop: 20 }}>
-          <Text style={{ marginTop: 10, color: '#7D5A50' }}>Lade...</Text>
+          <Text style={{ marginTop: 10, color: '#7D5A50' }}>{layoutCopy.loading}</Text>
           <StatusBar hidden={true} />
         </View>
       </View>
@@ -723,6 +731,8 @@ export default Sentry.wrap(function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [appIsReady, setAppIsReady] = useState(false);
+  const deviceLocale = getDeviceAppLocale();
+  const preparingText = deviceLocale === 'en' ? 'Loading app …' : deviceLocale === 'es' ? 'Cargando la app …' : 'App wird geladen …';
 
   // Vorbereiten der App
   useEffect(() => {
@@ -760,7 +770,7 @@ export default Sentry.wrap(function RootLayout() {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
-        <Text style={{ marginTop: 10, color: '#7D5A50' }}>App wird geladen...</Text>
+        <Text style={{ marginTop: 10, color: '#7D5A50' }}>{preparingText}</Text>
       </View>
     );
   }
@@ -769,21 +779,23 @@ export default Sentry.wrap(function RootLayout() {
   // ConvexProvider und BackendProvider für Dual-Backend-Architektur hinzugefügt
   return (
     <AuthProvider>
-      <ConvexProvider>
-        <BackendProvider>
-          <BackgroundProvider>
-            <AppThemeProvider>
-              <NavigationProvider>
-                <ActiveBabyProvider>
-                  <BabyStatusProvider>
-                    <RootLayoutNav />
-                  </BabyStatusProvider>
-                </ActiveBabyProvider>
-              </NavigationProvider>
-            </AppThemeProvider>
-          </BackgroundProvider>
-        </BackendProvider>
-      </ConvexProvider>
+      <LocaleProvider>
+        <ConvexProvider>
+          <BackendProvider>
+            <BackgroundProvider>
+              <AppThemeProvider>
+                <NavigationProvider>
+                  <ActiveBabyProvider>
+                    <BabyStatusProvider>
+                      <RootLayoutNav />
+                    </BabyStatusProvider>
+                  </ActiveBabyProvider>
+                </NavigationProvider>
+              </AppThemeProvider>
+            </BackgroundProvider>
+          </BackendProvider>
+        </ConvexProvider>
+      </LocaleProvider>
     </AuthProvider>
   );
 });

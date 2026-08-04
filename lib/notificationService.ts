@@ -3,6 +3,8 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { getAppSettings, getCachedUser, supabase } from './supabase';
+import { getPersistedAppLocale } from './localization';
+import { translateNotificationsText } from './notificationsTranslations';
 
 import { router } from 'expo-router';
 
@@ -343,6 +345,8 @@ export async function checkForNewNotifications() {
 
     // Lokale Benachrichtigungen für ungelesene Einträge anzeigen
     if (notifications && notifications.length > 0) {
+      const locale = await getPersistedAppLocale();
+      const nt = (key: Parameters<typeof translateNotificationsText>[1]) => translateNotificationsText(locale, key);
       notifications
         .filter((notification) => notification.type !== 'message')
         .forEach(async (notification) => {
@@ -353,30 +357,30 @@ export async function checkForNewNotifications() {
           .eq('id', notification.sender_id)
           .single();
 
-        const senderName = sender?.first_name || 'Jemand';
+        const senderName = sender?.first_name || nt('common.someone');
         
         // Titel und Text basierend auf dem Benachrichtigungstyp
-        let title = 'Neue Benachrichtigung';
+        let title = nt('common.new');
         let body = notification.content;
         
         switch (notification.type) {
           case 'like_post':
-            title = `${senderName} hat deinen Beitrag geliked`;
+            title = `${senderName} ${nt('activity.likePost')}`;
             break;
           case 'like_comment':
-            title = `${senderName} hat deinen Kommentar geliked`;
+            title = `${senderName} ${nt('activity.likeComment')}`;
             break;
           case 'comment':
-            title = `${senderName} hat auf deinen Beitrag geantwortet`;
+            title = `${senderName} ${nt('activity.comment')}`;
             break;
           case 'reply':
-            title = `${senderName} hat auf deinen Kommentar geantwortet`;
+            title = `${senderName} ${nt('activity.reply')}`;
             break;
           case 'message':
-            title = `Neue Nachricht von ${senderName}`;
+            title = `${senderName} ${nt('activity.message')}`;
             break;
           case 'follow':
-            title = `${senderName} folgt dir jetzt`;
+            title = `${senderName} ${nt('activity.follow')}`;
             break;
         }
 

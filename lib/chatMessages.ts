@@ -19,14 +19,16 @@ export const isVoiceMessage = (
 
 export const getMessagePreviewText = (
   message: Pick<ChatMessageCore, 'content' | 'message_type' | 'event_title'> | null | undefined,
+  labels: { voice?: string; event?: string } = {},
 ): string => {
   if (!message) return '';
   if (message.message_type === 'voice') {
-    return VOICE_MESSAGE_PREVIEW;
+    return labels.voice || VOICE_MESSAGE_PREVIEW;
   }
   if (message.message_type === 'event') {
     const title = message.event_title?.trim();
-    return title ? `Event: ${title}` : EVENT_MESSAGE_PREVIEW;
+    const eventLabel = labels.event || EVENT_MESSAGE_PREVIEW;
+    return title ? `${eventLabel}: ${title}` : eventLabel;
   }
   return message.content?.trim() || '';
 };

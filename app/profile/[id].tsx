@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TouchableOpacity, ScrollView, ActivityIndicator, FlatList, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +19,18 @@ import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { TagDisplay } from '@/components/TagDisplay';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  formatCommunityDate,
+  formatCommunityRelativeDate,
+  getCommunityRoleLabel,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 // Interface für das Benutzerprofil
 interface UserProfile {
@@ -46,6 +60,7 @@ const POST_CARD_OVERLAY = 'rgba(255,255,255,0.2)';
 const CONTENT_MAX_WIDTH = 520;
 
 export default function ProfileScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const { id } = useLocalSearchParams();
   const userId = Array.isArray(id) ? id[0] : id as string;
   const colorScheme = useColorScheme() ?? 'light';
@@ -110,7 +125,7 @@ export default function ProfileScreen() {
           if (!perr && p) {
             list.push({
               id: p.id,
-              first_name: p.first_name || 'Benutzer',
+              first_name: p.first_name || getCommunityRoleLabel(ACTIVE_COMMUNITY_LOCALE),
               last_name: p.last_name || '',
               user_role: p.user_role || 'unknown',
               username: p.username || null,
@@ -307,25 +322,25 @@ export default function ProfileScreen() {
       case 'mama':
         return { 
           color: '#FF9F9F', 
-          label: 'Mama',
+          label: getCommunityRoleLabel(ACTIVE_COMMUNITY_LOCALE, 'mama'),
           icon: 'person.fill'
         };
       case 'papa':
         return { 
           color: '#9FD8FF', 
-          label: 'Papa',
+          label: getCommunityRoleLabel(ACTIVE_COMMUNITY_LOCALE, 'papa'),
           icon: 'person.fill'
         };
       case 'admin':
         return { 
           color: '#9775FA', 
-          label: 'Administrator',
+          label: getCommunityRoleLabel(ACTIVE_COMMUNITY_LOCALE, 'admin'),
           icon: 'shield.fill'
         };
       default:
         return { 
           color: '#D9D9D9', 
-          label: 'Benutzer',
+          label: getCommunityRoleLabel(ACTIVE_COMMUNITY_LOCALE),
           icon: 'person.fill'
         };
     }
@@ -362,7 +377,7 @@ export default function ProfileScreen() {
   // Format für das Beitrittsdatum
   const formatJoinDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('de-DE', {
+    return formatCommunityDate(date, ACTIVE_COMMUNITY_LOCALE, {
       year: 'numeric',
       month: 'long'
     });
@@ -375,13 +390,13 @@ export default function ProfileScreen() {
   };
 
   const getProfileDisplayName = (entity?: NamedEntity | null) => {
-    if (!entity) return 'Profil';
+    if (!entity) return t('common.profile');
     const username = entity.username?.trim();
     if (username) return username;
     const first = entity.first_name?.trim() || '';
     const last = entity.last_name?.trim() || '';
     const fallback = `${first} ${last}`.trim();
-    return fallback || 'Profil';
+    return fallback || t('common.profile');
   };
 
   const getProfileInitials = (entity?: NamedEntity | null) => {
@@ -395,13 +410,7 @@ export default function ProfileScreen() {
 
   // Post-Helfer wie Community-Feed
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-    if (diffInDays === 0) return 'Heute';
-    if (diffInDays === 1) return 'Gestern';
-    if (diffInDays < 7) return `Vor ${diffInDays} Tagen`;
-    return date.toLocaleDateString('de-DE');
+    return formatCommunityRelativeDate(dateString, ACTIVE_COMMUNITY_LOCALE);
   };
 
   const getAvatar = (item: any) => {
@@ -428,7 +437,7 @@ export default function ProfileScreen() {
     const avatar = getAvatar(item);
     const iconEmoji = getPostEmoji(item);
     const dateLabel = formatDate(item.created_at);
-    const displayName = item.is_anonymous ? 'Anonym' : (item.user_name || 'Profil');
+    const displayName = item.is_anonymous ? t('common.anonymous') : (item.user_name || t('common.profile'));
     const roleLabel = !item.is_anonymous ? getRoleInfo(item.user_role).label : null;
     const metaLineParts = [roleLabel, dateLabel].filter(Boolean);
     const metaLine = metaLineParts.join(' · ');
@@ -521,7 +530,7 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right', 'bottom']}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header 
-          title="Profil"
+          title={t('publicProfile.title')}
           showBackButton
           onBackPress={() => router.back()}
         />
@@ -529,14 +538,14 @@ export default function ProfileScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Profil wird geladen...</ThemedText>
+            <ThemedText style={styles.loadingText}>{t('publicProfile.loading')}</ThemedText>
           </View>
         ) : !profile ? (
           <View style={styles.errorContainer}>
             <IconSymbol name="exclamationmark.triangle" size={48} color="#FF6B6B" />
-            <ThemedText style={styles.errorTitle}>Profil nicht gefunden</ThemedText>
+            <ThemedText style={styles.errorTitle}>{t('publicProfile.notFound')}</ThemedText>
             <ThemedText style={styles.errorText}>
-              Das gesuchte Profil konnte nicht gefunden werden oder existiert nicht.
+              {t('publicProfile.notFoundText')}
             </ThemedText>
           </View>
         ) : (
@@ -577,7 +586,7 @@ export default function ProfileScreen() {
                     </View>
                     
                     <ThemedText style={styles.joinDate}>
-                      Dabei seit {formatJoinDate(profile.created_at)}
+                      {t('publicProfile.joined', { date: formatJoinDate(profile.created_at) })}
                     </ThemedText>
                   </View>
                 </View>
@@ -590,7 +599,7 @@ export default function ProfileScreen() {
                       activeOpacity={0.85}
                     >
                       <IconSymbol name="pencil" size={16} color="#FFFFFF" />
-                      <ThemedText style={styles.editProfileButtonText}>Community-Profil bearbeiten</ThemedText>
+                      <ThemedText style={styles.editProfileButtonText}>{t('publicProfile.edit')}</ThemedText>
                     </TouchableOpacity>
                   ) : (
                     <>
@@ -607,7 +616,7 @@ export default function ProfileScreen() {
                         activeOpacity={0.85}
                       >
                         <IconSymbol name="paperplane.fill" size={16} color="#FFFFFF" />
-                        <ThemedText style={styles.dmButtonText}>Nachricht</ThemedText>
+                        <ThemedText style={styles.dmButtonText}>{t('publicProfile.message')}</ThemedText>
                       </TouchableOpacity>
                     </>
                   )}
@@ -615,13 +624,13 @@ export default function ProfileScreen() {
 
                 {isOwnProfile && (
                   <ThemedText style={styles.ownProfileHint}>
-                    Hier siehst du dein oeffentliches Community-Profil. Ueber Bearbeiten passt du Name, Bild und Profildaten an.
+                    {t('publicProfile.ownHint')}
                   </ThemedText>
                 )}
 
                 {mutualFollow && !isOwnProfile && (
                   <ThemedText style={[styles.mutualBadge, { color: theme.accent }]}>
-                    Ihr folgt euch gegenseitig
+                    {t('publicProfile.mutualFollow')}
                   </ThemedText>
                 )}
                 
@@ -629,15 +638,15 @@ export default function ProfileScreen() {
                 <View style={styles.statsContainer}>
                   <View style={styles.statItem}>
                     <ThemedText style={[styles.statValue, { color: theme.accent }]}>{posts.length}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Beiträge</ThemedText>
+                    <ThemedText style={styles.statLabel}>{t('publicProfile.posts')}</ThemedText>
                   </View>
                   <View style={styles.statItem}>
                     <ThemedText style={[styles.statValue, { color: theme.accent }]}>{followersCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Follower</ThemedText>
+                    <ThemedText style={styles.statLabel}>{t('publicProfile.followers')}</ThemedText>
                   </View>
                   <View style={styles.statItem}>
                     <ThemedText style={[styles.statValue, { color: theme.accent }]}>{followingCount}</ThemedText>
-                    <ThemedText style={styles.statLabel}>Folgt</ThemedText>
+                    <ThemedText style={styles.statLabel}>{t('publicProfile.following')}</ThemedText>
                   </View>
                 </View>
               </View>
@@ -652,10 +661,10 @@ export default function ProfileScreen() {
             >
               <View style={styles.friendsGlassContent}>
                 <View style={styles.friendsHeaderRow}>
-                  <ThemedText style={styles.friendsTitle}>Freunde</ThemedText>
+                  <ThemedText style={styles.friendsTitle}>{t('publicProfile.friends')}</ThemedText>
                   {!!followingUsers?.length && (
                     <TouchableOpacity onPress={() => {}}>
-                      <ThemedText style={styles.friendsAction}>Alle ansehen</ThemedText>
+                      <ThemedText style={styles.friendsAction}>{t('publicProfile.viewAll')}</ThemedText>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -691,7 +700,7 @@ export default function ProfileScreen() {
                   {(!followingUsers || followingUsers.length === 0) && (
                     <View style={styles.friendsEmpty}>
                       <IconSymbol name="person.2" size={20} color={theme.tabIconDefault} />
-                      <ThemedText style={styles.friendsEmptyText}>Noch keine Freunde</ThemedText>
+                      <ThemedText style={styles.friendsEmptyText}>{t('publicProfile.noFriends')}</ThemedText>
                     </View>
                   )}
                 </ScrollView>
@@ -707,20 +716,20 @@ export default function ProfileScreen() {
             >
               <View style={styles.postsGlassContent}>
                 <View style={styles.postsHeaderContainer}>
-                  <ThemedText style={styles.postsHeaderText}>Beiträge</ThemedText>
+                  <ThemedText style={styles.postsHeaderText}>{t('publicProfile.posts')}</ThemedText>
                 </View>
                 {loadingPosts ? (
                   <View style={styles.loadingPostsContainer}>
                     <ActivityIndicator size="small" color={theme.accent} />
-                    <ThemedText style={styles.loadingText}>Beiträge werden geladen...</ThemedText>
+                    <ThemedText style={styles.loadingText}>{t('publicProfile.postsLoading')}</ThemedText>
                   </View>
                 ) : posts.length === 0 ? (
                   <View style={styles.emptyPostsContainer}>
                     <IconSymbol name="text.bubble" size={32} color={theme.tabIconDefault} />
                     <ThemedText style={styles.emptyPostsText}>
                       {isOwnProfile 
-                        ? "Du hast noch keine Beiträge erstellt." 
-                        : "Dieser Benutzer hat noch keine Beiträge erstellt."}
+                        ? t('publicProfile.noOwnPosts')
+                        : t('publicProfile.noUserPosts')}
                     </ThemedText>
                   </View>
                 ) : (

@@ -35,12 +35,10 @@ import { useWeekHeartsClaim } from '@/hooks/useWeekHeartsClaim';
 import { useLottiAvatarChoice } from '@/hooks/useLottiAvatarChoice';
 import { LEVEL_BABY_IMAGES, babyImageForLevel } from '@/lib/lottiBabyImages';
 import { getWochenkarteMood, WochenkarteStory } from '@/components/WochenkarteStory';
-
-const POINTS_NOUN = 'Herzen'; // UI-Bezeichnung für Lotti-Punkte (austauschbar)
+import { useLocale } from '@/contexts/LocaleContext';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const PLACEHOLDER_SIZE = 64;
-const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const DAY_COUNT = 7;
 
 /**
@@ -92,6 +90,12 @@ type Props = {
 };
 
 export function LottiWeekCard({ style }: Props) {
+  const { locale } = useLocale();
+  const c = {
+    de: { completeTitle: 'Euer Wochen-Review ist bereit 🤍', title: 'Lottis Wochenmoment 🤍', details: 'Details', collect: 'einsammeln', hearts: 'Herzen', moments: 'Momente', waiting: 'Wochen-Review wartet', days: 'Tage', startHint: 'Sobald ihr trackt, entsteht hier euer Rückblick.', level: 'Stufe', until: 'Noch {{points}} Herzen bis Stufe {{level}}', max: 'Höchste Stufe erreicht 🤍', avatar: 'Lotti-Avatar', storyA11y: 'Wochen-Review als Story ansehen', story: 'Story', dayLabels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] },
+    en: { completeTitle: 'Your weekly review is ready 🤍', title: "Lotti's weekly moment 🤍", details: 'Details', collect: 'collect', hearts: 'hearts', moments: 'moments', waiting: 'Weekly review waiting', days: 'days', startHint: 'Your review will appear as soon as you start tracking.', level: 'Level', until: '{{points}} hearts until level {{level}}', max: 'Highest level reached 🤍', avatar: 'Lotti avatar', storyA11y: 'View weekly review as a story', story: 'Story', dayLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] },
+    es: { completeTitle: 'Vuestro resumen semanal está listo 🤍', title: 'Momento semanal de Lotti 🤍', details: 'Detalles', collect: 'recoger', hearts: 'corazones', moments: 'momentos', waiting: 'El resumen semanal está esperando', days: 'días', startHint: 'El resumen aparecerá cuando empecéis a registrar.', level: 'Nivel', until: 'Faltan {{points}} corazones para el nivel {{level}}', max: 'Nivel máximo alcanzado 🤍', avatar: 'Avatar de Lotti', storyA11y: 'Ver el resumen semanal como historia', story: 'Historia', dayLabels: ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'] },
+  }[locale];
   const router = useRouter();
   const [storyVisible, setStoryVisible] = useState(false);
   const adaptiveColors = useAdaptiveColors();
@@ -148,17 +152,17 @@ export function LottiWeekCard({ style }: Props) {
   const isWeekComplete =
     activeDays >= DAY_COUNT || (isSundayToday && activeDays >= 3);
 
-  const copy = getCopy(isWeekComplete);
+  const copy = { title: isWeekComplete ? c.completeTitle : c.title, cta: c.details };
   // Wartende Herzen machen den CTA zum Einsammel-Hinweis.
-  const ctaLabel = claimable > 0 ? `✨ ${claimable} einsammeln` : copy.cta;
+  const ctaLabel = claimable > 0 ? `✨ ${claimable} ${c.collect}` : copy.cta;
   const totalMoments = counts.feeding + counts.care + counts.sleep;
-  const mood = useMemo(() => getWochenkarteMood({ counts }), [counts]);
+  const mood = useMemo(() => getWochenkarteMood({ counts }, locale), [counts, locale]);
   const reviewTitle =
-    totalMoments > 0 ? `${mood.word} · ${totalMoments} Momente` : 'Wochen-Review wartet';
+    totalMoments > 0 ? `${mood.word} · ${totalMoments} ${c.moments}` : c.waiting;
   const reviewSubtitle =
     totalMoments > 0
-      ? `${activeDays}/7 Tage · +${weekPoints} ${POINTS_NOUN}`
-      : 'Sobald ihr trackt, entsteht hier euer Rückblick.';
+      ? `${activeDays}/7 ${c.days} · +${weekPoints} ${c.hearts}`
+      : c.startHint;
 
   // Aktueller Avatar-Zustand — vorbereitet für spätere Lotti-Illus.
   const avatarState = pickAvatarStateFromActiveDays(activeDays, isWeekComplete);
@@ -184,8 +188,8 @@ export function LottiWeekCard({ style }: Props) {
 
   // Untertitel: Stufenname + Herzen. Stufe Nr. zeigt das Badge.
   const subtitle = level.isMax
-    ? `${level.name} · ${totalPoints} ${POINTS_NOUN}`
-    : `${level.name} · ${totalPoints} / ${level.nextThreshold ?? '—'} ${POINTS_NOUN}`;
+    ? `${c.level} ${level.level} · ${totalPoints} ${c.hearts}`
+    : `${c.level} ${level.level} · ${totalPoints} / ${level.nextThreshold ?? '—'} ${c.hearts}`;
 
   // Progressbar-Animation
   const progressAnim = useMemo(() => new Animated.Value(0), []);
@@ -306,7 +310,7 @@ export function LottiWeekCard({ style }: Props) {
                   { transform: [{ scale: avatarScale }] },
                 ]}
                 // data-avatar-state damit später Illustration leicht zu finden
-                accessibilityLabel={`Lotti-Avatar (${avatarState})`}
+        accessibilityLabel={`${c.avatar} (${avatarState})`}
               >
                 <View
                   style={[
@@ -391,7 +395,7 @@ export function LottiWeekCard({ style }: Props) {
                     style={[styles.progressHint, { color: textTertiary }]}
                     numberOfLines={1}
                   >
-                    Noch {level.pointsToNext} {POINTS_NOUN} bis „{level.nextLevelName}“
+                    {c.until.replace('{{points}}', String(level.pointsToNext)).replace('{{level}}', String(level.level + 1))}
                   </ThemedText>
                 ) : (
                   <ThemedText
@@ -399,7 +403,7 @@ export function LottiWeekCard({ style }: Props) {
                     style={[styles.progressHint, { color: textTertiary }]}
                     numberOfLines={1}
                   >
-                    Höchste Stufe erreicht 🤍
+                    {c.max}
                   </ThemedText>
                 )}
               </View>
@@ -418,7 +422,7 @@ export function LottiWeekCard({ style }: Props) {
                 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Wochen-Review als Story ansehen"
+              accessibilityLabel={c.storyA11y}
             >
               <View style={styles.reviewEmojiBubble}>
                 <ThemedText adaptive={false} allowFontScaling={false} style={styles.reviewEmoji}>
@@ -443,7 +447,7 @@ export function LottiWeekCard({ style }: Props) {
               </View>
               <View style={styles.reviewCta}>
                 <ThemedText adaptive={false} style={styles.reviewCtaText}>
-                  Story
+                  {c.story}
                 </ThemedText>
                 <IconSymbol name="play.fill" size={13} color="#FFFFFF" />
               </View>
@@ -453,7 +457,7 @@ export function LottiWeekCard({ style }: Props) {
 
             <View style={styles.bottomRow}>
               <View style={styles.daysRow}>
-                {DAY_LABELS.map((label, idx) => {
+                {c.dayLabels.map((label, idx) => {
                   const isToday = idx === todayIndex;
                   const isOn = days[idx];
                   return (

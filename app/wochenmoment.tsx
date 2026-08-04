@@ -47,6 +47,16 @@ import {
 } from '@/lib/lottiPoints';
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  formatWeeklyMomentDuration,
+  formatWeeklyMomentRange,
+  getLocalizedLottiLevels,
+  translateWeeklyMomentText,
+  WEEKLY_MOMENT_DAY_NAMES,
+  WEEKLY_MOMENT_DAY_SHORT_NAMES,
+  type WeeklyMomentTranslationKey,
+} from '@/lib/weeklyMomentTranslations';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const POINTS_NOUN = 'Herzen';
@@ -86,6 +96,9 @@ export default function WochenmomentScreen() {
 }
 
 function WochenmomentScreenContent() {
+  const { locale, localeTag } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) =>
+    translateWeeklyMomentText(locale, key, params);
   const adaptiveColors = useAdaptiveColors();
   const {
     areas,
@@ -137,16 +150,22 @@ function WochenmomentScreenContent() {
     ? 'rgba(255, 255, 255, 0.18)'
     : 'rgba(94, 61, 179, 0.20)';
 
-  const sleepTotal = formatHoursMinutes(totalSleepMinutes);
-  const sleepRange = `${weekStart.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  const sleepTotal = formatWeeklyMomentDuration(locale, totalSleepMinutes);
+  const sleepRange = `${weekStart.toLocaleDateString(localeTag, { weekday: 'short', day: 'numeric', month: 'short' })} – ${weekEnd.toLocaleDateString(localeTag, { weekday: 'short', day: 'numeric', month: 'short' })}`;
+  const localizedLevels = getLocalizedLottiLevels(locale);
+  const localizedLevel = {
+    ...level,
+    name: localizedLevels[level.level - 1]?.name ?? level.name,
+    nextLevelName: level.nextLevelName ? localizedLevels[level.level]?.name ?? level.nextLevelName : level.nextLevelName,
+  };
 
   return (
     <ThemedBackground style={styles.background}>
       <StatusBar hidden />
       <SafeAreaView style={styles.safeArea}>
         <Header
-          title="Wochenmoment"
-          subtitle={formatRange(weekStart, weekEnd)}
+          title={t('screen.title')}
+          subtitle={formatWeeklyMomentRange(locale, weekStart, weekEnd)}
           showBackButton
           showBabySwitcher={false}
         />
@@ -170,7 +189,7 @@ function WochenmomentScreenContent() {
               pressed ? { opacity: 0.85 } : null,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Wochenkarte ansehen"
+            accessibilityLabel={t('card.reviewAccessibility')}
           >
             <ThemedText adaptive={false} style={styles.storyBannerEmoji}>
               ✨
@@ -183,8 +202,8 @@ function WochenmomentScreenContent() {
               ]}
             >
               {isWeekComplete
-                ? 'Eure Wochenkarte ist bereit'
-                : 'Eure Wochen-Story ansehen'}
+                ? t('story.ready')
+                : t('story.open')}
             </ThemedText>
             <ThemedText
               adaptive={false}
@@ -193,7 +212,7 @@ function WochenmomentScreenContent() {
                 { color: isWeekComplete ? '#FFFFFF' : ACCENT_PURPLE },
               ]}
             >
-              Ansehen ›
+              {t('action.view')}
             </ThemedText>
           </Pressable>
 
@@ -220,8 +239,8 @@ function WochenmomentScreenContent() {
             <AreaTile
               emoji="🍼"
               count={counts.feeding}
-              singular="Essensmoment"
-              plural="Essensmomente"
+              singular={t('area.feeding.one')}
+              plural={t('area.feeding.other')}
               active={areas.feeding}
               tileBg={tileBg}
               tileBorder={tileBorder}
@@ -230,8 +249,8 @@ function WochenmomentScreenContent() {
             <AreaTile
               emoji="🤍"
               count={counts.care}
-              singular="Pflegemoment"
-              plural="Pflegemomente"
+              singular={t('area.care.one')}
+              plural={t('area.care.other')}
               active={areas.care}
               tileBg={tileBg}
               tileBorder={tileBorder}
@@ -240,8 +259,8 @@ function WochenmomentScreenContent() {
             <AreaTile
               emoji="🌙"
               count={counts.sleep}
-              singular="Schlafmoment"
-              plural="Schlafmomente"
+              singular={t('area.sleep.one')}
+              plural={t('area.sleep.other')}
               active={areas.sleep}
               tileBg={tileBg}
               tileBorder={tileBorder}
@@ -264,7 +283,7 @@ function WochenmomentScreenContent() {
                   adaptive={false}
                   style={[styles.sleepTotalLabel, { color: textTertiary }]}
                 >
-                  Gesamtschlaf diese Woche
+                  {t('sleep.total')}
                 </ThemedText>
                 <ThemedText
                   adaptive={false}
@@ -288,11 +307,11 @@ function WochenmomentScreenContent() {
 
           {/* 4) Lotti-Reise */}
           <LottiJourneyMap
-            levels={LOTTI_LEVELS}
+            levels={localizedLevels}
             currentLevel={level.level}
             totalPoints={totalPoints}
             pointsToNext={level.pointsToNext}
-            nextLevelName={level.nextLevelName}
+            nextLevelName={localizedLevel.nextLevelName}
             progressFraction={level.progressFraction}
             avatarState={{ image: chosenAvatarImage, levelJustIncreased }}
           />
@@ -301,8 +320,7 @@ function WochenmomentScreenContent() {
             adaptive={false}
             style={[styles.closing, { color: textTertiary }]}
           >
-            Nicht jeder Tag muss perfekt dokumentiert sein. Jeder kleine Eintrag
-            hilft euch, euren Alltag besser zu verstehen.
+            {t('closing')}
           </ThemedText>
         </ScrollView>
 
@@ -318,7 +336,7 @@ function WochenmomentScreenContent() {
             weekPoints,
             dayBuckets,
             dayPoints,
-            level,
+            level: localizedLevel,
             totalPoints,
           }}
         />
@@ -376,6 +394,9 @@ function EureWocheCard({
   textSecondary,
   textTertiary,
 }: EureWocheProps) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
+  const dayLabels = WEEKLY_MOMENT_DAY_SHORT_NAMES[locale];
   const heartFilled = ACCENT_PURPLE;
   const heartEmptyBg = isDark
     ? 'rgba(255,255,255,0.06)'
@@ -446,19 +467,19 @@ function EureWocheCard({
               adaptive={false}
               style={[styles.weekHeaderTitle, { color: textPrimary }]}
             >
-              Eure Woche
+              {t('week.title')}
             </ThemedText>
           </View>
           <ThemedText
             adaptive={false}
             style={[styles.weekHeaderRight, { color: ACCENT_PURPLE }]}
           >
-            {activeDays} von 7 Tagen begleitet
+            {t('week.activeDays', { count: activeDays })}
           </ThemedText>
         </View>
 
         <View style={styles.dayChipsRow}>
-          {DAY_LABELS.map((label, idx) => {
+          {dayLabels.map((label, idx) => {
             const isToday = idx === todayIndex;
             const isOn = days[idx];
             const isFuture = idx > todayIndex && todayIndex !== -1;
@@ -472,7 +493,7 @@ function EureWocheCard({
                 onPress={() => onDayPress(idx)}
                 hitSlop={6}
                 accessibilityRole="button"
-                accessibilityLabel={`${label} — Tagesdetails anzeigen`}
+                accessibilityLabel={t('day.accessibility', { day: label })}
               >
                 <ThemedText
                   adaptive={false}
@@ -527,7 +548,7 @@ function EureWocheCard({
               adaptive={false}
               style={[styles.claimCountText, { color: ACCENT_PURPLE }]}
             >
-              +{displayCount} {POINTS_NOUN} 🤍
+              {t('points.collected', { count: displayCount })}
             </ThemedText>
           </View>
         ) : isLoaded && claimable > 0 ? (
@@ -536,10 +557,10 @@ function EureWocheCard({
             onPress={handleClaim}
             style={[styles.claimButton, { backgroundColor: ACCENT_PURPLE }]}
             accessibilityRole="button"
-            accessibilityLabel={`${claimable} ${POINTS_NOUN} einsammeln`}
+            accessibilityLabel={t('points.collect', { count: claimable })}
           >
             <ThemedText adaptive={false} style={styles.claimButtonText}>
-              ✨ {claimable} {POINTS_NOUN} einsammeln
+              {t('points.collect', { count: claimable })}
             </ThemedText>
           </TouchableOpacity>
         ) : (
@@ -548,15 +569,15 @@ function EureWocheCard({
               adaptive={false}
               style={[styles.weekFooterText, { color: textSecondary }]}
             >
-              Diese Woche
+              {t('week.thisWeek')}
             </ThemedText>
             <ThemedText
               adaptive={false}
               style={[styles.weekFooterPoints, { color: ACCENT_PURPLE }]}
             >
               {claimedPoints > 0
-                ? `Eingesammelt 🤍 +${claimedPoints} ${POINTS_NOUN}`
-                : `+${weekPoints} ${POINTS_NOUN}`}
+                ? t('points.collected', { count: claimedPoints })
+                : `+${weekPoints} ${t('points.hearts')}`}
             </ThemedText>
           </View>
         )}
@@ -680,6 +701,9 @@ function DayDetailSheet({
   textSecondary: string;
   textTertiary: string;
 }) {
+  const { locale, localeTag } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
+  const dayNames = WEEKLY_MOMENT_DAY_NAMES[locale];
   if (dayIndex === null || !buckets || !points) {
     return (
       <Modal visible={false} transparent animationType="slide">
@@ -690,7 +714,7 @@ function DayDetailSheet({
 
   const date = new Date(weekStart);
   date.setDate(date.getDate() + dayIndex);
-  const dateLabel = `${DAY_NAMES[dayIndex]}, ${date.getDate()}. ${date.toLocaleString('de-DE', { month: 'long' })}`;
+  const dateLabel = `${dayNames[dayIndex]}, ${date.toLocaleDateString(localeTag, { day: 'numeric', month: 'long' })}`;
 
   const isToday = dayIndex === todayIndex;
   const isFuture = todayIndex !== -1 && dayIndex > todayIndex;
@@ -700,29 +724,29 @@ function DayDetailSheet({
   const rows: { emoji: string; label: string; count: number; pts: number }[] = [
     {
       emoji: '🍼',
-      label: buckets.feedingCount === 1 ? 'Essensmoment' : 'Essensmomente',
+      label: t(buckets.feedingCount === 1 ? 'area.feeding.one' : 'area.feeding.other'),
       count: buckets.feedingCount,
       pts: points.feeding,
     },
     {
       emoji: '🤍',
-      label: buckets.careCount === 1 ? 'Pflegemoment' : 'Pflegemomente',
+      label: t(buckets.careCount === 1 ? 'area.care.one' : 'area.care.other'),
       count: buckets.careCount,
       pts: points.care,
     },
     {
       emoji: '🌙',
-      label: buckets.sleepCount === 1 ? 'Schlafmoment' : 'Schlafmomente',
+      label: t(buckets.sleepCount === 1 ? 'area.sleep.one' : 'area.sleep.other'),
       count: buckets.sleepCount,
       pts: points.sleep,
     },
   ].filter((row) => row.count > 0);
 
   const emptyMessage = isFuture
-    ? 'Dieser Tag liegt noch vor euch 🤍'
+    ? t('day.futureEmpty')
     : isToday
-      ? 'Heute ist noch nichts festgehalten — der erste Moment zählt doppelt schön.'
-      : 'An diesem Tag habt ihr nichts festgehalten — völlig okay. Nicht jeder Tag braucht Einträge.';
+      ? t('day.todayEmpty')
+      : t('day.pastEmpty');
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -756,7 +780,7 @@ function DayDetailSheet({
               <View style={styles.sheetHeaderRow}>
                 <View style={styles.sheetHeaderText}>
                   <ThemedText adaptive={false} style={styles.sheetKicker}>
-                    {isToday ? 'Heute' : DAY_NAMES[dayIndex]}
+                    {isToday ? t('day.today') : dayNames[dayIndex]}
                   </ThemedText>
                   <ThemedText
                     adaptive={false}
@@ -771,7 +795,7 @@ function DayDetailSheet({
                       adaptive={false}
                       style={styles.sheetPointsBadgeText}
                     >
-                      +{points.total} {POINTS_NOUN}
+                      +{points.total} {t('points.hearts')}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -814,11 +838,11 @@ function DayDetailSheet({
                         adaptive={false}
                         style={[styles.sheetRowLabel, { color: textPrimary }]}
                       >
-                        Bonus
+                        {t('day.bonus')}
                         {buckets.feedingCount > 0 &&
                         buckets.careCount > 0 &&
                         buckets.sleepCount > 0
-                          ? ' — alle drei Bereiche an einem Tag!'
+                          ? t('day.allAreasBonus')
                           : ''}
                       </ThemedText>
                       <ThemedText
@@ -834,7 +858,7 @@ function DayDetailSheet({
 
               <Pressable onPress={onClose} style={styles.sheetCloseButton}>
                 <ThemedText adaptive={false} style={styles.sheetCloseText}>
-                  Schließen
+                  {t('journey.close')}
                 </ThemedText>
               </Pressable>
             </View>

@@ -16,6 +16,7 @@ import { WebView } from 'react-native-webview';
 import { Colors } from '@/constants/Colors';
 import { ThemedText } from '@/components/ThemedText';
 import { type StartupMessage } from '@/lib/startupMessages';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type StartupMessageModalProps = {
   visible: boolean;
@@ -24,8 +25,8 @@ type StartupMessageModalProps = {
   onConfirm: () => void;
 };
 
-const wrapHtmlDocument = (html: string) => `<!DOCTYPE html>
-<html lang="de">
+const wrapHtmlDocument = (html: string, language = 'de') => `<!DOCTYPE html>
+<html lang="${language}">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -77,6 +78,12 @@ export function StartupMessageModal({
   onConfirm,
 }: StartupMessageModalProps) {
   const { height } = useWindowDimensions();
+  const { locale } = useLocale();
+  const ui = locale === 'en'
+    ? { web: 'This web view is embedded directly in the native app.', open: 'Open page', badge: 'New in LottiBaby', okay: 'Okay' }
+    : locale === 'es'
+      ? { web: 'Esta vista web se integra directamente en la app nativa.', open: 'Abrir página', badge: 'Novedad en LottiBaby', okay: 'Aceptar' }
+      : { web: 'Diese Web-Ansicht wird in der nativen App direkt eingebettet.', open: 'Seite öffnen', badge: 'Neu in LottiBaby', okay: 'Okay' };
   const webViewHeight = Math.min(Math.max(height * 0.42, 220), 420);
 
   const htmlDocument = useMemo(() => {
@@ -84,8 +91,8 @@ export function StartupMessageModal({
       return null;
     }
 
-    return wrapHtmlDocument(message.content);
-  }, [message]);
+    return wrapHtmlDocument(message.content, locale);
+  }, [locale, message]);
 
   if (!message) {
     return null;
@@ -111,7 +118,7 @@ export function StartupMessageModal({
         return (
           <View style={[styles.webFallback, { minHeight: webViewHeight }]}>
             <ThemedText style={styles.webFallbackText}>
-              Diese Web-Ansicht wird in der nativen App direkt eingebettet.
+              {ui.web}
             </ThemedText>
             <TouchableOpacity
               style={styles.linkButton}
@@ -119,7 +126,7 @@ export function StartupMessageModal({
                 void Linking.openURL(message.source_url!);
               }}
             >
-              <ThemedText style={styles.linkButtonText}>Seite öffnen</ThemedText>
+              <ThemedText style={styles.linkButtonText}>{ui.open}</ThemedText>
             </TouchableOpacity>
           </View>
         );
@@ -163,7 +170,7 @@ export function StartupMessageModal({
     return (
       <View style={[styles.webViewShell, { height: webViewHeight }]}>
         <WebView
-          source={{ html: htmlDocument ?? wrapHtmlDocument(''), baseUrl: 'https://lottibaby.de' }}
+          source={{ html: htmlDocument ?? wrapHtmlDocument('', locale), baseUrl: 'https://lottibaby.de' }}
           style={styles.webView}
           javaScriptEnabled={false}
           domStorageEnabled={false}
@@ -192,7 +199,7 @@ export function StartupMessageModal({
         <Pressable style={StyleSheet.absoluteFill} />
         <View style={styles.card}>
           <View style={styles.badge}>
-            <ThemedText style={styles.badgeText}>Neu in LottiBaby</ThemedText>
+            <ThemedText style={styles.badgeText}>{ui.badge}</ThemedText>
           </View>
 
           <ThemedText style={styles.title}>{message.title}</ThemedText>
@@ -212,7 +219,7 @@ export function StartupMessageModal({
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <ThemedText style={styles.confirmButtonText}>
-                {message.button_label || 'Okay'}
+                {message.button_label || ui.okay}
               </ThemedText>
             )}
           </TouchableOpacity>

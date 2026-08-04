@@ -24,6 +24,8 @@ import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useLocale } from '@/contexts/LocaleContext';
+import { DailyTranslationKey, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 import {
   computeTotalQuantity,
   fetchDiaperInventoryItems,
@@ -119,6 +121,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   onDelete,
   initialData,
 }) => {
+  const { locale } = useLocale();
+  const t = useCallback((key: DailyTranslationKey) => translateDailyText(locale, key), [locale]);
+  const localeTag = getDailyLocaleTag(locale);
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = forceDarkMode ?? (colorScheme === 'dark');
 
@@ -218,11 +223,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         : null;
 
     const options = [
-      { type: 'breast' as const, label: 'Stillen', icon: '🤱', hiddenKey: 'feeding_breast' },
-      { type: 'bottle' as const, label: 'Flasche', icon: '🍼', hiddenKey: 'feeding_bottle' },
-      { type: 'solids' as const, label: 'Beikost', icon: '🥄', hiddenKey: 'feeding_solids' },
-      { type: 'pump' as const, label: 'Abpumpen', icon: '🥛', hiddenKey: 'feeding_pump' },
-      { type: 'water' as const, label: 'Wasser', icon: '🚰', hiddenKey: 'feeding_water' },
+      { type: 'breast' as const, label: t('feeding.breast'), icon: '🤱', hiddenKey: 'feeding_breast' },
+      { type: 'bottle' as const, label: t('feeding.bottle'), icon: '🍼', hiddenKey: 'feeding_bottle' },
+      { type: 'solids' as const, label: t('feeding.solids'), icon: '🥄', hiddenKey: 'feeding_solids' },
+      { type: 'pump' as const, label: t('feeding.pump'), icon: '🥛', hiddenKey: 'feeding_pump' },
+      { type: 'water' as const, label: t('feeding.water'), icon: '🚰', hiddenKey: 'feeding_water' },
     ];
 
     const visibleOptions = isStandaloneSpecialFlow
@@ -232,7 +237,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     return visibleOptions.filter(
       (option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type)
     );
-  }, [hiddenSubTypeSet, initialData?.feeding_type, isEditingExistingEntry, isStandaloneSpecialFlow, standaloneSpecialEntryType]);
+  }, [hiddenSubTypeSet, initialData?.feeding_type, isEditingExistingEntry, isStandaloneSpecialFlow, standaloneSpecialEntryType, t]);
   const diaperOptions = useMemo(() => {
     const currentEditingType =
       initialData?.diaper_type === 'DIRTY'
@@ -244,11 +249,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         : null;
 
     return [
-      { type: 'wet' as const, label: 'Nass', icon: '💧', hiddenKey: 'diaper_wet' },
-      { type: 'dirty' as const, label: 'Voll', icon: '💩', hiddenKey: 'diaper_dirty' },
-      { type: 'both' as const, label: 'Beides', icon: '💧💩', hiddenKey: 'diaper_both' },
+      { type: 'wet' as const, label: t('diaper.wet'), icon: '💧', hiddenKey: 'diaper_wet' },
+      { type: 'dirty' as const, label: t('diaper.dirty'), icon: '💩', hiddenKey: 'diaper_dirty' },
+      { type: 'both' as const, label: t('diaper.both'), icon: '💧💩', hiddenKey: 'diaper_both' },
     ].filter((option) => !hiddenSubTypeSet.has(option.hiddenKey) || (isEditingExistingEntry && currentEditingType === option.type));
-  }, [hiddenSubTypeSet, initialData?.diaper_type, isEditingExistingEntry]);
+  }, [hiddenSubTypeSet, initialData?.diaper_type, isEditingExistingEntry, t]);
 
   const isFiniteManualDate = useCallback((value: unknown): value is Date => {
     return value instanceof Date && Number.isFinite(value.getTime());
@@ -491,12 +496,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // Speichern: Payload für baby_care_entries
   const handleSave = () => {
     if (activityType === 'feeding' && !isStandaloneSpecialFlow && feedingOptions.length === 0) {
-      Alert.alert('Keine Fütterungsarten sichtbar', 'Blende mindestens eine Fütterungs-Quick-Action wieder ein.');
+      Alert.alert(t('input.noFeedingTitle'), t('input.noFeedingBody'));
       return;
     }
 
     if (activityType === 'diaper' && diaperOptions.length === 0) {
-      Alert.alert('Keine Windelarten sichtbar', 'Blende mindestens eine Windel-Quick-Action wieder ein.');
+      Alert.alert(t('input.noDiaperTitle'), t('input.noDiaperBody'));
       return;
     }
 
@@ -543,12 +548,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       const parsedDose = diaperSuppositoryGiven ? toPositiveInt(diaperSuppositoryDoseMg) : null;
 
       if (diaperFeverMeasured && (parsedTemp === null || parsedTemp < 30 || parsedTemp > 45)) {
-        Alert.alert('Ungültige Temperatur', 'Bitte gib eine Temperatur zwischen 30 und 45 °C ein.');
+        Alert.alert(t('input.invalidTemperatureTitle'), t('input.invalidTemperatureBody'));
         return;
       }
 
       if (diaperSuppositoryGiven && parsedDose === null) {
-        Alert.alert('Ungültige Dosis', 'Bitte gib eine gültige Dosis in mg ein (z. B. 125).');
+        Alert.alert(t('input.invalidDoseTitle'), t('input.invalidDoseBody'));
         return;
       }
 
@@ -656,7 +661,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         <FixedEmojiText style={styles.sectionTitleEmoji}>⏰</FixedEmojiText>{' '}
-        {showEndTime ? 'Zeitraum' : 'Zeitpunkt'}
+        {showEndTime ? t('input.period') : t('input.time')}
       </Text>
 
       <View style={[styles.timeRow, !showEndTime && styles.timeRowSingle]}> 
@@ -672,9 +677,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           ]}
           onPress={openStartPicker}
         >
-          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Start</Text>
+          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{t('input.start')}</Text>
           <Text style={[styles.timeValue, { color: theme.text }]}>
-            {safeModalStartTime.toLocaleString('de-DE', {
+            {safeModalStartTime.toLocaleString(localeTag, {
               hour: '2-digit',
               minute: '2-digit',
               day: '2-digit',
@@ -701,7 +706,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             }}
             activeOpacity={startTimer ? 1 : 0.7}
           >
-            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>Ende</Text>
+            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{t('input.end')}</Text>
             <Text
               style={[
                 styles.timeValue,
@@ -709,17 +714,17 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               ]}
             >
               {startTimer
-                ? 'Timer läuft'
+                ? t('input.timerRunning')
                 : safeModalEndTime
-                ? safeModalEndTime.toLocaleString('de-DE', {
+                ? safeModalEndTime.toLocaleString(localeTag, {
                     hour: '2-digit',
                     minute: '2-digit',
                     day: '2-digit',
                     month: '2-digit',
                   })
-                : 'Offen'}
+                : t('input.open')}
             </Text>
-            {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>Stoppe später, Ende wird gesetzt</Text>}
+            {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>{t('input.timerHint')}</Text>}
           </TouchableOpacity>
         )}
       </View>
@@ -751,7 +756,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           />
           <View style={styles.datePickerActions}>
             <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowStartPicker(false)}>
-              <Text style={styles.datePickerCancelText}>Fertig</Text>
+              <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -784,7 +789,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           />
           <View style={styles.datePickerActions}>
             <TouchableOpacity style={styles.datePickerCancel} onPress={() => setShowEndPicker(false)}>
-              <Text style={styles.datePickerCancelText}>Fertig</Text>
+              <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -823,9 +828,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   onPress={() => setShowStartPicker(false)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>Start</Text>
+                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>{t('input.start')}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     commitStartPickerDraft();
@@ -833,7 +838,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>Fertig</Text>
+                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker
@@ -846,7 +851,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 maximumDate={MAX_VALID_MANUAL_DATE}
                 mode="datetime"
                 display="spinner"
-                locale="de-DE"
+                locale={localeTag}
                 onChange={(event, d) => {
                   if (event.type === 'dismissed') return;
                   setStartPickerDraft((prev) =>
@@ -895,9 +900,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   onPress={() => setShowEndPicker(false)}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>Abbrechen</Text>
+                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
-                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>Ende</Text>
+                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>{t('input.end')}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     commitEndPickerDraft();
@@ -905,7 +910,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>Fertig</Text>
+                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
               <DateTimePicker
@@ -918,7 +923,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 maximumDate={MAX_VALID_MANUAL_DATE}
                 mode="datetime"
                 display="spinner"
-                locale="de-DE"
+                locale={localeTag}
                 onChange={(event, d) => {
                   if (event.type === 'dismissed') return;
                   setEndPickerDraft((prev) =>
@@ -969,10 +974,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.timerToggleLabel, { color: theme.text }]}>
-              Timer optional mitlaufen lassen
+              {t('input.timerOptional')}
             </Text>
             <Text style={[styles.timerToggleSub, { color: theme.textSecondary }]}>
-              {startTimer ? 'Läuft, bis du stoppst' : 'Ohne Timer speichern'}
+              {startTimer ? t('input.runningUntilStop') : t('input.saveWithoutTimer')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -994,17 +999,17 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   
   const getModalTitle = () => {
     switch (activityType) {
-      case 'feeding': return isPumpSelection ? 'Abpumpen' : isWaterSelection ? 'Wasser' : 'Neue Fütterung';
-      case 'diaper': return 'Wickeln';
-      default: return 'Neuer Eintrag';
+      case 'feeding': return isPumpSelection ? t('feeding.pump') : isWaterSelection ? t('feeding.water') : t('input.newFeeding');
+      case 'diaper': return t('input.diaper');
+      default: return t('input.newEntry');
     }
   };
 
   const getModalSubtitle = () => {
     if (isPumpSelection || isWaterSelection) {
-      return 'Wird separat dokumentiert';
+      return t('input.documentedSeparately');
     }
-    return 'Details eingeben';
+    return t('input.enterDetails');
   };
 
   // --- RENDER FUNKTIONEN ---
@@ -1040,7 +1045,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           onPress={() => setBreastSide(side)}
         >
           <Text style={[styles.sideSelectorButtonText, { color: breastSide === side ? '#FFFFFF' : theme.text }]}>
-            {side === 'left' ? 'Links' : side === 'right' ? 'Rechts' : 'Beide'}
+            {side === 'left' ? t('input.left') : side === 'right' ? t('input.right') : t('input.both')}
           </Text>
         </TouchableOpacity>
       ))}
@@ -1055,7 +1060,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       <View style={{width: '100%', alignItems: 'center'}}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
-          {feedingType === 'pump' ? 'Abgepumpte Menge (ml)' : feedingType === 'water' ? 'Getrunkene Menge (ml)' : 'Menge (ml)'}
+          {feedingType === 'pump' ? t('input.pumpedAmount') : feedingType === 'water' ? t('input.drunkAmount') : t('input.amountMl')}
         </Text>
         <View
           style={[
@@ -1112,7 +1117,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         <FixedEmojiText style={styles.sectionTitleEmoji}>{feedingType === 'pump' ? '🥛' : feedingType === 'water' ? '🚰' : '🍼'}</FixedEmojiText>{' '}
-        {feedingType === 'pump' ? 'Abpumpen' : feedingType === 'water' ? 'Wasser' : 'Art der Fütterung'}
+        {feedingType === 'pump' ? t('feeding.pump') : feedingType === 'water' ? t('feeding.water') : t('input.feedingType')}
       </Text>
       {!isStandaloneSpecialFlow && feedingOptions.length > 0 ? (
         <View style={styles.optionsGrid}>
@@ -1144,7 +1149,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           ]}
         >
           <Text style={[styles.hiddenOptionNoticeText, { color: theme.textSecondary }]}>
-            Alle Fütterungsarten sind aktuell ausgeblendet.
+            {t('input.allFeedingHidden')}
           </Text>
         </View>
       ) : null}
@@ -1173,11 +1178,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               },
             ]}
           >
-            <Text style={[styles.pumpNoticeTitle, { color: theme.text }]}>Separater Eintrag</Text>
+            <Text style={[styles.pumpNoticeTitle, { color: theme.text }]}>{t('input.separateEntry')}</Text>
             <Text style={[styles.pumpNoticeText, { color: theme.textSecondary }]}>
               {feedingType === 'water'
-                ? 'Wasser wird dokumentiert, aber nicht als Fütterung oder Mahlzeit mitgezählt.'
-                : 'Abpumpen wird dokumentiert, aber nicht als Fütterung oder Mahlzeit mitgezählt.'}
+                ? t('input.waterNotice')
+                : t('input.pumpNotice')}
             </Text>
           </View>
         )}
@@ -1185,7 +1190,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         {feedingType === 'bottle' && !initialData?.id && formulaInventoryItems.length > 0 ? (
           <View style={styles.diaperStockGroup}>
             <Text style={[styles.diaperStockTitle, { color: theme.textSecondary }]}>
-              Welches Milchpulver? (optional)
+              {t('input.formulaQuestion')}
             </Text>
             <View style={styles.diaperStockChipRow}>
               <TouchableOpacity
@@ -1202,7 +1207,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                     { color: selectedFormulaItemId === null ? '#FFFFFF' : theme.text },
                   ]}
                 >
-                  Automatisch
+                  {t('input.automatic')}
                 </Text>
               </TouchableOpacity>
               {formulaInventoryItems.map((item) => (
@@ -1240,7 +1245,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                     { color: selectedFormulaItemId === 'none' ? '#FFFFFF' : theme.text },
                   ]}
                 >
-                  Kein Pulver (Muttermilch)
+                  {t('input.noFormula')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1250,13 +1255,13 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           <View style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>{feedingType === 'pump' ? '🥛' : '🤱'}</FixedEmojiText>{' '}
-              Seite
+              {t('input.side')}
             </Text>
             {renderFeedingSideSelector()}
             <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>
               {feedingType === 'pump'
-                ? 'Wähle die Seite, von der abgepumpt wurde.'
-                : 'Wähle die Seite, auf der gestillt wurde.'}
+                ? t('input.pumpSideHint')
+                : t('input.breastSideHint')}
             </Text>
           </View>
         )}
@@ -1264,7 +1269,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
-              BLW-Rezepte
+              {t('input.blwRecipes')}
             </Text>
             <TouchableOpacity
               style={[
@@ -1279,10 +1284,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             >
               <Text style={[styles.recipeDropdownLabel, { color: theme.text }]}>
                 {selectedRecipeId
-                  ? recipeOptions.find((r) => r.id === selectedRecipeId)?.title?.trim() || 'Rezept wählen'
+                  ? recipeOptions.find((r) => r.id === selectedRecipeId)?.title?.trim() || t('input.chooseRecipe')
                   : isLoadingRecipes
-                  ? 'Lade Rezepte...'
-                  : 'Rezept auswählen (optional)'}
+                  ? t('input.loadingRecipes')
+                  : t('input.chooseRecipeOptional')}
               </Text>
               <Text style={[styles.recipeDropdownCaret, { color: theme.textSecondary }]}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
             </TouchableOpacity>
@@ -1299,16 +1304,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               >
                 {isLoadingRecipes ? (
                   <View style={styles.recipeLoadingRow}>
-                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>Lade Rezepte ...</Text>
+                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>{t('input.loadingRecipes')}</Text>
                   </View>
                 ) : recipeOptions.length === 0 ? (
                   <View style={styles.recipeLoadingRow}>
-                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>Keine Rezepte gefunden</Text>
+                    <Text style={[styles.recipeRowTitle, { color: theme.text }]}>{t('input.noRecipes')}</Text>
                   </View>
                 ) : recipeOptions.map((recipe) => {
                   const isSelected = selectedRecipeId === recipe.id;
-                  const displayTitle = recipe.title?.trim() || 'Rezept';
-                  const subtitle = recipe.minMonths ? `${recipe.minMonths}+ Monate` : recipe.source === 'sample' ? 'Sample' : '';
+                  const displayTitle = recipe.title?.trim() || t('input.recipe');
+                  const subtitle = recipe.minMonths ? `${recipe.minMonths}+ ${t('input.months')}` : recipe.source === 'sample' ? 'Sample' : '';
                   return (
                     <TouchableOpacity
                       key={recipe.id}
@@ -1342,7 +1347,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             )}
 
             <Text style={[styles.infoText, { marginTop: 12, color: theme.textSecondary }]}>
-              Der gewählte Rezepttitel erscheint als Hinweis in der Timeline.
+              {t('input.recipeHint')}
             </Text>
           </View>
         )}
@@ -1354,7 +1359,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: theme.text }]}>
         <FixedEmojiText style={styles.sectionTitleEmoji}>💧</FixedEmojiText>{' '}
-        Art der Windel
+        {t('input.diaperType')}
       </Text>
       {diaperOptions.length > 0 ? (
         <View style={styles.optionsGrid}>
@@ -1389,7 +1394,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           ]}
         >
           <Text style={[styles.hiddenOptionNoticeText, { color: theme.textSecondary }]}>
-            Alle Windelarten sind aktuell ausgeblendet.
+            {t('input.allDiaperHidden')}
           </Text>
         </View>
       )}
@@ -1397,7 +1402,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       {diaperOptions.length > 0 && !initialData?.id && diaperInventoryItems.length >= 2 ? (
         <View style={styles.diaperStockGroup}>
           <Text style={[styles.diaperStockTitle, { color: theme.textSecondary }]}>
-            Welche Windeln? (optional)
+            {t('input.diaperQuestion')}
           </Text>
           <View style={styles.diaperStockChipRow}>
             <TouchableOpacity
@@ -1414,7 +1419,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   { color: selectedDiaperItemId === null ? '#FFFFFF' : theme.text },
                 ]}
               >
-                Automatisch
+                {t('input.automatic')}
               </Text>
             </TouchableOpacity>
             {diaperInventoryItems.map((item) => (
@@ -1463,9 +1468,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             <View style={[styles.healthToggleKnob, diaperFeverMeasured && styles.healthToggleKnobActive]} />
           </View>
           <View style={styles.healthToggleTextWrap}>
-            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>Fieber gemessen</Text>
+            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>{t('input.feverMeasured')}</Text>
             <Text style={[styles.healthToggleSub, { color: theme.textSecondary }]}>
-              {diaperFeverMeasured ? 'Ja, Temperatur eintragen' : 'Optional'}
+              {diaperFeverMeasured ? t('input.yesTemperature') : t('input.optional')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -1484,21 +1489,21 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               setFocusValue(diaperTemperatureC);
               setFocusConfig({
                 field: 'diaper_temperature_c',
-                label: 'Temperatur (°C)',
+                label: t('input.temperature'),
                 placeholder: 'z. B. 38,5',
                 keyboardType: 'decimal-pad',
                 inputMode: 'decimal',
               });
             }}
           >
-            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>Temperatur (°C)</Text>
+            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>{t('input.temperature')}</Text>
             <Text
               style={[
                 styles.diaperHealthInputValue,
                 { color: diaperTemperatureC.trim() ? theme.text : theme.textSecondary },
               ]}
             >
-              {diaperTemperatureC.trim() ? `${diaperTemperatureC.trim()} °C` : 'Wert eingeben'}
+              {diaperTemperatureC.trim() ? `${diaperTemperatureC.trim()} °C` : t('input.enterValue')}
             </Text>
           </TouchableOpacity>
         )}
@@ -1522,9 +1527,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             <View style={[styles.healthToggleKnob, diaperSuppositoryGiven && styles.healthToggleKnobActive]} />
           </View>
           <View style={styles.healthToggleTextWrap}>
-            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>Zäpfchen gegeben</Text>
+            <Text style={[styles.healthToggleLabel, { color: theme.text }]}>{t('input.suppositoryGiven')}</Text>
             <Text style={[styles.healthToggleSub, { color: theme.textSecondary }]}>
-              {diaperSuppositoryGiven ? 'Ja, Dosis eintragen' : 'Optional'}
+              {diaperSuppositoryGiven ? t('input.yesDose') : t('input.optional')}
             </Text>
           </View>
         </TouchableOpacity>
@@ -1543,21 +1548,21 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               setFocusValue(diaperSuppositoryDoseMg);
               setFocusConfig({
                 field: 'diaper_suppository_dose_mg',
-                label: 'Dosis (mg)',
+                label: t('input.dose'),
                 placeholder: 'z. B. 125',
                 keyboardType: 'number-pad',
                 inputMode: 'numeric',
               });
             }}
           >
-            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>Dosis (mg)</Text>
+            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>{t('input.dose')}</Text>
             <Text
               style={[
                 styles.diaperHealthInputValue,
                 { color: diaperSuppositoryDoseMg.trim() ? theme.text : theme.textSecondary },
               ]}
             >
-              {diaperSuppositoryDoseMg.trim() ? `${diaperSuppositoryDoseMg.trim()} mg` : 'Wert eingeben'}
+              {diaperSuppositoryDoseMg.trim() ? `${diaperSuppositoryDoseMg.trim()} mg` : t('input.enterValue')}
             </Text>
           </TouchableOpacity>
         )}
@@ -1565,7 +1570,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       ) : null}
 
       {diaperOptions.length > 0 ? (
-        <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>Wähle aus, was auf die Windel zutrifft.</Text>
+        <Text style={[styles.infoText, { marginTop: 20, color: theme.textSecondary }]}>{t('input.diaperHint')}</Text>
       ) : null}
     </View>
   );
@@ -1579,8 +1584,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     setFocusValue(notes);
     setFocusConfig({
       field: 'notes',
-      label: 'Notizen',
-      placeholder: 'Details hinzufügen...',
+      label: t('input.notes'),
+      placeholder: t('input.details'),
       multiline: true,
     });
   };
@@ -1607,7 +1612,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
          <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
            <Text style={[styles.sectionTitle, { color: theme.text, marginBottom: 0 }]}>
              <FixedEmojiText style={styles.sectionTitleEmoji}>📝</FixedEmojiText>{' '}
-             Notizen
+             {t('input.notes')}
            </Text>
            <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
          </TouchableOpacity>
@@ -1627,7 +1632,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 style={{ color: notes.trim() ? theme.text : theme.textSecondary, fontSize: 14 }}
                 numberOfLines={3}
               >
-                {notes.trim() || 'Details hinzufügen...'}
+                  {notes.trim() || t('input.details')}
               </Text>
             </TouchableOpacity>
          )}
@@ -1676,7 +1681,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                             onPress={handleDelete}
                             activeOpacity={0.85}
                           >
-                            <Text style={styles.deleteButtonText}>🗑️  Eintrag löschen</Text>
+                            <Text style={styles.deleteButtonText}>{t('input.deleteEntry')}</Text>
                           </TouchableOpacity>
                         )}
                     </View>

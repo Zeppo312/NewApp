@@ -3,6 +3,12 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  getSettingsLocale,
+  localeTag,
+  localize,
+  SupportedLocale,
+} from '../_shared/localization.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -35,7 +41,8 @@ interface PlannerNotificationPayload {
 const getNotificationContent = (
   notificationType: string,
   plannerItem: PlannerNotificationPayload['planner_item'],
-  reminderMinutes: number | null
+  reminderMinutes: number | null,
+  locale: SupportedLocale
 ): { title: string; body: string; emoji: string } => {
   const { entry_type, title, location, baby_name, assignee } = plannerItem;
 
@@ -43,48 +50,58 @@ const getNotificationContent = (
   let timeStr = '';
   if (entry_type === 'event' && plannerItem.start_at) {
     const startTime = new Date(plannerItem.start_at);
-    timeStr = startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    timeStr = startTime.toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' });
   } else if (entry_type === 'todo' && plannerItem.due_at) {
     const dueTime = new Date(plannerItem.due_at);
-    timeStr = dueTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    timeStr = dueTime.toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' });
   }
 
   // Add location if available
-  const locationStr = location ? ` in ${location}` : '';
+  const locationStr = location
+    ? localize(locale, { de: ` in ${location}`, en: ` at ${location}`, es: ` en ${location}` })
+    : '';
 
   // Add baby name if available and assigned to child
-  const babyStr = baby_name && assignee === 'child' ? ` für ${baby_name}` : '';
+  const babyStr = baby_name && assignee === 'child'
+    ? localize(locale, { de: ` für ${baby_name}`, en: ` for ${baby_name}`, es: ` para ${baby_name}` })
+    : '';
 
   // Build notification based on type
   switch (notificationType) {
     case 'event_reminder': {
-      const reminderText = reminderMinutes ? ` in ${reminderMinutes} Minuten` : '';
+      const reminderText = reminderMinutes
+        ? localize(locale, {
+            de: ` in ${reminderMinutes} Minuten`,
+            en: ` in ${reminderMinutes} minutes`,
+            es: ` en ${reminderMinutes} minutos`,
+          })
+        : '';
       return {
-        title: `Termin${reminderText}`,
-        body: `${title}${babyStr} um ${timeStr}${locationStr}`,
+        title: `${localize(locale, { de: 'Termin', en: 'Appointment', es: 'Evento' })}${reminderText}`,
+        body: `${title}${babyStr}${localize(locale, { de: ' um ', en: ' at ', es: ' a las ' })}${timeStr}${locationStr}`,
         emoji: '📅',
       };
     }
 
     case 'todo_due': {
       return {
-        title: 'Aufgabe fällig',
-        body: `${title}${babyStr} um ${timeStr}`,
+        title: localize(locale, { de: 'Aufgabe fällig', en: 'Task due', es: 'Tarea pendiente' }),
+        body: `${title}${babyStr}${localize(locale, { de: ' um ', en: ' at ', es: ' a las ' })}${timeStr}`,
         emoji: '✓',
       };
     }
 
     case 'todo_overdue': {
       return {
-        title: 'Aufgabe überfällig',
-        body: `${title}${babyStr} war fällig um ${timeStr}`,
+        title: localize(locale, { de: 'Aufgabe überfällig', en: 'Task overdue', es: 'Tarea atrasada' }),
+        body: `${title}${babyStr}${localize(locale, { de: ' war fällig um ', en: ' was due at ', es: ' vencía a las ' })}${timeStr}`,
         emoji: '⚠️',
       };
     }
 
     default: {
       return {
-        title: 'Planner Erinnerung',
+        title: localize(locale, { de: 'Planner-Erinnerung', en: 'Planner reminder', es: 'Recordatorio del planificador' }),
         body: title,
         emoji: '📋',
       };
@@ -117,7 +134,7 @@ serve(async (req) => {
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
-      .select('notifications_enabled, planner_notifications_enabled')
+      .select('notifications_enabled, planner_notifications_enabled, resolved_language, language_preference')
       .eq('user_id', user_id)
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -140,6 +157,7 @@ serve(async (req) => {
         }
       );
     }
+    const locale = getSettingsLocale(recipientSettings);
 
     // Get user's name for personalization
     const { data: profile } = await supabase
@@ -183,7 +201,8 @@ serve(async (req) => {
     const { title, body, emoji } = getNotificationContent(
       notification_type,
       payload.planner_item,
-      reminder_minutes
+      reminder_minutes,
+      locale
     );
 
     console.log(`📬 Sending notification: ${emoji} ${title} - ${body}`);

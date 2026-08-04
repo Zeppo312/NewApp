@@ -1,6 +1,7 @@
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getSettingsLocale, localize, SupportedLocale } from '../_shared/localization.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -35,7 +36,7 @@ const getDisplayName = (profile?: SenderProfile | null) => {
   if (username) return username;
   const first = profile?.first_name?.trim() || '';
   const last = profile?.last_name?.trim() || '';
-  return `${first} ${last}`.trim() || 'Jemand';
+  return `${first} ${last}`.trim() || null;
 };
 
 serve(async (req: Request) => {
@@ -103,7 +104,7 @@ serve(async (req: Request) => {
     }
 
     // 3. Get sender display name
-    let senderName = 'Jemand';
+    let senderName: string | null = null;
     const { data: senderProfile } = await supabase
       .from('profiles')
       .select('username, first_name, last_name')
@@ -127,7 +128,7 @@ serve(async (req: Request) => {
     // Batch fetch notification settings
     const { data: settingsData } = await supabase
       .from('user_settings')
-      .select('user_id, notifications_enabled')
+      .select('user_id, notifications_enabled, resolved_language, language_preference')
       .in('user_id', recipientIds);
 
     const disabledUsers = new Set(
@@ -137,6 +138,9 @@ serve(async (req: Request) => {
     );
 
     const eligibleRecipients = recipientIds.filter((id) => !disabledUsers.has(id));
+    const localeByUser = new Map<string, SupportedLocale>(
+      (settingsData || []).map((settings) => [settings.user_id, getSettingsLocale(settings)])
+    );
 
     if (eligibleRecipients.length === 0) {
       return new Response(
@@ -164,34 +168,36 @@ serve(async (req: Request) => {
     }
 
     // 5. Send push notifications
-    let body = 'Neue Nachricht';
-    if (message_type === 'voice') {
-      body = 'Sprachnachricht';
-    } else if (message_type === 'event') {
-      let eventTitle: string | null = null;
-      if (event_id) {
-        const { data: eventData } = await supabase
-          .from('community_group_events')
-          .select('title')
-          .eq('id', event_id)
-          .maybeSingle();
-        eventTitle = eventData?.title?.trim() || null;
-      }
-      body = eventTitle ? `Event: ${eventTitle}` : 'Event';
-    } else if (content?.trim()) {
-      body = content.length > 120
-        ? `${content.slice(0, 117)}...`
-        : content;
+    let eventTitle: string | null = null;
+    if (message_type === 'event' && event_id) {
+      const { data: eventData } = await supabase
+        .from('community_group_events')
+        .select('title')
+        .eq('id', event_id)
+        .maybeSingle();
+      eventTitle = eventData?.title?.trim() || null;
     }
 
-    const pushPayloads = tokens.map((tokenRecord) =>
-      fetch(EXPO_PUSH_URL, {
+    const pushPayloads = tokens.map((tokenRecord) => {
+      const locale = localeByUser.get(tokenRecord.user_id) || 'de';
+      const localizedSender = senderName || localize(locale, { de: 'Jemand', en: 'Someone', es: 'Alguien' });
+      let body = localize(locale, { de: 'Neue Nachricht', en: 'New message', es: 'Nuevo mensaje' });
+      if (message_type === 'voice') {
+        body = localize(locale, { de: 'Sprachnachricht', en: 'Voice message', es: 'Mensaje de voz' });
+      } else if (message_type === 'event') {
+        const eventLabel = localize(locale, { de: 'Event', en: 'Event', es: 'Evento' });
+        body = eventTitle ? `${eventLabel}: ${eventTitle}` : eventLabel;
+      } else if (content?.trim()) {
+        body = content.length > 120 ? `${content.slice(0, 117)}...` : content;
+      }
+
+      return fetch(EXPO_PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: tokenRecord.token,
           title: groupName,
-          body: `${senderName}: ${body}`,
+          body: `${localizedSender}: ${body}`,
           sound: 'default',
           priority: 'high',
           data: {
@@ -202,8 +208,8 @@ serve(async (req: Request) => {
             messageId: id,
           },
         }),
-      })
-    );
+      });
+    });
 
     const results = await Promise.all(pushPayloads);
     const errors: { token: string; error: unknown }[] = [];

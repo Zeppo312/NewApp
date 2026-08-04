@@ -3,6 +3,8 @@ import { StyleProp, ViewStyle } from 'react-native';
 import { GeburtsplanSection } from './GeburtsplanSection';
 import { TextInputField } from './TextInputField';
 import { SonstigeWuensche } from '@/types/geburtsplan';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateBirthPlanText } from '@/lib/birthPlanTranslations';
 
 interface SonstigeWuenscheSectionProps {
   data: SonstigeWuensche;
@@ -12,10 +14,12 @@ interface SonstigeWuenscheSectionProps {
 }
 
 export const SonstigeWuenscheSection: React.FC<SonstigeWuenscheSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateBirthPlanText>[1]) => translateBirthPlanText(locale, key);
   return (
-    <GeburtsplanSection title="6. Sonstige Wünsche / Hinweise" containerStyle={containerStyle}>
+    <GeburtsplanSection title={t('section.other')} containerStyle={containerStyle}>
       <TextInputField
-        label="Weitere Wünsche und Hinweise"
+        label={t('other.label')}
         value={data.freitext}
         onChangeText={(text) => {
           if (readOnly) return;
@@ -23,7 +27,7 @@ export const SonstigeWuenscheSection: React.FC<SonstigeWuenscheSectionProps> = (
         }}
         multiline
         numberOfLines={6}
-        placeholder="Hier kannst du weitere Wünsche und Hinweise eintragen, die in den vorherigen Kategorien nicht abgedeckt wurden..."
+        placeholder={t('other.placeholder')}
         readOnly={readOnly}
       />
     </GeburtsplanSection>

@@ -9,22 +9,26 @@
  */
 
 import type { RuleCandidate, RuleSignals } from './advisorRules.ts';
+import type { SupportedLocale } from '../_shared/localization.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini';
 
-const SYSTEM_PROMPT = `Du bist "Lotti", die fürsorgliche Begleiterin in einer Baby-App. Du schreibst eine EINZIGE kurze Nachricht an ein Elternteil auf Deutsch.
+const systemPrompt = (locale: SupportedLocale) => {
+  const language = locale === 'en' ? 'English' : locale === 'es' ? 'Spanish' : 'German';
+  return `You are "Lotti", a caring companion in a baby app. Write ONE short message to a parent in ${language}.
 
-REGELN:
-- Nutze NUR die Fakten und den "kerninhalt" aus dem Input. Erfinde KEINE zusätzlichen medizinischen Aussagen, Zahlen oder Empfehlungen.
-- Warm, persönlich, auf Augenhöhe — nie belehrend, nie alarmierend.
-- Sprich das Baby mit Namen an, beziehe Alter und konkrete Zahlen ein, wenn vorhanden.
-- "headline": knackige Kernaussage, max. 40 Zeichen, ohne Emoji.
-- "body": maximal 2 Sätze, höchstens 240 Zeichen, ohne Emoji.
-- Kein medizinischer Rat im engeren Sinn; auf Hebamme/Kinderärztin nur verweisen, wenn der kerninhalt das vorsieht.
-- Antworte ausschließlich als JSON: {"headline": "...", "body": "..."}`;
+RULES:
+- Use ONLY the facts and core content from the input. Do not invent medical claims, numbers, or recommendations.
+- Warm, personal, respectful, never alarming.
+- Address the baby by name and include age or concrete values when available.
+- "headline": concise, at most 40 characters, no emoji.
+- "body": at most 2 sentences and 240 characters, no emoji.
+- Do not give medical advice; mention a healthcare professional only when the core content requires it.
+- Respond only as JSON: {"headline": "...", "body": "..."}`;
+};
 
 export interface AiText {
   headline: string;
@@ -40,6 +44,7 @@ const looksSafe = (text: string): boolean =>
 export const generateAiText = async (
   candidate: RuleCandidate,
   signals: RuleSignals,
+  locale: SupportedLocale = 'de',
 ): Promise<AiText | null> => {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
   if (!apiKey) return null;
@@ -69,7 +74,7 @@ export const generateAiText = async (
         temperature: 0.7,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt(locale) },
           { role: 'user', content: JSON.stringify(payload) },
         ],
       }),

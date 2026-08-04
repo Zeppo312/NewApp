@@ -30,6 +30,15 @@ module.exports = function({ config }) {
   addPlugin(plugins, '@react-native-community/datetimepicker');
   addPlugin(plugins, 'expo-image');
   addPlugin(plugins, 'expo-sharing');
+  addPlugin(plugins, [
+    'expo-localization',
+    {
+      supportedLocales: {
+        ios: ['de', 'en', 'es'],
+        android: ['de', 'en', 'es'],
+      },
+    },
+  ]);
   addPlugin(plugins, './plugins/withLiveActivityModule');
 
   // Konfiguration für Updates
@@ -45,9 +54,18 @@ module.exports = function({ config }) {
     ios: {
       ...config.ios,
       version: config.version,
+      infoPlist: {
+        ...config.ios?.infoPlist,
+        CFBundleAllowMixedLocalizations: true,
+      },
     },
     android: {
       ...config.android,
+    },
+    locales: {
+      de: './assets/locales/de.json',
+      en: './assets/locales/en.json',
+      es: './assets/locales/es.json',
     },
     // Zusätzliche Expo-Konfiguration
     extra: {

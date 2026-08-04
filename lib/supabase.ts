@@ -1479,6 +1479,8 @@ export type AppSettings = {
   vitamin_d_reminder_minute: number;
   partner_notifications_enabled: boolean;
   planner_notifications_enabled: boolean;
+  language_preference?: 'system' | 'de' | 'en' | 'es';
+  resolved_language?: 'de' | 'en' | 'es';
   due_date?: string | null;
   is_baby_born?: boolean;
   preferred_backend?: 'supabase' | 'convex'; // Backend preference for dual-backend architecture
@@ -1518,6 +1520,8 @@ export const getAppSettings = async () => {
       vitamin_d_reminder_minute: 0,
       partner_notifications_enabled: true,
       planner_notifications_enabled: true,
+      language_preference: 'system',
+      resolved_language: 'de',
       due_date: null,
       is_baby_born: false
     };

@@ -20,17 +20,23 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, TEXT_PRIMARY, GLASS_BORDER, PRIMARY } from '@/constants/DesignGuide';
 import { supabase, updateDueDateAndSync } from '@/lib/supabase';
 import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
+import {
+  getPregnancyStatsDayLabel,
+  translatePregnancyStatsText,
+  type PregnancyStatsTranslationKey,
+} from '@/lib/pregnancyStatsTranslations';
 
 type PregnancyStats = {
   daysLeft: number;
   currentWeek: number;
   currentDay: number;
   progress: number;
-  trimester: string;
+  trimester: 1 | 2 | 3;
   daysPregnant: number;
   calendarMonth: number;
   pregnancyMonth: number;
@@ -41,7 +47,7 @@ const initialStats: PregnancyStats = {
   currentWeek: 1,
   currentDay: 0,
   progress: 0,
-  trimester: '1. Trimester',
+  trimester: 1,
   daysPregnant: 0,
   calendarMonth: 1,
   pregnancyMonth: 1,
@@ -93,6 +99,9 @@ const getArcPath = (progress: number) => {
 };
 
 export default function PregnancyStatsScreen() {
+  const { locale, localeTag } = useLocale();
+  const t = (key: PregnancyStatsTranslationKey, params?: Record<string, string | number>) =>
+    translatePregnancyStatsText(locale, key, params);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
@@ -169,11 +178,11 @@ export default function PregnancyStatsScreen() {
 
     const progress = Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy));
 
-    let trimester = '1. Trimester';
+    let trimester: 1 | 2 | 3 = 1;
     if (currentWeek >= 28) {
-      trimester = '3. Trimester';
+      trimester = 3;
     } else if (currentWeek >= 14) {
-      trimester = '2. Trimester';
+      trimester = 2;
     }
 
     const calendarMonth = Math.max(1, Math.ceil(daysPregnant / 30));
@@ -194,11 +203,11 @@ export default function PregnancyStatsScreen() {
   const saveDueDate = async (date: Date) => {
     const safeDate = parseSafeDate(date);
     if (!safeDate) {
-      Alert.alert('Fehler', 'Ungültiges Datum.');
+      Alert.alert(t('common.error'), t('alert.invalidDate'));
       return;
     }
     if (!user) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtstermin zu speichern.');
+      Alert.alert(t('common.notice'), t('alert.signIn'));
       return;
     }
 
@@ -207,7 +216,7 @@ export default function PregnancyStatsScreen() {
 
       if (!result.success) {
         console.error('Error saving due date:', result.error);
-        Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('alert.saveFailed'));
         return;
       }
 
@@ -217,13 +226,13 @@ export default function PregnancyStatsScreen() {
       const syncedUsers = result.syncResult?.linkedUsers || [];
       if (syncedUsers.length > 0) {
         const linkedUserNames = syncedUsers.map((linkedUser: any) => linkedUser.firstName).join(', ');
-        Alert.alert('Erfolg', `Geburtstermin gespeichert und mit ${linkedUserNames} synchronisiert.`);
+        Alert.alert(t('common.success'), t('alert.savedSynced', { names: linkedUserNames }));
       } else {
-        Alert.alert('Erfolg', 'Geburtstermin erfolgreich gespeichert.');
+        Alert.alert(t('common.success'), t('alert.saved'));
       }
     } catch (err) {
       console.error('Failed to save due date:', err);
-      Alert.alert('Fehler', 'Der Geburtstermin konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.saveFailed'));
     }
   };
 
@@ -260,36 +269,36 @@ export default function PregnancyStatsScreen() {
   const factItems = [
     {
       key: 'progress',
-      label: 'Fortschritt',
-      value: `${(stats.progress * 100).toFixed(1).replace('.', ',')} %`,
-      caption: 'von 280 Tagen',
+      label: t('fact.progress'),
+      value: `${(stats.progress * 100).toLocaleString(localeTag, { maximumFractionDigits: 1 })} %`,
+      caption: t('fact.ofDays'),
       icon: 'waveform.path.ecg' as const,
       accent: pastelPalette.rose,
       iconColor: '#D06262',
     },
     {
       key: 'days-pregnant',
-      label: 'Tage schwanger',
-      value: stats.daysPregnant.toLocaleString('de-DE'),
-      caption: 'seit Beginn',
+      label: t('fact.daysPregnant'),
+      value: stats.daysPregnant.toLocaleString(localeTag),
+      caption: t('fact.sinceStart'),
       icon: 'hourglass.bottomhalf.fill' as const,
       accent: pastelPalette.sage,
       iconColor: '#5A8F80',
     },
     {
       key: 'days-left',
-      label: 'Tage bis EGT',
-      value: stats.daysLeft.toLocaleString('de-DE'),
-      caption: 'verbleibend',
+      label: t('fact.daysToDue'),
+      value: stats.daysLeft.toLocaleString(localeTag),
+      caption: t('fact.remaining'),
       icon: 'calendar.badge.clock' as const,
       accent: pastelPalette.honey,
       iconColor: '#B7745D',
     },
     {
       key: 'trimester',
-      label: 'Trimester',
-      value: stats.trimester,
-      caption: 'laufend',
+      label: t('fact.trimester'),
+      value: t(`trimester.${stats.trimester === 1 ? 'one' : stats.trimester === 2 ? 'two' : 'three'}`),
+      caption: t('fact.current'),
       icon: 'sparkles' as const,
       accent: pastelPalette.sky,
       iconColor: '#7A6FD1',
@@ -299,48 +308,48 @@ export default function PregnancyStatsScreen() {
   const statTiles = [
     {
       key: 'week',
-      label: 'Aktuelle SSW',
-      value: `${stats.currentWeek}. SSW`,
+      label: t('detail.currentWeek'),
+      value: t('detail.weekValue', { week: stats.currentWeek }),
       icon: 'calendar' as const,
       accent: pastelPalette.lavender,
       iconColor: '#7A6FD1',
     },
     {
       key: 'days',
-      label: 'Tag der Woche',
-      value: `${stats.currentDay} Tag${stats.currentDay === 1 ? '' : 'e'}`,
+      label: t('detail.weekDay'),
+      value: getPregnancyStatsDayLabel(locale, stats.currentDay),
       icon: 'sunrise' as const,
       accent: pastelPalette.peach,
       iconColor: '#C17055',
     },
     {
       key: 'trimester-card',
-      label: 'Trimester',
-      value: stats.trimester,
+      label: t('fact.trimester'),
+      value: t(`trimester.${stats.trimester === 1 ? 'one' : stats.trimester === 2 ? 'two' : 'three'}`),
       icon: 'circle.grid.hex' as const,
       accent: pastelPalette.blush,
       iconColor: '#CF6F8B',
     },
     {
       key: 'calendar-month',
-      label: `Kalender${SOFT_HYPHEN}monat`,
-      value: `${stats.calendarMonth}. Monat`,
+      label: t('detail.calendarMonth').replace('monat', `${SOFT_HYPHEN}monat`),
+      value: t('detail.monthValue', { month: stats.calendarMonth }),
       icon: 'chart.bar.xaxis' as const,
       accent: pastelPalette.sage,
       iconColor: '#5A8F80',
     },
     {
       key: 'pregnancy-month',
-      label: `Schwangerschafts${SOFT_HYPHEN}monat`,
-      value: `${stats.pregnancyMonth}. Monat`,
+      label: t('detail.pregnancyMonth').replace('monat', `${SOFT_HYPHEN}monat`),
+      value: t('detail.monthValue', { month: stats.pregnancyMonth }),
       icon: 'moon.stars.fill' as const,
       accent: pastelPalette.sky,
       iconColor: '#6C87C1',
     },
     {
       key: 'days-left-card',
-      label: 'Tage bis zum EGT',
-      value: stats.daysLeft.toLocaleString('de-DE'),
+      label: t('detail.daysToDue'),
+      value: stats.daysLeft.toLocaleString(localeTag),
       icon: 'arrow.down' as const,
       accent: pastelPalette.honey,
       iconColor: '#B7745D',
@@ -353,8 +362,8 @@ export default function PregnancyStatsScreen() {
         <SafeAreaView style={styles.safeArea}>
           <Stack.Screen options={{ headerShown: false }} />
           <Header
-            title="Schwangerschaft"
-            subtitle="Countdown noch nicht gesetzt"
+            title={t('screen.title')}
+            subtitle={t('screen.noDateSubtitle')}
             showBackButton
           />
           <ScrollView
@@ -363,9 +372,9 @@ export default function PregnancyStatsScreen() {
           >
             <LiquidGlassCard style={styles.glassCard}>
               <View style={styles.glassInner}>
-                <ThemedText style={styles.sectionTitle}>Geburtstermin fehlt</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('noDate.title')}</ThemedText>
                 <ThemedText style={styles.noDataText}>
-                  Bitte setze zuerst deinen Geburtstermin in der Countdown-Ansicht, um alle Details zu sehen.
+                  {t('noDate.description')}
                 </ThemedText>
                 <TouchableOpacity
                   style={[styles.dueDateAction, styles.glassSurface]}
@@ -373,7 +382,7 @@ export default function PregnancyStatsScreen() {
                 >
                   <GlassLayer tint={pastelPalette.lavender} sheenOpacity={0.22} />
                   <IconSymbol name="calendar" size={18} color="#7A6FD1" style={styles.dueDateActionIcon} />
-                  <ThemedText style={styles.dueDateActionText}>Zum Countdown</ThemedText>
+                  <ThemedText style={styles.dueDateActionText}>{t('noDate.action')}</ThemedText>
                 </TouchableOpacity>
               </View>
             </LiquidGlassCard>
@@ -388,8 +397,8 @@ export default function PregnancyStatsScreen() {
       <SafeAreaView style={styles.safeArea}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header
-          title="Schwangerschaft"
-          subtitle="Countdown & Status"
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
           showBackButton
         />
         {isLoading ? (
@@ -405,7 +414,7 @@ export default function PregnancyStatsScreen() {
               <>
                 <LiquidGlassCard style={[styles.glassCard, styles.firstGlassCard]}>
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Fortschritt</ThemedText>
+                    <ThemedText style={styles.sectionTitle}>{t('progress.title')}</ThemedText>
                     <View style={[styles.progressPanel, styles.glassSurface]}>
                       <GlassLayer tint="rgba(255,255,255,0.22)" sheenOpacity={0.2} />
                       <View style={styles.progressWrapper}>
@@ -436,7 +445,7 @@ export default function PregnancyStatsScreen() {
                                 fill={PRIMARY}
                                 fontWeight="bold"
                               >
-                                {(stats.progress * 100).toFixed(1).replace('.', ',')}
+                                {(stats.progress * 100).toLocaleString(localeTag, { maximumFractionDigits: 1 })}
                               </SvgText>
                               <SvgText
                                 x="50"
@@ -451,9 +460,9 @@ export default function PregnancyStatsScreen() {
                           </Svg>
                         </View>
                         <View style={styles.progressTextBlock}>
-                          <ThemedText style={styles.progressHeadline}>Deine Reise</ThemedText>
-                          <ThemedText style={styles.progressSubtext}>Noch {stats.daysLeft} Tage bis EGT</ThemedText>
-                          <ThemedText style={styles.progressSubtext}>{stats.daysPregnant} Tage seit Beginn</ThemedText>
+                          <ThemedText style={styles.progressHeadline}>{t('progress.journey')}</ThemedText>
+                          <ThemedText style={styles.progressSubtext}>{t('progress.daysLeft', { count: stats.daysLeft })}</ThemedText>
+                          <ThemedText style={styles.progressSubtext}>{t('progress.daysPregnant', { count: stats.daysPregnant })}</ThemedText>
                         </View>
                       </View>
                       <View style={styles.heartsContainer}>
@@ -473,7 +482,7 @@ export default function PregnancyStatsScreen() {
 
                 <LiquidGlassCard style={styles.glassCard}>
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Errechneter Geburtstermin</ThemedText>
+                    <ThemedText style={styles.sectionTitle}>{t('dueDate.title')}</ThemedText>
                     <TouchableOpacity
                       style={styles.dueDateTouch}
                       onPress={showDatepicker}
@@ -486,7 +495,7 @@ export default function PregnancyStatsScreen() {
                             <IconSymbol name="calendar" size={20} color={PRIMARY} />
                           </View>
                           <ThemedText style={styles.dueDateValue}>
-                            {dueDate.toLocaleDateString('de-DE', {
+                            {dueDate.toLocaleDateString(localeTag, {
                               day: '2-digit',
                               month: '2-digit',
                               year: '2-digit',
@@ -496,7 +505,7 @@ export default function PregnancyStatsScreen() {
                       </View>
                       <View style={styles.editHintContainer}>
                         <IconSymbol name="pencil" size={14} color={TEXT_PRIMARY} style={{ marginRight: 6, opacity: 0.7 }} />
-                        <ThemedText style={styles.editHint}>Tippen zum Ändern</ThemedText>
+                        <ThemedText style={styles.editHint}>{t('dueDate.change')}</ThemedText>
                       </View>
                     </TouchableOpacity>
                   </View>
@@ -504,7 +513,7 @@ export default function PregnancyStatsScreen() {
 
                 <LiquidGlassCard style={styles.glassCard}>
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Schwangerschafts-Details</ThemedText>
+                    <ThemedText style={styles.sectionTitle}>{t('details.title')}</ThemedText>
                     <View style={styles.statGrid}>
                       {statTiles.map((tile) => (
                         <View key={tile.key} style={[styles.statItem, styles.glassSurface]}>
@@ -528,7 +537,7 @@ export default function PregnancyStatsScreen() {
 
                 <LiquidGlassCard style={styles.glassCard}>
                   <View style={styles.glassInner}>
-                    <ThemedText style={styles.sectionTitle}>Interessante Fakten</ThemedText>
+                    <ThemedText style={styles.sectionTitle}>{t('facts.title')}</ThemedText>
                     <View style={styles.factGrid}>
                       {factItems.map((fact) => (
                         <View key={fact.key} style={[styles.factTile, styles.glassSurface]}>
@@ -562,7 +571,8 @@ export default function PregnancyStatsScreen() {
                 {Platform.OS === 'ios' && (
                   <IOSBottomDatePicker
                     visible={showDatePicker}
-                    title="Geburtstermin auswählen"
+                    title={t('dueDate.choose')}
+                    locale={localeTag}
                     value={getSafePickerDate(tempDate ?? dueDate, new Date(), {
                       minimumDate: new Date(),
                       maximumDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 280),

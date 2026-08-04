@@ -7,6 +7,8 @@ import { LiquidGlassCard } from "@/constants/DesignGuide";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { useLocale } from "@/contexts/LocaleContext";
+import { translatePlannerText } from "@/lib/plannerTranslations";
 import {
   GLASS_BORDER,
   GLASS_OVERLAY,
@@ -32,9 +34,16 @@ const toRgba = (hex: string, opacity = 1) => {
 
 export const GreetingCard: React.FC<Props> = ({
   title,
-  subline = "Schön, dass du da bist.",
+  subline,
   avatarUrl = null,
 }) => {
+  const { locale } = useLocale();
+  const resolvedSubline = subline ?? translatePlannerText(locale, 'greeting.welcome');
+  const accessibilityCopy = {
+    de: { greeting: 'Begrüßung', picture: 'Profilbild', placeholder: 'Profilbild Platzhalter' },
+    en: { greeting: 'Greeting', picture: 'Profile picture', placeholder: 'Profile picture placeholder' },
+    es: { greeting: 'Saludo', picture: 'Foto de perfil', placeholder: 'Marcador de foto de perfil' },
+  }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -143,7 +152,7 @@ export const GreetingCard: React.FC<Props> = ({
           style={styles.content}
           accessible
           accessibilityRole="summary"
-          accessibilityLabel={`Begrüßung. ${title}.`}
+          accessibilityLabel={`${accessibilityCopy.greeting}. ${title}.`}
         >
           {/* Text */}
           <View style={styles.textColumn}>
@@ -154,12 +163,12 @@ export const GreetingCard: React.FC<Props> = ({
               </ThemedText>
             </ThemedText>
 
-            {subline ? (
+            {resolvedSubline ? (
               <ThemedText
                 style={[styles.sub, { color: textSecondary }]}
                 numberOfLines={2}
               >
-                {subline}
+                {resolvedSubline}
               </ThemedText>
             ) : null}
           </View>
@@ -172,7 +181,7 @@ export const GreetingCard: React.FC<Props> = ({
             ]}
             accessible
             accessibilityLabel={
-              avatarUrl ? "Profilbild" : "Profilbild Platzhalter"
+              avatarUrl ? accessibilityCopy.picture : accessibilityCopy.placeholder
             }
           >
             <View

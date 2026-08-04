@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
@@ -56,8 +58,8 @@ const ACCENT_MINT    = '#A8C4C1';
 const ACCENT_ORANGE  = '#FF8C42';
 const ACCENT_RED     = '#E06464';
 
-const ACTIVE_ACCOUNT_LINKING_LOCALE = DEFAULT_ACCOUNT_LINKING_LOCALE;
-const ACCOUNT_LINKING_LOCALE_TAG = getAccountLinkingLocaleTag(ACTIVE_ACCOUNT_LINKING_LOCALE);
+let ACTIVE_ACCOUNT_LINKING_LOCALE = DEFAULT_ACCOUNT_LINKING_LOCALE;
+let ACCOUNT_LINKING_LOCALE_TAG = getAccountLinkingLocaleTag(ACTIVE_ACCOUNT_LINKING_LOCALE);
 const t = (
   key: AccountLinkingTranslationKey,
   params?: Record<string, string | number>,
@@ -88,6 +90,8 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
 // Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function AccountLinkingScreen() {
+  ACTIVE_ACCOUNT_LINKING_LOCALE = useLocale().locale;
+  ACCOUNT_LINKING_LOCALE_TAG = getAccountLinkingLocaleTag(ACTIVE_ACCOUNT_LINKING_LOCALE);
   const access = useFeatureAccess('partnerLink');
 
   if (access.hasAccess === null) return null;

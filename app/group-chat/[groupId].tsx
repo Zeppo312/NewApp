@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,13 +44,10 @@ import { useChatAudioPlayback } from '@/hooks/useChatAudioPlayback';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { uploadChatAudio } from '@/lib/chatAudio';
 import {
-  EVENT_MESSAGE_PREVIEW,
-  VOICE_MESSAGE_PREVIEW,
   formatAudioDuration,
   getMessagePreviewText,
 } from '@/lib/chatMessages';
 import {
-  GROUP_CHAT_EVENT_RSVP_LABELS,
   type GroupChatEvent,
   type GroupChatEventRsvp,
   type GroupChatEventRsvpStatus,
@@ -85,6 +84,20 @@ import {
   enrichGroupMessages,
   formatMessageTime,
 } from '@/lib/groupChat';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  getCommunityEventCopy,
+  getCommunityLocaleTag,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+let COMMUNITY_LOCALE_TAG = getCommunityLocaleTag(ACTIVE_COMMUNITY_LOCALE);
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
+const eventCopy = getCommunityEventCopy(ACTIVE_COMMUNITY_LOCALE);
+const memberTitle = t('groups.members.other', { count: '' }).trim();
 
 // ---------------------------------------------------------------------------
 // Swipeable row (swipe right → reply)
@@ -171,6 +184,8 @@ const swipeStyles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 
 export default function GroupChatScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
+  COMMUNITY_LOCALE_TAG = getCommunityLocaleTag(ACTIVE_COMMUNITY_LOCALE);
   const { user } = useAuth();
   const { groupId, from } = useLocalSearchParams<{ groupId?: string | string[]; from?: string }>();
   const resolvedGroupId = useMemo(
@@ -185,7 +200,7 @@ export default function GroupChatScreen() {
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const eventIdsRef = useRef<Set<string>>(new Set());
 
-  const [groupName, setGroupName] = useState('Gruppenchat');
+  const [groupName, setGroupName] = useState(t('groupChat.title'));
   const [groupDetails, setGroupDetails] = useState<CommunityGroup | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -251,7 +266,12 @@ export default function GroupChatScreen() {
   const eventMap = useMemo(() => buildEventMap(events), [events]);
   const eventRsvpMap = useMemo(() => buildEventRsvpMap(eventRsvps), [eventRsvps]);
   const enriched = useMemo(
-    () => enrichGroupMessages(messages, memberMap, eventMap, user?.id),
+    () => enrichGroupMessages(messages, memberMap, eventMap, user?.id, {
+      locale: COMMUNITY_LOCALE_TAG,
+      today: t('common.today'),
+      yesterday: t('common.yesterday'),
+      unknown: eventCopy.unknown,
+    }),
     [messages, memberMap, eventMap, user?.id],
   );
 
@@ -650,7 +670,7 @@ export default function GroupChatScreen() {
       setEventCoverLocalUri(result.assets[0].uri);
     } catch (error) {
       console.error('Failed to pick event cover:', error);
-      Alert.alert('Event', 'Das Titelbild konnte nicht ausgewählt werden.');
+      Alert.alert(t('groupChat.event'), t('groupChat.eventImageFailed'));
     }
   }, []);
 
@@ -711,11 +731,11 @@ export default function GroupChatScreen() {
     const trimmedTitle = eventTitle.trim();
     const trimmedLocation = eventLocation.trim();
     if (!trimmedTitle) {
-      Alert.alert('Event', 'Bitte gib einen Titel ein.');
+      Alert.alert(t('groupChat.event'), t('groupChat.eventTitleRequired'));
       return;
     }
     if (!trimmedLocation) {
-      Alert.alert('Event', 'Bitte gib einen Ort ein.');
+      Alert.alert(t('groupChat.event'), t('groupChat.eventLocationRequired'));
       return;
     }
 
@@ -736,14 +756,14 @@ export default function GroupChatScreen() {
           ? await createGroupChatEvent(payload)
           : selectedEventId
             ? await updateGroupChatEvent({ ...payload, eventId: selectedEventId })
-            : { data: null, error: new Error('Kein Event ausgewählt.') };
+            : { data: null, error: new Error(t('groupChat.noEventSelected')) };
 
       if (result.error) {
         Alert.alert(
-          'Event',
+          t('groupChat.event'),
           result.error instanceof Error
             ? result.error.message
-            : 'Das Event konnte nicht gespeichert werden.',
+            : eventCopy.saveFailed,
         );
         return;
       }
@@ -754,8 +774,8 @@ export default function GroupChatScreen() {
       setTimeout(() => scrollToBottom(true), 250);
     } catch (error) {
       Alert.alert(
-        'Event',
-        error instanceof Error ? error.message : 'Das Event konnte nicht gespeichert werden.',
+        t('groupChat.event'),
+        error instanceof Error ? error.message : eventCopy.saveFailed,
       );
     } finally {
       setSavingEvent(false);
@@ -785,10 +805,10 @@ export default function GroupChatScreen() {
 
         if (error) {
           Alert.alert(
-            'Event',
+            t('groupChat.event'),
             error instanceof Error
               ? error.message
-              : 'Deine Antwort konnte nicht gespeichert werden.',
+              : t('feed.replySaveFailed'),
           );
           return;
         }
@@ -796,8 +816,8 @@ export default function GroupChatScreen() {
         await loadEventRsvps();
       } catch (error) {
         Alert.alert(
-          'Event',
-          error instanceof Error ? error.message : 'Deine Antwort konnte nicht gespeichert werden.',
+          t('groupChat.event'),
+          error instanceof Error ? error.message : t('feed.replySaveFailed'),
         );
       } finally {
         setRespondingKey(null);
@@ -809,12 +829,12 @@ export default function GroupChatScreen() {
   const handleCancelEvent = useCallback(
     (event: GroupChatEvent) => {
       Alert.alert(
-        'Event absagen',
-        `Möchtest du "${event.title}" wirklich absagen?`,
+        t('groupChat.eventCancelTitle'),
+        t('groupChat.eventCancelMessage', { title: event.title }),
         [
-          { text: 'Abbrechen', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Absagen',
+            text: t('groupChat.cancelEvent'),
             style: 'destructive',
             onPress: async () => {
               setCancellingEventId(event.id);
@@ -823,10 +843,10 @@ export default function GroupChatScreen() {
 
                 if (error) {
                   Alert.alert(
-                    'Event',
+                    t('groupChat.event'),
                     error instanceof Error
                       ? error.message
-                      : 'Das Event konnte nicht abgesagt werden.',
+                      : eventCopy.cancelFailed,
                   );
                   return;
                 }
@@ -834,8 +854,8 @@ export default function GroupChatScreen() {
                 await loadEvents();
               } catch (error) {
                 Alert.alert(
-                  'Event',
-                  error instanceof Error ? error.message : 'Das Event konnte nicht abgesagt werden.',
+                  t('groupChat.event'),
+                  error instanceof Error ? error.message : eventCopy.cancelFailed,
                 );
               } finally {
                 setCancellingEventId(null);
@@ -851,12 +871,12 @@ export default function GroupChatScreen() {
   const handleDeleteEvent = useCallback(
     (event: GroupChatEvent) => {
       Alert.alert(
-        'Event löschen',
-        `Möchtest du "${event.title}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`,
+        t('groupChat.eventDeleteTitle'),
+        t('groupChat.eventDeleteMessage', { title: event.title }),
         [
-          { text: 'Abbrechen', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Löschen',
+            text: t('common.delete'),
             style: 'destructive',
             onPress: async () => {
               setDeletingEventId(event.id);
@@ -865,10 +885,10 @@ export default function GroupChatScreen() {
 
                 if (error) {
                   Alert.alert(
-                    'Event',
+                    t('groupChat.event'),
                     error instanceof Error
                       ? error.message
-                      : 'Das Event konnte nicht gelöscht werden.',
+                      : t('groupChat.eventDeleteFailed'),
                   );
                   return;
                 }
@@ -880,8 +900,8 @@ export default function GroupChatScreen() {
                 setMessages((current) => current.filter((entry) => entry.event_id !== event.id));
               } catch (error) {
                 Alert.alert(
-                  'Event',
-                  error instanceof Error ? error.message : 'Das Event konnte nicht gelöscht werden.',
+                  t('groupChat.event'),
+                  error instanceof Error ? error.message : t('groupChat.eventDeleteFailed'),
                 );
               } finally {
                 setDeletingEventId(null);
@@ -899,10 +919,10 @@ export default function GroupChatScreen() {
       const isOwnMessage = message.sender_id === user?.id;
       if (!isOwnMessage && !canManage) return;
 
-      Alert.alert('Nachricht löschen', 'Möchtest du diese Nachricht wirklich löschen?', [
-        { text: 'Abbrechen', style: 'cancel' },
+      Alert.alert(t('chat.deleteMessageTitle'), t('chat.deleteMessageMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -914,7 +934,7 @@ export default function GroupChatScreen() {
               }
             } catch (error) {
               console.error('Fehler beim Löschen der Nachricht:', error);
-              Alert.alert('Gruppenchat', 'Die Nachricht konnte gerade nicht gelöscht werden.');
+              Alert.alert(t('groupChat.title'), t('chat.deleteMessageFailed'));
             }
           },
         },
@@ -935,7 +955,7 @@ export default function GroupChatScreen() {
 
     const trimmedName = editingGroupName.trim();
     if (!trimmedName) {
-      Alert.alert('Gruppe', 'Bitte gib einen Gruppennamen ein.');
+      Alert.alert(t('common.group'), t('groups.nameRequired'));
       return;
     }
 
@@ -949,8 +969,8 @@ export default function GroupChatScreen() {
 
     if (error || !data) {
       Alert.alert(
-        'Gruppe',
-        error instanceof Error ? error.message : 'Die Gruppe konnte nicht gespeichert werden.',
+        t('common.group'),
+        error instanceof Error ? error.message : t('groupChat.groupSaveFailed'),
       );
       return;
     }
@@ -969,8 +989,8 @@ export default function GroupChatScreen() {
 
     if (error) {
       Alert.alert(
-        'Gruppe',
-        error instanceof Error ? error.message : 'Die Gruppe konnte nicht gelöscht werden.',
+        t('common.group'),
+        error instanceof Error ? error.message : t('groupChat.groupDeleteFailed'),
       );
       return;
     }
@@ -983,21 +1003,21 @@ export default function GroupChatScreen() {
     if (!groupDetails || !canEditGroup || deletingGroup) return;
 
     Alert.alert(
-      'Gruppe löschen',
-      'Möchtest du diese Gruppe wirklich löschen? Alle Nachrichten und Mitgliedschaften gehen dabei dauerhaft verloren.',
+      t('groupChat.deleteGroupTitle'),
+      t('groupChat.deleteGroupMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             Alert.alert(
-              'Wirklich löschen?',
-              `Die Gruppe "${groupDetails.name}" wird dauerhaft gelöscht.`,
+              t('groupChat.deleteConfirmTitle'),
+              t('groupChat.deleteConfirmMessage', { name: groupDetails.name }),
               [
-                { text: 'Abbrechen', style: 'cancel' },
+                { text: t('common.cancel'), style: 'cancel' },
                 {
-                  text: 'Ja, löschen',
+                  text: t('groupChat.deleteConfirmAction'),
                   style: 'destructive',
                   onPress: () => {
                     void handleConfirmDeleteGroup();
@@ -1017,12 +1037,12 @@ export default function GroupChatScreen() {
       if (member.role === 'owner') return;
 
       Alert.alert(
-        'Mitglied entfernen',
-        `${member.display_name} wird aus der Gruppe entfernt.`,
+        t('groupChat.removeMemberTitle'),
+        t('groupChat.removeMemberMessage', { name: member.display_name }),
         [
-          { text: 'Abbrechen', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Entfernen',
+            text: t('common.remove'),
             style: 'destructive',
             onPress: async () => {
               setRemovingMemberId(member.user_id);
@@ -1031,10 +1051,10 @@ export default function GroupChatScreen() {
 
               if (error) {
                 Alert.alert(
-                  'Gruppe',
+                  t('common.group'),
                   error instanceof Error
                     ? error.message
-                    : 'Das Mitglied konnte nicht entfernt werden.',
+                    : t('groupChat.removeMemberFailed'),
                 );
                 return;
               }
@@ -1087,10 +1107,10 @@ export default function GroupChatScreen() {
       const canDelete = isOwnMessage || canManage;
 
       if (canDelete) {
-        Alert.alert('Nachricht', undefined, [
-          { text: 'Antworten', onPress: () => handleReply(message) },
-          { text: 'Löschen', style: 'destructive', onPress: () => handleDeleteMessage(message) },
-          { text: 'Abbrechen', style: 'cancel' },
+        Alert.alert(t('common.message'), undefined, [
+          { text: t('feed.replyAction'), onPress: () => handleReply(message) },
+          { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteMessage(message) },
+          { text: t('common.cancel'), style: 'cancel' },
         ]);
       } else {
         handleReply(message);
@@ -1122,11 +1142,11 @@ export default function GroupChatScreen() {
   const getMemberRoleLabel = useCallback((role: GroupMemberProfile['role']) => {
     switch (role) {
       case 'owner':
-        return 'Besitzer';
+        return t('common.owner');
       case 'admin':
-        return 'Admin';
+        return t('common.admin');
       default:
-        return 'Mitglied';
+        return t('common.member');
     }
   }, []);
 
@@ -1149,7 +1169,7 @@ export default function GroupChatScreen() {
       <View style={[styles.unreadDividerLine, { backgroundColor: theme.accent }]} />
       <View style={[styles.unreadDividerPill, { backgroundColor: theme.accent }]}>
         <ThemedText style={styles.unreadDividerText}>
-          {unreadCount} ungelesene {unreadCount === 1 ? 'Nachricht' : 'Nachrichten'}
+          {t(unreadCount === 1 ? 'common.unread.one' : 'common.unread.other', { count: unreadCount })}
         </ThemedText>
       </View>
       <View style={[styles.unreadDividerLine, { backgroundColor: theme.accent }]} />
@@ -1183,14 +1203,14 @@ export default function GroupChatScreen() {
   const renderQuoteBlock = (item: EnrichedGroupMessage, isOwnBubble: boolean) => {
     const quotedPreview =
       item.quotedMessageType === 'voice'
-        ? VOICE_MESSAGE_PREVIEW
+        ? t('chat.voiceTitle')
         : item.quotedMessageType === 'event'
-          ? (item.quotedEventTitle ? `Event: ${item.quotedEventTitle}` : EVENT_MESSAGE_PREVIEW)
+          ? (item.quotedEventTitle ? `${t('groupChat.event')}: ${item.quotedEventTitle}` : t('groupChat.event'))
           : item.quotedContent;
     if (!quotedPreview) return null;
     const quotedIsOwn = item.quotedSenderId === user?.id;
     const quotedMember = item.quotedSenderId ? memberMap.get(item.quotedSenderId) : null;
-    const quotedName = quotedIsOwn ? 'Du' : (quotedMember?.display_name ?? 'Unbekannt');
+    const quotedName = quotedIsOwn ? t('common.you') : (quotedMember?.display_name ?? eventCopy.unknown);
     const accentBarColor = quotedIsOwn ? theme.accent : getSenderColor(item.quotedSenderId ?? '');
     const quoteBg = isOwnBubble
       ? 'rgba(255,255,255,0.18)'
@@ -1262,7 +1282,7 @@ export default function GroupChatScreen() {
                         },
                       ]}
                     >
-                      {GROUP_CHAT_EVENT_RSVP_LABELS[status]}
+                      {eventCopy[status]}
                     </ThemedText>
                     <ThemedText
                       style={[
@@ -1390,7 +1410,7 @@ export default function GroupChatScreen() {
                     <ThemedText
                       style={[styles.voiceTitle, { color: isOwn ? ownTextColor : otherTextColor }]}
                     >
-                      {VOICE_MESSAGE_PREVIEW}
+                      {t('chat.voiceTitle')}
                     </ThemedText>
                     {isExpandedVoiceSlider ? (
                       <Slider
@@ -1488,7 +1508,7 @@ export default function GroupChatScreen() {
                   <ThemedText
                     style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
                   >
-                    {formatMessageTime(item.created_at)}
+                    {formatMessageTime(item.created_at, COMMUNITY_LOCALE_TAG)}
                   </ThemedText>
                 </View>
               </>
@@ -1510,7 +1530,7 @@ export default function GroupChatScreen() {
                       <View style={styles.eventMetaLine}>
                         <IconSymbol name="calendar" size={13} color={theme.textTertiary} />
                         <ThemedText style={[styles.eventMetaText, { color: theme.textTertiary }]}>
-                          {formatGroupEventDateTime(event.starts_at)}
+                          {formatGroupEventDateTime(event.starts_at, COMMUNITY_LOCALE_TAG)}
                         </ThemedText>
                       </View>
                       <View style={styles.eventMetaLine}>
@@ -1538,7 +1558,7 @@ export default function GroupChatScreen() {
                           { color: event.status === 'cancelled' ? '#D65441' : '#C0895B' },
                         ]}
                       >
-                        {event.status === 'cancelled' ? 'Abgesagt' : 'Aktiv'}
+                        {event.status === 'cancelled' ? eventCopy.cancelled : eventCopy.active}
                       </ThemedText>
                     </View>
                   </View>
@@ -1556,16 +1576,16 @@ export default function GroupChatScreen() {
 
                   <View style={styles.eventFooterRow}>
                     <ThemedText style={[styles.eventFooterText, { color: theme.textTertiary }]}>
-                      Tippen für Details
+                      {t('groupChat.tapForDetails')}
                     </ThemedText>
                     <ThemedText style={[styles.messageTime, { color: theme.textTertiary }]}>
-                      {formatMessageTime(item.created_at)}
+                      {formatMessageTime(item.created_at, COMMUNITY_LOCALE_TAG)}
                     </ThemedText>
                   </View>
                 </>
               ) : (
                 <ThemedText style={[styles.messageText, { color: theme.textTertiary }]}>
-                  Event wird geladen…
+                  {t('groupChat.eventLoading')}
                 </ThemedText>
               )
             ) : (
@@ -1576,7 +1596,7 @@ export default function GroupChatScreen() {
                   {item.content}
                   <ThemedText style={styles.metaSpacer}>
                     {'  '}
-                    {formatMessageTime(item.created_at)}
+                    {formatMessageTime(item.created_at, COMMUNITY_LOCALE_TAG)}
                   </ThemedText>
                 </ThemedText>
 
@@ -1584,7 +1604,7 @@ export default function GroupChatScreen() {
                   <ThemedText
                     style={[styles.messageTime, { color: isOwn ? ownMetaColor : otherMetaColor }]}
                   >
-                    {formatMessageTime(item.created_at)}
+                    {formatMessageTime(item.created_at, COMMUNITY_LOCALE_TAG)}
                   </ThemedText>
                 </View>
               </>
@@ -1615,8 +1635,8 @@ export default function GroupChatScreen() {
 
   const replyToSenderName = useMemo(() => {
     if (!replyTo) return '';
-    if (replyTo.sender_id === user?.id) return 'Du';
-    return memberMap.get(replyTo.sender_id)?.display_name ?? 'Unbekannt';
+    if (replyTo.sender_id === user?.id) return t('common.you');
+    return memberMap.get(replyTo.sender_id)?.display_name ?? eventCopy.unknown;
   }, [replyTo, user?.id, memberMap]);
 
   const replyToSenderColor = useMemo(() => {
@@ -1631,7 +1651,7 @@ export default function GroupChatScreen() {
     (eventId: string, status: GroupChatEventRsvpStatus) => {
       return (eventRsvpMap.get(eventId) || [])
         .filter((entry) => entry.status === status)
-        .map((entry) => memberMap.get(entry.user_id)?.display_name || 'Unbekannt');
+        .map((entry) => memberMap.get(entry.user_id)?.display_name || eventCopy.unknown);
     },
     [eventRsvpMap, memberMap],
   );
@@ -1646,7 +1666,9 @@ export default function GroupChatScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <Header
           title={groupName}
-          subtitle={activeMemberCount > 0 ? `${activeMemberCount} Mitglieder` : 'Gruppenchat'}
+          subtitle={activeMemberCount > 0
+            ? t(activeMemberCount === 1 ? 'groups.members.one' : 'groups.members.other', { count: activeMemberCount })
+            : t('groupChat.title')}
           showBackButton
           onBackPress={() => {
             if (from === 'notifications') {
@@ -1734,9 +1756,9 @@ export default function GroupChatScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <IconSymbol name="bubble.left.and.bubble.right" size={36} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.emptyTitle}>Noch keine Nachrichten</ThemedText>
+                  <ThemedText style={styles.emptyTitle}>{t('groupChat.emptyTitle')}</ThemedText>
                   <ThemedText style={styles.emptyText}>
-                    Schreib die erste Nachricht im Gruppenchat!
+                    {t('groupChat.emptyText')}
                   </ThemedText>
                 </View>
               }
@@ -1756,6 +1778,9 @@ export default function GroupChatScreen() {
                 ? getMessagePreviewText({
                     ...replyTo,
                     event_title: replyTo.event_id ? eventMap.get(replyTo.event_id)?.title ?? null : null,
+                  }, {
+                    voice: t('chat.voiceTitle'),
+                    event: t('groupChat.event'),
                   })
                 : null
             }
@@ -1765,6 +1790,7 @@ export default function GroupChatScreen() {
             theme={theme}
             isDark={isDark}
             bottomInset={insets.bottom}
+            locale={ACTIVE_COMMUNITY_LOCALE}
             leadingAction={
               <TouchableOpacity
                 style={[
@@ -1822,11 +1848,11 @@ export default function GroupChatScreen() {
                     activeOpacity={0.7}
                   >
                     <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
-                      Schließen
+                      {t('common.close')}
                     </ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
-                    Event
+                    {t('groupChat.event')}
                   </ThemedText>
                   <View style={styles.modalPlaceholder} />
                 </View>
@@ -1846,7 +1872,7 @@ export default function GroupChatScreen() {
                           {selectedEvent.title}
                         </ThemedText>
                         <ThemedText style={[styles.detailEventMeta, { color: theme.textTertiary }]}>
-                          {formatGroupEventDateTime(selectedEvent.starts_at)}
+                          {formatGroupEventDateTime(selectedEvent.starts_at, COMMUNITY_LOCALE_TAG)}
                         </ThemedText>
                         <ThemedText style={[styles.detailEventMeta, { color: theme.textTertiary }]}>
                           {selectedEvent.location}
@@ -1869,7 +1895,7 @@ export default function GroupChatScreen() {
                             { color: selectedEvent.status === 'cancelled' ? '#D65441' : '#C0895B' },
                           ]}
                         >
-                          {selectedEvent.status === 'cancelled' ? 'Abgesagt' : 'Aktiv'}
+                          {selectedEvent.status === 'cancelled' ? eventCopy.cancelled : eventCopy.active}
                         </ThemedText>
                       </View>
                     </View>
@@ -1898,7 +1924,7 @@ export default function GroupChatScreen() {
                           >
                             <IconSymbol name="pencil" size={14} color={theme.text} />
                             <ThemedText style={[styles.detailEventActionText, { color: theme.text }]}>
-                              Bearbeiten
+                              {t('common.edit')}
                             </ThemedText>
                           </TouchableOpacity>
                         ) : null}
@@ -1922,7 +1948,7 @@ export default function GroupChatScreen() {
                             ) : (
                               <>
                                 <IconSymbol name="xmark.circle" size={14} color="#D65441" />
-                                <ThemedText style={styles.detailEventCancelText}>Absagen</ThemedText>
+                                <ThemedText style={styles.detailEventCancelText}>{t('groupChat.cancelEvent')}</ThemedText>
                               </>
                             )}
                           </TouchableOpacity>
@@ -1947,7 +1973,7 @@ export default function GroupChatScreen() {
                             ) : (
                               <>
                                 <IconSymbol name="trash.fill" size={14} color="#D65441" />
-                                <ThemedText style={styles.detailEventDeleteText}>Löschen</ThemedText>
+                                <ThemedText style={styles.detailEventDeleteText}>{t('common.delete')}</ThemedText>
                               </>
                             )}
                           </TouchableOpacity>
@@ -1970,7 +1996,7 @@ export default function GroupChatScreen() {
                         >
                           <View style={styles.eventParticipantHeader}>
                             <ThemedText style={[styles.eventParticipantTitle, { color: theme.text }]}>
-                              {GROUP_CHAT_EVENT_RSVP_LABELS[status]}
+                              {eventCopy[status]}
                             </ThemedText>
                             <ThemedText style={[styles.eventParticipantCount, { color: theme.textTertiary }]}>
                               {participants.length}
@@ -1987,7 +2013,7 @@ export default function GroupChatScreen() {
                             ))
                           ) : (
                             <ThemedText style={[styles.eventParticipantEmpty, { color: theme.textTertiary }]}>
-                              Noch keine Antworten
+                              {t('groupChat.noReplies')}
                             </ThemedText>
                           )}
                         </View>
@@ -2053,11 +2079,11 @@ export default function GroupChatScreen() {
                     activeOpacity={0.7}
                   >
                     <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
-                      Abbrechen
+                      {t('common.cancel')}
                     </ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
-                    {eventModalMode === 'create' ? 'Event erstellen' : 'Event bearbeiten'}
+                    {eventModalMode === 'create' ? eventCopy.create : eventCopy.edit}
                   </ThemedText>
                   <View style={styles.modalPlaceholder} />
                 </View>
@@ -2065,7 +2091,7 @@ export default function GroupChatScreen() {
                 <TextInput
                   value={eventTitle}
                   onChangeText={setEventTitle}
-                  placeholder="Titel"
+                  placeholder={t('groupChat.titlePlaceholder')}
                   placeholderTextColor={theme.textTertiary}
                   style={[
                     styles.modalInput,
@@ -2080,7 +2106,7 @@ export default function GroupChatScreen() {
                 <TextInput
                   value={eventLocation}
                   onChangeText={setEventLocation}
-                  placeholder="Ort"
+                  placeholder={t('groupChat.locationPlaceholder')}
                   placeholderTextColor={theme.textTertiary}
                   style={[
                     styles.modalInput,
@@ -2095,7 +2121,7 @@ export default function GroupChatScreen() {
                 <TextInput
                   value={eventDescription}
                   onChangeText={setEventDescription}
-                  placeholder="Beschreibung (optional)"
+                  placeholder={t('groupChat.optionalDescription')}
                   placeholderTextColor={theme.textTertiary}
                   multiline
                   style={[
@@ -2123,10 +2149,10 @@ export default function GroupChatScreen() {
                   <IconSymbol name="calendar.badge.clock" size={16} color={theme.accent} />
                   <View style={styles.eventPickerBody}>
                     <ThemedText style={[styles.eventPickerLabel, { color: theme.textTertiary }]}>
-                      Beginn
+                      {t('groupChat.start')}
                     </ThemedText>
                     <ThemedText style={[styles.eventPickerText, { color: theme.text }]}>
-                      {eventStartsAt.toLocaleString('de-DE', {
+                      {eventStartsAt.toLocaleString(COMMUNITY_LOCALE_TAG, {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric',
@@ -2175,7 +2201,7 @@ export default function GroupChatScreen() {
                         }}
                         activeOpacity={0.85}
                       >
-                        <ThemedText style={styles.datePickerDoneText}>Fertig</ThemedText>
+                        <ThemedText style={styles.datePickerDoneText}>{t('groupChat.done')}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -2195,7 +2221,7 @@ export default function GroupChatScreen() {
                 >
                   <IconSymbol name="photo" size={16} color={theme.accent} />
                   <ThemedText style={[styles.eventCoverButtonText, { color: theme.text }]}>
-                    Titelbild auswählen
+                    {t('groupChat.selectCover')}
                   </ThemedText>
                 </TouchableOpacity>
 
@@ -2220,7 +2246,7 @@ export default function GroupChatScreen() {
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
                       <ThemedText style={styles.saveGroupButtonText}>
-                        {eventModalMode === 'create' ? 'Event posten' : 'Event speichern'}
+                        {eventModalMode === 'create' ? eventCopy.post : eventCopy.save}
                       </ThemedText>
                     )}
                   </LinearGradient>
@@ -2261,11 +2287,11 @@ export default function GroupChatScreen() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <ThemedText style={[styles.manualPickerActionText, { color: theme.textTertiary }]}>
-                            Abbrechen
+                            {t('common.cancel')}
                           </ThemedText>
                         </TouchableOpacity>
                         <ThemedText style={[styles.manualPickerTitle, { color: theme.text }]}>
-                          Beginn
+                          {t('groupChat.start')}
                         </ThemedText>
                         <TouchableOpacity
                           onPress={() => {
@@ -2275,7 +2301,7 @@ export default function GroupChatScreen() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
                           <ThemedText style={[styles.manualPickerActionText, { color: theme.accent }]}>
-                            Fertig
+                            {t('groupChat.done')}
                           </ThemedText>
                         </TouchableOpacity>
                       </View>
@@ -2285,7 +2311,7 @@ export default function GroupChatScreen() {
                         maximumDate={new Date(2100, 11, 31, 23, 59, 59, 999)}
                         mode="datetime"
                         display="spinner"
-                        locale="de-DE"
+                        locale={COMMUNITY_LOCALE_TAG}
                         onChange={(event, date) => {
                           if (event.type === 'dismissed') return;
                           setEventStartPickerDraft((prev) =>
@@ -2350,11 +2376,11 @@ export default function GroupChatScreen() {
                     activeOpacity={0.7}
                   >
                     <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
-                      Abbrechen
+                      {t('common.cancel')}
                     </ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
-                    Gruppe bearbeiten
+                    {t('groupChat.editGroup')}
                   </ThemedText>
                   <View style={styles.modalPlaceholder} />
                 </View>
@@ -2362,7 +2388,7 @@ export default function GroupChatScreen() {
                 <TextInput
                   value={editingGroupName}
                   onChangeText={setEditingGroupName}
-                  placeholder="Gruppenname"
+                  placeholder={t('groups.namePlaceholder')}
                   placeholderTextColor={theme.textTertiary}
                   style={[
                     styles.modalInput,
@@ -2377,7 +2403,7 @@ export default function GroupChatScreen() {
                 <TextInput
                   value={editingGroupDescription}
                   onChangeText={setEditingGroupDescription}
-                  placeholder="Beschreibung"
+                  placeholder={t('groupChat.descriptionPlaceholder')}
                   placeholderTextColor={theme.textTertiary}
                   multiline
                   style={[
@@ -2404,7 +2430,7 @@ export default function GroupChatScreen() {
                     {savingGroup ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <ThemedText style={styles.saveGroupButtonText}>Speichern</ThemedText>
+                      <ThemedText style={styles.saveGroupButtonText}>{t('common.save')}</ThemedText>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -2422,7 +2448,7 @@ export default function GroupChatScreen() {
                     >
                       <View style={styles.memberSectionHeader}>
                         <ThemedText style={[styles.memberSectionTitle, { color: theme.text }]}>
-                          Mitglieder
+                          {memberTitle}
                         </ThemedText>
                         <ThemedText style={[styles.memberSectionCount, { color: theme.textTertiary }]}>
                           {activeMemberCount}
@@ -2472,7 +2498,7 @@ export default function GroupChatScreen() {
                                 </ThemedText>
                                 {isCurrentUser ? (
                                   <ThemedText style={[styles.memberYouBadge, { color: theme.textTertiary }]}>
-                                    Du
+                                    {t('common.you')}
                                   </ThemedText>
                                 ) : null}
                               </View>
@@ -2499,7 +2525,7 @@ export default function GroupChatScreen() {
                                   <ActivityIndicator size="small" color="#D65441" />
                                 ) : (
                                   <ThemedText style={styles.memberRemoveButtonText}>
-                                    Entfernen
+                                    {t('common.remove')}
                                   </ThemedText>
                                 )}
                               </TouchableOpacity>
@@ -2527,7 +2553,7 @@ export default function GroupChatScreen() {
                       ) : (
                         <>
                           <IconSymbol name="trash.fill" size={16} color="#D65441" />
-                          <ThemedText style={styles.deleteGroupButtonText}>Gruppe löschen</ThemedText>
+                          <ThemedText style={styles.deleteGroupButtonText}>{t('groupChat.deleteGroupTitle')}</ThemedText>
                         </>
                       )}
                     </TouchableOpacity>
@@ -2584,11 +2610,11 @@ export default function GroupChatScreen() {
                     activeOpacity={0.7}
                   >
                     <ThemedText style={[styles.modalCancel, { color: theme.textTertiary }]}>
-                      Schließen
+                      {t('common.close')}
                     </ThemedText>
                   </TouchableOpacity>
                   <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
-                    Mitglieder
+                    {memberTitle}
                   </ThemedText>
                   <View style={styles.modalPlaceholder} />
                 </View>
@@ -2604,7 +2630,7 @@ export default function GroupChatScreen() {
                 >
                   <View style={styles.memberSectionHeader}>
                     <ThemedText style={[styles.memberSectionTitle, { color: theme.text }]}>
-                      Mitglieder
+                      {memberTitle}
                     </ThemedText>
                     <ThemedText style={[styles.memberSectionCount, { color: theme.textTertiary }]}>
                       {activeMemberCount}
@@ -2657,7 +2683,7 @@ export default function GroupChatScreen() {
                             </ThemedText>
                             {isCurrentUser ? (
                               <ThemedText style={[styles.memberYouBadge, { color: theme.textTertiary }]}>
-                                Du
+                                {t('common.you')}
                               </ThemedText>
                             ) : null}
                           </View>

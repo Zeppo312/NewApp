@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,11 +19,20 @@ import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/lib/supabase';
+import {
+  AuthTranslationKey,
+  DEFAULT_AUTH_LOCALE,
+  translateAuthText,
+} from '@/lib/authTranslations';
 
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6';
+let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
+const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
+  translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
 
 export default function ResetPasswordScreen() {
+  ACTIVE_AUTH_LOCALE = useLocale().locale;
   const router = useRouter();
   const searchParams = useLocalSearchParams();
   const rawUrl = Linking.useURL();
@@ -84,7 +95,7 @@ export default function ResetPasswordScreen() {
         const codeOrToken = code ?? token;
 
         if (codeOrToken) {
-          if (isMounted) setStatus('Link wird verarbeitet…');
+          if (isMounted) setStatus(t('reset.processing'));
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeOrToken);
           if (exchangeError) {
             const rawType = searchParams.type ?? rawUrlParams.type;
@@ -100,7 +111,7 @@ export default function ResetPasswordScreen() {
             }
           }
         } else if (accessToken && refreshToken) {
-          if (isMounted) setStatus('Link wird verarbeitet…');
+          if (isMounted) setStatus(t('reset.processing'));
           const { error: setSessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -117,7 +128,7 @@ export default function ResetPasswordScreen() {
         console.error('Reset password session check failed:', err);
         if (isMounted) {
           setHasSession(false);
-          setStatus('Link konnte nicht verarbeitet werden.');
+          setStatus(t('reset.processingFailed'));
         }
       } finally {
         if (isMounted) setIsCheckingSession(false);
@@ -136,11 +147,11 @@ export default function ResetPasswordScreen() {
 
     const nextPassword = password.trim();
     if (nextPassword.length < 8) {
-      Alert.alert('Passwort zu kurz', 'Bitte wähle ein Passwort mit mindestens 8 Zeichen.');
+      Alert.alert(t('reset.tooShortTitle'), t('reset.tooShortMessage'));
       return;
     }
     if (nextPassword !== passwordConfirm.trim()) {
-      Alert.alert('Passwörter stimmen nicht überein', 'Bitte überprüfe die Eingabe.');
+      Alert.alert(t('reset.mismatchTitle'), t('reset.mismatchMessage'));
       return;
     }
 
@@ -149,12 +160,12 @@ export default function ResetPasswordScreen() {
       const { error } = await supabase.auth.updateUser({ password: nextPassword });
       if (error) throw error;
 
-      Alert.alert('Passwort geändert', 'Dein Passwort wurde erfolgreich aktualisiert.', [
-        { text: 'Weiter', onPress: () => router.replace('/') },
+      Alert.alert(t('reset.changedTitle'), t('reset.changedMessage'), [
+        { text: t('common.continue'), onPress: () => router.replace('/') },
       ]);
     } catch (err: any) {
       console.error('Failed to update password:', err);
-      Alert.alert('Fehler', err?.message || 'Dein Passwort konnte nicht geändert werden.');
+      Alert.alert(t('common.error'), t('reset.updateFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -166,8 +177,8 @@ export default function ResetPasswordScreen() {
       <ThemedBackground style={styles.background}>
         <SafeAreaView style={styles.safeArea}>
           <Header
-            title="Passwort ändern"
-            subtitle="Bestätige dein neues Passwort"
+            title={t('reset.title')}
+            subtitle={t('reset.subtitle')}
             showBackButton
             onBackPress={() => router.replace('/(auth)/login')}
           />
@@ -176,30 +187,30 @@ export default function ResetPasswordScreen() {
             {isCheckingSession ? (
               <View style={styles.center}>
                 <ActivityIndicator size="large" color={ACCENT_PURPLE} />
-                <ThemedText style={styles.statusText}>Lade…</ThemedText>
+                <ThemedText style={styles.statusText}>{t('reset.loading')}</ThemedText>
               </View>
             ) : !hasSession ? (
               <View style={styles.center}>
-                <ThemedText style={styles.infoTitle}>Link ungültig</ThemedText>
+                <ThemedText style={styles.infoTitle}>{t('reset.invalidLinkTitle')}</ThemedText>
                 <ThemedText style={styles.infoText}>
                   {status ||
-                    'Der Link ist abgelaufen oder wurde bereits verwendet. Bitte fordere eine neue E-Mail an.'}
+                    t('reset.invalidLinkMessage')}
                 </ThemedText>
                 <TouchableOpacity
                   onPress={() => router.replace('/(auth)/login')}
                   activeOpacity={0.9}
                   style={styles.secondaryButton}
                 >
-                  <ThemedText style={styles.secondaryButtonText}>Zum Login</ThemedText>
+                  <ThemedText style={styles.secondaryButtonText}>{t('reset.toLogin')}</ThemedText>
                 </TouchableOpacity>
               </View>
             ) : (
               <BlurView intensity={28} tint="light" style={styles.card}>
-                <ThemedText style={styles.label}>Neues Passwort</ThemedText>
+                <ThemedText style={styles.label}>{t('reset.newPassword')}</ThemedText>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Mindestens 8 Zeichen"
+                  placeholder={t('reset.passwordPlaceholder')}
                   placeholderTextColor="#9BA0A6"
                   secureTextEntry
                   autoCapitalize="none"
@@ -207,11 +218,11 @@ export default function ResetPasswordScreen() {
                   style={styles.input}
                 />
 
-                <ThemedText style={[styles.label, { marginTop: 14 }]}>Passwort bestätigen</ThemedText>
+                <ThemedText style={[styles.label, { marginTop: 14 }]}>{t('reset.confirmPassword')}</ThemedText>
                 <TextInput
                   value={passwordConfirm}
                   onChangeText={setPasswordConfirm}
-                  placeholder="Wiederholen"
+                  placeholder={t('reset.confirmPlaceholder')}
                   placeholderTextColor="#9BA0A6"
                   secureTextEntry
                   autoCapitalize="none"
@@ -231,7 +242,7 @@ export default function ResetPasswordScreen() {
                   {isSubmitting ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <ThemedText style={styles.primaryButtonText}>Speichern</ThemedText>
+                    <ThemedText style={styles.primaryButtonText}>{t('reset.save')}</ThemedText>
                   )}
                 </TouchableOpacity>
               </BlurView>

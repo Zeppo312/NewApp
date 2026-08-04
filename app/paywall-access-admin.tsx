@@ -24,26 +24,29 @@ import {
   LiquidGlassCard,
 } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile, invalidateUserProfileCache } from '@/lib/appCache';
 import {
-  getPaywallAccessRoleLabel,
   searchPaywallAccessUsers,
   setUserPaywallAccessRole,
   type PaywallAccessAdminUser,
   type PaywallAccessRole,
 } from '@/lib/paywallAccess';
 
-const ROLE_OPTIONS: { role: PaywallAccessRole | null; label: string }[] = [
-  { role: null, label: 'Keine' },
-  { role: 'lite_tester', label: 'Lite-Tester' },
-  { role: 'tester', label: 'Tester' },
-  { role: 'cooperation_partner', label: 'Kooperationspartner' },
-  { role: 'premium_tester', label: 'Premiumtester' },
-];
-
 export default function PaywallAccessAdminScreen() {
+  const { locale } = useLocale();
+  const c = locale === 'en' ? {
+    none: 'None', lite: 'Lite tester', tester: 'Tester', partner: 'Cooperation partner', premium: 'Premium tester', loadFailed: 'Users could not be loaded.', profileMissing: 'Profile missing', profileMissingText: 'This user does not have a profile yet. Special access can be assigned once a profile has been created.', adminAccess: 'Admin access', adminAccessText: 'Admins do not need additional special paywall access.', error: 'Error', saveFailed: 'The role could not be saved.', searchHelp: 'Search by email, first name, last name, or username.', searching: 'Searching …', noResults: 'No matching users found.', title: 'Paywall access', subtitle: 'Manage testers, partners, and premium testers', placeholder: 'Email, first name, last name, or username', checking: 'Checking admin permissions …', adminsOnly: 'This section is for admins only.', result: 'result', results: 'results', unnamed: 'Unnamed', noEmail: 'No email', noProfile: 'No profile', admin: 'Admin',
+  } : locale === 'es' ? {
+    none: 'Ninguno', lite: 'Usuario de prueba Lite', tester: 'Usuario de prueba', partner: 'Socio colaborador', premium: 'Usuario de prueba Premium', loadFailed: 'No se pudieron cargar los usuarios.', profileMissing: 'Falta el perfil', profileMissingText: 'Este usuario aún no tiene perfil. El acceso especial podrá asignarse cuando se cree uno.', adminAccess: 'Acceso de administrador', adminAccessText: 'Los administradores no necesitan acceso especial adicional a la pantalla de pago.', error: 'Error', saveFailed: 'No se pudo guardar el rol.', searchHelp: 'Busca por correo, nombre, apellido o usuario.', searching: 'Buscando …', noResults: 'No se encontraron usuarios.', title: 'Accesos a la pantalla de pago', subtitle: 'Gestiona usuarios de prueba, socios y Premium', placeholder: 'Correo, nombre, apellido o usuario', checking: 'Comprobando permisos de administrador …', adminsOnly: 'Esta sección es solo para administradores.', result: 'resultado', results: 'resultados', unnamed: 'Sin nombre', noEmail: 'Sin correo', noProfile: 'Sin perfil', admin: 'Admin',
+  } : {
+    none: 'Keine', lite: 'Lite-Tester', tester: 'Tester', partner: 'Kooperationspartner', premium: 'Premiumtester', loadFailed: 'Nutzer konnten nicht geladen werden.', profileMissing: 'Profil fehlt', profileMissingText: 'Für diesen Nutzer existiert noch kein Profil. Der Sonderzugang kann erst gesetzt werden, wenn ein Profil angelegt wurde.', adminAccess: 'Admin-Zugang', adminAccessText: 'Für Admins ist kein zusätzlicher Paywall-Sonderzugang nötig.', error: 'Fehler', saveFailed: 'Die Rolle konnte nicht gespeichert werden.', searchHelp: 'Suche nach E-Mail, Vorname, Nachname oder Username.', searching: 'Suche läuft …', noResults: 'Keine passenden Nutzer gefunden.', title: 'Paywall-Zugänge', subtitle: 'Tester, Kooperationspartner & Premiumtester verwalten', placeholder: 'E-Mail, Vorname, Nachname oder Username', checking: 'Admin-Rechte werden geprüft …', adminsOnly: 'Dieser Bereich ist nur für Admins.', result: 'Ergebnis', results: 'Ergebnisse', unnamed: 'Unbenannt', noEmail: 'Keine E-Mail', noProfile: 'Kein Profil', admin: 'Admin',
+  };
+  const roleOptions: { role: PaywallAccessRole | null; label: string }[] = [
+    { role: null, label: c.none }, { role: 'lite_tester', label: c.lite }, { role: 'tester', label: c.tester }, { role: 'cooperation_partner', label: c.partner }, { role: 'premium_tester', label: c.premium },
+  ];
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -129,7 +132,7 @@ export default function PaywallAccessAdminScreen() {
         console.error('Failed to search paywall access users:', error);
         setResults([]);
         setSearchError(
-          error?.message ?? 'Nutzer konnten nicht geladen werden.',
+          c.loadFailed,
         );
       } finally {
         if (!cancelled) {
@@ -142,7 +145,7 @@ export default function PaywallAccessAdminScreen() {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [isAdmin, trimmedQuery]);
+  }, [c.loadFailed, isAdmin, trimmedQuery]);
 
   const handleRoleChange = async (
     targetUser: PaywallAccessAdminUser,
@@ -150,16 +153,16 @@ export default function PaywallAccessAdminScreen() {
   ) => {
     if (!targetUser.has_profile) {
       Alert.alert(
-        'Profil fehlt',
-        'Für diesen Nutzer existiert noch kein Profil. Der Sonderzugang kann erst gesetzt werden, wenn ein Profil angelegt wurde.',
+        c.profileMissing,
+        c.profileMissingText,
       );
       return;
     }
 
     if (targetUser.is_admin) {
       Alert.alert(
-        'Admin-Zugang',
-        'Für Admins ist kein zusätzlicher Paywall-Sonderzugang nötig.',
+        c.adminAccess,
+        c.adminAccessText,
       );
       return;
     }
@@ -177,8 +180,8 @@ export default function PaywallAccessAdminScreen() {
     } catch (error: any) {
       console.error('Failed to update paywall access role:', error);
       Alert.alert(
-        'Fehler',
-        error?.message ?? 'Die Rolle konnte nicht gespeichert werden.',
+        c.error,
+        c.saveFailed,
       );
     } finally {
       setUpdatingUserId(null);
@@ -187,16 +190,16 @@ export default function PaywallAccessAdminScreen() {
 
   const emptyStateText = useMemo(() => {
     if (trimmedQuery.length < 2) {
-      return 'Suche nach E-Mail, Vorname, Nachname oder Username.';
+      return c.searchHelp;
     }
     if (isSearching) {
-      return 'Suche läuft…';
+      return c.searching;
     }
     if (searchError) {
       return searchError;
     }
-    return 'Keine passenden Nutzer gefunden.';
-  }, [isSearching, searchError, trimmedQuery.length]);
+    return c.noResults;
+  }, [c.noResults, c.searchHelp, c.searching, isSearching, searchError, trimmedQuery.length]);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -210,8 +213,8 @@ export default function PaywallAccessAdminScreen() {
         />
 
         <Header
-          title="Paywall-Zugänge"
-          subtitle="Tester, Kooperationspartner & Premiumtester verwalten"
+          title={c.title}
+          subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
           onBackPress={() => router.push('/app-settings')}
@@ -241,7 +244,7 @@ export default function PaywallAccessAdminScreen() {
               <TextInput
                 value={query}
                 onChangeText={setQuery}
-                placeholder="E-Mail, Vorname, Nachname oder Username"
+                placeholder={c.placeholder}
                 placeholderTextColor={textSecondary}
                 style={[styles.searchInput, { color: textPrimary }]}
                 autoCapitalize="none"
@@ -265,7 +268,7 @@ export default function PaywallAccessAdminScreen() {
               <View style={styles.centerState}>
                 <ActivityIndicator color={theme.accent} />
                 <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-                  Admin-Rechte werden geprüft…
+                  {c.checking}
                 </ThemedText>
               </View>
             ) : !isAdmin ? (
@@ -278,7 +281,7 @@ export default function PaywallAccessAdminScreen() {
                   />
                 </View>
                 <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-                  Dieser Bereich ist nur für Admins.
+                  {c.adminsOnly}
                 </ThemedText>
               </View>
             ) : results.length === 0 ? (
@@ -297,11 +300,11 @@ export default function PaywallAccessAdminScreen() {
             ) : (
               <View style={styles.resultList}>
                 <ThemedText style={[styles.resultCount, { color: textSecondary }]}>
-                  {results.length} {results.length === 1 ? 'Ergebnis' : 'Ergebnisse'}
+                  {results.length} {results.length === 1 ? c.result : c.results}
                 </ThemedText>
                 {results.map((item, index) => {
                   const isUpdating = updatingUserId === item.user_id;
-                  const roleLabel = getPaywallAccessRoleLabel(item.paywall_access_role);
+                  const roleLabel = roleOptions.find((option) => option.role === item.paywall_access_role)?.label ?? c.none;
                   const isActionDisabled = isUpdating || !!item.is_admin || !item.has_profile;
                   const isLast = index === results.length - 1;
 
@@ -318,13 +321,13 @@ export default function PaywallAccessAdminScreen() {
                             <ThemedText
                               style={[styles.resultName, { color: textPrimary }]}
                             >
-                              {[item.first_name, item.last_name].filter(Boolean).join(' ') || item.username || 'Unbenannt'}
+                              {[item.first_name, item.last_name].filter(Boolean).join(' ') || item.username || c.unnamed}
                             </ThemedText>
                             <ThemedText
                               style={[styles.resultEmail, { color: textSecondary }]}
                               numberOfLines={1}
                             >
-                              {item.email ?? 'Keine E-Mail'}
+                              {item.email ?? c.noEmail}
                               {item.username ? `  ·  @${item.username}` : ''}
                             </ThemedText>
                           </View>
@@ -334,12 +337,12 @@ export default function PaywallAccessAdminScreen() {
                             <View style={styles.chipWrap}>
                               {item.is_admin ? (
                                 <View style={[styles.chip, styles.adminChip]}>
-                                  <ThemedText style={styles.adminChipText}>Admin</ThemedText>
+                                  <ThemedText style={styles.adminChipText}>{c.admin}</ThemedText>
                                 </View>
                               ) : null}
                               {!item.has_profile ? (
                                 <View style={[styles.chip, styles.warningChip]}>
-                                  <ThemedText style={styles.warningChipText}>Kein Profil</ThemedText>
+                                  <ThemedText style={styles.warningChipText}>{c.noProfile}</ThemedText>
                                 </View>
                               ) : item.paywall_access_role ? (
                                 <View style={[styles.chip, styles.roleChip]}>
@@ -351,7 +354,7 @@ export default function PaywallAccessAdminScreen() {
                         </View>
 
                         <View style={styles.roleButtonRow}>
-                          {ROLE_OPTIONS.map((option) => {
+                          {roleOptions.map((option) => {
                             const isSelected = item.paywall_access_role === option.role;
                             return (
                               <TouchableOpacity

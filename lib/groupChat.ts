@@ -52,21 +52,31 @@ const isSameDay = (a: Date, b: Date) =>
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
-export const formatMessageTime = (dateString: string) => {
+export const formatMessageTime = (dateString: string, locale = 'de-DE') => {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 };
 
-export const formatDateLabel = (dateString: string) => {
+type GroupChatLocalization = {
+  locale?: string;
+  today?: string;
+  yesterday?: string;
+  unknown?: string;
+};
+
+export const formatDateLabel = (
+  dateString: string,
+  localization: GroupChatLocalization = {},
+) => {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '';
   const now = new Date();
-  if (isSameDay(date, now)) return 'Heute';
+  if (isSameDay(date, now)) return localization.today || 'Heute';
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (isSameDay(date, yesterday)) return 'Gestern';
-  return date.toLocaleDateString('de-DE', {
+  if (isSameDay(date, yesterday)) return localization.yesterday || 'Gestern';
+  return date.toLocaleDateString(localization.locale || 'de-DE', {
     day: 'numeric',
     month: 'long',
     ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
@@ -81,21 +91,28 @@ export function enrichGroupMessages(
   messages: GroupChatMessage[],
   memberMap: Map<string, GroupChatMemberInfo>,
   currentUserId?: string,
+  localization?: GroupChatLocalization,
 ): EnrichedGroupMessage[];
 export function enrichGroupMessages(
   messages: GroupChatMessage[],
   memberMap: Map<string, GroupChatMemberInfo>,
   eventMap: Map<string, GroupChatEvent>,
   currentUserId?: string,
+  localization?: GroupChatLocalization,
 ): EnrichedGroupMessage[];
 export function enrichGroupMessages(
   messages: GroupChatMessage[],
   memberMap: Map<string, GroupChatMemberInfo>,
   eventMapOrCurrentUserId?: Map<string, GroupChatEvent> | string,
-  currentUserId?: string,
+  currentUserIdOrLocalization?: string | GroupChatLocalization,
+  localizationOverride?: GroupChatLocalization,
 ): EnrichedGroupMessage[] {
   const eventMap =
     eventMapOrCurrentUserId instanceof Map ? eventMapOrCurrentUserId : new Map<string, GroupChatEvent>();
+  const localization =
+    typeof currentUserIdOrLocalization === 'object'
+      ? currentUserIdOrLocalization
+      : localizationOverride || {};
   const map = new Map<string, GroupChatMessage>();
   for (const m of messages) map.set(m.id, m);
 
@@ -130,12 +147,12 @@ export function enrichGroupMessages(
       isFirstInGroup,
       isLastInGroup,
       showDateSeparator,
-      dateLabel: formatDateLabel(msg.created_at),
+      dateLabel: formatDateLabel(msg.created_at, localization),
       quotedContent: quoted?.content ?? null,
       quotedMessageType: quoted?.message_type ?? null,
       quotedSenderId: quoted?.sender_id ?? null,
       quotedEventTitle: quotedEvent?.title ?? null,
-      senderDisplayName: member?.display_name ?? 'Unbekannt',
+      senderDisplayName: member?.display_name ?? localization.unknown ?? 'Unbekannt',
       senderAvatarUrl: member?.avatar_url ?? null,
     };
   });

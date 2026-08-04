@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, ScrollView, StatusBar, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +29,7 @@ import {
 
 const BLUE_GLASS_OVERLAY = 'rgba(166,205,237,0.18)';
 const BLUE_GLASS_BORDER = 'rgba(166,205,237,0.35)';
-const ACTIVE_BABY_WEATHER_LOCALE = DEFAULT_BABY_WEATHER_LOCALE;
+let ACTIVE_BABY_WEATHER_LOCALE = DEFAULT_BABY_WEATHER_LOCALE;
 const t = (key: BabyWeatherTranslationKey, params?: Record<string, string | number>) =>
   translateBabyWeatherText(ACTIVE_BABY_WEATHER_LOCALE, key, params);
 
@@ -817,6 +819,7 @@ const MemoHeader = React.memo(BabyWeatherHeader);
 const FELT_TEMPERATURE_OPTIONS = [16, 18, 20, 22, 24, 26];
 
 export default function BabyWeatherScreen() {
+  ACTIVE_BABY_WEATHER_LOCALE = useLocale().locale;
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();

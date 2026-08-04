@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/ThemedText';
 import SwipeableListItem from './SwipeableListItem';
 import { GLASS_BORDER, GLASS_OVERLAY, LAYOUT_PAD, PRIMARY, TEXT_PRIMARY } from '@/constants/PlannerDesign';
 import { parseSafeDate } from '@/lib/safeDate';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   block: PlannerBlock;
@@ -15,6 +16,12 @@ type Props = {
 };
 
 export const TimeBlockCard: React.FC<Props> = ({ block, initiallyCollapsed = true, onToggleTodo, onMoveTomorrow }) => {
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { block: 'Zeitblock', collapse: 'Einklappen', expand: 'Aufklappen', hint: 'Tippen zum Auf- oder Zuklappen', done: 'erledigt', events: 'Termine', empty: 'Noch nichts geplant. Tippe auf +, um etwas hinzuzufügen.', timeOpen: 'Zeit offen' },
+    en: { block: 'Time block', collapse: 'Collapse', expand: 'Expand', hint: 'Tap to expand or collapse', done: 'completed', events: 'appointments', empty: 'Nothing planned yet. Tap + to add something.', timeOpen: 'Time open' },
+    es: { block: 'Bloque horario', collapse: 'Contraer', expand: 'Desplegar', hint: 'Toca para desplegar o contraer', done: 'completadas', events: 'citas', empty: 'Aún no hay nada planeado. Toca + para añadir algo.', timeOpen: 'Hora abierta' },
+  }[locale];
   const [open, setOpen] = useState(!initiallyCollapsed);
 
   const { todos, events, completedCount } = useMemo(() => {
@@ -33,16 +40,16 @@ export const TimeBlockCard: React.FC<Props> = ({ block, initiallyCollapsed = tru
       onPress={() => setOpen((v) => !v)}
       activeOpacity={0.95}
     >
-      <View style={styles.header} accessible accessibilityRole="button" accessibilityLabel={`Zeitblock ${block.label}. ${open ? 'Einklappen' : 'Aufklappen'}.`} accessibilityHint="Tippen zum Auf- oder Zuklappen">
+      <View style={styles.header} accessible accessibilityRole="button" accessibilityLabel={`${c.block} ${block.label}. ${open ? c.collapse : c.expand}.`} accessibilityHint={c.hint}>
         <ThemedText style={styles.title}>{block.label}</ThemedText>
         <ThemedText style={styles.meta} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>
-          {todos.length > 0 ? `${todos.filter(t => t.completed).length}/${todos.length} erledigt` : `${events.length} Termine`}
+          {todos.length > 0 ? `${todos.filter(t => t.completed).length}/${todos.length} ${c.done}` : `${events.length} ${c.events}`}
         </ThemedText>
       </View>
       {open ? (
         <View style={styles.content}>
           {block.items.length === 0 ? (
-            <ThemedText style={styles.empty} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>Noch nichts geplant. Tippe auf +, um etwas hinzuzufügen.</ThemedText>
+            <ThemedText style={styles.empty} lightColor={TEXT_PRIMARY} darkColor={TEXT_PRIMARY}>{c.empty}</ThemedText>
           ) : (
             <View>
               {block.items.map((item) => {
@@ -51,8 +58,8 @@ export const TimeBlockCard: React.FC<Props> = ({ block, initiallyCollapsed = tru
                 const eventEnd = !isTodo ? parseSafeDate((item as PlannerEvent).end) : null;
                 const eventTimeLabel =
                   eventStart && eventEnd
-                    ? `${eventStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${eventEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                    : 'Zeit offen';
+                    ? `${eventStart.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })} – ${eventEnd.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })}`
+                    : c.timeOpen;
                 return (
                   <SwipeableListItem
                     key={item.id}
@@ -72,7 +79,7 @@ export const TimeBlockCard: React.FC<Props> = ({ block, initiallyCollapsed = tru
       ) : (
         completedCount > 0 ? (
           <View style={styles.collapsedInfo}>
-            <ThemedText style={styles.collapsedText}>+{completedCount} erledigt</ThemedText>
+            <ThemedText style={styles.collapsedText}>+{completedCount} {c.done}</ThemedText>
           </View>
         ) : null
       )}

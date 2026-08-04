@@ -6,6 +6,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getDailyEntriesForDateRange, calculateDailyStats, DailyEntry } from '@/lib/baby';
+import { useLocale } from '@/contexts/LocaleContext';
 
 interface WeekScrollerProps {
   selectedDate: Date;
@@ -13,6 +14,7 @@ interface WeekScrollerProps {
 }
 
 const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect }) => {
+  const { localeTag } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
@@ -134,7 +136,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
 
   // Formatiere Monat und Jahr für den Header
   const formatMonthYear = (date: Date): string => {
-    return date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    return date.toLocaleDateString(localeTag, { month: 'long', year: 'numeric' });
   };
 
   // Wechsle zur vorherigen Woche
@@ -203,7 +205,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
             lightColor={isSelected ? '#FFFFFF' : theme.text}
             darkColor={isSelected ? '#FFFFFF' : theme.text}
           >
-            {item.toLocaleDateString('de-DE', { weekday: 'short' })}
+            {item.toLocaleDateString(localeTag, { weekday: 'short' })}
           </ThemedText>
 
           <ThemedView

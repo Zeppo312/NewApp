@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import BackgroundTimer from 'react-native-background-timer';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistedAppLocale } from './localization';
+import { translateNotificationsText } from './notificationsTranslations';
 
 // Kanal-ID für die Benachrichtigung
 const SLEEP_NOTIFICATION_CHANNEL = 'sleep-tracking-channel';
@@ -36,10 +38,11 @@ class SleepNotificationService {
     if (this.isInitialized) return;
     
     try {
+      const locale = await getPersistedAppLocale();
       // Erstelle den Kanal für Android
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync(SLEEP_NOTIFICATION_CHANNEL, {
-          name: 'Schlaftracker',
+          name: translateNotificationsText(locale, 'scheduled.sleepChannel'),
           importance: Notifications.AndroidImportance.HIGH,
           sound: 'default',
           vibrationPattern: [0, 250, 250, 250],
@@ -104,11 +107,12 @@ class SleepNotificationService {
     if (!this.startTime) return;
 
     const elapsedTime = this.formatElapsedTime(this.startTime);
+    const locale = await getPersistedAppLocale();
     
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Schlafaufzeichnung läuft',
-        body: `Laufzeit: ${elapsedTime}`,
+        title: translateNotificationsText(locale, 'scheduled.sleepTrackingTitle'),
+        body: translateNotificationsText(locale, 'scheduled.elapsed', { time: elapsedTime }),
         data: { startTime: this.startTime.toISOString() },
         sticky: true, // Bleibt bestehen, bis explizit entfernt (iOS)
         autoDismiss: false, // Bleibt bestehen (Android)
@@ -132,11 +136,12 @@ class SleepNotificationService {
     
     // Stelle die initiale Benachrichtigung
     await Notifications.dismissAllNotificationsAsync(); // Lösche vorherige Benachrichtigungen
+    const locale = await getPersistedAppLocale();
     
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Schlafaufzeichnung läuft',
-        body: 'Laufzeit: 00:00:00',
+        title: translateNotificationsText(locale, 'scheduled.sleepTrackingTitle'),
+        body: translateNotificationsText(locale, 'scheduled.elapsed', { time: '00:00:00' }),
         data: { startTime: startTime.toISOString() },
         sticky: true,
         autoDismiss: false,

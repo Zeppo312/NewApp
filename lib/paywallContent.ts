@@ -868,8 +868,8 @@ export const sanitizePaywallContent = (value: unknown): PaywallContent => {
   };
 };
 
-export const formatEuroAmount = (value: number) =>
-  `${value.toFixed(2).replace('.', ',')} €`;
+export const formatEuroAmount = (value: number, locale = 'de-DE') =>
+  new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(value);
 
 export const applyPaywallPlansTemplate = (
   value: string,

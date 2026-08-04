@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -34,12 +36,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { BlogPost, createBlogPost, getBlogPosts, updateBlogPost, uploadBlogCover, deleteBlogPost } from '@/lib/blog';
 import { supabase } from '@/lib/supabase';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  formatCommunityDate,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 const formatDate = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('de-DE', {
+  return formatCommunityDate(date, ACTIVE_COMMUNITY_LOCALE, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -63,33 +75,34 @@ const displayNameForProfile = (profile?: {
     return username;
   }
 
-  return 'Lotti Baby Team';
+  return t('blog.teamName');
 };
 
 const mapSupabaseError = (error: any) => {
   if (!error) {
-    return 'Beim Speichern ist ein Fehler aufgetreten.';
+    return t('blog.saveGenericFailed');
   }
 
   const message = typeof error?.message === 'string' ? error.message : '';
   const code = error?.code;
 
   if (code === '42501' || message.toLowerCase().includes('row-level security')) {
-    return 'Du brauchst Admin-Rechte (profiles.is_admin = true), um Beiträge zu speichern. Bitte neu anmelden oder Admin-Flag setzen.';
+    return t('blog.adminRequired');
   }
 
   if (code === '23503' || message.toLowerCase().includes('foreign key')) {
-    return 'Dein Profil wurde nicht gefunden. Bitte erneut anmelden, damit dein Profil geladen wird.';
+    return t('blog.profileMissing');
   }
 
   if (message.toLowerCase().includes('jwt') || message.toLowerCase().includes('token')) {
-    return 'Session abgelaufen. Bitte melde dich erneut an.';
+    return t('blog.sessionExpired');
   }
 
-  return message || 'Beim Speichern ist ein Fehler aufgetreten.';
+  return message || t('blog.saveGenericFailed');
 };
 
 export default function CommunityScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDarkMode = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -115,7 +128,7 @@ export default function CommunityScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [currentUserName, setCurrentUserName] = useState('Lotti Baby Team');
+  const [currentUserName, setCurrentUserName] = useState(t('blog.teamName'));
   const [showDraftList, setShowDraftList] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
 
@@ -145,7 +158,7 @@ export default function CommunityScreen() {
   const loadProfile = useCallback(async () => {
     if (!user?.id) {
       setIsAdmin(false);
-      setCurrentUserName('Lotti Baby Team');
+      setCurrentUserName(t('blog.teamName'));
       return;
     }
 
@@ -181,7 +194,7 @@ export default function CommunityScreen() {
   const pickCoverImage = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      setErrorMessage('Bitte erlaube den Zugriff auf deine Fotos, um ein Titelbild auszuwählen.');
+      setErrorMessage(t('blog.photoPermission'));
       return;
     }
 
@@ -200,12 +213,12 @@ export default function CommunityScreen() {
 
   const handlePublish = useCallback(async () => {
     if (!user?.id) {
-      setErrorMessage('Bitte erneut anmelden.');
+      setErrorMessage(t('blog.signInAgain'));
       return;
     }
 
     if (!newTitle.trim() || !newContent.trim()) {
-      setErrorMessage('Titel und Inhalt dürfen nicht leer sein.');
+      setErrorMessage(t('blog.titleContentRequired'));
       return;
     }
 
@@ -272,10 +285,10 @@ export default function CommunityScreen() {
       const previewText = isExpanded ? item.content : item.summary ?? item.content;
       const canToggle = item.content.length > (item.summary?.length ?? 0) + 40;
       const handleDelete = async () => {
-        Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-          { text: 'Abbrechen', style: 'cancel' },
+        Alert.alert(t('blog.deleteTitle'), t('blog.deleteMessage'), [
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Löschen',
+            text: t('common.delete'),
             style: 'destructive',
             onPress: async () => {
               const { error } = await deleteBlogPost(item.id);
@@ -318,7 +331,7 @@ export default function CommunityScreen() {
               />
               {!item.is_published && (
                 <View style={styles.draftBadge}>
-                  <ThemedText style={styles.draftBadgeText}>Entwurf</ThemedText>
+                  <ThemedText style={styles.draftBadgeText}>{t('blog.draft')}</ThemedText>
                 </View>
               )}
             </View>
@@ -333,7 +346,7 @@ export default function CommunityScreen() {
                 <ThemedText style={[styles.metaPillText, { color: primaryTextOnCommunity }]}>{formatDate(item.published_at)}</ThemedText>
               </View>
             </View>
-            <ThemedText style={[styles.metaText, { color: theme.textTertiary }]}>von {item.authorName}</ThemedText>
+            <ThemedText style={[styles.metaText, { color: theme.textTertiary }]}>{t('blog.by')} {item.authorName}</ThemedText>
             <ThemedText style={[styles.cardBodyText, { color: theme.textSecondary }]}>{previewText}</ThemedText>
             {canToggle && (
               <TouchableOpacity
@@ -341,7 +354,7 @@ export default function CommunityScreen() {
                 onPress={() => setExpandedPostId(isExpanded ? null : item.id)}
               >
                 <ThemedText style={[styles.readMoreText, { color: theme.tint }]}>
-                  {isExpanded ? 'Weniger anzeigen' : 'Weiterlesen'}
+                  {t(isExpanded ? 'blog.readLess' : 'blog.readMore')}
                 </ThemedText>
               </TouchableOpacity>
             )}
@@ -355,8 +368,8 @@ export default function CommunityScreen() {
   const renderEmptyState = useMemo(
     () => (
       <View style={styles.emptyState}>
-        <ThemedText style={[styles.emptyTitle, { color: primaryTextOnCommunity }]}>Hier wächst gerade etwas Neues...</ThemedText>
-        <ThemedText style={[styles.emptyDescription, { color: theme.textSecondary }]}>Die Redaktion bereitet aktuell neue Inhalte vor. Schau später noch einmal rein.</ThemedText>
+        <ThemedText style={[styles.emptyTitle, { color: primaryTextOnCommunity }]}>{t('blog.emptyTitle')}</ThemedText>
+        <ThemedText style={[styles.emptyDescription, { color: theme.textSecondary }]}>{t('blog.emptyText')}</ThemedText>
       </View>
     ),
     [primaryTextOnCommunity, theme.textSecondary],
@@ -373,16 +386,16 @@ export default function CommunityScreen() {
       </TouchableOpacity>
       <View style={styles.heroBubbleTwo} />
       <View style={styles.heroTextBlock}>
-        <ThemedText type="title" style={[styles.heroTitle, { color: primaryTextOnCommunity }]}>Lotti Baby Blog</ThemedText>
-        <ThemedText style={[styles.heroSubtitle, { color: theme.textSecondary }]}>Sanfte Stories, Tipps von Hebammen und echte Erfahrungen aus der Community – alles an einem Ort.</ThemedText>
+        <ThemedText type="title" style={[styles.heroTitle, { color: primaryTextOnCommunity }]}>{t('blog.title')}</ThemedText>
+        <ThemedText style={[styles.heroSubtitle, { color: theme.textSecondary }]}>{t('blog.heroText')}</ThemedText>
         <View style={styles.heroChips}>
           <View style={[styles.heroChip, { backgroundColor: '#FFD8C2' }]}>
             <IconSymbol name="heart.fill" size={14} color="#7D5A50" />
-            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>Warm & liebevoll</ThemedText>
+            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>{t('blog.warmChip')}</ThemedText>
           </View>
           <View style={[styles.heroChip, { backgroundColor: '#E7F2ED' }]}>
             <IconSymbol name="star.fill" size={14} color="#7D5A50" />
-            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>Expertinnen geprüft</ThemedText>
+            <ThemedText style={[styles.heroChipText, { color: primaryTextOnCommunity }]}>{t('blog.expertChip')}</ThemedText>
           </View>
         </View>
       </View>
@@ -390,11 +403,11 @@ export default function CommunityScreen() {
         <View style={styles.heroStats}>
           <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
             <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{published.length}</ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>veröffentlichte Artikel</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>{t('blog.publishedArticles')}</ThemedText>
           </View>
           <View style={[styles.statCard, { backgroundColor: isDarkMode ? '#2F2522' : '#FFFFFF', borderColor: theme.border }]}>
             <ThemedText style={[styles.statNumber, { color: primaryTextOnCommunity }]}>{drafts.length}</ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>in Vorbereitung</ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textSecondary }]}>{t('blog.inPreparation')}</ThemedText>
           </View>
         </View>
       ) : null}
@@ -407,12 +420,12 @@ export default function CommunityScreen() {
         <View style={styles.adminBadgeRow}>
           <View style={styles.adminBadge}>
             <IconSymbol name="star.fill" size={14} color="#fff" />
-            <ThemedText style={styles.adminBadgeText}>Admin</ThemedText>
+            <ThemedText style={styles.adminBadgeText}>{t('common.admin')}</ThemedText>
           </View>
-          <ThemedText style={[styles.adminTitle, { color: primaryTextOnCommunity }]}>Redaktionsbereich</ThemedText>
+          <ThemedText style={[styles.adminTitle, { color: primaryTextOnCommunity }]}>{t('blog.editorArea')}</ThemedText>
         </View>
       </View>
-      <ThemedText style={[styles.adminSubtitle, { color: theme.textSecondary }]}>Veröffentliche einen neuen Artikel oder speichere ihn als Entwurf, um später weiterzuschreiben.</ThemedText>
+      <ThemedText style={[styles.adminSubtitle, { color: theme.textSecondary }]}>{t('blog.editorDescription')}</ThemedText>
       {drafts.length > 0 ? (
         <View style={styles.draftRow}>
           {drafts.slice(0, 3).map((draft) => (
@@ -423,7 +436,7 @@ export default function CommunityScreen() {
           ))}
         </View>
       ) : (
-        <ThemedText style={[styles.noDraftsText, { color: theme.textSecondary }]}>Keine Entwürfe – bereit für etwas Neues?</ThemedText>
+        <ThemedText style={[styles.noDraftsText, { color: theme.textSecondary }]}>{t('blog.noDraftsPrompt')}</ThemedText>
       )}
     </View>
   ) : null;
@@ -431,16 +444,16 @@ export default function CommunityScreen() {
   const listHeader = (
     <View style={styles.listHeader}>
       <Header
-        title="Lotti Baby Blog"
-        subtitle="Begleiter durch Schwangerschaft und erstes Jahr"
+        title={t('blog.title')}
+        subtitle={t('blog.subtitle')}
         showBackButton
         onBackPress={() => router.push('/(tabs)/community')}
       />
       {hero}
       {adminPanel}
       <View style={styles.sectionHeader}>
-        <ThemedText style={[styles.sectionTitle, { color: primaryTextOnCommunity }]}>Aktuelle Artikel</ThemedText>
-        <ThemedText style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>Frisch für dich zusammengestellt</ThemedText>
+        <ThemedText style={[styles.sectionTitle, { color: primaryTextOnCommunity }]}>{t('blog.currentArticles')}</ThemedText>
+        <ThemedText style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>{t('blog.currentArticlesSubtitle')}</ThemedText>
       </View>
     </View>
   );
@@ -486,15 +499,15 @@ export default function CommunityScreen() {
                 onPress={() => setShowDraftList(true)}
               >
                 <IconSymbol name="tray.full.fill" size={16} color={primaryTextOnCommunity} />
-                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>Entwürfe ({drafts.length})</ThemedText>
+                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>{t('blog.draftsCount', { count: drafts.length })}</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={() => openModal(false)}>
                 <IconSymbol name="plus" size={16} color={primaryTextOnCommunity} />
-                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>Entwurf</ThemedText>
+                <ThemedText style={[styles.fabLabelSecondary, { color: primaryTextOnCommunity }]}>{t('blog.draft')}</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.fab, styles.fabPrimary]} onPress={() => openModal(true)}>
                 <IconSymbol name="plus" size={18} color="#fff" />
-                <ThemedText style={styles.fabLabel}>Schreiben</ThemedText>
+                <ThemedText style={styles.fabLabel}>{t('blog.write')}</ThemedText>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -519,11 +532,11 @@ export default function CommunityScreen() {
                     },
                   ]}
                 >
-                <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>Neue Publikation</ThemedText>
-                <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>Veröffentlicht als {currentUserName}</ThemedText>
+                <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>{t('blog.newPublication')}</ThemedText>
+                <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>{t('blog.publishedAs', { name: currentUserName })}</ThemedText>
 
               <TextInput
-                placeholder="Titel"
+                placeholder={t('blog.titlePlaceholder')}
                 placeholderTextColor={theme.textTertiary}
                 value={newTitle}
                 onChangeText={setNewTitle}
@@ -538,7 +551,7 @@ export default function CommunityScreen() {
               />
 
               <TextInput
-                placeholder="Kurzbeschreibung (optional)"
+                placeholder={t('blog.summaryPlaceholder')}
                 placeholderTextColor={theme.textTertiary}
                 value={newSummary}
                 onChangeText={setNewSummary}
@@ -566,8 +579,8 @@ export default function CommunityScreen() {
                   <IconSymbol name="photo" size={18} color={primaryTextOnCommunity} />
                 </View>
                 <View style={styles.coverPickerTextBlock}>
-                  <ThemedText style={[styles.coverPickerTitle, { color: primaryTextOnCommunity }]}>Titelbild hinzufügen</ThemedText>
-                  <ThemedText style={[styles.coverPickerSubtitle, { color: theme.textSecondary }]}>Optionales Cover für den Artikel.</ThemedText>
+                  <ThemedText style={[styles.coverPickerTitle, { color: primaryTextOnCommunity }]}>{t('blog.coverTitle')}</ThemedText>
+                  <ThemedText style={[styles.coverPickerSubtitle, { color: theme.textSecondary }]}>{t('blog.coverSubtitle')}</ThemedText>
                 </View>
                 {coverImageUri ? <View style={[styles.coverStatusDot, { backgroundColor: theme.success }]} /> : null}
               </TouchableOpacity>
@@ -576,7 +589,7 @@ export default function CommunityScreen() {
               ) : null}
 
               <TextInput
-                placeholder="Artikel"
+                placeholder={t('blog.articlePlaceholder')}
                 placeholderTextColor={theme.textTertiary}
                 value={newContent}
                 onChangeText={setNewContent}
@@ -595,8 +608,8 @@ export default function CommunityScreen() {
 
               <View style={styles.publishRow}>
                 <View>
-                  <ThemedText style={[styles.publishLabel, { color: primaryTextOnCommunity }]}>Sofort veröffentlichen</ThemedText>
-                  <ThemedText style={[styles.publishHint, { color: theme.textSecondary }]}>Wenn deaktiviert, bleibt der Beitrag als Entwurf gespeichert.</ThemedText>
+                  <ThemedText style={[styles.publishLabel, { color: primaryTextOnCommunity }]}>{t('blog.publishNow')}</ThemedText>
+                  <ThemedText style={[styles.publishHint, { color: theme.textSecondary }]}>{t('blog.publishHint')}</ThemedText>
                 </View>
                 <Switch value={isPublished} onValueChange={setIsPublished} thumbColor={isPublished ? theme.tint : '#ccc'} />
               </View>
@@ -615,7 +628,7 @@ export default function CommunityScreen() {
                   {isCreating ? (
                     <ActivityIndicator color="#fff" />
                   ) : (
-                    <ThemedText style={styles.modalButtonText}>Speichern</ThemedText>
+                    <ThemedText style={styles.modalButtonText}>{t('common.save')}</ThemedText>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -632,7 +645,7 @@ export default function CommunityScreen() {
                     setEditingPostId(null);
                   }}
                 >
-                  <ThemedText style={{ color: theme.textSecondary }}>Abbrechen</ThemedText>
+                  <ThemedText style={{ color: theme.textSecondary }}>{t('common.cancel')}</ThemedText>
                 </TouchableOpacity>
                 </View>
               </View>
@@ -658,8 +671,8 @@ export default function CommunityScreen() {
                       },
                     ]}
                   >
-                    <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>Entwürfe</ThemedText>
-                    <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>Tippe auf einen Entwurf, um weiterzuschreiben.</ThemedText>
+                    <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>{t('blog.draftsTitle')}</ThemedText>
+                    <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>{t('blog.draftsSubtitle')}</ThemedText>
 
                     {drafts.length > 0 ? (
                       <View style={styles.draftList}>
@@ -680,10 +693,10 @@ export default function CommunityScreen() {
                           >
                             <View style={styles.draftListText}>
                               <ThemedText style={[styles.draftListTitle, { color: primaryTextOnCommunity }]} numberOfLines={1}>
-                                {draft.title || 'Ohne Titel'}
+                                {draft.title || t('blog.titlePlaceholder')}
                               </ThemedText>
                               <ThemedText style={[styles.draftListMeta, { color: theme.textSecondary }]}>
-                                Letzte Änderung: {formatDate(draft.updated_at)}
+                                {t('blog.lastChanged', { date: formatDate(draft.updated_at) })}
                               </ThemedText>
                             </View>
                             <IconSymbol name="chevron.right" size={16} color={theme.textSecondary} />
@@ -691,7 +704,7 @@ export default function CommunityScreen() {
                         ))}
                       </View>
                     ) : (
-                      <ThemedText style={[styles.noDraftsText, { color: theme.textSecondary }]}>Keine Entwürfe vorhanden.</ThemedText>
+                      <ThemedText style={[styles.noDraftsText, { color: theme.textSecondary }]}>{t('blog.noDrafts')}</ThemedText>
                     )}
 
                     <View style={styles.modalActions}>
@@ -699,7 +712,7 @@ export default function CommunityScreen() {
                         style={[styles.modalButton, styles.modalCancelButton]}
                         onPress={() => setShowDraftList(false)}
                       >
-                        <ThemedText style={{ color: theme.textSecondary }}>Schließen</ThemedText>
+                        <ThemedText style={{ color: theme.textSecondary }}>{t('common.close')}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </View>

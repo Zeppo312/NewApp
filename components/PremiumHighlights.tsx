@@ -6,6 +6,7 @@
 // Animationen laufen komplett über den nativen Driver (nur transform/opacity).
 
 import React, { useEffect } from 'react';
+import { useLocale } from '@/contexts/LocaleContext';
 import {
   Animated,
   Easing,
@@ -164,6 +165,7 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
 };
 
 const PremiumHighlights: React.FC<Props> = ({ items }) => {
+  const { locale } = useLocale();
   const { width } = useWindowDimensions();
   const shimmer = React.useState(() => new Animated.Value(0))[0];
 
@@ -232,7 +234,9 @@ const PremiumHighlights: React.FC<Props> = ({ items }) => {
           <Text style={styles.headerTitle}>
             Lotti <Text style={styles.headerTitleAccent}>Premium</Text>
           </Text>
-          <Text style={styles.headerSubtitle}>Exklusiv für dich freigeschaltet</Text>
+          <Text style={styles.headerSubtitle}>
+            {{ de: 'Exklusiv für dich freigeschaltet', en: 'Unlocked exclusively for you', es: 'Desbloqueado en exclusiva para ti' }[locale]}
+          </Text>
         </View>
 
         <View style={styles.featureRow}>

@@ -25,6 +25,7 @@ import {
   LOCKED_FEATURE_COPY,
   type AppFeature,
 } from '@/lib/entitlements';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type LockedFeatureScreenProps = {
   feature: AppFeature;
@@ -39,7 +40,29 @@ export function LockedFeatureScreen({
   headerSubtitle,
 }: LockedFeatureScreenProps) {
   const router = useRouter();
-  const copy = LOCKED_FEATURE_COPY[feature];
+  const { locale } = useLocale();
+  const defaultCopy = LOCKED_FEATURE_COPY[feature];
+  const translated = {
+    en: {
+      partnerLink: { title: 'Together as a family', subtitle: 'Link your account with your partner so you can both see and track the same baby.', bullets: ['Entries appear for both of you immediately', 'Both of you can see the current status', 'Notifications for your partner'] },
+      planner: { title: 'Planner & appointments', subtitle: 'Keep medical appointments, check-ups, and family life in view.', bullets: ['Shared family calendar', 'Reminders for important appointments', 'Synced with your partner'] },
+      shoppingList: { title: 'Shopping lists', subtitle: 'Running low on diapers? Add it once and both of you can see it.', bullets: ['Shared lists for both of you', 'Low-stock reminders', 'Templates for baby essentials'] },
+      wochenmomente: { title: 'Weekly moments', subtitle: "Save one special moment from your baby's week.", bullets: ['A weekly memory collection', 'Your story to look back on', 'Share moments with your partner'] },
+    },
+    es: {
+      partnerLink: { title: 'Juntos en familia', subtitle: 'Vincula tu cuenta con la de tu pareja para ver y registrar al mismo bebé.', bullets: ['Los registros aparecen al instante para ambos', 'Los dos veis la situación actual', 'Notificaciones para tu pareja'] },
+      planner: { title: 'Planificador y citas', subtitle: 'Ten a la vista las citas médicas, revisiones y la vida familiar.', bullets: ['Calendario familiar compartido', 'Recordatorios de citas importantes', 'Sincronizado con tu pareja'] },
+      shoppingList: { title: 'Listas de la compra', subtitle: '¿Quedan pocos pañales? Añádelo una vez y ambos lo veréis.', bullets: ['Listas compartidas', 'Recordatorios cuando queden pocas unidades', 'Plantillas de productos esenciales'] },
+      wochenmomente: { title: 'Momentos semanales', subtitle: 'Guarda cada semana un momento especial de tu bebé.', bullets: ['Colección semanal de recuerdos', 'Vuestra historia para volver a verla', 'Comparte momentos con tu pareja'] },
+    },
+  } as const;
+  const localizedCopy = locale === 'de' ? null : translated[locale][feature as keyof typeof translated.en];
+  const copy = localizedCopy ? { ...defaultCopy, ...localizedCopy } : defaultCopy;
+  const ui = {
+    de: { premium: 'Premium-Feature', lite: 'Nicht in Lotti Lite', unlock: 'Mit Premium freischalten', options: 'Abo-Optionen ansehen', later: 'Vielleicht später' },
+    en: { premium: 'Premium feature', lite: 'Not in Lotti Lite', unlock: 'Unlock with Premium', options: 'View subscription options', later: 'Maybe later' },
+    es: { premium: 'Función Premium', lite: 'No incluido en Lotti Lite', unlock: 'Desbloquear con Premium', options: 'Ver opciones de suscripción', later: 'Quizá más tarde' },
+  }[locale];
   const isPremiumFeature = copy.requiredTier === 'premium';
 
   const openPaywall = () => {
@@ -71,7 +94,7 @@ export function LockedFeatureScreen({
                   isPremiumFeature && styles.tierBadgeTextPremium,
                 ]}
               >
-                {isPremiumFeature ? 'Premium-Feature' : 'Nicht in Lotti Lite'}
+                {isPremiumFeature ? ui.premium : ui.lite}
               </Text>
             </View>
             <ThemedText adaptive={false} style={styles.title}>
@@ -108,12 +131,12 @@ export function LockedFeatureScreen({
               />
               <Text style={styles.ctaButtonText}>
                 {isPremiumFeature
-                  ? 'Mit Premium freischalten'
-                  : 'Abo-Optionen ansehen'}
+                  ? ui.unlock
+                  : ui.options}
               </Text>
             </Pressable>
             <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.backText}>Vielleicht später</Text>
+              <Text style={styles.backText}>{ui.later}</Text>
             </Pressable>
           </GlassCard>
         </View>

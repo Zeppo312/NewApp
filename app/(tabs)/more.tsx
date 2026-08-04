@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useState } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -15,8 +17,18 @@ import {
   getPaywallAccessReasonLabel,
   type PaywallAccessReason,
 } from '@/lib/paywallAccess';
+import {
+  DEFAULT_MORE_LOCALE,
+  MoreTranslationKey,
+  translateMoreText,
+} from '@/lib/moreTranslations';
+
+let ACTIVE_MORE_LOCALE = DEFAULT_MORE_LOCALE;
+const t = (key: MoreTranslationKey, params?: Record<string, string | number>) =>
+  translateMoreText(ACTIVE_MORE_LOCALE, key, params);
 
 export default function MoreScreen() {
+  ACTIVE_MORE_LOCALE = useLocale().locale;
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -67,28 +79,28 @@ export default function MoreScreen() {
   const hasActiveAccess = accessReason !== 'none';
   const hasSubscription = accessReason === 'subscription';
   const subscriptionTitle = hasSubscription
-    ? 'Abo verwalten'
+    ? t('subscription.manage')
     : hasActiveAccess
-      ? 'Zugang ansehen'
-      : 'Abo ansehen';
+      ? t('subscription.access')
+      : t('subscription.view');
   const subscriptionDescription = hasSubscription
-    ? 'Sieh nach, welches Abo aktiv ist, und verwalte deinen Zugang'
+    ? t('subscription.manageDescription')
     : hasActiveAccess
-      ? `${getPaywallAccessReasonLabel(accessReason)}-Zugang aktiv`
-      : 'Sieh deinen Status an oder wähle ein Abo aus';
+      ? t('subscription.activeDescription', { reason: getPaywallAccessReasonLabel(accessReason) })
+      : t('subscription.viewDescription');
 
   // Abmelden-Funktion
   const handleLogout = async () => {
     Alert.alert(
-      'Abmelden',
-      'Möchtest du dich wirklich abmelden?',
+      t('logout.action'),
+      t('logout.question'),
       [
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Abmelden',
+          text: t('logout.action'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -100,9 +112,9 @@ export default function MoreScreen() {
               const message = error instanceof Error
                 ? error.message
                 : (typeof error === 'object' && error !== null && 'message' in error)
-                  ? String((error as { message?: unknown }).message ?? 'Unbekannter Fehler')
-                  : 'Unbekannter Fehler';
-              Alert.alert('Fehler', `Beim Abmelden ist ein Fehler aufgetreten.\n${message}`);
+                  ? String((error as { message?: unknown }).message ?? t('common.unknownError'))
+                  : t('common.unknownError');
+              Alert.alert(t('common.error'), t('logout.failed', { message }));
             }
           },
         },
@@ -117,8 +129,8 @@ export default function MoreScreen() {
        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
         <Header 
-          title="Mehr" 
-          subtitle="Einstellungen und weitere Funktionen" 
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
@@ -126,7 +138,7 @@ export default function MoreScreen() {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Abo
+              {t('subscription.section')}
             </ThemedText>
 
             <TouchableOpacity
@@ -151,7 +163,7 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Shop
+              {t('shop.section')}
             </ThemedText>
 
             <TouchableOpacity
@@ -163,10 +175,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Lotti Baby Shop
+                  {t('shop.title')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Prints ansehen und bestellen
+                  {t('shop.description')}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
@@ -175,7 +187,7 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Einstellungen
+              {t('settings.section')}
             </ThemedText>
 
             <TouchableOpacity
@@ -187,10 +199,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  App-Einstellungen
+                  {t('settings.appTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Benachrichtigungen, Erscheinungsbild, etc.
+                  {t('settings.appDescription')}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
@@ -205,10 +217,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Profil
+                  {t('settings.profileTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Deine persönlichen Daten verwalten
+                  {t('settings.profileDescription')}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
@@ -223,10 +235,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Accounts verknüpfen
+                  {t('settings.linkTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Verbinde dich mit deinem Partner oder Familie
+                  {t('settings.linkDescription')}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
@@ -236,7 +248,7 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Support
+              {t('support.section')}
             </ThemedText>
 
             <TouchableOpacity
@@ -248,7 +260,7 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Support kontaktieren
+                  {t('support.contact')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
                   support@lottibaby.de
@@ -266,10 +278,10 @@ export default function MoreScreen() {
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Verbesserungsvorschläge
+                  {t('support.suggestions')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Teile deine Ideen zur Verbesserung der App
+                  {t('support.suggestionsDescription')}
                 </ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
@@ -278,30 +290,30 @@ export default function MoreScreen() {
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Rechtliches
+              {t('legal.section')}
             </ThemedText>
 
             <TouchableOpacity
               style={styles.legalItem}
               onPress={() => router.push('/datenschutz' as any)}
             >
-              <ThemedText style={styles.legalTitle}>Datenschutz</ThemedText>
-              <ThemedText style={styles.legalMeta}>Stand: 03.02.2026</ThemedText>
+              <ThemedText style={styles.legalTitle}>{t('legal.privacy')}</ThemedText>
+              <ThemedText style={styles.legalMeta}>{t('legal.privacyVersion')}</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.legalItem}
               onPress={() => router.push('/nutzungsbedingungen' as any)}
             >
-              <ThemedText style={styles.legalTitle}>Nutzungsbedingungen</ThemedText>
-              <ThemedText style={styles.legalMeta}>Stand: 07.03.2026</ThemedText>
+              <ThemedText style={styles.legalTitle}>{t('legal.terms')}</ThemedText>
+              <ThemedText style={styles.legalMeta}>{t('legal.termsVersion')}</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.legalItem}
               onPress={() => router.push('/impressum' as any)}
             >
-              <ThemedText style={styles.legalTitle}>Impressum</ThemedText>
+              <ThemedText style={styles.legalTitle}>{t('legal.imprint')}</ThemedText>
             </TouchableOpacity>
           </LiquidGlassCard>
 
@@ -312,7 +324,7 @@ export default function MoreScreen() {
               onPress={handleLogout}
             >
               <ThemedText style={styles.logoutButtonText}>
-                Abmelden
+                {t('logout.action')}
               </ThemedText>
             </TouchableOpacity>
           </View>

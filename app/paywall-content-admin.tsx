@@ -31,6 +31,7 @@ import {
   LiquidGlassCard,
 } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile, invalidateUserProfileCache } from '@/lib/appCache';
@@ -52,6 +53,7 @@ import {
   DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
   DEFAULT_DISPLAY_YEARLY_PRICE,
 } from '@/lib/paywallDefaults';
+import { getPaywallAdminCopy } from '@/lib/paywallAdminTranslations';
 
 type Mode = 'edit' | 'preview';
 
@@ -82,27 +84,7 @@ const setValueAtPath = (
   return sanitizePaywallContent(next);
 };
 
-const TIER_TOGGLE_META: {
-  id: PaywallPlansTierId;
-  title: string;
-  description: string;
-}[] = [
-  {
-    id: 'premium',
-    title: 'Lotti Premium',
-    description: 'Standard plus KI-Features (Sprach-Logging, Lottis Fürsorge).',
-  },
-  {
-    id: 'standard',
-    title: 'Lotti Standard',
-    description: 'Voller Funktionsumfang ohne KI-Features.',
-  },
-  {
-    id: 'lite',
-    title: 'Lotti Lite',
-    description: 'Basis-Tracker mit Verlauf der letzten 7 Tage.',
-  },
-];
+const TIER_IDS: PaywallPlansTierId[] = ['premium', 'standard', 'lite'];
 
 export default function PaywallContentAdminScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -110,6 +92,8 @@ export default function PaywallContentAdminScreen() {
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, user } = useAuth();
+  const { locale, localeTag } = useLocale();
+  const c = getPaywallAdminCopy(locale);
 
   const [mode, setMode] = useState<Mode>('edit');
   const [isAuthorizing, setIsAuthorizing] = useState(true);
@@ -131,21 +115,21 @@ export default function PaywallContentAdminScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const billingLabel =
     Platform.OS === 'ios'
-      ? 'Abrechnung über den App Store'
+      ? c.billingApple
       : Platform.OS === 'android'
-        ? 'Abrechnung über Google Play'
-        : 'Abrechnung';
+        ? c.billingGoogle
+        : c.billing;
   const storeProvider =
     Platform.OS === 'ios'
       ? 'Apple'
       : Platform.OS === 'android'
         ? 'Google Play'
-        : 'der Store';
+        : c.store;
 
   const previewPrices: PaywallPlanPrices = useMemo(() => {
     const price = (amount: number) => ({
       amount,
-      label: formatEuroAmount(amount),
+      label: formatEuroAmount(amount, localeTag),
     });
 
     return {
@@ -156,12 +140,11 @@ export default function PaywallContentAdminScreen() {
       liteMonthly: price(DEFAULT_DISPLAY_LITE_MONTHLY_PRICE),
       liteYearly: price(DEFAULT_DISPLAY_LITE_YEARLY_PRICE),
     };
-  }, []);
+  }, [localeTag]);
 
   const visibleTierCount = useMemo(
     () =>
-      TIER_TOGGLE_META.filter((meta) => draft.plans.tiers[meta.id].visible)
-        .length,
+      TIER_IDS.filter((id) => draft.plans.tiers[id].visible).length,
     [draft.plans.tiers],
   );
 
@@ -170,15 +153,15 @@ export default function PaywallContentAdminScreen() {
     [draft, savedContent],
   );
   const editorModeTitle =
-    mode === 'edit' ? 'Inline-Editor' : 'Gerenderte Vorschau';
+    mode === 'edit' ? c.editTitle : c.previewTitle;
   const editorModeDescription =
     mode === 'edit'
-      ? 'Tippe direkt auf einen Text in der Paywall und ändere ihn an Ort und Stelle. Ausgeblendete Pläne bleiben hier gedimmt sichtbar.'
-      : 'Hier siehst du die Paywall exakt so, wie Nutzer sie aktuell sehen – inklusive ausgeblendeter Pläne.';
+      ? c.editDescription
+      : c.previewDescription;
   const lastSavedLabel = lastSavedAt
-    ? new Date(lastSavedAt).toLocaleString('de-DE')
+    ? new Date(lastSavedAt).toLocaleString(localeTag)
     : null;
-  const saveStateTitle = hasUnsavedChanges ? 'Entwurf offen' : 'Alles gespeichert';
+  const saveStateTitle = hasUnsavedChanges ? c.draft : c.saved;
   const canSave = hasUnsavedChanges && !isSaving;
   const canRestoreSaved = hasUnsavedChanges && !isSaving;
 
@@ -211,7 +194,7 @@ export default function PaywallContentAdminScreen() {
           setSavedContent(clonePaywallContent(DEFAULT_PAYWALL_CONTENT));
           setDraft(clonePaywallContent(DEFAULT_PAYWALL_CONTENT));
           setSaveError(
-            'Gespeicherte Texte konnten nicht geladen werden. Die Standardtexte sind aktiv.',
+            c.loadError,
           );
         }
       } catch (error) {
@@ -240,7 +223,7 @@ export default function PaywallContentAdminScreen() {
     return () => {
       mounted = false;
     };
-  }, [user]);
+  }, [c.loadError, user]);
 
   const handleFieldChange = (path: string, value: string) => {
     setDraft((current) => setValueAtPath(current, path, value));
@@ -261,12 +244,12 @@ export default function PaywallContentAdminScreen() {
 
   const restoreDefaultContent = () => {
     Alert.alert(
-      'Standardtexte laden',
-      'Willst du wirklich alle Paywall-Texte auf die Standardversion zurücksetzen? Nicht gespeicherte Änderungen gehen dabei verloren.',
+      c.resetTitle,
+      c.resetQuestion,
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: c.cancel, style: 'cancel' },
         {
-          text: 'Zurücksetzen',
+          text: c.reset,
           style: 'destructive',
           onPress: () => {
             setDraft(clonePaywallContent(DEFAULT_PAYWALL_CONTENT));
@@ -289,11 +272,11 @@ export default function PaywallContentAdminScreen() {
       setSavedContent(clonePaywallContent(nextContent));
       setDraft(clonePaywallContent(nextContent));
       setLastSavedAt(record.updatedAt);
-      Alert.alert('Gespeichert', 'Die Paywall-Texte wurden aktualisiert.');
+      Alert.alert(c.savedTitle, c.savedMessage);
     } catch (error: any) {
       console.error('Failed to save paywall content:', error);
       setSaveError(
-        error?.message ?? 'Die Paywall-Texte konnten nicht gespeichert werden.',
+        error?.message ?? c.saveError,
       );
     } finally {
       setIsSaving(false);
@@ -312,8 +295,8 @@ export default function PaywallContentAdminScreen() {
         />
 
         <Header
-          title="Paywall-Editor"
-          subtitle="Texte, Pläne & Sichtbarkeit bearbeiten"
+          title={c.header}
+          subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
           onBackPress={() => router.push('/app-settings')}
@@ -323,14 +306,14 @@ export default function PaywallContentAdminScreen() {
           <View style={styles.centerState}>
             <ActivityIndicator color={theme.accent} />
             <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-              Paywall-Konfiguration wird geladen…
+              {c.loading}
             </ThemedText>
           </View>
         ) : !isAdmin ? (
           <View style={styles.centerState}>
             <IconSymbol name="lock.fill" size={22} color={textSecondary} />
             <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-              Dieser Bereich ist nur für Admins mit `profiles.is_admin = true`.
+              {c.adminOnly}
             </ThemedText>
           </View>
         ) : (
@@ -409,18 +392,18 @@ export default function PaywallContentAdminScreen() {
               <View style={styles.infoRow}>
                 <View style={styles.infoCard}>
                   <ThemedText style={styles.infoLabel}>
-                    Zuletzt gespeichert
+                    {c.lastSaved}
                   </ThemedText>
                   <ThemedText style={styles.infoValue}>
-                    {lastSavedLabel ?? 'Noch keine gespeicherte Version gefunden.'}
+                    {lastSavedLabel ?? c.noSaved}
                   </ThemedText>
                 </View>
                 <View style={styles.infoCard}>
-                  <ThemedText style={styles.infoLabel}>Workflow</ThemedText>
+                  <ThemedText style={styles.infoLabel}>{c.workflow}</ThemedText>
                   <ThemedText style={styles.infoValue}>
                     {mode === 'edit'
-                      ? 'Texte direkt in der Oberfläche anfassen und sofort prüfen.'
-                      : 'Sichere Ansicht zum Gegencheck, ohne Texte versehentlich zu verändern.'}
+                      ? c.workflowEdit
+                      : c.workflowPreview}
                   </ThemedText>
                 </View>
               </View>
@@ -444,7 +427,7 @@ export default function PaywallContentAdminScreen() {
                       mode === 'edit' && styles.segmentButtonTextActive,
                     ]}
                   >
-                    Direkt bearbeiten
+                    {c.edit}
                   </ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -465,7 +448,7 @@ export default function PaywallContentAdminScreen() {
                       mode === 'preview' && styles.segmentButtonTextActive,
                     ]}
                   >
-                    Vorschau
+                    {c.preview}
                   </ThemedText>
                 </TouchableOpacity>
               </View>
@@ -492,15 +475,15 @@ export default function PaywallContentAdminScreen() {
                   <View style={styles.primaryActionCopy}>
                     <ThemedText style={styles.primaryActionTitle}>
                       {isSaving
-                        ? 'Speichere Änderungen…'
+                        ? c.saving
                         : hasUnsavedChanges
-                          ? 'Änderungen speichern'
-                          : 'Alles ist gespeichert'}
+                          ? c.save
+                          : c.allSaved}
                     </ThemedText>
                     <ThemedText style={styles.primaryActionHint}>
                       {hasUnsavedChanges
-                        ? 'Übernimmt den aktuellen Entwurf direkt für die Live-Paywall.'
-                        : 'Sobald du Texte änderst, kannst du sie hier sichern.'}
+                        ? c.saveHint
+                        : c.savedHint}
                     </ThemedText>
                   </View>
                 </TouchableOpacity>
@@ -523,11 +506,10 @@ export default function PaywallContentAdminScreen() {
                     </View>
                     <View style={styles.utilityActionCopy}>
                       <ThemedText style={styles.utilityActionTitle}>
-                        Gespeicherten Stand laden
+                        {c.restoreSaved}
                       </ThemedText>
                       <ThemedText style={styles.utilityActionText}>
-                        Lädt die letzte gespeicherte Version und verwirft den
-                        aktuellen Entwurf.
+                        {c.restoreSavedHint}
                       </ThemedText>
                     </View>
                   </TouchableOpacity>
@@ -546,10 +528,10 @@ export default function PaywallContentAdminScreen() {
                     </View>
                     <View style={styles.utilityActionCopy}>
                       <ThemedText style={styles.utilityActionTitle}>
-                        Standardtexte laden
+                        {c.resetTitle}
                       </ThemedText>
                       <ThemedText style={styles.utilityActionText}>
-                        Setzt den Editor auf die Basisversion der Paywall zurück.
+                        {c.restoreDefaultsHint}
                       </ThemedText>
                     </View>
                   </TouchableOpacity>
@@ -562,27 +544,26 @@ export default function PaywallContentAdminScreen() {
                     <IconSymbol name="eye.fill" size={14} color="#7D5A50" />
                   </View>
                   <ThemedText style={styles.templateSectionTitle}>
-                    Pläne ein- & ausblenden
+                    {c.toggleTitle}
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.templateSectionText}>
-                  Ausgeblendete Pläne verschwinden auf der Live-Paywall aus der
-                  Auswahl und aus der Vergleichstabelle.
+                  {c.toggleHint}
                 </ThemedText>
 
-                {TIER_TOGGLE_META.map((meta) => (
-                  <View key={meta.id} style={styles.tierToggleRow}>
+                {TIER_IDS.map((tierId) => (
+                  <View key={tierId} style={styles.tierToggleRow}>
                     <View style={styles.tierToggleCopy}>
                       <ThemedText style={styles.tierToggleTitle}>
-                        {meta.title}
+                        {`Lotti ${tierId[0].toUpperCase()}${tierId.slice(1)}`}
                       </ThemedText>
                       <ThemedText style={styles.tierToggleText}>
-                        {meta.description}
+                        {c[`${tierId}Description` as const]}
                       </ThemedText>
                     </View>
                     <Switch
-                      value={draft.plans.tiers[meta.id].visible}
-                      onValueChange={(value) => handleToggleTier(meta.id, value)}
+                      value={draft.plans.tiers[tierId].visible}
+                      onValueChange={(value) => handleToggleTier(tierId, value)}
                       trackColor={{
                         false: 'rgba(125,90,80,0.22)',
                         true: '#8B6152',
@@ -600,8 +581,7 @@ export default function PaywallContentAdminScreen() {
                       color="#7A4D3A"
                     />
                     <ThemedText style={styles.toggleWarningText}>
-                      Alle Pläne sind ausgeblendet – die App zeigt in diesem Fall
-                      zur Sicherheit wieder alle Pläne an.
+                      {c.allHidden}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -613,18 +593,16 @@ export default function PaywallContentAdminScreen() {
                     <IconSymbol name="eurosign.circle" size={14} color="#7D5A50" />
                   </View>
                   <ThemedText style={styles.templateSectionTitle}>
-                    Basis-Einstellungen
+                    {c.settings}
                   </ThemedText>
                 </View>
                 <ThemedText style={styles.templateSectionText}>
-                  Trial-Dauer für die App-Logik. Alle Preise kommen direkt aus
-                  dem Store; solange ein Produkt dort fehlt, gelten die
-                  Fallback-Preise aus der App (nicht hier editierbar).
+                  {c.settingsHint}
                 </ThemedText>
                 <View style={styles.settingsRow}>
                   <View style={styles.settingsField}>
                     <ThemedText style={styles.settingsFieldLabel}>
-                      Trial-Tage
+                      {c.trialDays}
                     </ThemedText>
                     <TextInput
                       value={draft.settings.trialDays}

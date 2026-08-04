@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -58,9 +59,10 @@ import {
   DEFAULT_CYCLE_LOCALE,
   translateCycleText,
 } from '@/lib/cycleTranslations';
+import { useLocale } from '@/contexts/LocaleContext';
 
-const ACTIVE_CYCLE_LOCALE = DEFAULT_CYCLE_LOCALE;
-const CYCLE_DATE_LOCALE = ACTIVE_CYCLE_LOCALE === 'de' ? 'de-DE' : 'en-US';
+let ACTIVE_CYCLE_LOCALE = DEFAULT_CYCLE_LOCALE;
+let CYCLE_DATE_LOCALE = 'de-DE';
 const t = (key: string, params?: Record<string, string | number>) =>
   translateCycleText(ACTIVE_CYCLE_LOCALE, key, params);
 
@@ -95,68 +97,47 @@ const LEGEND = [
   { labelKey: 'hero.legend.luteal', color: C_LUTEAL },
 ] as const;
 
-const WEEK_DAYS_DE = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
+let WEEK_DAYS_DE = ['M', 'D', 'M', 'D', 'F', 'S', 'S'];
 
-const LH_OPTIONS: { value: CycleLhTestResult | null; label: string }[] = [
-  { value: null, label: 'Kein Test' },
-  { value: 'negative', label: 'Negativ' },
-  { value: 'high', label: 'High' },
-  { value: 'peak', label: 'Peak' },
+const LH_OPTIONS: { value: CycleLhTestResult | null; labelKey: string }[] = [
+  { value: null, labelKey: 'value.lh.none' },
+  { value: 'negative', labelKey: 'value.lh.negative' },
+  { value: 'high', labelKey: 'value.lh.high' },
+  { value: 'peak', labelKey: 'value.lh.peak' },
 ];
 
-const MUCUS_OPTIONS: { value: CycleCervicalMucus | null; label: string }[] = [
-  { value: null, label: 'Keine Angabe' },
-  { value: 'dry', label: 'Trocken' },
-  { value: 'sticky', label: 'Klebrig' },
-  { value: 'creamy', label: 'Cremig' },
-  { value: 'watery', label: 'Wässrig' },
-  { value: 'eggwhite', label: 'Eiklar' },
+const MUCUS_OPTIONS: { value: CycleCervicalMucus | null; labelKey: string }[] = [
+  { value: null, labelKey: 'value.mucus.none' },
+  { value: 'dry', labelKey: 'value.mucus.dry' },
+  { value: 'sticky', labelKey: 'value.mucus.sticky' },
+  { value: 'creamy', labelKey: 'value.mucus.creamy' },
+  { value: 'watery', labelKey: 'value.mucus.watery' },
+  { value: 'eggwhite', labelKey: 'value.mucus.eggwhite' },
 ];
 
-const BLEEDING_OPTIONS: { value: CycleBleedingIntensity; label: string }[] = [
-  { value: 'none', label: 'Keine Blutung' },
-  { value: 'light', label: 'Leicht' },
-  { value: 'medium', label: 'Mittel' },
-  { value: 'heavy', label: 'Stark' },
+const BLEEDING_OPTIONS: { value: CycleBleedingIntensity; labelKey: string }[] = [
+  { value: 'none', labelKey: 'value.bleeding.none' },
+  { value: 'light', labelKey: 'value.bleeding.light' },
+  { value: 'medium', labelKey: 'value.bleeding.medium' },
+  { value: 'heavy', labelKey: 'value.bleeding.heavy' },
 ];
-
-const BLEEDING_LABEL: Record<CycleBleedingIntensity, string> = {
-  none: '—',
-  light: 'Leicht',
-  medium: 'Mittel',
-  heavy: 'Stark',
-};
-
-const MUCUS_LABEL: Record<string, string> = {
-  dry: 'Trocken',
-  sticky: 'Klebrig',
-  creamy: 'Cremig',
-  watery: 'Wässrig',
-  eggwhite: 'Eiklar',
-};
-
-const LH_LABEL: Record<string, string> = {
-  negative: 'Negativ',
-  high: 'High',
-  peak: 'Peak ✓',
-};
 
 const PHASE_META = {
-  period: { label: 'Periode', color: C_PERIOD },
-  follicular: { label: 'Follikelphase', color: C_FOLLICULAR },
-  fertile: { label: 'Fruchtbares Fenster', color: C_FERTILE },
-  luteal: { label: 'Lutealphase', color: C_LUTEAL },
+  period: { labelKey: 'phase.period', color: C_PERIOD },
+  follicular: { labelKey: 'phase.follicular', color: C_FOLLICULAR },
+  fertile: { labelKey: 'phase.fertile', color: C_FERTILE },
+  luteal: { labelKey: 'phase.luteal', color: C_LUTEAL },
 } as const;
 
 const SYMPTOMS = [
-  { emoji: '🫶', label: 'Brustspannen' },
-  { emoji: '😮‍💨', label: 'Blähungen' },
-  { emoji: '😣', label: 'Krämpfe' },
-  { emoji: '🤕', label: 'Kopfschmerzen' },
-  { emoji: '😤', label: 'Reizbar' },
-  { emoji: '💤', label: 'Müdigkeit' },
-  { emoji: '🌸', label: 'Libido hoch' },
-  { emoji: '✨', label: 'Alles gut' },
+  { emoji: '🫶', id: 'Brustspannen', labelKey: 'symptom.breastTenderness' },
+  { emoji: '😮‍💨', id: 'Blähungen', labelKey: 'symptom.bloating' },
+  { emoji: '😣', id: 'Krämpfe', labelKey: 'symptom.cramps' },
+  { emoji: '🤕', id: 'Kopfschmerzen', labelKey: 'symptom.headache' },
+  { emoji: '😤', id: 'Reizbar', labelKey: 'symptom.irritable' },
+  { emoji: '💤', id: 'Müdigkeit', labelKey: 'symptom.fatigue' },
+  { emoji: '🌸', id: 'Libido hoch', labelKey: 'symptom.highLibido' },
+  { emoji: '✨', id: 'Alles gut', labelKey: 'symptom.allGood' },
 ] as const;
 
 const CANVAS_SIZE = 230;
@@ -529,6 +510,7 @@ function WeekCalendarStrip({
 
 function CalendarMonthSection({
   monthDate,
+  dateLocale,
   selectedDate,
   today,
   logMap,
@@ -539,6 +521,7 @@ function CalendarMonthSection({
   isDark,
 }: {
   monthDate: Date;
+  dateLocale: string;
   selectedDate: Date;
   today: Date;
   logMap: Map<string, CycleDailyLog>;
@@ -553,8 +536,8 @@ function CalendarMonthSection({
   const glassBorder = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.26)';
   const gridDates = useMemo(() => getMonthGrid(monthDate), [monthDate]);
   const monthLabel = useMemo(
-    () => monthDate.toLocaleDateString(CYCLE_DATE_LOCALE, { month: 'long', year: 'numeric' }),
-    [monthDate],
+    () => monthDate.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' }),
+    [dateLocale, monthDate],
   );
 
   return (
@@ -669,6 +652,7 @@ function CalendarMonthSection({
 
 function MonthCalendarOverlay({
   visible,
+  dateLocale,
   baseMonthDate,
   selectedDate,
   trackerData,
@@ -680,6 +664,7 @@ function MonthCalendarOverlay({
   isDark,
 }: {
   visible: boolean;
+  dateLocale: string;
   baseMonthDate: Date;
   selectedDate: Date;
   trackerData: CycleTrackerData | null;
@@ -811,6 +796,7 @@ function MonthCalendarOverlay({
             >
               <CalendarMonthSection
                 monthDate={monthDate}
+                dateLocale={dateLocale}
                 selectedDate={selectedDate}
                 today={today}
                 logMap={logMap}
@@ -1080,7 +1066,7 @@ function QuickEntryTile({
             { backgroundColor: `${accentColor}20`, borderColor: `${accentColor}44` },
           ]}
         >
-          <Text style={[styles.quickTileStatusText, { color: accentColor }]}>Erfasst</Text>
+          <Text style={[styles.quickTileStatusText, { color: accentColor }]}>{t('daily.logged')}</Text>
         </View>
       ) : null}
     </TouchableOpacity>
@@ -1088,6 +1074,18 @@ function QuickEntryTile({
 }
 
 export default function PeriodTrackerScreen() {
+  const { locale, localeTag } = useLocale();
+  ACTIVE_CYCLE_LOCALE = locale;
+  CYCLE_DATE_LOCALE = localeTag;
+  WEEK_DAYS_DE = Array.from({ length: 7 }, (_, index) =>
+    new Intl.DateTimeFormat(localeTag, { weekday: 'narrow' }).format(new Date(2024, 0, 1 + index)),
+  );
+  const bleedingOptions = BLEEDING_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }));
+  const mucusOptions = MUCUS_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }));
+  const lhOptions = LH_OPTIONS.map((option) => ({ value: option.value, label: t(option.labelKey) }));
+  const bleedingLabel = (value: CycleBleedingIntensity) => value === 'none' ? '—' : t(`value.bleeding.${value}`);
+  const mucusLabel = (value: CycleCervicalMucus) => t(`value.mucus.${value}`);
+  const lhLabel = (value: CycleLhTestResult) => `${t(`value.lh.${value}`)}${value === 'peak' ? ' ✓' : ''}`;
   const { width: windowWidth } = useWindowDimensions();
   const stackInfoPills = windowWidth < 360;
   const adaptiveColors = useAdaptiveColors();
@@ -1583,14 +1581,14 @@ export default function PeriodTrackerScreen() {
 
   const heroGradientStart = isDark ? 'rgba(142,78,198,0.22)' : 'rgba(196,168,224,0.38)';
   const heroGradientEnd = isDark ? 'rgba(0,0,0,0)' : 'rgba(255,248,245,0)';
-  const selectedDateLabel = useMemo(() => formatDateLong(selectedDate), [selectedDate]);
+  const selectedDateLabel = useMemo(() => formatDateLong(selectedDate), [localeTag, selectedDate]);
   const monthOverviewLabel = useMemo(
     () => selectedDate.toLocaleDateString(CYCLE_DATE_LOCALE, { month: 'long', year: 'numeric' }),
-    [selectedDate],
+    [localeTag, selectedDate],
   );
   const logEntryDateLabel = useMemo(
     () => selectedDate.toLocaleDateString(CYCLE_DATE_LOCALE, { day: 'numeric', month: 'long' }),
-    [selectedDate],
+    [localeTag, selectedDate],
   );
   const isSelectedToday = useMemo(() => isSameDay(selectedDate, today), [selectedDate, today]);
   const activePhase = useMemo(
@@ -1608,10 +1606,8 @@ export default function PeriodTrackerScreen() {
     : prediction.subline;
   const symptomsSummary =
     selectedSymptoms.length > 0
-      ? `${selectedSymptoms.length} ${
-          selectedSymptoms.length === 1 ? 'Symptom erfasst' : 'Symptome erfasst'
-        }`
-      : 'Noch keine Symptome erfasst';
+      ? t(selectedSymptoms.length === 1 ? 'daily.symptomsLogged.one' : 'daily.symptomsLogged.other', { count: selectedSymptoms.length })
+      : t('daily.symptomsLogged.none');
 
   if (loading && !trackerData) {
     return (
@@ -1810,7 +1806,7 @@ export default function PeriodTrackerScreen() {
                 </Text>
                 <Text style={[styles.quickPeriodHelper, { color: bleedingIntensity !== 'none' ? textSecondary : 'rgba(255,255,255,0.82)' }]}>
                   {bleedingIntensity !== 'none'
-                    ? t('quickPeriod.edit', { intensity: BLEEDING_LABEL[bleedingIntensity] })
+                    ? t('quickPeriod.edit', { intensity: bleedingLabel(bleedingIntensity) })
                     : t('quickPeriod.helper')}
                 </Text>
               </View>
@@ -1880,7 +1876,7 @@ export default function PeriodTrackerScreen() {
               </View>
             </View>
             <View style={styles.selectedDayFacts}>
-              <View style={styles.selectedDayFact}><Text style={styles.selectedDayFactIcon}>🩸</Text><Text style={[styles.selectedDayFactText, { color: textSecondary }]}>{selectedLog?.bleeding_intensity && selectedLog.bleeding_intensity !== 'none' ? BLEEDING_LABEL[selectedLog.bleeding_intensity] : selectedLog?.spotting ? 'Spotting' : t('daily.noBleeding')}</Text></View>
+              <View style={styles.selectedDayFact}><Text style={styles.selectedDayFactIcon}>🩸</Text><Text style={[styles.selectedDayFactText, { color: textSecondary }]}>{selectedLog?.bleeding_intensity && selectedLog.bleeding_intensity !== 'none' ? bleedingLabel(selectedLog.bleeding_intensity) : selectedLog?.spotting ? t('daily.spotting') : t('daily.noBleeding')}</Text></View>
               <View style={styles.selectedDayFact}><Text style={styles.selectedDayFactIcon}>✨</Text><Text style={[styles.selectedDayFactText, { color: textSecondary }]}>{selectedLog?.symptoms?.length ? t('daily.symptomCount', { count: selectedLog.symptoms.length }) : t('daily.noSymptoms')}</Text></View>
               <View style={styles.selectedDayFact}><Text style={styles.selectedDayFactIcon}>🌡️</Text><Text style={[styles.selectedDayFactText, { color: textSecondary }]}>{selectedLog?.bbt_celsius ? `${selectedLog.bbt_celsius} °C` : t('daily.noTemperature')}</Text></View>
             </View>
@@ -1946,12 +1942,12 @@ export default function PeriodTrackerScreen() {
                               { color: isSelectedToday ? C_OVULATION : textSecondary },
                             ]}
                           >
-                            {isSelectedToday ? 'HEUTE' : 'EINTRAGEN'}
+                            {isSelectedToday ? t('common.todayUpper') : t('daily.logUpper')}
                           </Text>
                         </View>
                         <Text style={[styles.logEntryTitle, { color: textPrimary }]}>{logEntryDateLabel}</Text>
                         <Text style={[styles.logEntryMeta, { color: textSecondary }]}>
-                          Zyklustag {prediction.currentDay} · {activePhaseMeta.label}
+                          {t('daily.cyclePhase', { day: prediction.currentDay, phase: t(activePhaseMeta.labelKey) })}
                         </Text>
                       </View>
 
@@ -1971,7 +1967,7 @@ export default function PeriodTrackerScreen() {
                     </View>
 
                     <Text style={[styles.logEntrySectionEyebrow, { color: textSecondary }]}>
-                      Primäre Eingabe
+                      {t('daily.primaryInput')}
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -2013,7 +2009,7 @@ export default function PeriodTrackerScreen() {
                             },
                           ]}
                         >
-                          Blutung / Periode
+                          {t('daily.bleedingPeriod')}
                         </Text>
                         <Text
                           style={[
@@ -2027,10 +2023,10 @@ export default function PeriodTrackerScreen() {
                           ]}
                         >
                           {bleedingIntensity !== 'none'
-                            ? `${BLEEDING_LABEL[bleedingIntensity]}${spotting ? ' · Spotting' : ''}`
+                            ? `${bleedingLabel(bleedingIntensity)}${spotting ? ` · ${t('daily.spotting')}` : ''}`
                             : spotting
-                              ? 'Spotting'
-                              : 'Heute als wichtigste Eingabe'}
+                              ? t('daily.spotting')
+                              : t('daily.primaryToday')}
                         </Text>
                       </View>
                       <View
@@ -2053,7 +2049,7 @@ export default function PeriodTrackerScreen() {
                             },
                           ]}
                         >
-                          {bleedingIntensity !== 'none' || spotting ? 'Aktiv' : 'Offen'}
+                          {bleedingIntensity !== 'none' || spotting ? t('daily.active') : t('daily.open')}
                         </Text>
                       </View>
                       <IconSymbol
@@ -2073,10 +2069,10 @@ export default function PeriodTrackerScreen() {
                         ]}
                       >
                         <Text style={[styles.expandedSectionLabel, { color: textSecondary }]}>
-                          Blutungsstärke
+                          {t('daily.bleedingIntensity')}
                         </Text>
                         <ChipRow
-                          options={BLEEDING_OPTIONS}
+                          options={bleedingOptions}
                           value={bleedingIntensity}
                           onChange={setBleedingIntensity}
                           isDark={isDark}
@@ -2084,7 +2080,7 @@ export default function PeriodTrackerScreen() {
                         <View style={[styles.divider, { backgroundColor: divider, marginVertical: 4 }]} />
                         <View style={styles.expandedToggleRow}>
                           <Text style={[styles.expandedSectionLabel, { color: textSecondary }]}>
-                            Spotting
+                            {t('daily.spotting')}
                           </Text>
                           <TouchableOpacity
                             onPress={() => setSpotting((current) => !current)}
@@ -2102,7 +2098,7 @@ export default function PeriodTrackerScreen() {
                             <Text
                               style={[styles.toggleBtnText, { color: spotting ? '#FFFFFF' : textSecondary }]}
                             >
-                              {spotting ? '✓ Ja' : 'Nein'}
+                              {spotting ? `✓ ${t('daily.yes')}` : t('daily.no')}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -2110,14 +2106,14 @@ export default function PeriodTrackerScreen() {
                     ) : null}
 
                     <Text style={[styles.logEntrySectionEyebrow, { color: textSecondary }]}>
-                      Weitere Einträge
+                      {t('daily.moreEntries')}
                     </Text>
                     <View style={styles.quickGridRow}>
                       <QuickEntryTile
                         icon={<IconSymbol name="drop.fill" size={20} color={C_FERTILE} />}
-                        label="Schleim"
-                        helper={mucus ? 'Aktueller Status' : 'Nicht eingetragen'}
-                        value={mucus ? (MUCUS_LABEL[mucus] ?? 'Nicht eingetragen') : 'Nicht eingetragen'}
+                        label={t('factors.mucus')}
+                        helper={mucus ? t('daily.currentStatus') : t('daily.notLogged')}
+                        value={mucus ? mucusLabel(mucus) : t('daily.notLogged')}
                         hasValue={mucus !== null}
                         expanded={expandedSection === 'mucus'}
                         onPress={() => toggleSection('mucus')}
@@ -2126,9 +2122,9 @@ export default function PeriodTrackerScreen() {
                       />
                       <QuickEntryTile
                         icon={<IconSymbol name="magnifyingglass" size={20} color={C_OVULATION} />}
-                        label="LH-Test"
-                        helper={lh ? 'Testergebnis' : 'Heute offen'}
-                        value={lh ? (LH_LABEL[lh] ?? 'Kein Test') : 'Kein Test'}
+                        label={t('factors.lh')}
+                        helper={lh ? t('daily.testResult') : t('daily.openToday')}
+                        value={lh ? lhLabel(lh) : t('value.lh.none')}
                         hasValue={lh !== null}
                         expanded={expandedSection === 'lh'}
                         onPress={() => toggleSection('lh')}
@@ -2139,9 +2135,9 @@ export default function PeriodTrackerScreen() {
                     <View style={styles.quickGridRow}>
                       <QuickEntryTile
                         icon={<IconSymbol name="heart.fill" size={20} color={C_OVULATION} />}
-                        label="Sex"
-                        helper={sex ? 'Bereits eingetragen' : 'Nicht eingetragen'}
-                        value={sex ? 'Ja' : 'Noch offen'}
+                        label={t('daily.sex')}
+                        helper={sex ? t('daily.alreadyLogged') : t('daily.notLogged')}
+                        value={sex ? t('daily.yes') : t('daily.stillOpen')}
                         hasValue={sex}
                         expanded={false}
                         onPress={() => setSex((current) => !current)}
@@ -2150,9 +2146,9 @@ export default function PeriodTrackerScreen() {
                       />
                       <QuickEntryTile
                         icon={<IconSymbol name="waveform.path.ecg" size={20} color={C_FOLLICULAR} />}
-                        label="Temperatur"
-                        helper={bbt.trim() ? 'Letzter Wert' : 'Kein Wert'}
-                        value={bbt.trim() ? `${bbt} °C` : 'Nicht eingetragen'}
+                        label={t('daily.temperature')}
+                        helper={bbt.trim() ? t('daily.lastValue') : t('daily.noValue')}
+                        value={bbt.trim() ? `${bbt} °C` : t('daily.notLogged')}
                         hasValue={Boolean(bbt.trim())}
                         expanded={expandedSection === 'bbt'}
                         onPress={() => toggleSection('bbt')}
@@ -2171,9 +2167,9 @@ export default function PeriodTrackerScreen() {
                         ]}
                       >
                         <Text style={[styles.expandedSectionLabel, { color: textSecondary }]}>
-                          Zervixschleim
+                          {t('factors.mucus')}
                         </Text>
-                        <ChipRow options={MUCUS_OPTIONS} value={mucus} onChange={setMucus} isDark={isDark} />
+                        <ChipRow options={mucusOptions} value={mucus} onChange={setMucus} isDark={isDark} />
                       </View>
                     ) : null}
 
@@ -2187,9 +2183,9 @@ export default function PeriodTrackerScreen() {
                         ]}
                       >
                         <Text style={[styles.expandedSectionLabel, { color: textSecondary }]}>
-                          LH-Test Ergebnis
+                          {t('factors.lh')}
                         </Text>
-                        <ChipRow options={LH_OPTIONS} value={lh} onChange={setLh} isDark={isDark} />
+                        <ChipRow options={lhOptions} value={lh} onChange={setLh} isDark={isDark} />
                       </View>
                     ) : null}
 
@@ -2205,7 +2201,7 @@ export default function PeriodTrackerScreen() {
                         ]}
                       >
                         <Text style={[styles.expandedSectionLabel, { color: textSecondary }]}>
-                          Basaltemperatur (°C)
+                          {t('factors.bbt')} (°C)
                         </Text>
                         <TextInput
                           value={bbt}
@@ -2216,13 +2212,13 @@ export default function PeriodTrackerScreen() {
                             { color: textPrimary, borderColor: `${C_FOLLICULAR}55` },
                           ]}
                           placeholderTextColor={textSecondary}
-                          placeholder="z.B. 36,50"
+                          placeholder={t('daily.temperaturePlaceholder')}
                         />
                       </View>
                     ) : null}
 
                     <Text style={[styles.logEntrySectionEyebrow, { color: textSecondary }]}>
-                      Symptome
+                      {t('daily.symptoms')}
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -2246,7 +2242,7 @@ export default function PeriodTrackerScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={styles.symptomsRowHeader}>
-                          <Text style={[styles.symptomsRowTitle, { color: textPrimary }]}>Symptome</Text>
+                          <Text style={[styles.symptomsRowTitle, { color: textPrimary }]}>{t('daily.symptoms')}</Text>
                           <View
                             style={[
                               styles.symptomsCountBadge,
@@ -2262,17 +2258,20 @@ export default function PeriodTrackerScreen() {
                                 { color: selectedSymptoms.length > 0 ? C_OVULATION : textSecondary },
                               ]}
                             >
-                              {selectedSymptoms.length > 0 ? symptomsSummary : 'Offen'}
+                              {selectedSymptoms.length > 0 ? symptomsSummary : t('daily.open')}
                             </Text>
                           </View>
                         </View>
                         {selectedSymptoms.length > 0 ? (
                           <Text style={[styles.symptomsRowSub, { color: C_OVULATION }]}>
-                            {selectedSymptoms.join(' · ')}
+                            {selectedSymptoms.map((id) => {
+                              const symptom = SYMPTOMS.find((item) => item.id === id);
+                              return symptom ? t(symptom.labelKey) : id;
+                            }).join(' · ')}
                           </Text>
                         ) : (
                           <Text style={[styles.symptomsRowSub, { color: textSecondary }]}>
-                            Müdigkeit, Krämpfe oder Blähungen festhalten
+                            {t('daily.symptomsHint')}
                           </Text>
                         )}
                       </View>
@@ -2287,11 +2286,11 @@ export default function PeriodTrackerScreen() {
                       <View style={styles.symptomGrid}>
                         {SYMPTOMS.map((symptom) => (
                           <SymptomChip
-                            key={symptom.label}
+                            key={symptom.id}
                             emoji={symptom.emoji}
-                            label={symptom.label}
-                            selected={selectedSymptoms.includes(symptom.label)}
-                            onToggle={() => toggleSymptom(symptom.label)}
+                            label={t(symptom.labelKey)}
+                            selected={selectedSymptoms.includes(symptom.id)}
+                            onToggle={() => toggleSymptom(symptom.id)}
                             isDark={isDark}
                           />
                         ))}
@@ -2442,6 +2441,7 @@ export default function PeriodTrackerScreen() {
 
         <MonthCalendarOverlay
           visible={showMonthCalendar}
+          dateLocale={localeTag}
           baseMonthDate={calendarMonthDate}
           selectedDate={selectedDate}
           trackerData={trackerData}

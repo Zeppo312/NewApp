@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -37,11 +39,20 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { deleteChatMessage, uploadChatAudio } from '@/lib/chatAudio';
 import {
   type ChatMessageType,
-  VOICE_MESSAGE_PREVIEW,
   formatAudioDuration,
   getMessagePreviewText,
 } from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  formatCommunityDate,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,13 +97,13 @@ const getDisplayName = (profile?: ProfileLookup | null) => {
   if (username) return username;
   const first = profile?.first_name?.trim() || '';
   const last = profile?.last_name?.trim() || '';
-  return `${first} ${last}`.trim() || 'Chat';
+  return `${first} ${last}`.trim() || t('chat.title');
 };
 
 const formatMessageTime = (dateString: string) => {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return formatCommunityDate(date, ACTIVE_COMMUNITY_LOCALE, { hour: '2-digit', minute: '2-digit' });
 };
 
 const isSameDay = (a: Date, b: Date) =>
@@ -104,11 +115,11 @@ const formatDateLabel = (dateString: string) => {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return '';
   const now = new Date();
-  if (isSameDay(date, now)) return 'Heute';
+  if (isSameDay(date, now)) return t('common.today');
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (isSameDay(date, yesterday)) return 'Gestern';
-  return date.toLocaleDateString('de-DE', {
+  if (isSameDay(date, yesterday)) return t('common.yesterday');
+  return formatCommunityDate(date, ACTIVE_COMMUNITY_LOCALE, {
     day: 'numeric',
     month: 'long',
     ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
@@ -249,6 +260,7 @@ const swipeStyles = StyleSheet.create({
 // ---------------------------------------------------------------------------
 
 export default function ChatThreadScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const { user } = useAuth();
   const { userId } = useLocalSearchParams<{ userId?: string | string[] }>();
   const partnerId = useMemo(() => (Array.isArray(userId) ? userId[0] : userId) || '', [userId]);
@@ -259,7 +271,7 @@ export default function ChatThreadScreen() {
   const flatListRef = useRef<FlatList<EnrichedMessage>>(null);
   const scrollTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const [partnerName, setPartnerName] = useState('Chat');
+  const [partnerName, setPartnerName] = useState(t('chat.title'));
   const [partnerAvatarUrl, setPartnerAvatarUrl] = useState<string | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -362,7 +374,7 @@ export default function ChatThreadScreen() {
       setPartnerAvatarUrl(rpcData[0].avatar_url && avatarAllowed ? rpcData[0].avatar_url : null);
       return;
     }
-    setPartnerName('Chat');
+    setPartnerName(t('chat.title'));
   }, [partnerId]);
 
   const loadMessages = useCallback(async () => {
@@ -559,17 +571,17 @@ export default function ChatThreadScreen() {
   const handleDeleteMessage = useCallback(
     (message: DirectMessage) => {
       if (message.sender_id !== user?.id) return;
-      Alert.alert('Nachricht löschen', 'Möchtest du diese Nachricht wirklich löschen?', [
-        { text: 'Abbrechen', style: 'cancel' },
+      Alert.alert(t('chat.deleteMessageTitle'), t('chat.deleteMessageMessage'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteChatMessage('direct', message.id);
             } catch (error) {
               console.error('Fehler beim Löschen der Nachricht:', error);
-              Alert.alert('Chat', 'Die Nachricht konnte gerade nicht gelöscht werden.');
+              Alert.alert(t('chat.title'), t('chat.deleteMessageFailed'));
               return;
             }
             setMessages((current) => current.filter((item) => item.id !== message.id));
@@ -591,10 +603,10 @@ export default function ChatThreadScreen() {
 
       if (message.sender_id === user?.id) {
         // Own message → reply or delete
-        Alert.alert('Nachricht', undefined, [
-          { text: 'Antworten', onPress: () => handleReply(message) },
-          { text: 'Löschen', style: 'destructive', onPress: () => handleDeleteMessage(message) },
-          { text: 'Abbrechen', style: 'cancel' },
+        Alert.alert(t('common.message'), undefined, [
+          { text: t('feed.replyAction'), onPress: () => handleReply(message) },
+          { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteMessage(message) },
+          { text: t('common.cancel'), style: 'cancel' },
         ]);
       } else {
         // Partner message → reply
@@ -643,7 +655,7 @@ export default function ChatThreadScreen() {
       <View style={[styles.unreadDividerLine, { backgroundColor: theme.accent }]} />
       <View style={[styles.unreadDividerPill, { backgroundColor: theme.accent }]}>
         <ThemedText style={styles.unreadDividerText}>
-          {unreadCount} ungelesene {unreadCount === 1 ? 'Nachricht' : 'Nachrichten'}
+          {t(unreadCount === 1 ? 'common.unread.one' : 'common.unread.other', { count: unreadCount })}
         </ThemedText>
       </View>
       <View style={[styles.unreadDividerLine, { backgroundColor: theme.accent }]} />
@@ -662,7 +674,7 @@ export default function ChatThreadScreen() {
 
   const renderQuoteBlock = (item: EnrichedMessage, isOwnBubble: boolean) => {
     const quotedPreview =
-      item.quotedMessageType === 'voice' ? VOICE_MESSAGE_PREVIEW : item.quotedContent;
+      item.quotedMessageType === 'voice' ? t('chat.voiceTitle') : item.quotedContent;
     if (!quotedPreview) return null;
     const quotedIsOwn = item.quotedSenderId === user?.id;
     const accentBarColor = quotedIsOwn ? theme.accent : '#9775FA';
@@ -688,7 +700,7 @@ export default function ChatThreadScreen() {
         ]}
       >
         <ThemedText style={[styles.quoteSender, { color: quoteSenderColor }]} numberOfLines={1}>
-          {quotedIsOwn ? 'Du' : partnerName}
+          {quotedIsOwn ? t('common.you') : partnerName}
         </ThemedText>
         <ThemedText style={[styles.quoteText, { color: quoteTextColor }]} numberOfLines={2}>
           {quotedPreview}
@@ -788,7 +800,7 @@ export default function ChatThreadScreen() {
                   <ThemedText
                     style={[styles.voiceTitle, { color: isOwn ? ownTextColor : otherTextColor }]}
                   >
-                    {VOICE_MESSAGE_PREVIEW}
+                    {t('chat.voiceTitle')}
                   </ThemedText>
                   {isExpandedVoiceSlider ? (
                     <Slider
@@ -947,7 +959,7 @@ export default function ChatThreadScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <Header
           title={partnerName}
-          subtitle="Chat"
+          subtitle={t('chat.title')}
           showBackButton
           onBackPress={() => router.push('/(tabs)/notifications')}
           showBabySwitcher={false}
@@ -1002,9 +1014,9 @@ export default function ChatThreadScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <IconSymbol name="bubble.right" size={36} color={theme.tabIconDefault} />
-                  <ThemedText style={styles.emptyTitle}>Noch kein Chatverlauf</ThemedText>
+                  <ThemedText style={styles.emptyTitle}>{t('chat.emptyTitle')}</ThemedText>
                   <ThemedText style={styles.emptyText}>
-                    Schreib die erste Nachricht, um das Gespräch zu starten.
+                    {t('chat.emptyText')}
                   </ThemedText>
                 </View>
               }
@@ -1018,14 +1030,18 @@ export default function ChatThreadScreen() {
             onSendText={handleSendText}
             onSendVoice={handleSendVoice}
             onInputFocus={() => scrollToBottom(true)}
-            replyPreviewSender={replyTo ? (replyTo.sender_id === user?.id ? 'Du' : partnerName) : null}
-            replyPreviewText={replyTo ? getMessagePreviewText(replyTo) : null}
+            replyPreviewSender={replyTo ? (replyTo.sender_id === user?.id ? t('common.you') : partnerName) : null}
+            replyPreviewText={replyTo ? getMessagePreviewText(replyTo, {
+              voice: t('chat.voiceTitle'),
+              event: t('groupChat.event'),
+            }) : null}
             replyPreviewAccentColor={replyTo?.sender_id === user?.id ? theme.accent : '#9775FA'}
             onCancelReply={replyTo ? () => setReplyTo(null) : undefined}
             focusToken={replyTo?.id || null}
             theme={theme}
             isDark={isDark}
             bottomInset={insets.bottom}
+            locale={ACTIVE_COMMUNITY_LOCALE}
           />
         </KeyboardAvoidingView>
       </View>

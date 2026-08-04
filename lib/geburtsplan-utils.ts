@@ -3,6 +3,13 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { getGeburtsplan } from './supabase';
 import { formatContentForHTMLLeftColumn, formatContentForHTMLRightColumn } from '@/components/geburtsplan/formatHelpers';
+import {
+  getBirthPlanLocaleTag,
+  localizeBirthPlanOptionValue,
+  translateBirthPlanText,
+  type BirthPlanLocale,
+  type BirthPlanTranslationKey,
+} from './birthPlanTranslations';
 
 // Helper: escape HTML
 const escapeHtml = (str: string) =>
@@ -21,7 +28,10 @@ const renderOptions = (all: string[], selected: string[] = []) =>
   `<div class="options">${all.map((o) => renderOption(o, selected.includes(o))).join('')}</div>`;
 
 // Erstelle ein schönes, strukturiertes HTML direkt aus structured_data
-const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) => {
+const buildHtmlFromStructuredData = (data: any, babyIconBase64: string | null | undefined, locale: BirthPlanLocale) => {
+  const t = (key: BirthPlanTranslationKey, params?: Record<string, string | number>) => translateBirthPlanText(locale, key, params);
+  const option = (value: string) => localizeBirthPlanOptionValue(locale, value);
+  const options = (values: string[] = []) => values.map(option);
   // Brand (nach deinem Design-Guide: kein Blau, Lila + warmes Beige)
   const colorBg = '#FFF8F0';
   const colorCard = '#FFFFFF';
@@ -32,13 +42,13 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
   const colorLightPurple = 'rgba(94, 61, 179, 0.08)';
   const colorPurpleBorder = 'rgba(94, 61, 179, 0.25)';
 
-  const createdAt = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const createdAt = new Date().toLocaleDateString(getBirthPlanLocaleTag(locale), { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const metaRows: Array<{ label: string; value: string }> = [
-    { label: 'Name der Mutter', value: data?.allgemeineAngaben?.mutterName || '' },
-    { label: 'Entbindungstermin (ET)', value: data?.allgemeineAngaben?.entbindungstermin || '' },
-    { label: 'Geburtsklinik / Hausgeburt', value: data?.allgemeineAngaben?.geburtsklinik || '' },
-    { label: 'Begleitperson(en)', value: data?.allgemeineAngaben?.begleitpersonen || '' },
+    { label: t('general.motherName'), value: data?.allgemeineAngaben?.mutterName || '' },
+    { label: t('general.dueDate'), value: data?.allgemeineAngaben?.entbindungstermin || '' },
+    { label: t('general.place'), value: data?.allgemeineAngaben?.geburtsklinik || '' },
+    { label: t('general.companions'), value: data?.allgemeineAngaben?.begleitpersonen || '' },
   ];
 
   // Kurzfassung (oben auf Seite 1)
@@ -47,12 +57,12 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
   const mi = data?.medizinischeEingriffe || {};
 
   const summary = [
-    { k: 'Schmerzmittel', v: (gp.schmerzmittel?.[0] || gp.schmerzmittel) ? (Array.isArray(gp.schmerzmittel) ? gp.schmerzmittel.join(', ') : String(gp.schmerzmittel)) : '–' },
-    { k: 'Positionen', v: gp.geburtspositionen?.length ? gp.geburtspositionen.join(', ') : '–' },
-    { k: 'Begleitperson', v: gp.rolleBegleitperson || '–' },
-    { k: 'Bonding', v: ndg.bonding ? 'Ja' : 'Nein/–' },
-    { k: 'Stillen', v: ndg.stillen ? 'Ja' : 'Nein/–' },
-    { k: 'Monitoring', v: mi.monitoring || '–' },
+    { k: t('birthWishes.painRelief'), v: (gp.schmerzmittel?.[0] || gp.schmerzmittel) ? (Array.isArray(gp.schmerzmittel) ? options(gp.schmerzmittel).join(', ') : option(String(gp.schmerzmittel))) : '–' },
+    { k: t('birthWishes.positions'), v: gp.geburtspositionen?.length ? options(gp.geburtspositionen).join(', ') : '–' },
+    { k: t('birthWishes.companionRole'), v: gp.rolleBegleitperson ? option(gp.rolleBegleitperson) : '–' },
+    { k: t('afterBirth.bonding'), v: ndg.bonding ? t('common.yes') : `${t('common.no')}/–` },
+    { k: t('afterBirth.breastfeeding'), v: ndg.stillen ? t('common.yes') : `${t('common.no')}/–` },
+    { k: t('interventions.monitoring'), v: mi.monitoring ? option(mi.monitoring) : '–' },
   ];
 
   const section = (num: string, title: string, bodyHtml: string) => `
@@ -70,7 +80,8 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
   // Option-Renderer: 2 Spalten via CSS columns (print-freundlicher als Grid)
   // Zeigt nur ausgewählte Werte als Liste an
   const renderSelectedValues = (selected: string[] = []) => {
-    if (!selected || selected.length === 0) return '<div class="no-selection">Keine Auswahl getroffen</div>';
+    if (!selected || selected.length === 0) return `<div class="no-selection">${escapeHtml(t('export.noSelection'))}</div>`;
+    selected = options(selected);
     return `<div class="selected-values">${selected.map(val =>
       `<div class="selected-item">
         <span class="bullet">•</span>
@@ -90,7 +101,7 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mein Geburtsplan</title>
+    <title>${escapeHtml(t('export.myPlan'))}</title>
     <style>
       @page { size: A4; margin: 2cm 1.5cm 1.8cm 1.5cm; }
 
@@ -358,13 +369,13 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
       <div class="header">
         <div class="header-top">
           <div class="brand"><span class="dot"></span><span>LottiBaby App</span></div>
-          <div class="created">Erstellt am ${createdAt}</div>
+          <div class="created">${escapeHtml(t('export.createdOn', { date: createdAt }))}</div>
         </div>
 
         <div class="hero">
           <div class="title-wrap">
-            <h1>Mein Geburtsplan</h1>
-            <div class="subtitle">Wichtigste Punkte auf einen Blick</div>
+            <h1>${escapeHtml(t('export.myPlan'))}</h1>
+            <div class="subtitle">${escapeHtml(t('export.subtitle'))}</div>
           </div>
           ${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby"/></div>` : ''}
         </div>
@@ -372,7 +383,7 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
 
       <!-- Kurzfassung ganz oben -->
       <div class="card" style="padding:14px 16px; margin-bottom: 20px; border-left-width: 5px;">
-        <div style="font-weight:900;color:${colorTitle};margin-bottom:12px;font-size:13pt;">⭐ Wichtigste Punkte</div>
+        <div style="font-weight:900;color:${colorTitle};margin-bottom:12px;font-size:13pt;">⭐ ${escapeHtml(t('export.highlights'))}</div>
         <div class="summary">
           ${summary.map(s => `
             <div class="sitem">
@@ -383,7 +394,7 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
         </div>
       </div>
 
-      ${section('1', 'Allgemeine Angaben', `
+      ${section('1', t('section.general').replace(/^1\.\s*/, ''), `
         <div class="kv">
           ${metaRows.map(r => `
             <div class="k">${escapeHtml(r.label)}</div>
@@ -397,23 +408,23 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
         let content = '';
 
         if (gp.geburtspositionen && gp.geburtspositionen.length > 0) {
-          content += `<div class="group"><h3>Geburtspositionen</h3>${renderSelectedValues(gp.geburtspositionen)}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('birthWishes.positions'))}</h3>${renderSelectedValues(gp.geburtspositionen)}</div>`;
         }
         if (gp.schmerzmittel && gp.schmerzmittel.length > 0) {
-          content += `<div class="group"><h3>Schmerzmittel</h3>${renderSelectedValues(gp.schmerzmittel)}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('birthWishes.painRelief'))}</h3>${renderSelectedValues(gp.schmerzmittel)}</div>`;
         }
         if (gp.rolleBegleitperson) {
-          content += `<div class="group"><h3>Rolle der Begleitperson</h3>${renderSelectedValues([gp.rolleBegleitperson])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('birthWishes.companionRole'))}</h3>${renderSelectedValues([gp.rolleBegleitperson])}</div>`;
         }
         if (gp.musikAtmosphaere && gp.musikAtmosphaere.length > 0) {
-          content += `<div class="group"><h3>Musik / Atmosphäre</h3>${renderSelectedValues(gp.musikAtmosphaere)}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('birthWishes.atmosphere'))}</h3>${renderSelectedValues(gp.musikAtmosphaere)}</div>`;
         }
         const freitext = free(gp.sonstigeWuensche);
         if (freitext) {
-          content += `<div class="group"><h3>Sonstige Wünsche</h3>${freitext}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('birthWishes.other'))}</h3>${freitext}</div>`;
         }
 
-        return content ? section('2', 'Wünsche zur Geburt', content) : '';
+        return content ? section('2', t('section.birthWishes').replace(/^2\.\s*/, ''), content) : '';
       })()}
 
       ${(() => {
@@ -421,23 +432,23 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
         let content = '';
 
         if (mi.wehenfoerderung) {
-          content += `<div class="group"><h3>Wehenförderung</h3>${renderSelectedValues([mi.wehenfoerderung])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('interventions.induction'))}</h3>${renderSelectedValues([mi.wehenfoerderung])}</div>`;
         }
         if (mi.dammschnitt) {
-          content += `<div class="group"><h3>Dammschnitt / -massage</h3>${renderSelectedValues([mi.dammschnitt])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('interventions.episiotomy'))}</h3>${renderSelectedValues([mi.dammschnitt])}</div>`;
         }
         if (mi.monitoring) {
-          content += `<div class="group"><h3>Monitoring</h3>${renderSelectedValues([mi.monitoring])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('interventions.monitoring'))}</h3>${renderSelectedValues([mi.monitoring])}</div>`;
         }
         if (mi.notkaiserschnitt) {
-          content += `<div class="group"><h3>Notkaiserschnitt</h3>${renderSelectedValues([mi.notkaiserschnitt])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('interventions.emergencyCSection'))}</h3>${renderSelectedValues([mi.notkaiserschnitt])}</div>`;
         }
         const freitext = free(mi.sonstigeEingriffe);
         if (freitext) {
-          content += `<div class="group"><h3>Sonstige Eingriffe</h3>${freitext}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('interventions.other'))}</h3>${freitext}</div>`;
         }
 
-        return content ? section('3', 'Medizinische Eingriffe & Maßnahmen', content) : '';
+        return content ? section('3', t('section.interventions').replace(/^3\.\s*/, ''), content) : '';
       })()}
 
       ${(() => {
@@ -445,23 +456,23 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
         let content = '';
 
         if (ndg.bonding !== undefined && ndg.bonding !== null) {
-          content += `<div class="group"><h3>Bonding</h3>${renderSelectedValues([ndg.bonding ? 'Ja' : 'Nein'])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('afterBirth.bonding'))}</h3>${renderSelectedValues([t(ndg.bonding ? 'common.yes' : 'common.no')])}</div>`;
         }
         if (ndg.stillen !== undefined && ndg.stillen !== null) {
-          content += `<div class="group"><h3>Stillen</h3>${renderSelectedValues([ndg.stillen ? 'Ja' : 'Nein'])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('afterBirth.breastfeeding'))}</h3>${renderSelectedValues([t(ndg.stillen ? 'common.yes' : 'common.no')])}</div>`;
         }
         if (ndg.plazenta) {
-          content += `<div class="group"><h3>Plazenta</h3>${renderSelectedValues([ndg.plazenta])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('afterBirth.placenta'))}</h3>${renderSelectedValues([ndg.plazenta])}</div>`;
         }
         if (ndg.vitaminKGabe) {
-          content += `<div class="group"><h3>Vitamin-K-Gabe fürs Baby</h3>${renderSelectedValues([ndg.vitaminKGabe])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('afterBirth.vitaminK'))}</h3>${renderSelectedValues([ndg.vitaminKGabe])}</div>`;
         }
         const freitext = free(ndg.sonstigeWuensche);
         if (freitext) {
-          content += `<div class="group"><h3>Sonstige Wünsche</h3>${freitext}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('afterBirth.other'))}</h3>${freitext}</div>`;
         }
 
-        return content ? section('4', 'Nach der Geburt', content) : '';
+        return content ? section('4', t('section.afterBirth').replace(/^4\.\s*/, ''), content) : '';
       })()}
 
       ${(() => {
@@ -469,31 +480,31 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
         let content = '';
 
         if (nf.begleitpersonImOP) {
-          content += `<div class="group"><h3>Begleitperson im OP</h3>${renderSelectedValues([nf.begleitpersonImOP])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('emergency.companion'))}</h3>${renderSelectedValues([nf.begleitpersonImOP])}</div>`;
         }
         if (nf.bondingImOP !== undefined && nf.bondingImOP !== null) {
-          content += `<div class="group"><h3>Bonding im OP</h3>${renderSelectedValues([nf.bondingImOP ? 'Ja' : 'Nein'])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('emergency.bonding'))}</h3>${renderSelectedValues([t(nf.bondingImOP ? 'common.yes' : 'common.no')])}</div>`;
         }
         if (nf.fotoerlaubnis) {
-          content += `<div class="group"><h3>Fotoerlaubnis</h3>${renderSelectedValues([nf.fotoerlaubnis])}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('emergency.photos'))}</h3>${renderSelectedValues([nf.fotoerlaubnis])}</div>`;
         }
         const freitext = free(nf.sonstigeWuensche);
         if (freitext) {
-          content += `<div class="group"><h3>Sonstige Wünsche</h3>${freitext}</div>`;
+          content += `<div class="group"><h3>${escapeHtml(t('emergency.other'))}</h3>${freitext}</div>`;
         }
 
-        return content ? section('5', 'Für den Notfall / Kaiserschnitt', content) : '';
+        return content ? section('5', t('section.emergency').replace(/^5\.\s*/, ''), content) : '';
       })()}
 
       ${(() => {
         const freitext = free(data?.sonstigeWuensche?.freitext);
         if (!freitext) return '';
-        return section('6', 'Sonstige Hinweise', freitext);
+        return section('6', t('section.other').replace(/^6\.\s*/, ''), freitext);
       })()}
 
       <div class="footer">
-        <div><strong>LottiBaby App</strong> — Liebe. Klarheit. Überblick.</div>
-        <div>Dieser Geburtsplan wurde mit der LottiBaby App erstellt.</div>
+        <div><strong>LottiBaby App</strong> — ${escapeHtml(t('export.motto'))}</div>
+        <div>${escapeHtml(t('export.footer'))}</div>
       </div>
     </div>
   </body>
@@ -504,7 +515,8 @@ const buildHtmlFromStructuredData = (data: any, babyIconBase64?: string | null) 
 };
 
 // Funktion zum Generieren und Herunterladen des Geburtsplans als PDF
-export const generateAndDownloadPDF = async (babyIconBase64: string | null, setIsGeneratingPDF?: (value: boolean) => void) => {
+export const generateAndDownloadPDF = async (babyIconBase64: string | null, setIsGeneratingPDF?: (value: boolean) => void, locale: BirthPlanLocale = 'de') => {
+  const t = (key: BirthPlanTranslationKey, params?: Record<string, string | number>) => translateBirthPlanText(locale, key, params);
   try {
     if (setIsGeneratingPDF) {
       setIsGeneratingPDF(true);
@@ -515,27 +527,27 @@ export const generateAndDownloadPDF = async (babyIconBase64: string | null, setI
 
     if (error) {
       console.error('Error loading geburtsplan:', error);
-      Alert.alert('Fehler', 'Der Geburtsplan konnte nicht geladen werden.');
+      Alert.alert(t('common.error'), t('export.loadFailed'));
       return;
     }
 
     if (!data) {
-      Alert.alert('Hinweis', 'Es wurde noch kein Geburtsplan erstellt.');
+      Alert.alert(t('common.notice'), t('export.empty'));
       return;
     }
 
     // Erstelle HTML für das PDF
     let htmlContent: string;
     if (data.structured_data) {
-      htmlContent = buildHtmlFromStructuredData(data.structured_data, babyIconBase64);
+      htmlContent = buildHtmlFromStructuredData(data.structured_data, babyIconBase64, locale);
     } else {
       // Fallback: bestehendes 2-Spalten-Layout aus Textinhalt
       const content = data.textContent || data.content || '';
-      htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Mein Geburtsplan</title>
+      htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(t('export.myPlan'))}</title>
       <style>@page{margin:1.5cm;size:A4;}body{font-family:Arial,Helvetica,sans-serif;line-height:1.5;margin:0;color:#333;background:#FFF8F0;font-size:10pt}.container{max-width:100%;margin:0 auto;background:#fff;padding:20px}.header{text-align:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #E8D5C4}h1{color:#7D5A50;font-size:18pt;margin:0 0 5px}h2{color:#7D5A50;font-size:12pt;margin:10px 0 5px;border-bottom:1px solid #E8D5C4;padding-bottom:3px}h3{color:#7D5A50;font-size:11pt;margin:8px 0 4px}.columns{display:flex;gap:20px;}.column{width:48%}.section{margin-bottom:10px}.item{margin-bottom:4px}.item-label{font-weight:700;color:#5D4037}.item-value{margin-left:3px}.footer{text-align:center;margin-top:14px;font-size:9pt;color:#7D5A50;font-style:italic;border-top:1px solid #E8D5C4;padding-top:10px}.baby-icon{text-align:center;margin:8px auto}.baby-icon img{height:46px}</style>
-      </head><body><div class="container"><div class="header"><h1>Mein Geburtsplan</h1><p>Erstellt am ${new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p></div>
+      </head><body><div class="container"><div class="header"><h1>${escapeHtml(t('export.myPlan'))}</h1><p>${escapeHtml(t('export.createdOn', { date: new Date().toLocaleDateString(getBirthPlanLocaleTag(locale), { day: '2-digit', month: '2-digit', year: 'numeric' }) }))}</p></div>
       <div class="columns"><div class="column left-column">${formatContentForHTMLLeftColumn(content)}</div><div class="column right-column">${formatContentForHTMLRightColumn(content)}</div></div>
-      <div class="footer">${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}<p>Dieser Geburtsplan wurde mit der LottiBaby App erstellt.</p></div></div></body></html>`;
+      <div class="footer">${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}<p>${escapeHtml(t('export.footer'))}</p></div></div></body></html>`;
     }
 
     // Generiere das PDF mit expo-print
@@ -560,16 +572,16 @@ export const generateAndDownloadPDF = async (babyIconBase64: string | null, setI
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
-        dialogTitle: 'Geburtsplan als PDF speichern',
+        dialogTitle: t('export.dialogTitle'),
         UTI: 'com.adobe.pdf'
       });
     } else {
-      Alert.alert('Teilen nicht verfügbar', 'Das Teilen von Dateien wird auf diesem Gerät nicht unterstützt.');
+      Alert.alert(t('export.shareUnavailableTitle'), t('export.shareUnavailable'));
     }
 
   } catch (error) {
     console.error('Fehler beim Generieren des PDFs:', error);
-    Alert.alert('Fehler', 'Der Geburtsplan konnte nicht als PDF gespeichert werden.');
+    Alert.alert(t('common.error'), t('export.failed'));
   } finally {
     if (setIsGeneratingPDF) {
       setIsGeneratingPDF(false);

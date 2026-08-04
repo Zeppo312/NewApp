@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateWeeklyMomentText, type WeeklyMomentTranslationKey } from '@/lib/weeklyMomentTranslations';
 import {
   addLottiMomentListener,
   type LottiMomentCategory,
@@ -29,10 +31,10 @@ const SHOW_DURATION_MS = 2400;
 const FADE_IN_MS = 220;
 const FADE_OUT_MS = 260;
 
-const COPY: Record<LottiMomentCategory, { emoji: string; text: string }> = {
-  feeding: { emoji: '🍼', text: 'Essensmoment zur Woche hinzugefügt' },
-  care: { emoji: '🤍', text: 'Pflegemoment zur Woche hinzugefügt' },
-  sleep: { emoji: '🌙', text: 'Schlafmoment zur Woche hinzugefügt' },
+const COPY: Record<LottiMomentCategory, { emoji: string; textKey: WeeklyMomentTranslationKey }> = {
+  feeding: { emoji: '🍼', textKey: 'toast.feeding' },
+  care: { emoji: '🤍', textKey: 'toast.care' },
+  sleep: { emoji: '🌙', textKey: 'toast.sleep' },
 };
 
 type ActiveToast = {
@@ -41,6 +43,7 @@ type ActiveToast = {
 };
 
 export function LottiMomentToast() {
+  const { locale } = useLocale();
   const insets = useSafeAreaInsets();
   const adaptiveColors = useAdaptiveColors();
   const [active, setActive] = useState<ActiveToast | null>(null);
@@ -160,7 +163,7 @@ export function LottiMomentToast() {
               adaptive={false}
               style={[styles.text, { color: textPrimary }]}
             >
-              {copy.text}
+              {translateWeeklyMomentText(locale, copy.textKey)}
             </ThemedText>
             <View style={[styles.dot, { backgroundColor: ACCENT_PURPLE }]} />
           </View>

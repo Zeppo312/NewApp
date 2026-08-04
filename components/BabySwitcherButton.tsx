@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type BabySwitcherButtonProps = {
   size?: number;
@@ -34,6 +35,12 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   isOpen,
   onOpenChange,
 }) => {
+  const { locale } = useLocale();
+  const c = {
+    de: { error: 'Fehler', switchFailed: 'Das aktive Kind konnte nicht gewechselt werden.', child: 'Kind', createFailed: 'Das neue Kind konnte nicht angelegt werden.', pregnancyFailed: 'Die Schwangerschaft konnte nicht vorbereitet werden.', deleteFailed: 'Das Kind konnte nicht gelöscht werden.', notPossible: 'Nicht möglich', needOne: 'Du brauchst mindestens ein Kind in der App.', deleteQuestion: 'Kind löschen?', deleteBody: (name: string) => `Möchtest du „${name}“ wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`, cancel: 'Abbrechen', delete: 'Löschen', editOpenFailed: 'Das Kind konnte nicht zum Bearbeiten geöffnet werden.', edit: 'Bearbeiten', deleteChild: 'Kind löschen', manage: (name: string) => `„${name}“ verwalten`, whatDo: 'Was möchtest du tun?', cannotDelete: (name: string) => `„${name}“ kann nicht gelöscht werden, weil mindestens ein Kind bestehen bleiben muss.`, permission: 'Berechtigung erforderlich', photoPermission: 'Bitte erlaube den Zugriff auf deine Fotos.', imageProcess: 'Das Bild konnte nicht verarbeitet werden.', imageSave: 'Das Babybild konnte nicht gespeichert werden.', imageChange: 'Das Babybild konnte nicht geändert werden.', select: 'Kind auswählen', none: 'Keine Kinder gefunden.', active: 'Aktiv', activeChild: 'Aktives Kind', updating: 'Bild wird aktualisiert…', changeImage: 'Bild ändern', view: 'Ansicht', pregnancyMode: 'Schwangerschaftsmodus anschauen', babyMode: 'Babymodus anschauen', temporary: 'Temporär aktiv (max. 10 Minuten)', createNew: 'Neu anlegen', creating: 'Wird angelegt…', createChild: 'Kind anlegen', preparing: 'Wird vorbereitet…', createPregnancy: 'Schwangerschaft anlegen' },
+    en: { error: 'Error', switchFailed: 'The active child could not be changed.', child: 'Child', createFailed: 'The new child could not be created.', pregnancyFailed: 'Pregnancy setup could not be prepared.', deleteFailed: 'The child could not be deleted.', notPossible: 'Not possible', needOne: 'You need at least one child in the app.', deleteQuestion: 'Delete child?', deleteBody: (name: string) => `Are you sure you want to delete “${name}”? This cannot be undone.`, cancel: 'Cancel', delete: 'Delete', editOpenFailed: 'The child could not be opened for editing.', edit: 'Edit', deleteChild: 'Delete child', manage: (name: string) => `Manage “${name}”`, whatDo: 'What would you like to do?', cannotDelete: (name: string) => `“${name}” cannot be deleted because at least one child must remain.`, permission: 'Permission required', photoPermission: 'Please allow access to your photos.', imageProcess: 'The image could not be processed.', imageSave: "The baby's photo could not be saved.", imageChange: "The baby's photo could not be changed.", select: 'Select child', none: 'No children found.', active: 'Active', activeChild: 'Active child', updating: 'Updating photo…', changeImage: 'Change photo', view: 'View', pregnancyMode: 'View pregnancy mode', babyMode: 'View baby mode', temporary: 'Temporarily active (up to 10 minutes)', createNew: 'Create new', creating: 'Creating…', createChild: 'Add child', preparing: 'Preparing…', createPregnancy: 'Add pregnancy' },
+    es: { error: 'Error', switchFailed: 'No se pudo cambiar el niño activo.', child: 'Niño', createFailed: 'No se pudo crear el nuevo niño.', pregnancyFailed: 'No se pudo preparar el embarazo.', deleteFailed: 'No se pudo eliminar el niño.', notPossible: 'No es posible', needOne: 'Necesitas al menos un niño en la aplicación.', deleteQuestion: '¿Eliminar niño?', deleteBody: (name: string) => `¿Seguro que quieres eliminar a «${name}»? Esta acción no se puede deshacer.`, cancel: 'Cancelar', delete: 'Eliminar', editOpenFailed: 'No se pudo abrir el niño para editarlo.', edit: 'Editar', deleteChild: 'Eliminar niño', manage: (name: string) => `Gestionar «${name}»`, whatDo: '¿Qué quieres hacer?', cannotDelete: (name: string) => `No se puede eliminar a «${name}» porque debe quedar al menos un niño.`, permission: 'Permiso necesario', photoPermission: 'Permite el acceso a tus fotos.', imageProcess: 'No se pudo procesar la imagen.', imageSave: 'No se pudo guardar la foto del bebé.', imageChange: 'No se pudo cambiar la foto del bebé.', select: 'Seleccionar niño', none: 'No se encontraron niños.', active: 'Activo', activeChild: 'Niño activo', updating: 'Actualizando foto…', changeImage: 'Cambiar foto', view: 'Vista', pregnancyMode: 'Ver modo embarazo', babyMode: 'Ver modo bebé', temporary: 'Activo temporalmente (máx. 10 minutos)', createNew: 'Crear nuevo', creating: 'Creando…', createChild: 'Añadir niño', preparing: 'Preparando…', createPregnancy: 'Añadir embarazo' },
+  }[locale];
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
@@ -133,7 +140,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     } catch (error) {
       console.error('Error switching active baby:', error);
       setModalOpen(false);
-      Alert.alert('Fehler', 'Das aktive Kind konnte nicht gewechselt werden.');
+      Alert.alert(c.error, c.switchFailed);
     }
   };
 
@@ -141,14 +148,14 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     if (isCreatingBaby) return;
     setIsCreatingBaby(true);
 
-    const fallbackName = `Kind ${babies.length + 1}`;
+    const fallbackName = `${c.child} ${babies.length + 1}`;
 
     try {
       const { data, error } = await createBaby({ name: fallbackName });
 
       if (error) {
         console.error('Error creating baby:', error);
-        Alert.alert('Fehler', 'Das neue Kind konnte nicht angelegt werden.');
+        Alert.alert(c.error, c.createFailed);
         return;
       }
 
@@ -183,7 +190,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       navigateFromModal('/pregnancy-setup');
     } catch (error) {
       console.error('Error preparing pregnancy setup:', error);
-      Alert.alert('Fehler', 'Die Schwangerschaft konnte nicht vorbereitet werden.');
+      Alert.alert(c.error, c.pregnancyFailed);
     } finally {
       setIsCreatingPregnancy(false);
     }
@@ -216,7 +223,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       }
     } catch (error) {
       console.error('Error deleting baby:', error);
-      Alert.alert('Fehler', 'Das Kind konnte nicht gelöscht werden.');
+      Alert.alert(c.error, c.deleteFailed);
     } finally {
       setDeletingBabyId(null);
     }
@@ -225,19 +232,19 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const handleDeleteBaby = (babyId: string, label: string) => {
     if (deletingBabyId) return;
     if (babies.length <= 1) {
-      Alert.alert('Nicht möglich', 'Du brauchst mindestens ein Kind in der App.');
+      Alert.alert(c.notPossible, c.needOne);
       return;
     }
 
     const fallbackBabyId = babies.find((baby) => baby.id && baby.id !== babyId)?.id ?? null;
 
     Alert.alert(
-      'Kind löschen?',
-      `Möchtest du "${label}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      c.deleteQuestion,
+      c.deleteBody(label),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: c.cancel, style: 'cancel' },
         {
-          text: 'Löschen',
+          text: c.delete,
           style: 'destructive',
           onPress: () => {
             void runDeleteBaby(babyId, fallbackBabyId);
@@ -261,7 +268,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       });
     } catch (error) {
       console.error('Error opening baby edit screen:', error);
-      Alert.alert('Fehler', 'Das Kind konnte nicht zum Bearbeiten geöffnet werden.');
+      Alert.alert(c.error, c.editOpenFailed);
     }
   };
 
@@ -270,9 +277,9 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
     const canDelete = babies.length > 1;
     const actions: AlertButton[] = [
-      { text: 'Abbrechen', style: 'cancel' as const },
+      { text: c.cancel, style: 'cancel' as const },
       {
-        text: 'Bearbeiten',
+        text: c.edit,
         onPress: () => {
           void handleEditBaby(babyId);
         },
@@ -281,17 +288,17 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
     if (canDelete) {
       actions.push({
-        text: 'Kind löschen',
+        text: c.deleteChild,
         style: 'destructive' as const,
         onPress: () => handleDeleteBaby(babyId, label),
       });
     }
 
     Alert.alert(
-      `"${label}" verwalten`,
+      c.manage(label),
       canDelete
-        ? 'Was möchtest du tun?'
-        : `"${label}" kann nicht gelöscht werden, weil mindestens ein Kind bestehen bleiben muss.`,
+        ? c.whatDo
+        : c.cannotDelete(label),
       actions,
     );
   };
@@ -303,7 +310,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        Alert.alert(c.permission, c.photoPermission);
         return;
       }
 
@@ -336,27 +343,27 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
           });
         } catch (error) {
           console.error('Error converting baby photo:', error);
-          Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+          Alert.alert(c.error, c.imageProcess);
           return;
         }
       }
 
       if (!base64Data) {
-        Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+        Alert.alert(c.error, c.imageProcess);
         return;
       }
 
       const { error } = await saveBabyInfo({ photo_url: base64Data }, activeBabyId);
       if (error) {
         console.error('Error updating baby photo:', error);
-        Alert.alert('Fehler', 'Das Babybild konnte nicht gespeichert werden.');
+        Alert.alert(c.error, c.imageSave);
         return;
       }
 
       await refreshBabies();
     } catch (error) {
       console.error('Error changing baby photo:', error);
-      Alert.alert('Fehler', 'Das Babybild konnte nicht geändert werden.');
+      Alert.alert(c.error, c.imageChange);
     } finally {
       setIsChangingPhoto(false);
     }
@@ -413,7 +420,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
             onPress={(event) => event.stopPropagation()}
           >
             <View style={styles.modalHeader}>
-              <ThemedText style={[styles.modalTitle, { color: textColor }]}>Kind auswählen</ThemedText>
+              <ThemedText style={[styles.modalTitle, { color: textColor }]}>{c.select}</ThemedText>
               <TouchableOpacity onPress={() => setModalOpen(false)}>
                 <IconSymbol name="xmark" size={18} color={textColor} />
               </TouchableOpacity>
@@ -423,17 +430,17 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               {!isLoading && babies.length === 0 && (
                 <View style={styles.emptyState}>
                   <ThemedText style={[styles.emptyStateTitle, { color: textColor }]}>
-                    Keine Kinder gefunden.
+                    {c.none}
                   </ThemedText>
                   {loadError && (
                     <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
-                      Fehler: {loadError}
+                      {c.error}: {loadError}
                     </ThemedText>
                   )}
                 </View>
               )}
               {babies.map((baby, index) => {
-                const label = baby.name?.trim() || `Kind ${index + 1}`;
+                const label = baby.name?.trim() || `${c.child} ${index + 1}`;
                 const isActive = baby.id === activeBabyId;
                 const isDeletingThisBaby = baby.id != null && deletingBabyId === baby.id;
                 return (
@@ -462,7 +469,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                     )}
                     <View style={styles.babyRowText}>
                       <ThemedText style={[styles.babyRowTitle, { color: textColor }]}>{label}</ThemedText>
-                      {isActive && <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>Aktiv</ThemedText>}
+                      {isActive && <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>{c.active}</ThemedText>}
                     </View>
                     {isActive && (
                       <IconSymbol name="checkmark.circle.fill" size={18} color={activeStateIconColor} />
@@ -492,41 +499,41 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
             </View>
 
             <View style={[styles.photoSection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.photoSectionTitle, { color: textColor }]}>Aktives Kind</ThemedText>
+              <ThemedText style={[styles.photoSectionTitle, { color: textColor }]}>{c.activeChild}</ThemedText>
               <TouchableOpacity
                 style={[styles.photoButton, { backgroundColor: primaryButtonBgColor }, isChangingPhoto && styles.createButtonDisabled]}
                 onPress={handleChangePhoto}
                 disabled={!activeBabyId || isChangingPhoto}
               >
                 <ThemedText style={[styles.photoButtonText, { color: primaryButtonTextColor }]}>
-                  {isChangingPhoto ? 'Bild wird aktualisiert...' : 'Bild ändern'}
+                  {isChangingPhoto ? c.updating : c.changeImage}
                 </ThemedText>
               </TouchableOpacity>
             </View>
 
             <View style={[styles.viewModeSection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.viewModeTitle, { color: textColor }]}>Ansicht</ThemedText>
+              <ThemedText style={[styles.viewModeTitle, { color: textColor }]}>{c.view}</ThemedText>
               <TouchableOpacity style={[styles.viewModeButton, { backgroundColor: primaryButtonBgColor }]} onPress={handleSwitchViewMode}>
                 <ThemedText style={[styles.viewModeButtonText, { color: primaryButtonTextColor }]}>
-                  {isBabyBorn ? 'Schwangerschaftsmodus anschauen' : 'Babymodus anschauen'}
+                  {isBabyBorn ? c.pregnancyMode : c.babyMode}
                 </ThemedText>
               </TouchableOpacity>
               {temporaryViewMode && (
                 <ThemedText style={[styles.viewModeHint, { color: subtitleColor }]}>
-                  Temporär aktiv (max. 10 Minuten)
+                  {c.temporary}
                 </ThemedText>
               )}
             </View>
 
             <View style={[styles.newBabySection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>Neu anlegen</ThemedText>
+              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>{c.createNew}</ThemedText>
               <TouchableOpacity
                 style={[styles.createButton, { backgroundColor: primaryButtonBgColor }, isCreatingBaby && styles.createButtonDisabled]}
                 onPress={handleCreateBaby}
                 disabled={isCreatingBaby}
               >
                 <ThemedText style={[styles.createButtonText, { color: primaryButtonTextColor }]}>
-                  {isCreatingBaby ? 'Wird angelegt...' : 'Kind anlegen'}
+                  {isCreatingBaby ? c.creating : c.createChild}
                 </ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
@@ -539,7 +546,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                 disabled={isCreatingPregnancy || isCreatingBaby}
               >
                 <ThemedText style={[styles.secondaryActionButtonText, { color: secondaryButtonTextColor }]}>
-                  {isCreatingPregnancy ? 'Wird vorbereitet...' : 'Schwangerschaft anlegen'}
+                  {isCreatingPregnancy ? c.preparing : c.createPregnancy}
                 </ThemedText>
               </TouchableOpacity>
             </View>

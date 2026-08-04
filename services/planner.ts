@@ -657,8 +657,12 @@ export function toDateOnlyISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function usePlannerDay(date: Date) {
+export function usePlannerDay(
+  date: Date,
+  options: { ensureDay?: boolean } = {},
+) {
   const { user } = useAuth();
+  const ensureDay = options.ensureDay ?? true;
   const normalizedDate = useMemo(() => {
     const copy = new Date(date);
     copy.setHours(0, 0, 0, 0);
@@ -735,7 +739,9 @@ export function usePlannerDay(date: Date) {
 
     const scopedOwnerIds = ownerIds.length > 0 ? ownerIds : [user.id];
 
-    const ensuredDayId = await ensurePlannerDayForUser(user.id, normalizedDate);
+    const ensuredDayId = ensureDay
+      ? await ensurePlannerDayForUser(user.id, normalizedDate)
+      : null;
 
     const { data: dayRows, error: dayError } = await supabase
       .from('planner_days')
@@ -899,7 +905,7 @@ export function usePlannerDay(date: Date) {
       })),
       baseDayId: aggregated.baseDayId ?? ensuredDayId,
     };
-  }, [user?.id, ownerIds, dateIso, normalizedDate]);
+  }, [user?.id, ownerIds, dateIso, ensureDay, normalizedDate]);
 
   const itemsMapRef = useRef<Record<string, PlannerItemRow>>({});
   const baseDayIdRef = useRef<string | null>(null);

@@ -8,6 +8,7 @@ import {
   GLASS_OVERLAY,
   PRIMARY,
 } from "@/constants/PlannerDesign";
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   onPress: () => void;
@@ -20,6 +21,7 @@ export const FloatingAddButton: React.FC<Props> = ({
   bottomInset = 16,
   rightInset = 16,
 }) => {
+  const { locale } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -37,7 +39,7 @@ export const FloatingAddButton: React.FC<Props> = ({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel="Schnell hinzufügen"
+        accessibilityLabel={{ de: 'Schnell hinzufügen', en: 'Quick add', es: 'Añadir rápidamente' }[locale]}
         style={({ pressed }) => [
           styles.btn,
           pressed && { transform: [{ scale: 0.98 }] },

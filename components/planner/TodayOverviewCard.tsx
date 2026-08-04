@@ -13,12 +13,19 @@ import {
   PRIMARY,
   TEXT_PRIMARY,
 } from "@/constants/PlannerDesign";
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   summary: PlannerDaySummary;
 };
 
 export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
+  const { locale } = useLocale();
+  const c = {
+    de: { noTasks: 'Keine Aufgaben', done: 'erledigt', open: 'Offen', events: 'Termine', sleep: 'Schlaf', today: 'Heute', tasks: 'Aufgaben erledigt', hoursSleep: 'Stunden Schlaf', title: 'Tagesübersicht', progress: 'Fortschritt', percent: 'Prozent' },
+    en: { noTasks: 'No tasks', done: 'completed', open: 'Open', events: 'Appointments', sleep: 'Sleep', today: 'Today', tasks: 'tasks completed', hoursSleep: 'hours of sleep', title: 'Day overview', progress: 'Progress', percent: 'percent' },
+    es: { noTasks: 'Sin tareas', done: 'completadas', open: 'Abiertas', events: 'Citas', sleep: 'Sueño', today: 'Hoy', tasks: 'tareas completadas', hoursSleep: 'horas de sueño', title: 'Resumen del día', progress: 'Progreso', percent: 'por ciento' },
+  }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -35,22 +42,22 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
   const openTasks = Math.max(summary.tasksTotal - summary.tasksDone, 0);
   const progressText =
     summary.tasksTotal === 0
-      ? "Keine Aufgaben"
-      : `${summary.tasksDone}/${summary.tasksTotal} erledigt`;
+      ? c.noTasks
+      : `${summary.tasksDone}/${summary.tasksTotal} ${c.done}`;
 
   const stats = [
     {
-      label: "Offen",
+      label: c.open,
       value: `${openTasks}`,
     },
     {
-      label: "Termine",
+      label: c.events,
       value: `${summary.eventsCount}`,
     },
     ...(summary.babySleepHours !== undefined
       ? [
           {
-            label: "Schlaf",
+            label: c.sleep,
             value: `${summary.babySleepHours}h`,
           },
         ]
@@ -77,12 +84,12 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
       <View
         style={styles.contentRow}
         accessibilityRole="summary"
-        accessibilityLabel={`Heute: ${summary.tasksDone} von ${summary.tasksTotal} Aufgaben erledigt, ${openTasks} offen, ${summary.eventsCount} Termine${summary.babySleepHours ? `, ${summary.babySleepHours} Stunden Schlaf` : ""}.`}
+        accessibilityLabel={`${c.today}: ${summary.tasksDone}/${summary.tasksTotal} ${c.tasks}, ${openTasks} ${c.open.toLowerCase()}, ${summary.eventsCount} ${c.events}${summary.babySleepHours ? `, ${summary.babySleepHours} ${c.hoursSleep}` : ""}.`}
       >
         <View style={styles.progressColumn}>
           <View style={styles.titleRow}>
             <ThemedText style={[styles.title, { color: textPrimary }]}>
-              Tagesübersicht
+              {c.title}
             </ThemedText>
             <Text style={[styles.progressText, { color: textPrimary }]}>
               {progressPct}%
@@ -93,7 +100,7 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
           </Text>
           <View
             style={styles.progressWrap}
-            accessibilityLabel={`Fortschritt ${progressPct} Prozent`}
+            accessibilityLabel={`${c.progress} ${progressPct} ${c.percent}`}
             accessibilityRole="progressbar"
           >
             <View

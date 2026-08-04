@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle } from 'react-native';
 import { Colors } from '@/constants/Colors';
@@ -24,6 +26,17 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
+import {
+  DEFAULT_PREGNANCY_HOME_LOCALE,
+  getPregnancyHomeLocaleTag,
+  PregnancyHomeTranslationKey,
+  translatePregnancyHomeText,
+} from '@/lib/pregnancyHomeTranslations';
+
+let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
+let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
+const t = (key: PregnancyHomeTranslationKey, params?: Record<string, string | number>) =>
+  translatePregnancyHomeText(ACTIVE_PREGNANCY_HOME_LOCALE, key, params);
 
 function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   const anim = React.useState(() => new Animated.Value(0))[0];
@@ -262,14 +275,19 @@ type PregnancyQuickAccessCardConfig = {
   iconBackgroundColor: string;
 };
 
+type PregnancyQuickAccessCardDefinition = Omit<PregnancyQuickAccessCardConfig, 'title' | 'description'> & {
+  titleKey: PregnancyHomeTranslationKey;
+  descriptionKey: PregnancyHomeTranslationKey;
+};
+
 const PREGNANCY_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'pregnancy_home_quick_access_order';
 const PREGNANCY_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'pregnancy_home_quick_access_hidden';
 
-const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
+const PREGNANCY_QUICK_ACCESS_CARD_DEFINITIONS: PregnancyQuickAccessCardDefinition[] = [
   {
     id: 'countdown',
-    title: 'Countdown',
-    description: 'Dein Weg zur Geburt',
+    titleKey: 'card.countdown.title',
+    descriptionKey: 'card.countdown.description',
     iconName: 'calendar',
     destination: { pathname: '/(tabs)/countdown' },
     cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
@@ -277,8 +295,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'contraction-tracker',
-    title: 'Wehen-Tracker',
-    description: 'Wehen messen und verfolgen',
+    titleKey: 'card.contractions.title',
+    descriptionKey: 'card.contractions.description',
     iconName: 'timer',
     destination: '/(tabs)',
     cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
@@ -286,8 +304,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'planner',
-    title: 'Planer',
-    description: 'Tagesplanung & Termine',
+    titleKey: 'card.planner.title',
+    descriptionKey: 'card.planner.description',
     iconName: 'clock',
     destination: '/planner',
     cardBackgroundColor: 'rgba(195, 220, 255, 0.6)',
@@ -295,8 +313,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'checklist',
-    title: 'Checkliste',
-    description: 'Kliniktasche vorbereiten',
+    titleKey: 'card.checklist.title',
+    descriptionKey: 'card.checklist.description',
     iconName: 'checklist',
     destination: { pathname: '/(tabs)/explore' },
     cardBackgroundColor: 'rgba(220, 200, 255, 0.6)',
@@ -304,8 +322,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'birth-plan',
-    title: 'Geburtsplan',
-    description: 'Wünsche für die Geburt',
+    titleKey: 'card.birthPlan.title',
+    descriptionKey: 'card.birthPlan.description',
     iconName: 'doc.text.fill',
     destination: { pathname: '/(tabs)/geburtsplan' },
     cardBackgroundColor: 'rgba(255, 215, 180, 0.6)',
@@ -313,8 +331,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'selfcare',
-    title: 'Mama Selfcare',
-    description: 'Nimm dir Zeit für dich',
+    titleKey: 'card.selfcare.title',
+    descriptionKey: 'card.selfcare.description',
     iconName: 'heart.fill',
     destination: '/(tabs)/selfcare',
     cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
@@ -322,8 +340,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'doctor-questions',
-    title: 'Meine Fragen',
-    description: 'Fragen für den nächsten Termin',
+    titleKey: 'card.questions.title',
+    descriptionKey: 'card.questions.description',
     iconName: 'questionmark.circle',
     destination: '/doctor-questions',
     cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
@@ -331,8 +349,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'baby',
-    title: 'Mein Baby',
-    description: 'Infos anpassen & Entwicklung sehen',
+    titleKey: 'card.baby.title',
+    descriptionKey: 'card.baby.description',
     iconName: 'person.fill',
     destination: '/(tabs)/baby',
     cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
@@ -340,8 +358,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'baby-names',
-    title: 'Babynamen',
-    description: 'Finde den perfekten Namen',
+    titleKey: 'card.names.title',
+    descriptionKey: 'card.names.description',
     iconName: 'person.text.rectangle',
     destination: '/baby-names',
     cardBackgroundColor: 'rgba(200, 225, 255, 0.6)',
@@ -349,8 +367,8 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
   {
     id: 'weight-tracker',
-    title: 'Gewichtskurve',
-    description: 'Gewicht tracken',
+    titleKey: 'card.weight.title',
+    descriptionKey: 'card.weight.description',
     iconName: 'chart.line.uptrend.xyaxis',
     destination: '/(tabs)/weight-tracker',
     cardBackgroundColor: 'rgba(200, 240, 200, 0.6)',
@@ -358,7 +376,7 @@ const PREGNANCY_QUICK_ACCESS_CARDS: PregnancyQuickAccessCardConfig[] = [
   },
 ];
 
-const PREGNANCY_QUICK_ACCESS_ORDER = PREGNANCY_QUICK_ACCESS_CARDS.map(({ id }) => id);
+const PREGNANCY_QUICK_ACCESS_ORDER = PREGNANCY_QUICK_ACCESS_CARD_DEFINITIONS.map(({ id }) => id);
 
 const normalizePregnancyQuickAccessOrder = (value: unknown): PregnancyQuickAccessCardId[] => {
   if (!Array.isArray(value)) return [...PREGNANCY_QUICK_ACCESS_ORDER];
@@ -412,21 +430,24 @@ const normalizePregnancyQuickAccessHidden = (value: unknown): PregnancyQuickAcce
 
 // Konstanten für Überfälligkeits-Informationen
 const overdueInfo = {
-  baby: "Dein Baby ist jetzt vollständig entwickelt. Die Plazenta versorgt es weiterhin mit allen notwendigen Nährstoffen. Die Verbindung zwischen euch beiden ist stärker denn je. Das Immunsystem deines Babys wird durch die Übertragung von Antikörpern über die Plazenta weiter gestärkt.",
-  mother: "Viele Frauen empfinden diese Wartezeit als besonders anstrengend. Versuche dich abzulenken und nutze die Zeit für Entspannung. Bewegung kann helfen, den Geburtsprozess anzuregen. Achte auf Anzeichen für Wehen oder den Abgang des Mutterkuchens. Bei Unsicherheiten kontaktiere immer deine Hebamme oder deinen Arzt.",
-  partner: "Deine Unterstützung ist jetzt besonders wichtig. Sei geduldig und verständnisvoll. Hilf beim Ablenken und sorge für Aktivitäten, die die Wartezeit verkürzen. Stelle sicher, dass alles für die Fahrt ins Krankenhaus bereit ist und ihr jederzeit los könnt.",
+  baby: t('overdue.baby'),
+  mother: t('overdue.mother'),
+  partner: t('overdue.partner'),
   symptoms: [
-    "Harter, tiefer Bauch",
-    "Verstärkter Ausfluss",
-    "Zunehmender Druck im Becken",
-    "Vorwehen (Übungswehen)",
-    "Rückenschmerzen",
-    "Verstärkte Müdigkeit",
-    "Emotionale Anspannung"
+    t('overdue.symptom.hardBelly'),
+    t('overdue.symptom.discharge'),
+    t('overdue.symptom.pressure'),
+    t('overdue.symptom.contractions'),
+    t('overdue.symptom.backPain'),
+    t('overdue.symptom.fatigue'),
+    t('overdue.symptom.tension'),
   ]
 };
 
 export default function PregnancyHomeScreen() {
+  const { locale } = useLocale();
+  ACTIVE_PREGNANCY_HOME_LOCALE = locale;
+  PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
   // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -487,8 +508,18 @@ export default function PregnancyHomeScreen() {
     [user?.id],
   );
   const quickAccessCardById = useMemo(
-    () => new Map(PREGNANCY_QUICK_ACCESS_CARDS.map((card) => [card.id, card] as const)),
-    [],
+    () =>
+      new Map(
+        PREGNANCY_QUICK_ACCESS_CARD_DEFINITIONS.map(({ titleKey, descriptionKey, ...card }) => [
+          card.id,
+          {
+            ...card,
+            title: translatePregnancyHomeText(locale, titleKey),
+            description: translatePregnancyHomeText(locale, descriptionKey),
+          },
+        ] as const),
+      ),
+    [locale],
   );
   const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
   const orderedQuickAccessCards = useMemo(
@@ -563,7 +594,7 @@ export default function PregnancyHomeScreen() {
   const handleHideQuickAccessCard = useCallback(
     (itemId: PregnancyQuickAccessCardId) => {
       if (orderedQuickAccessCards.length <= 1) {
-        Alert.alert('Hinweis', 'Mindestens eine Schnellzugriff-Kachel muss sichtbar bleiben.');
+        Alert.alert(t('common.notice'), t('alert.keepTile'));
         return;
       }
 
@@ -744,15 +775,15 @@ export default function PregnancyHomeScreen() {
 
   const showPastDueDateAlert = () => {
     Alert.alert(
-      "Entbindungstermin überschritten",
-      "Dein Entbindungstermin ist bereits überschritten. Ist dein Baby schon geboren?",
+      t('dueDate.overdueTitle'),
+      t('dueDate.overdueQuestion'),
       [
         {
-          text: "Noch nicht geboren",
+          text: t('dueDate.notBorn'),
           style: "cancel"
         },
         {
-          text: "Ja, mein Baby ist da!",
+          text: t('dueDate.born'),
           onPress: handleBabyBorn
         }
       ]
@@ -792,16 +823,16 @@ export default function PregnancyHomeScreen() {
           .map((user: LinkedUser) => user.firstName)
           .join(', ');
 
-        syncMessage = `\n\nDiese Information wurde auch mit ${linkedUserNames} geteilt.`;
+        syncMessage = t('born.synced', { names: linkedUserNames });
       }
 
       // Erfolgsmeldung anzeigen
       Alert.alert(
-        "Herzlichen Glückwunsch!",
-        `Wir freuen uns mit dir über die Geburt deines Babys! 🎉${syncMessage}`,
+        t('born.congratulations'),
+        t('born.message', { syncMessage }),
         [
           {
-            text: "OK",
+            text: t('common.ok'),
             onPress: () => {
               // Navigation zum Baby-Dashboard
               router.replace('/(tabs)/baby');
@@ -811,7 +842,7 @@ export default function PregnancyHomeScreen() {
       );
     } catch (error) {
       console.error('Fehler beim Setzen des Baby-Status:', error);
-      Alert.alert('Fehler', 'Es gab ein Problem bei der Aktualisierung des Status.');
+      Alert.alert(t('common.error'), t('born.statusFailed'));
     }
   };
 
@@ -893,7 +924,7 @@ export default function PregnancyHomeScreen() {
 
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
-        ToastAndroid.show('Daten aktualisiert', ToastAndroid.SHORT);
+        ToastAndroid.show(t('refresh.updated'), ToastAndroid.SHORT);
       } else {
         // iOS-Feedback (wird durch Animation angezeigt)
         showUpdateSuccess();
@@ -912,7 +943,7 @@ export default function PregnancyHomeScreen() {
       month: 'long',
       day: 'numeric'
     };
-    return new Date().toLocaleDateString('de-DE', options);
+    return new Date().toLocaleDateString(PREGNANCY_HOME_LOCALE_TAG, options);
   };
 
   const calculatePregnancyProgressPercent = () => {
@@ -966,7 +997,7 @@ export default function PregnancyHomeScreen() {
         >
           <View style={styles.sectionTitleContainer}>
             <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
-              Dein Tag im Überblick
+              {t('overview.title')}
             </ThemedText>
             <View style={styles.liquidGlassChevron}>
               <IconSymbol name="chevron.right" size={20} color={textSecondary} />
@@ -987,7 +1018,7 @@ export default function PregnancyHomeScreen() {
                 textShadowOffset: { width: 0, height: 1 },
                 textShadowRadius: 2,
               }]}>{currentWeek || 0}</ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>SSW</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.week')}</ThemedText>
             </View>
 
             <View style={[styles.statItem, styles.liquidGlassStatItem, {
@@ -1009,7 +1040,7 @@ export default function PregnancyHomeScreen() {
                     ? "2"
                     : "3"}
               </ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Trimester</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.trimester')}</ThemedText>
             </View>
 
             <View style={[styles.statItem, styles.liquidGlassStatItem, {
@@ -1027,7 +1058,7 @@ export default function PregnancyHomeScreen() {
               }]}>
                 {pregnancyProgressPercent}%
               </ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Fortschritt</ThemedText>
+              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.progress')}</ThemedText>
             </View>
           </View>
         </ThemedView>
@@ -1037,7 +1068,7 @@ export default function PregnancyHomeScreen() {
 
   const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const cardHeightStyle = { height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT };
-    const buttonLabel = 'Shop';
+    const buttonLabel = t('shop.button');
     const showShopCard = true;
 
     return (
@@ -1060,7 +1091,7 @@ export default function PregnancyHomeScreen() {
                   onPress={handleFocusRecommendation}
                   activeOpacity={0.9}
                   accessibilityRole="button"
-                  accessibilityLabel="Lotti Baby Shop öffnen"
+                  accessibilityLabel={t('shop.accessibility')}
                 >
                   <Image
                     source={require('../../assets/images/lotti-baby-shop-hero.png')}
@@ -1079,15 +1110,15 @@ export default function PregnancyHomeScreen() {
                   />
                   <View style={styles.recommendationContentPane}>
                     <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
-                      Lotti Baby Shop
+                      {t('shop.eyebrow')}
                     </ThemedText>
                     <View style={styles.recommendationFooter}>
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={styles.recommendationTitle}>
-                          Prints zum Aufbügeln
+                          {t('shop.title')}
                         </ThemedText>
                         <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={2}>
-                          Lieblingsmotiv wählen und direkt bestellen
+                          {t('shop.description')}
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
@@ -1104,14 +1135,14 @@ export default function PregnancyHomeScreen() {
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lotti Baby Shop
+                    {t('shop.eyebrow')}
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
                   <IconSymbol name="bag.fill" size={20} color={textSecondary} />
                   <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
-                    Prints ansehen und bestellen.
+                    {t('shop.empty')}
                   </ThemedText>
                 </View>
               </View>
@@ -1228,7 +1259,7 @@ export default function PregnancyHomeScreen() {
                 onPress={() => handleHideQuickAccessCard(item.id)}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.title} ausblenden`}
+                accessibilityLabel={t('quick.hideAccessibility', { title: item.title })}
               >
                 <IconSymbol name="eye.slash" size={14} color="#FFFFFF" />
               </TouchableOpacity>
@@ -1280,12 +1311,12 @@ export default function PregnancyHomeScreen() {
         <View style={styles.quickAccessHiddenHeader}>
           <View style={styles.quickAccessHiddenHeaderText}>
             <ThemedText adaptive={false} style={[styles.quickAccessHiddenTitle, { color: textSecondary }]}>
-              Ausgeblendet
+              {t('quick.hiddenTitle')}
             </ThemedText>
             <ThemedText adaptive={false} style={[styles.quickAccessHiddenSubtitle, { color: textSecondary }]}>
               {hiddenQuickAccessCards.length === 1
-                ? '1 Kachel ist ausgeblendet.'
-                : `${hiddenQuickAccessCards.length} Kacheln sind ausgeblendet.`}
+                ? t('quick.hidden.one')
+                : t('quick.hidden.other', { count: hiddenQuickAccessCards.length })}
             </ThemedText>
           </View>
           <TouchableOpacity
@@ -1299,12 +1330,12 @@ export default function PregnancyHomeScreen() {
             onPress={handleRestoreAllQuickAccessCards}
             activeOpacity={0.85}
           >
-            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>Alle einblenden</Text>
+            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>{t('quick.restoreAll')}</Text>
           </TouchableOpacity>
         </View>
 
         <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
-          Tippe auf eine ausgeblendete Kachel, um sie wieder anzuzeigen.
+          {t('quick.restoreHint')}
         </ThemedText>
 
         <View style={styles.quickAccessHiddenGrid}>
@@ -1358,7 +1389,7 @@ export default function PregnancyHomeScreen() {
                     {card.title}
                   </ThemedText>
                   <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
-                    Einblenden
+                    {t('quick.restore')}
                   </ThemedText>
                 </View>
               </BlurView>
@@ -1372,7 +1403,7 @@ export default function PregnancyHomeScreen() {
   const renderQuickAccessSection = () => (
     <View style={styles.cardsSection}>
       <ThemedText adaptive={false} style={[styles.cardsSectionTitle, { color: textSecondary, fontSize: 22 }]}>
-        Schnellzugriff
+        {t('quick.title')}
       </ThemedText>
 
       {isQuickAccessEditMode ? (
@@ -1388,7 +1419,7 @@ export default function PregnancyHomeScreen() {
             onPress={closeQuickAccessEditor}
             activeOpacity={0.85}
           >
-            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>Fertig</Text>
+            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>{t('quick.done')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -1418,12 +1449,12 @@ export default function PregnancyHomeScreen() {
       />
       <ThemedText adaptive={false} style={[styles.quickAccessHint, { color: textSecondary }]}>
         {isQuickAccessEditMode
-          ? 'Kacheln verschieben, ausblenden und mit "Fertig" speichern.'
-          : 'Lange auf eine Kachel drücken, um die Reihenfolge anzupassen.'}
+          ? t('quick.editHint')
+          : t('quick.longPressHint')}
       </ThemedText>
       {isQuickAccessEditMode && hiddenQuickAccessCards.length > 0 ? (
         <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
-          Ausgeblendete Kacheln kannst du unten wieder einblenden.
+          {t('quick.hiddenHint')}
         </ThemedText>
       ) : null}
       {renderHiddenQuickAccessSection()}
@@ -1445,7 +1476,7 @@ export default function PregnancyHomeScreen() {
             <View style={styles.updateSuccessContent}>
               <IconSymbol name="checkmark.circle.fill" size={32} color={textSecondary} />
               <ThemedText adaptive={false} style={[styles.updateSuccessText, { color: textSecondary }]}>
-                Daten aktualisiert
+                {t('refresh.updated')}
               </ThemedText>
             </View>
           </Animated.View>
@@ -1472,7 +1503,7 @@ export default function PregnancyHomeScreen() {
               onRefresh={onRefresh}
               colors={['#7D5A50']} // Farbe für Android
               tintColor={theme.text} // Farbe für iOS
-              title={refreshing ? "Aktualisiere..." : "Zum Aktualisieren ziehen"} // Nur auf iOS sichtbar
+              title={refreshing ? t('refresh.active') : t('refresh.pull')} // Nur auf iOS sichtbar
               titleColor={theme.text} // Farbe für den Text auf iOS
             />
           }
@@ -1502,7 +1533,7 @@ export default function PregnancyHomeScreen() {
                 <View style={styles.greetingHeader}>
                   <View>
                     <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
-                      Hallo {userName || 'Mama'}!
+                      {t('greeting.hello', { name: userName || t('greeting.fallbackName') })}
                     </ThemedText>
                     <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                       {formatDate()}
@@ -1548,17 +1579,17 @@ export default function PregnancyHomeScreen() {
                       </View>
                       <View style={styles.tipContent}>
                         <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>
-                          Geburtsvorbereitung
+                          {t('birthPrep.title')}
                         </ThemedText>
                         <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>
-                          Ab SSW 34 findest du alle Maßnahmen übersichtlich im Countdown.
+                          {t('birthPrep.description')}
                         </ThemedText>
                         <ThemedText adaptive={false} style={[styles.birthPrepTeaserList, { color: textSecondary }]}>
                           {birthPrepPreview}
                         </ThemedText>
                         <View style={styles.birthPrepTeaserCta}>
                           <ThemedText adaptive={false} style={styles.birthPrepTeaserCtaText}>
-                            Zur Übersicht
+                            {t('birthPrep.action')}
                           </ThemedText>
                           <IconSymbol name="chevron.right" size={14} color="#FFFFFF" />
                         </View>

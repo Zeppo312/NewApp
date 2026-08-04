@@ -24,6 +24,8 @@ import { LOTTI_LEVELS } from '@/lib/lottiPoints';
 import { babyImageForLevel } from '@/lib/lottiBabyImages';
 import { useLottiAvatarChoice } from '@/hooks/useLottiAvatarChoice';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getLocalizedLottiLevels, translateWeeklyMomentText, type WeeklyMomentTranslationKey } from '@/lib/weeklyMomentTranslations';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const COLUMNS = 5;
@@ -43,6 +45,9 @@ export function LottiCollection({
   textSecondary,
   textTertiary,
 }: Props) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
+  const levels = getLocalizedLottiLevels(locale);
   const { chosenLevel, chooseLevel } = useLottiAvatarChoice();
   const [selected, setSelected] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -50,17 +55,17 @@ export function LottiCollection({
     ? Math.floor(currentLevel)
     : 0;
   const safeCurrentLevel = Math.min(
-    LOTTI_LEVELS.length,
+    levels.length,
     Math.max(0, normalizedCurrentLevel),
   );
 
   const unlockedCount = Math.min(
-    LOTTI_LEVELS.length,
+    levels.length,
     safeCurrentLevel,
   );
   const visibleLevels = isExpanded
-    ? LOTTI_LEVELS
-    : getCollapsedCollectionLevels(safeCurrentLevel);
+    ? levels
+    : getCollapsedCollectionLevels(safeCurrentLevel, levels);
 
   const tileBorder = isDark
     ? 'rgba(255,255,255,0.18)'
@@ -87,18 +92,18 @@ export function LottiCollection({
         accessibilityRole="button"
         accessibilityState={{ expanded: isExpanded }}
         accessibilityLabel={
-          isExpanded ? 'Lotti-Sammlung einklappen' : 'Lotti-Sammlung ausklappen'
+          isExpanded ? t('collection.collapse') : t('collection.expand')
         }
       >
         <View style={styles.headingText}>
           <ThemedText adaptive={false} style={[styles.title, { color: textPrimary }]}>
-            Eure Lotti-Sammlung
+            {t('collection.title')}
           </ThemedText>
           <ThemedText
             adaptive={false}
             style={[styles.subtitle, { color: textSecondary }]}
           >
-            {unlockedCount} von {LOTTI_LEVELS.length} Bildern freigeschaltet
+            {t('collection.unlocked', { count: unlockedCount, total: levels.length })}
           </ThemedText>
         </View>
 
@@ -109,7 +114,7 @@ export function LottiCollection({
           ]}
         >
           <ThemedText adaptive={false} style={styles.expandPillText}>
-            {isExpanded ? 'Weniger' : 'Alle'}
+            {isExpanded ? t('collection.less') : t('collection.all')}
           </ThemedText>
           <IconSymbol
             name={isExpanded ? 'chevron.up' : 'chevron.down'}
@@ -135,8 +140,8 @@ export function LottiCollection({
               accessibilityRole="button"
               accessibilityLabel={
                 isUnlocked
-                  ? `Stufe ${level.level} — ${level.name}`
-                  : `Stufe ${level.level} — noch nicht freigeschaltet`
+                  ? `${t('journey.stage', { level: level.level })} — ${level.name}`
+                  : `${t('journey.stage', { level: level.level })} — ${t('collection.locked')}`
               }
             >
               {isUnlocked ? (
@@ -205,11 +210,11 @@ export function LottiCollection({
   );
 }
 
-function getCollapsedCollectionLevels(currentLevel: number) {
-  const latestUnlocked = LOTTI_LEVELS
+function getCollapsedCollectionLevels(currentLevel: number, levels: readonly typeof LOTTI_LEVELS[number][]) {
+  const latestUnlocked = levels
     .filter((level) => level.level <= currentLevel)
     .slice(-2);
-  const nextLocked = LOTTI_LEVELS
+  const nextLocked = levels
     .filter((level) => level.level > currentLevel)
     .slice(0, Math.max(1, 3 - latestUnlocked.length));
 
@@ -237,6 +242,9 @@ function CollectionDetailSheet({
   textSecondary: string;
   textTertiary: string;
 }) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
+  const levels = getLocalizedLottiLevels(locale);
   if (level === null) {
     return (
       <Modal visible={false} transparent animationType="slide">
@@ -245,7 +253,7 @@ function CollectionDetailSheet({
     );
   }
 
-  const levelData = LOTTI_LEVELS.find((l) => l.level === level);
+  const levelData = levels.find((l) => l.level === level);
   const isUnlocked = level <= currentLevel;
   const isChosen = chosenLevel === level;
 
@@ -310,14 +318,14 @@ function CollectionDetailSheet({
 
               <View style={styles.sheetHeaderText}>
                 <ThemedText adaptive={false} style={styles.sheetKicker}>
-                  Stufe {level}
-                  {isUnlocked ? ' · Freigeschaltet' : ' · Noch verborgen'}
+                  {t('journey.stage', { level })}
+                  {isUnlocked ? ` · ${t('collection.unlockedState')}` : ` · ${t('collection.hiddenState')}`}
                 </ThemedText>
                 <ThemedText
                   adaptive={false}
                   style={[styles.sheetTitle, { color: textPrimary }]}
                 >
-                  {isUnlocked ? (levelData?.name ?? `Stufe ${level}`) : 'Ein neues Lotti-Bild wartet'}
+                  {isUnlocked ? (levelData?.name ?? t('journey.stage', { level })) : t('collection.newImage')}
                 </ThemedText>
                 <ThemedText
                   adaptive={false}
@@ -325,7 +333,7 @@ function CollectionDetailSheet({
                 >
                   {isUnlocked
                     ? (levelData?.description ?? '')
-                    : `Erreicht Stufe ${level}, um dieses Bild zu enthüllen.`}
+                    : t('collection.unlockAt', { level })}
                 </ThemedText>
                 {isUnlocked ? (
                   <View
@@ -351,8 +359,8 @@ function CollectionDetailSheet({
                       style={[styles.avatarHintText, { color: textSecondary }]}
                     >
                       {isChosen
-                        ? 'Dieses Bild ist euer Avatar auf der Wochenkarte und in der Lotti-Reise.'
-                        : 'Als Avatar erscheint dieses Bild auf der Wochenkarte und in der Lotti-Reise.'}
+                        ? t('collection.chosenHint')
+                        : t('collection.chooseHint')}
                     </ThemedText>
                   </View>
                 ) : null}
@@ -366,7 +374,7 @@ function CollectionDetailSheet({
                         adaptive={false}
                         style={styles.chooseButtonActiveText}
                       >
-                        Euer Avatar ✓
+                        {t('collection.chosen')}
                       </ThemedText>
                     </View>
                   ) : (
@@ -378,14 +386,14 @@ function CollectionDetailSheet({
                       ]}
                     >
                       <ThemedText adaptive={false} style={styles.chooseButtonText}>
-                        Als Avatar wählen
+                        {t('collection.choose')}
                       </ThemedText>
                     </Pressable>
                   )
                 ) : null}
                 <Pressable onPress={onClose} style={styles.sheetCloseButton}>
                   <ThemedText adaptive={false} style={styles.sheetCloseText}>
-                    Schließen
+                    {t('journey.close')}
                   </ThemedText>
                 </Pressable>
               </View>

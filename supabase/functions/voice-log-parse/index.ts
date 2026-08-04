@@ -13,6 +13,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 // @ts-ignore - Deno edge function import.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { localize, normalizeLocale, SupportedLocale } from '../_shared/localization.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -32,16 +33,27 @@ const RATE_LIMITS = [
   {
     windowMinutes: 10,
     max: 6,
-    message:
-      'Kurze Pause 🙂 Du hast gerade viele Aufnahmen gemacht. Bitte versuche es in ein paar Minuten noch einmal.',
+    messageKey: 'short',
   },
   {
     windowMinutes: 24 * 60,
     max: 40,
-    message:
-      'Das Tageslimit für Sprach-Einträge ist erreicht. Morgen geht es weiter — Einträge kannst du weiterhin manuell anlegen.',
+    messageKey: 'daily',
   },
 ] as const;
+
+const rateLimitMessage = (locale: SupportedLocale, key: 'short' | 'daily') => {
+  if (key === 'short') return localize(locale, {
+    de: 'Kurze Pause 🙂 Du hast gerade viele Aufnahmen gemacht. Bitte versuche es in ein paar Minuten noch einmal.',
+    en: 'Quick break 🙂 You have made several recordings. Please try again in a few minutes.',
+    es: 'Una breve pausa 🙂 Has hecho varias grabaciones. Vuelve a intentarlo en unos minutos.',
+  });
+  return localize(locale, {
+    de: 'Das Tageslimit für Sprach-Einträge ist erreicht. Morgen geht es weiter — Einträge kannst du weiterhin manuell anlegen.',
+    en: 'You have reached today’s voice-entry limit. You can continue tomorrow or add entries manually.',
+    es: 'Has alcanzado el límite diario de registros por voz. Puedes continuar mañana o añadir registros manualmente.',
+  });
+};
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -63,6 +75,7 @@ interface ParseRequest {
   /** Lokale Gerätezeit 'YYYY-MM-DDTHH:mm' — Referenz für relative Zeitangaben. */
   deviceNow: string;
   babyName?: string | null;
+  locale?: string;
   /** Aus den letzten fünf Einträgen des aktiven Babys abgeleiteter Vorschlag. */
   recentMilkPreference?: 'BREAST' | 'BOTTLE' | null;
 }
@@ -92,31 +105,31 @@ const buildSystemPrompt = (
   deviceNow: string,
   babyName?: string | null,
   recentMilkPreference?: 'BREAST' | 'BOTTLE' | null,
+  locale: SupportedLocale = 'de',
 ) =>
-  `Du extrahierst Baby-Tracking-Einträge aus der transkribierten deutschen Sprachnotiz eines Elternteils.
-Aktuelle lokale Zeit des Geräts: ${deviceNow}${babyName ? `\nDas Baby heißt ${babyName}.` : ''}
-Bevorzugte Milch-Fütterung aus den letzten Einträgen: ${recentMilkPreference ?? 'nicht bekannt'}.
+  `Extract baby-tracking entries from a parent's transcribed voice note in ${locale === 'en' ? 'English' : locale === 'es' ? 'Spanish' : 'German'}.
+Current local device time: ${deviceNow}${babyName ? `\nThe baby's name is ${babyName}.` : ''}
+Preferred milk-feeding method from recent entries: ${recentMilkPreference ?? 'unknown'}.
 
-Antworte ausschließlich als JSON: {"entries": [ ... ]}
+Respond only as JSON: {"entries": [ ... ]}
 
-Jeder Eintrag hat exakt diese Felder:
-- "type": "sleep" (Schlaf/Nickerchen), "feeding" (Stillen/Fläschchen/Beikost/Trinken) oder "diaper" (Wickeln/Windel).
-- "start_local": Beginn als "YYYY-MM-DDTHH:mm". Relative Angaben ("vor einer halben Stunde", "heute Mittag") relativ zur aktuellen Zeit auflösen. Ohne Zeitangabe: die aktuelle Zeit verwenden. "Gerade aufgewacht nach 2 Stunden Schlaf" heißt: Ende = jetzt, Beginn = vor 2 Stunden.
-- "end_local": Ende als "YYYY-MM-DDTHH:mm" oder null (z. B. Windel hat nie ein Ende; laufender Schlaf hat noch keins).
-- "feeding_type": nur bei feeding — "BREAST" (gestillt/Brust), "BOTTLE" (Flasche/Fläschchen), "SOLIDS" (Brei/Beikost/feste Nahrung), "PUMP" (abgepumpte Milch), "WATER" (Wasser/Tee); sonst null.
-- "feeding_type_needs_confirmation": true nur dann, wenn sicher eine Milch-Fütterung gemeint ist, die Formulierung aber nicht erkennen lässt, ob gestillt oder ein Fläschchen gegeben wurde. In diesem Fall "feeding_type" auf die bevorzugte Milch-Fütterung oben setzen; ist sie nicht bekannt, null setzen. Bei eindeutigen Angaben immer false.
-- "timer_requested": true NUR wenn ausdrücklich ein laufender Timer gewünscht oder eine gerade laufende Aktivität genannt wird (z. B. "Timer fürs Stillen starten", "ich stille gerade", "schläft seit 10 Minuten"). Dann muss "end_local" null sein. Bei vergangenen, abgeschlossenen oder zeitlich nicht näher beschriebenen Einträgen immer false. Eine fehlende Endzeit allein ist ausdrücklich KEIN Grund für einen Timer.
-- "feeding_volume_ml": Menge in ml als Zahl oder null.
-- "feeding_side": nur beim Stillen — "LEFT", "RIGHT" oder "BOTH"; sonst null.
-- "diaper_type": nur bei diaper — "WET" (Pipi/nass), "DIRTY" (Stuhlgang/groß), "BOTH" (beides); ohne Details: "WET".
-- "note": Zusatzinfos aus der Notiz, die in kein Feld passen (kurz, Deutsch), sonst null.
+Every entry has exactly these fields:
+- "type": "sleep", "feeding", or "diaper".
+- "start_local": start as "YYYY-MM-DDTHH:mm". Resolve relative times from the current device time. If no time is given, use the current time. Waking after a stated duration means end = now and start = now minus that duration.
+- "end_local": end as "YYYY-MM-DDTHH:mm" or null. Diaper entries never have an end; an explicitly ongoing activity has no end yet.
+- "feeding_type": for feeding only: "BREAST", "BOTTLE", "SOLIDS", "PUMP", or "WATER"; otherwise null.
+- "feeding_type_needs_confirmation": true only when milk feeding is clear but breast versus bottle is ambiguous. Then use the preferred method above, or null if unknown. False for explicit wording.
+- "timer_requested": true ONLY when the parent explicitly asks for a running timer or says an activity is happening now. Then "end_local" must be null. Past or unspecific entries always use false. A missing end time alone never implies a timer.
+- "feeding_volume_ml": amount in ml as a number or null.
+- "feeding_side": for breastfeeding only: "LEFT", "RIGHT", or "BOTH"; otherwise null.
+- "diaper_type": for diapers only: "WET", "DIRTY", or "BOTH"; if details are missing, use "WET".
+- "note": brief extra information that fits no other field, written in the same language as the voice note; otherwise null.
 
-Regeln:
-- Erfinde NICHTS. Nur Einträge extrahieren, die klar aus der Notiz hervorgehen.
-- Standard ist immer "timer_requested": false. Beispiele ohne Timer: "hat getrunken", "wurde gestillt", "hat geschlafen", "vorhin Fläschchen gegeben". Beispiele mit Timer: "Starte den Still-Timer", "sie trinkt gerade ihr Fläschchen", "sie ist gerade eingeschlafen".
-- Eindeutige Wörter wie "gestillt", "Brust", "Flasche" oder "Fläschchen" haben immer Vorrang vor der bisherigen Präferenz. Auch eine konkrete ml-Menge bedeutet Fläschchen. "Milch getrunken" oder nur "gefüttert" ist dagegen zwischen Stillen und Fläschchen uneindeutig und muss bestätigt werden.
-- Eine Notiz kann mehrere Einträge enthalten ("hat getrunken und ich habe sie gewickelt" = 2 Einträge).
-- Ist die Notiz kein Baby-Tracking-Inhalt, gib {"entries": []} zurück.`;
+Rules:
+- Do not invent anything. Extract only entries clearly stated in the note.
+- "timer_requested" defaults to false. Explicit words for breast or bottle override the recent preference. A concrete ml amount implies a bottle. Generic milk or feeding wording is ambiguous and needs confirmation.
+- One note may contain multiple entries.
+- If the note contains no baby-tracking information, return {"entries": []}.`;
 
 const sanitizeEntries = (
   raw: unknown,
@@ -207,6 +220,7 @@ serve(async (req: Request) => {
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
     const body = (await req.json()) as ParseRequest;
+    const locale = normalizeLocale(body.locale);
     if (!body?.audioBase64 || !body?.mimeType || !body?.deviceNow) {
       return json({ error: 'audioBase64, mimeType and deviceNow are required' }, 400);
     }
@@ -254,7 +268,7 @@ serve(async (req: Request) => {
         (r) => new Date(r.created_at).getTime() >= windowStart,
       ).length;
       if (used >= limit.max) {
-        return json({ error: 'rate_limited', message: limit.message }, 429);
+        return json({ error: 'rate_limited', message: rateLimitMessage(locale, limit.messageKey) }, 429);
       }
     }
     const { error: logError } = await admin
@@ -274,7 +288,7 @@ serve(async (req: Request) => {
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: body.mimeType }), `voice-log.${extension}`);
     form.append('model', TRANSCRIBE_MODEL);
-    form.append('language', 'de');
+    form.append('language', locale);
 
     const transcribeController = new AbortController();
     const transcribeTimeout = setTimeout(() => transcribeController.abort(), 30_000);
@@ -314,6 +328,7 @@ serve(async (req: Request) => {
               body.deviceNow,
               body.babyName,
               recentMilkPreference,
+              locale,
             ),
           },
           { role: 'user', content: transcript },

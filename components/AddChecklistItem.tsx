@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,6 +6,11 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { LiquidGlassCard, GlassCard, TEXT_PRIMARY } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  translatePregnancyChecklistText,
+  type PregnancyChecklistTranslationKey,
+} from '@/lib/pregnancyChecklistTranslations';
 
 const CTA_ACCENT = '#9D7BD8';
 const LILAC_GLASS_OVERLAY = 'rgba(142, 78, 198, 0.25)';
@@ -18,6 +23,8 @@ interface AddChecklistItemProps {
 }
 
 export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categories }) => {
+  const { locale } = useLocale();
+  const t = (key: PregnancyChecklistTranslationKey) => translatePregnancyChecklistText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -42,9 +49,13 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!categories.includes(category)) setCategory(categories[0] || '');
+  }, [categories, category]);
+
   const handleSubmit = async () => {
     if (!itemName.trim()) {
-      Alert.alert('Fehler', 'Bitte gib einen Namen für den Eintrag ein.');
+      Alert.alert(t('common.error'), t('error.nameRequired'));
       return;
     }
 
@@ -57,7 +68,7 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
       setModalVisible(false);
     } catch (error) {
       console.error('Error adding checklist item:', error);
-      Alert.alert('Fehler', 'Der Eintrag konnte nicht hinzugefügt werden.');
+      Alert.alert(t('common.error'), t('error.add'));
     } finally {
       setIsSubmitting(false);
     }
@@ -79,10 +90,10 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
           </View>
           <View>
             <ThemedText style={[styles.addButtonLabel, { color: textPrimary }]}>
-              Neuer Eintrag
+              {t('add.title')}
             </ThemedText>
             <ThemedText style={[styles.addButtonHint, { color: textSecondary }]}>
-              Wunsch ergänzen und direkt abhaken
+              {t('add.hint')}
             </ThemedText>
           </View>
         </View>
@@ -99,23 +110,23 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
             <View style={styles.modalInner}>
               <View style={styles.modalHeader}>
                 <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>
-                  Neuer Eintrag
+                  {t('add.title')}
                 </ThemedText>
                 <TouchableOpacity onPress={() => setModalVisible(false)}>
                   <Ionicons name="close" size={22} color={textPrimary} />
                 </TouchableOpacity>
               </View>
 
-              <ThemedText style={[styles.label, { color: textPrimary }]}>Name *</ThemedText>
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.name')}</ThemedText>
               <TextInput
                 style={[styles.input, { color: inputTextColor, backgroundColor: modalInputBg, borderColor: modalInputBorder }]}
                 value={itemName}
                 onChangeText={setItemName}
-                placeholder="z.B. Mutterpass"
+                placeholder={t('add.namePlaceholder')}
                 placeholderTextColor={placeholderTextColor}
               />
 
-              <ThemedText style={[styles.label, { color: textPrimary }]}>Kategorie</ThemedText>
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.category')}</ThemedText>
               <View style={styles.categoryContainer}>
                 {categories.map((cat) => (
                   <TouchableOpacity
@@ -140,12 +151,12 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
                 ))}
               </View>
 
-              <ThemedText style={[styles.label, { color: textPrimary }]}>Notizen</ThemedText>
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.notes')}</ThemedText>
               <TextInput
                 style={[styles.input, styles.notesInput, { color: inputTextColor, backgroundColor: modalInputBg, borderColor: modalInputBorder }]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Zusätzliche Informationen"
+                placeholder={t('add.notesPlaceholder')}
                 placeholderTextColor={placeholderTextColor}
                 multiline
                 numberOfLines={3}
@@ -158,7 +169,7 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
                 disabled={isSubmitting}
               >
                 <ThemedText style={styles.submitButtonText}>
-                  {isSubmitting ? 'Wird hinzugefügt...' : 'Hinzufügen'}
+                  {isSubmitting ? t('add.pending') : t('add.idle')}
                 </ThemedText>
               </TouchableOpacity>
             </View>

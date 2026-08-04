@@ -9,6 +9,8 @@ import { DailyEntry } from '@/lib/baby';
 import { Swipeable } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 interface ActivityCardProps {
   entry: DailyEntry;
@@ -25,6 +27,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   marginHorizontal = 16,
   auxiliaryBadgeLabel = null,
 }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
+  const localeTag = getDailyLocaleTag(locale);
   // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -74,7 +79,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   // Formatiere Zeit
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
   };
 
   // Berechne Dauer in Minuten
@@ -96,16 +101,16 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       return { emoji: customEmoji, label: customLabel };
     }
     if (entry.entry_type === 'feeding') {
-      if (entry.feeding_type === 'BREAST') return { emoji: '🤱', label: 'Stillen' };
-      if (entry.feeding_type === 'BOTTLE') return { emoji: '🍼', label: `Flasche${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
-      if (entry.feeding_type === 'PUMP') return { emoji: '🥛', label: `Abpumpen${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
-      if (entry.feeding_type === 'WATER') return { emoji: '🚰', label: `Wasser${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
-      return { emoji: '🥄', label: 'Beikost' };
+      if (entry.feeding_type === 'BREAST') return { emoji: '🤱', label: t('feeding.breast') };
+      if (entry.feeding_type === 'BOTTLE') return { emoji: '🍼', label: `${t('card.bottle')}${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
+      if (entry.feeding_type === 'PUMP') return { emoji: '🥛', label: `${t('feeding.pump')}${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
+      if (entry.feeding_type === 'WATER') return { emoji: '🚰', label: `${t('feeding.water')}${entry.feeding_volume_ml ? ` ${entry.feeding_volume_ml}ml` : ''}` };
+      return { emoji: '🥄', label: t('feeding.solids') };
     }
     if (entry.entry_type === 'diaper') {
-      if (entry.diaper_type === 'WET') return { emoji: '💧', label: 'Nass' };
-      if (entry.diaper_type === 'DIRTY') return { emoji: '💩', label: 'Voll' };
-      return { emoji: '💧💩', label: 'Beides' };
+      if (entry.diaper_type === 'WET') return { emoji: '💧', label: t('diaper.wet') };
+      if (entry.diaper_type === 'DIRTY') return { emoji: '💩', label: t('diaper.dirty') };
+      return { emoji: '💧💩', label: t('diaper.both') };
     }
     if (entry.entry_type === 'sleep') {
       // Verwende die bereits berechneten Werte aus dem Sleep-Tracker
@@ -113,26 +118,26 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         return { emoji: customEmoji, label: customLabel };
       }
       // Fallback falls die Werte nicht gesetzt sind
-      return { emoji: '💤', label: 'Schlaf' };
+      return { emoji: '💤', label: t('card.sleep') };
     }
-    return { emoji: '⭐️', label: 'Sonstiges' };
+    return { emoji: '⭐️', label: t('card.other') };
   };
 
   // Rendere Aktivitätstyp als Text
   const detail = getDetail();
 
-  const translateFeedingType = (t?: string | null) => {
-    switch (t) {
+  const translateFeedingType = (typeCode?: string | null) => {
+    switch (typeCode) {
       case 'BREAST':
-        return 'Brust';
+        return t('card.breast');
       case 'BOTTLE':
-        return 'Flasche';
+        return t('card.bottle');
       case 'SOLIDS':
-        return 'Beikost';
+        return t('feeding.solids');
       case 'PUMP':
-        return 'Abpumpen';
+        return t('feeding.pump');
       case 'WATER':
-        return 'Wasser';
+        return t('feeding.water');
       default:
         return '–';
     }
@@ -141,24 +146,24 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const translateFeedingSide = (s?: string | null) => {
     switch (s) {
       case 'LEFT':
-        return 'Links';
+        return t('input.left');
       case 'RIGHT':
-        return 'Rechts';
+        return t('input.right');
       case 'BOTH':
-        return 'Beide';
+        return t('input.both');
       default:
         return '–';
     }
   };
 
-  const translateDiaperType = (t?: string | null) => {
-    switch (t) {
+  const translateDiaperType = (typeCode?: string | null) => {
+    switch (typeCode) {
       case 'WET':
-        return 'Nass';
+        return t('diaper.wet');
       case 'DIRTY':
-        return 'Voll';
+        return t('diaper.dirty');
       case 'BOTH':
-        return 'Beides';
+        return t('diaper.both');
       default:
         return '–';
     }
@@ -271,11 +276,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const feverBadgeLabel =
     diaperTemperatureValue !== null
       ? `🌡️ ${String(diaperTemperatureValue).replace('.', ',')} °C`
-      : '🌡️ Fieber gemessen';
+      : `🌡️ ${t('card.fever')}`;
   const suppositoryBadgeLabel =
     diaperSuppositoryDoseValue !== null
-      ? `💊 Zäpfchen ${Math.trunc(diaperSuppositoryDoseValue)} mg`
-      : '💊 Zäpfchen gegeben';
+      ? `💊 ${t('card.suppository')} ${Math.trunc(diaperSuppositoryDoseValue)} mg`
+      : `💊 ${t('card.suppositoryGiven')}`;
 
   // Berechne Dauer
   const duration = entry.end_time

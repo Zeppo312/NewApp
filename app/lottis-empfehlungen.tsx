@@ -45,6 +45,8 @@ import {
   LottiRecommendation,
   CreateRecommendationInput,
 } from '@/lib/supabase/recommendations';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateRecommendations, type RecommendationsTranslationKey } from '@/lib/recommendationsTranslations';
 
 const TIMELINE_INSET = 8;
 
@@ -98,6 +100,8 @@ function WiggleView({
 }
 
 export default function LottisEmpfehlungenScreen() {
+  const { locale } = useLocale();
+  const t = (key: RecommendationsTranslationKey, params?: Record<string, string | number>) => translateRecommendations(locale, key, params);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const { focusId } = useLocalSearchParams<{ focusId?: string }>();
@@ -147,7 +151,7 @@ export default function LottisEmpfehlungenScreen() {
       setRecommendations(items);
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Fehler', 'Daten konnten nicht geladen werden.');
+      Alert.alert(t('error'), t('loadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -160,7 +164,7 @@ export default function LottisEmpfehlungenScreen() {
     setFormImageUrl('');
     setFormImageUri(null);
     setFormProductLink('');
-    setFormButtonText('Zum Produkt');
+    setFormButtonText(t('product'));
     setFormIsFavorite(false);
     setFormDiscountCode('');
     setModalVisible(true);
@@ -173,7 +177,7 @@ export default function LottisEmpfehlungenScreen() {
     setFormImageUrl(item.image_url || '');
     setFormImageUri(null);
     setFormProductLink(item.product_link);
-    setFormButtonText(item.button_text?.trim() || 'Zum Produkt');
+    setFormButtonText(item.button_text?.trim() || t('product'));
     setFormIsFavorite(item.is_favorite ?? false);
     setFormDiscountCode(item.discount_code || '');
     setModalVisible(true);
@@ -184,7 +188,7 @@ export default function LottisEmpfehlungenScreen() {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        Alert.alert(t('permissionTitle'), t('permissionMessage'));
         return;
       }
 
@@ -201,26 +205,26 @@ export default function LottisEmpfehlungenScreen() {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Fehler', 'Bild konnte nicht ausgewählt werden.');
+      Alert.alert(t('error'), t('imageFailed'));
     }
   };
 
   const handleDelete = (item: LottiRecommendation) => {
     Alert.alert(
-      'Empfehlung löschen',
-      `Möchtest du "${item.title}" wirklich löschen?`,
+      t('deleteTitle'),
+      t('deleteQuestion', { title: item.title }),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteRecommendation(item.id);
               await loadData();
-              Alert.alert('Erfolg', 'Empfehlung wurde gelöscht.');
+              Alert.alert(t('success'), t('deleted'));
             } catch (error) {
-              Alert.alert('Fehler', 'Empfehlung konnte nicht gelöscht werden.');
+              Alert.alert(t('error'), t('deleteFailed'));
             }
           },
         },
@@ -230,7 +234,7 @@ export default function LottisEmpfehlungenScreen() {
 
   const handleSave = async () => {
     if (!formTitle.trim() || !formDescription.trim() || !formProductLink.trim()) {
-      Alert.alert('Fehler', 'Bitte fülle alle Pflichtfelder aus.');
+      Alert.alert(t('error'), t('required'));
       return;
     }
 
@@ -248,13 +252,13 @@ export default function LottisEmpfehlungenScreen() {
           console.log('✅ Upload successful, URL:', imageUrl);
         } catch (error) {
           console.error('❌ Error uploading image:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
+          const errorMessage = error instanceof Error ? error.message : t('unknownError');
           Alert.alert(
-            'Upload fehlgeschlagen', 
-            `${errorMessage}\n\nTipp: Stelle sicher, dass der "public-images" Bucket in Supabase existiert.`,
+            t('uploadFailed'),
+            t('uploadTip', { error: errorMessage }),
             [
-              { text: 'Abbrechen', style: 'cancel' },
-              { text: 'Ohne Bild fortfahren', onPress: () => {
+              { text: t('cancel'), style: 'cancel' },
+              { text: t('continueWithoutImage'), onPress: () => {
                 setFormImageUri(null);
                 // Continue without image
               }}
@@ -267,7 +271,7 @@ export default function LottisEmpfehlungenScreen() {
         setIsUploadingImage(false);
       }
 
-      const buttonText = formButtonText.trim() || 'Zum Produkt';
+      const buttonText = formButtonText.trim() || t('product');
       const input: CreateRecommendationInput = {
         title: formTitle.trim(),
         description: formDescription.trim(),
@@ -287,11 +291,11 @@ export default function LottisEmpfehlungenScreen() {
 
       await loadData();
       setModalVisible(false);
-      Alert.alert('Erfolg', `Empfehlung wurde ${editingItem ? 'aktualisiert' : 'erstellt'}.`);
+      Alert.alert(t('success'), t(editingItem ? 'updated' : 'created'));
     } catch (error) {
       console.error('❌ Error saving recommendation:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unbekannter Fehler';
-      Alert.alert('Fehler', `Empfehlung konnte nicht gespeichert werden.\n\n${errorMessage}`);
+      const errorMessage = error instanceof Error ? error.message : t('unknownError');
+      Alert.alert(t('error'), t('saveFailed', { error: errorMessage }));
     } finally {
       setIsSaving(false);
       setIsUploadingImage(false);
@@ -304,10 +308,10 @@ export default function LottisEmpfehlungenScreen() {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Fehler', 'Dieser Link kann nicht geöffnet werden.');
+        Alert.alert(t('error'), t('linkUnsupported'));
       }
     } catch (error) {
-      Alert.alert('Fehler', 'Link konnte nicht geöffnet werden.');
+      Alert.alert(t('error'), t('linkFailed'));
     }
   };
 
@@ -318,9 +322,9 @@ export default function LottisEmpfehlungenScreen() {
       
       // Feedback anzeigen
       Alert.alert(
-        '✅ Kopiert!',
-        `Der Rabattcode "${code}" wurde in die Zwischenablage kopiert.`,
-        [{ text: 'OK', style: 'default' }]
+        t('copiedTitle'),
+        t('copiedMessage', { code }),
+        [{ text: t('ok'), style: 'default' }]
       );
 
       // Reset nach 3 Sekunden
@@ -328,12 +332,12 @@ export default function LottisEmpfehlungenScreen() {
         setCopiedCode(null);
       }, 3000);
     } catch (error) {
-      Alert.alert('Fehler', 'Code konnte nicht kopiert werden.');
+      Alert.alert(t('error'), t('copyFailed'));
     }
   };
 
   const renderRecommendationCard = (item: LottiRecommendation, index: number) => {
-    const buttonText = item.button_text?.trim() || 'Zum Produkt';
+    const buttonText = item.button_text?.trim() || t('product');
     return (
       <SlideInView
         direction={index % 2 === 0 ? 'left' : 'right'}
@@ -350,7 +354,7 @@ export default function LottisEmpfehlungenScreen() {
                 <View style={styles.favoritePinStem} />
               </View>
               <View style={styles.favoriteBadge}>
-                <ThemedText style={styles.favoriteBadgeText}>Lottis Favorit</ThemedText>
+                <ThemedText style={styles.favoriteBadgeText}>{t('favorite')}</ThemedText>
               </View>
             </View>
           )}
@@ -393,7 +397,7 @@ export default function LottisEmpfehlungenScreen() {
                         <View style={styles.discountCodeInner}>
                           <ThemedText style={styles.sparkle}>✨</ThemedText>
                           <ThemedText style={styles.discountCodeLabel}>
-                            Rabattcode:
+                            {t('discountCode')}
                           </ThemedText>
                           <ThemedText style={styles.discountCodeText}>
                             {item.discount_code}
@@ -471,7 +475,7 @@ export default function LottisEmpfehlungenScreen() {
     } catch (error) {
       console.error('Error updating recommendations order:', error);
       setRecommendations(previous);
-      Alert.alert('Fehler', 'Reihenfolge konnte nicht gespeichert werden.');
+      Alert.alert(t('error'), t('reorderFailed'));
     }
   };
 
@@ -512,7 +516,7 @@ export default function LottisEmpfehlungenScreen() {
               style={styles.addButton}
             >
               <IconSymbol name="plus.circle.fill" size={24} color="#FFFFFF" />
-              <ThemedText style={styles.addButtonText}>Neue Empfehlung</ThemedText>
+              <ThemedText style={styles.addButtonText}>{t('add')}</ThemedText>
             </LinearGradient>
           </AnimatedButton>
         </SlideInView>
@@ -525,7 +529,7 @@ export default function LottisEmpfehlungenScreen() {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.accent} />
-          <ThemedText style={styles.loadingText}>Lade Empfehlungen...</ThemedText>
+          <ThemedText style={styles.loadingText}>{t('loading')}</ThemedText>
         </View>
       );
     }
@@ -534,11 +538,11 @@ export default function LottisEmpfehlungenScreen() {
       <SlideInView direction="up" delay={200} duration={600}>
         <LiquidGlassCard style={styles.emptyCard} intensity={26} overlayColor={GLASS_OVERLAY}>
           <IconSymbol name="star.fill" size={60} color={theme.accent} />
-          <ThemedText style={styles.emptyTitle}>Noch keine Empfehlungen</ThemedText>
+          <ThemedText style={styles.emptyTitle}>{t('emptyTitle')}</ThemedText>
           <ThemedText style={styles.emptyDescription}>
             {isAdmin
-              ? 'Füge die erste Empfehlung hinzu!'
-              : 'Schau bald wieder vorbei für tolle Produktempfehlungen!'}
+              ? t('emptyAdmin')
+              : t('emptyUser')}
           </ThemedText>
         </LiquidGlassCard>
       </SlideInView>
@@ -551,8 +555,8 @@ export default function LottisEmpfehlungenScreen() {
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
         <Header 
-          title="Lottis Empfehlungen" 
-          subtitle="Handverlesene Produkte für dich und dein Baby"
+          title={t('title')}
+          subtitle={t('subtitle')}
           showBackButton={true}
         />
 
@@ -602,7 +606,7 @@ export default function LottisEmpfehlungenScreen() {
               <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
                 <View style={styles.modalHeader}>
                   <ThemedText style={styles.modalTitle}>
-                    {editingItem ? 'Empfehlung bearbeiten' : 'Neue Empfehlung'}
+                    {editingItem ? t('editTitle') : t('add')}
                   </ThemedText>
                   <TouchableOpacity onPress={() => setModalVisible(false)}>
                     <IconSymbol name="xmark.circle.fill" size={30} color={theme.tabIconDefault} />
@@ -611,18 +615,18 @@ export default function LottisEmpfehlungenScreen() {
 
                 <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Titel *</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldTitle')}</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
                       value={formTitle}
                       onChangeText={setFormTitle}
-                      placeholder="z.B. Beste Baby-Tragetasche"
+                      placeholder={t('titlePlaceholder')}
                       placeholderTextColor={theme.tabIconDefault}
                     />
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Beschreibung *</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldDescription')}</ThemedText>
                     <TextInput
                       style={[
                         styles.input,
@@ -631,7 +635,7 @@ export default function LottisEmpfehlungenScreen() {
                       ]}
                       value={formDescription}
                       onChangeText={setFormDescription}
-                      placeholder="Beschreibe das Produkt..."
+                      placeholder={t('descriptionPlaceholder')}
                       placeholderTextColor={theme.tabIconDefault}
                       multiline
                       numberOfLines={4}
@@ -639,7 +643,7 @@ export default function LottisEmpfehlungenScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Produktbild</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldImage')}</ThemedText>
                     
                     {/* Image Picker Button */}
                     <TouchableOpacity 
@@ -663,13 +667,13 @@ export default function LottisEmpfehlungenScreen() {
                               />
                               <View style={styles.imageChangeOverlay}>
                                 <IconSymbol name="photo" size={24} color="#FFFFFF" />
-                                <ThemedText style={styles.imageChangeText}>Bild ändern</ThemedText>
+                                <ThemedText style={styles.imageChangeText}>{t('changeImage')}</ThemedText>
                               </View>
                             </View>
                           ) : (
                             <>
                               <IconSymbol name="photo" size={32} color={theme.accent} />
-                              <ThemedText style={styles.imagePickerText}>Bild auswählen</ThemedText>
+                              <ThemedText style={styles.imagePickerText}>{t('chooseImage')}</ThemedText>
                             </>
                           )}
                         </LinearGradient>
@@ -679,7 +683,7 @@ export default function LottisEmpfehlungenScreen() {
                     {/* Optional: URL Input */}
                     <View style={styles.orDivider}>
                       <View style={styles.orLine} />
-                      <ThemedText style={styles.orText}>oder</ThemedText>
+                      <ThemedText style={styles.orText}>{t('or')}</ThemedText>
                       <View style={styles.orLine} />
                     </View>
                     
@@ -690,7 +694,7 @@ export default function LottisEmpfehlungenScreen() {
                         setFormImageUrl(text);
                         setFormImageUri(null); // Clear picked image if URL is entered
                       }}
-                      placeholder="Bild-URL eingeben (https://...)"
+                      placeholder={t('imageUrlPlaceholder')}
                       placeholderTextColor={theme.tabIconDefault}
                       autoCapitalize="none"
                       keyboardType="url"
@@ -699,7 +703,7 @@ export default function LottisEmpfehlungenScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Produkt-Link *</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldLink')}</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
                       value={formProductLink}
@@ -713,7 +717,7 @@ export default function LottisEmpfehlungenScreen() {
 
                   <View style={styles.formGroup}>
                     <View style={styles.switchRow}>
-                      <ThemedText style={[styles.label, styles.switchLabel]}>Lottis Favorit</ThemedText>
+                      <ThemedText style={[styles.label, styles.switchLabel]}>{t('favorite')}</ThemedText>
                       <Switch
                         value={formIsFavorite}
                         onValueChange={setFormIsFavorite}
@@ -723,36 +727,36 @@ export default function LottisEmpfehlungenScreen() {
                       />
                     </View>
                     <ThemedText style={styles.fieldHint}>
-                      Optional: Zeigt den angepinnten Favorit-Badge
+                      {t('favoriteHint')}
                     </ThemedText>
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Button-Text</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldButton')}</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
                       value={formButtonText}
                       onChangeText={setFormButtonText}
-                      placeholder="Zum Produkt"
+                      placeholder={t('product')}
                       placeholderTextColor={theme.tabIconDefault}
                     />
                     <ThemedText style={styles.fieldHint}>
-                      Optional: Standard ist „Zum Produkt“
+                      {t('buttonHint')}
                     </ThemedText>
                   </View>
 
                   <View style={styles.formGroup}>
-                    <ThemedText style={styles.label}>Rabattcode</ThemedText>
+                    <ThemedText style={styles.label}>{t('fieldDiscount')}</ThemedText>
                     <TextInput
                       style={[styles.input, { color: theme.text, borderColor: theme.tabIconDefault }]}
                       value={formDiscountCode}
                       onChangeText={setFormDiscountCode}
-                      placeholder="z.B. LOTTI10"
+                      placeholder={t('discountPlaceholder')}
                       placeholderTextColor={theme.tabIconDefault}
                       autoCapitalize="characters"
                     />
                     <ThemedText style={styles.fieldHint}>
-                      Optional: Code für Checkout (z.B. LOTTI10 für 10% Rabatt)
+                      {t('discountHint')}
                     </ThemedText>
                   </View>
                 </ScrollView>
@@ -763,7 +767,7 @@ export default function LottisEmpfehlungenScreen() {
                     onPress={() => setModalVisible(false)}
                     disabled={isSaving}
                   >
-                    <ThemedText style={styles.cancelButtonText}>Abbrechen</ThemedText>
+                    <ThemedText style={styles.cancelButtonText}>{t('cancel')}</ThemedText>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -775,11 +779,11 @@ export default function LottisEmpfehlungenScreen() {
                       <View style={styles.savingContainer}>
                         <ActivityIndicator color="#FFFFFF" size="small" />
                         <ThemedText style={styles.savingText}>
-                          {isUploadingImage ? 'Bild wird hochgeladen...' : 'Speichere...'}
+                          {isUploadingImage ? t('uploading') : t('saving')}
                         </ThemedText>
                       </View>
                     ) : (
-                      <ThemedText style={styles.saveButtonText}>Speichern</ThemedText>
+                      <ThemedText style={styles.saveButtonText}>{t('save')}</ThemedText>
                     )}
                   </TouchableOpacity>
                 </View>

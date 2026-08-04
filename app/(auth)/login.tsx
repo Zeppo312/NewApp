@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,8 +14,18 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import {
+  AuthTranslationKey,
+  DEFAULT_AUTH_LOCALE,
+  translateAuthText,
+} from '@/lib/authTranslations';
+
+let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
+const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
+  translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
 
 export default function LoginScreen() {
+  ACTIVE_AUTH_LOCALE = useLocale().locale;
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
@@ -67,9 +79,9 @@ export default function LoginScreen() {
   const handleForgotPassword = async () => {
     if (!email) {
       Alert.alert(
-        'E-Mail erforderlich',
-        'Bitte gib deine E-Mail-Adresse ein, um dein Passwort zurückzusetzen.',
-        [{ text: 'OK' }]
+        t('login.emailRequiredTitle'),
+        t('login.emailRequiredMessage'),
+        [{ text: t('common.ok') }]
       );
       return;
     }
@@ -88,13 +100,13 @@ export default function LoginScreen() {
       }
 
       Alert.alert(
-        'E-Mail gesendet',
-        'Wir haben dir eine E-Mail mit einem Link zum Zurücksetzen deines Passworts gesendet. Bitte überprüfe dein Postfach.',
-        [{ text: 'OK' }]
+        t('login.resetEmailSentTitle'),
+        t('login.resetEmailSentMessage'),
+        [{ text: t('common.ok') }]
       );
     } catch (err: any) {
       console.error('Password reset error:', err);
-      setError(err.message || 'Passwort zurücksetzen fehlgeschlagen. Bitte versuche es erneut.');
+      setError(t('login.resetFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +139,7 @@ export default function LoginScreen() {
 
     // Basic validation
     if (!email || !password) {
-      setError('Bitte E-Mail und Passwort eingeben');
+      setError(t('login.credentialsRequired'));
       return;
     }
 
@@ -177,7 +189,7 @@ export default function LoginScreen() {
         // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
         const session = data?.session ?? await waitForAuthenticatedSession();
         if (!session?.user) {
-          setError('Anmeldung erfolgreich, aber Session noch nicht verfügbar. Bitte kurz erneut versuchen.');
+          setError(t('login.sessionUnavailable'));
           return;
         }
 
@@ -189,22 +201,21 @@ export default function LoginScreen() {
       console.error('Authentication error:', err);
 
       if (err.message?.toLowerCase().includes('rate limit')) {
-        setError('Zu viele Versuche. Bitte warte kurz, bevor du es erneut probierst.');
+        setError(t('login.tooManyAttempts'));
       } else if (err.message?.includes('Invalid login')) {
-        setError('Ungültige E-Mail oder Passwort');
+        setError(t('login.invalidCredentials'));
       } else if (err.message?.includes('Email not confirmed')) {
-        setError('Bitte bestätige deine E-Mail-Adresse');
+        setError(t('login.emailNotConfirmed'));
         Alert.alert(
-          'E-Mail nicht bestätigt',
-          'Bitte öffne den Bestätigungslink in der E-Mail, die wir dir gesendet haben.',
-          [{ text: 'OK' }]
+          t('login.emailNotConfirmedTitle'),
+          t('login.emailNotConfirmedMessage'),
+          [{ text: t('common.ok') }]
         );
       } else {
         const friendlyFallback = isRegistering
-          ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
-          : 'Login fehlgeschlagen. Bitte versuche es erneut.';
-        // Zeige den Supabase-Fehlertext mit Fallback, damit wir den echten Grund sehen
-        setError(err?.message ? `${friendlyFallback} (${err.message})` : friendlyFallback);
+          ? t('login.registrationFailed')
+          : t('login.signInFailed');
+        setError(friendlyFallback);
       }
     } finally {
       setIsLoading(false);
@@ -253,7 +264,7 @@ export default function LoginScreen() {
         // User cancelled, don't show error
         return;
       }
-      setError(err.message || 'Apple Sign-In fehlgeschlagen');
+      setError(t('login.appleFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -276,7 +287,7 @@ export default function LoginScreen() {
                   Lotti Baby
                 </ThemedText>
                 <ThemedText style={styles.appSubtitle} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
-                  Für Eltern und alle, die es bald werden
+                  {t('login.subtitle')}
                 </ThemedText>
               </View>
 
@@ -288,7 +299,7 @@ export default function LoginScreen() {
                 />
                 <View style={styles.formContent}>
                   <ThemedText type="subtitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
-                    {isRegistering ? 'Registrieren' : 'Anmelden'}
+                    {isRegistering ? t('login.register') : t('common.login')}
                   </ThemedText>
 
                   {error ? (
@@ -303,14 +314,14 @@ export default function LoginScreen() {
 
                 <View style={styles.inputContainer}>
                   <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
-                    E-Mail
+                    {t('login.email')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
                     <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                     <TextInput
                       style={styles.input}
-                      placeholder="deine@email.de"
+                      placeholder={t('login.emailPlaceholder')}
                       placeholderTextColor="#9D9D9D"
                       value={email}
                       onChangeText={setEmail}
@@ -322,7 +333,7 @@ export default function LoginScreen() {
 
                 <View style={styles.inputContainer}>
                   <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
-                    Passwort
+                    {t('login.password')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
                     <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
@@ -345,7 +356,7 @@ export default function LoginScreen() {
                     disabled={isLoading}
                   >
                     <ThemedText style={styles.forgotPasswordText} lightColor={accentColor} darkColor={accentColor}>
-                      Passwort vergessen?
+                      {t('login.forgotPassword')}
                     </ThemedText>
                   </TouchableOpacity>
                 )}
@@ -362,7 +373,9 @@ export default function LoginScreen() {
                     style={StyleSheet.absoluteFill}
                   />
                   <ThemedText style={styles.buttonText}>
-                    {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
+                    {isLoading
+                      ? (isRegistering ? t('login.registering') : t('login.signingIn'))
+                      : (isRegistering ? t('login.register') : t('common.login'))}
                   </ThemedText>
                 </TouchableOpacity>
 
@@ -381,7 +394,7 @@ export default function LoginScreen() {
                     <View style={styles.buttonContent}>
                       <ThemedText style={styles.appleIcon}></ThemedText>
                       <ThemedText style={styles.buttonText}>
-                        Mit Apple anmelden
+                        {t('login.apple')}
                       </ThemedText>
                     </View>
                   </TouchableOpacity>
@@ -395,21 +408,21 @@ export default function LoginScreen() {
                       disabled={isLoading}
                     >
                       <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
-                        {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
+                        {showInvitationField ? t('login.withoutInvitation') : t('login.hasInvitation')}
                       </ThemedText>
                     </TouchableOpacity>
 
                     {showInvitationField && (
                       <>
                         <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
-                          Einladungscode (optional)
+                          {t('login.invitationOptional')}
                         </ThemedText>
                         <View style={styles.inputWrapper}>
                           <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
                           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                           <TextInput
                             style={styles.input}
-                            placeholder="Einladungscode eingeben"
+                            placeholder={t('login.invitationPlaceholder')}
                             placeholderTextColor="#9D9D9D"
                             value={invitationCode}
                             onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
@@ -432,7 +445,7 @@ export default function LoginScreen() {
                   disabled={isLoading}
                 >
                   <ThemedText style={styles.switchModeText} lightColor={accentColor} darkColor={accentColor}>
-                    {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
+                    {isRegistering ? t('login.hasAccount') : t('login.noAccount')}
                   </ThemedText>
                 </TouchableOpacity>
                 </View>

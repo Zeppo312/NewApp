@@ -24,6 +24,8 @@ import {
   type RuleSignals,
 } from './advisorRules.ts';
 import { generateAiText } from './advisorAi.ts';
+import { localizeAdvisorCandidate } from '../_shared/advisorLocalization.ts';
+import { getSettingsLocale, localize, SupportedLocale } from '../_shared/localization.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -111,10 +113,19 @@ const ageMonthsOf = (birthDate: string | null): number | null => {
   return Math.max(0, months);
 };
 
-const ageTextOf = (ageMonths: number | null): string => {
+const ageTextOf = (ageMonths: number | null, locale: SupportedLocale): string => {
   if (ageMonths == null) return '';
-  if (ageMonths < 24) return `${ageMonths} Monate alt`;
-  return `${Math.floor(ageMonths / 12)} Jahre alt`;
+  if (ageMonths < 24) return localize(locale, {
+    de: `${ageMonths} Monate alt`,
+    en: `${ageMonths} months old`,
+    es: `${ageMonths} meses`,
+  });
+  const years = Math.floor(ageMonths / 12);
+  return localize(locale, {
+    de: `${years} Jahre alt`,
+    en: `${years} years old`,
+    es: `${years} años`,
+  });
 };
 
 /** WMO-Wettercode → kurze deutsche Beschreibung (Open-Meteo). */
@@ -245,6 +256,14 @@ serve(async (req: Request) => {
         results[settings.user_id] = 'no_access';
         continue;
       }
+      const { data: userSettings } = await supabase
+        .from('user_settings')
+        .select('resolved_language, language_preference')
+        .eq('user_id', settings.user_id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const locale = getSettingsLocale(userSettings);
 
       // Babys des Nutzers (Mehrbaby-Support via baby_members).
       const { data: memberRows } = await supabase
@@ -405,9 +424,13 @@ serve(async (req: Request) => {
         );
 
         const signals: RuleSignals = {
-          babyName: baby?.name?.trim() || 'dein Baby',
+          babyName: baby?.name?.trim() || localize(locale, {
+            de: 'dein Baby',
+            en: 'your baby',
+            es: 'tu bebé',
+          }),
           ageMonths,
-          ageText: ageTextOf(ageMonths),
+          ageText: ageTextOf(ageMonths, locale),
           feeding: {
             totalCount: todayFeedings.length,
             isReal: true,
@@ -469,10 +492,14 @@ serve(async (req: Request) => {
           (r: { rule_id: string }) => r.rule_id,
         );
 
-        const candidate = selectCandidate(evaluateRules(signals), {
-          themes: settings.themes,
-          recentRuleIds,
-        });
+        const candidate = localizeAdvisorCandidate(
+          selectCandidate(evaluateRules(signals), {
+            themes: settings.themes,
+            recentRuleIds,
+          }),
+          signals,
+          locale,
+        );
 
         // „Nur Wichtiges": bei niedriger Priorität weder speichern noch pushen.
         if (settings.frequency === 'critical_only' && candidate.priority > 2) {
@@ -485,7 +512,7 @@ serve(async (req: Request) => {
         let text = candidate.body;
         let source = 'rules';
         if (settings.ai_enabled !== false) {
-          const ai = await generateAiText(candidate, signals);
+          const ai = await generateAiText(candidate, signals, locale);
           if (ai) {
             headline = ai.headline;
             text = ai.body;
@@ -549,7 +576,7 @@ serve(async (req: Request) => {
             tone: candidate.tone,
             category: candidate.category,
             priority: candidate.priority,
-            facts: { ...candidate.facts, reasons: candidate.reasons },
+            facts: { ...candidate.facts, reasons: candidate.reasons, locale },
             source,
             pushed_at: pushedAt,
             push_status: pushStatus,

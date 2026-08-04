@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect } from 'react';
 import {
   Alert,
@@ -25,23 +27,34 @@ import {
   deleteFeatureRequest,
   type FeatureRequest,
 } from '@/lib/supabase';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  formatCommunityDate,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
 
 type Category = 'feature' | 'improvement' | 'bug-fix';
 type Priority = 'low' | 'medium' | 'high';
 
-const CATEGORIES: { value: Category; label: string; icon: string }[] = [
-  { value: 'feature', label: 'Neues Feature', icon: 'sparkles' },
-  { value: 'improvement', label: 'Verbesserung', icon: 'arrow.up.circle' },
-  { value: 'bug-fix', label: 'Fehler beheben', icon: 'ladybug' },
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
+
+const CATEGORIES: { value: Category; labelKey: CommunityTranslationKey; icon: string }[] = [
+  { value: 'feature', labelKey: 'feature.category.feature', icon: 'sparkles' },
+  { value: 'improvement', labelKey: 'feature.category.improvement', icon: 'arrow.up.circle' },
+  { value: 'bug-fix', labelKey: 'feature.category.bug-fix', icon: 'ladybug' },
 ];
 
-const PRIORITIES: { value: Priority; label: string; color: string }[] = [
-  { value: 'low', label: 'Niedrig', color: '#3A9E8C' },
-  { value: 'medium', label: 'Mittel', color: '#E9C9B6' },
-  { value: 'high', label: 'Hoch', color: '#FF6B6B' },
+const PRIORITIES: { value: Priority; labelKey: CommunityTranslationKey; color: string }[] = [
+  { value: 'low', labelKey: 'feature.priority.low', color: '#3A9E8C' },
+  { value: 'medium', labelKey: 'feature.priority.medium', color: '#E9C9B6' },
+  { value: 'high', labelKey: 'feature.priority.high', color: '#FF6B6B' },
 ];
 
 export default function FeatureRequestsScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -71,16 +84,16 @@ export default function FeatureRequestsScreen() {
 
   const handleSubmit = async () => {
     if (!title.trim()) {
-      Alert.alert('Fehler', 'Bitte gib einen Titel ein.');
+      Alert.alert(t('common.error'), t('feature.titleRequired'));
       return;
     }
     if (!description.trim()) {
-      Alert.alert('Fehler', 'Bitte gib eine Beschreibung ein.');
+      Alert.alert(t('common.error'), t('feature.descriptionRequired'));
       return;
     }
 
     setIsSubmitting(true);
-    const { data, error } = await saveFeatureRequest({
+    const { error } = await saveFeatureRequest({
       title: title.trim(),
       description: description.trim(),
       category,
@@ -91,9 +104,9 @@ export default function FeatureRequestsScreen() {
 
     if (error) {
       console.error('Error saving feature request:', error);
-      Alert.alert('Fehler', 'Dein Vorschlag konnte nicht gespeichert werden. Bitte versuche es später erneut.');
+      Alert.alert(t('common.error'), t('feature.saveFailed'));
     } else {
-      Alert.alert('Erfolg', 'Vielen Dank für deinen Verbesserungsvorschlag!');
+      Alert.alert(t('common.success'), t('feature.saved'));
       setTitle('');
       setDescription('');
       setCategory('feature');
@@ -104,17 +117,17 @@ export default function FeatureRequestsScreen() {
 
   const handleDelete = (id: string) => {
     Alert.alert(
-      'Vorschlag löschen',
-      'Möchtest du diesen Vorschlag wirklich löschen?',
+      t('feature.deleteTitle'),
+      t('feature.deleteMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const { error } = await deleteFeatureRequest(id);
             if (error) {
-              Alert.alert('Fehler', 'Der Vorschlag konnte nicht gelöscht werden.');
+              Alert.alert(t('common.error'), t('feature.deleteFailed'));
             } else {
               loadRequests();
             }
@@ -134,7 +147,7 @@ export default function FeatureRequestsScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return formatCommunityDate(date, ACTIVE_COMMUNITY_LOCALE);
   };
 
   return (
@@ -145,8 +158,8 @@ export default function FeatureRequestsScreen() {
           <StatusBar hidden={true} />
 
           <Header
-            title="Verbesserungen"
-            subtitle="Deine Ideen für die App"
+            title={t('feature.screenTitle')}
+            subtitle={t('feature.screenSubtitle')}
             showBackButton
             onBackPress={() => router.push('/more')}
           />
@@ -154,13 +167,13 @@ export default function FeatureRequestsScreen() {
           <ScrollView contentContainerStyle={styles.content}>
             {/* Formular */}
             <LiquidGlassCard style={styles.card} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <ThemedText style={styles.sectionTitle}>Neuer Vorschlag</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('feature.new')}</ThemedText>
 
-              <ThemedText style={styles.label}>Titel</ThemedText>
+              <ThemedText style={styles.label}>{t('feature.title')}</ThemedText>
               <TextInput
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Kurze Beschreibung deiner Idee"
+                placeholder={t('feature.titlePlaceholder')}
                 placeholderTextColor="rgba(0,0,0,0.35)"
                 style={styles.input}
                 autoCorrect={true}
@@ -168,7 +181,7 @@ export default function FeatureRequestsScreen() {
                 returnKeyType="next"
               />
 
-              <ThemedText style={styles.label}>Kategorie</ThemedText>
+              <ThemedText style={styles.label}>{t('feature.category')}</ThemedText>
               <View style={styles.categoryContainer}>
                 {CATEGORIES.map((cat) => (
                   <TouchableOpacity
@@ -190,13 +203,13 @@ export default function FeatureRequestsScreen() {
                         category === cat.value && styles.categoryButtonTextActive,
                       ]}
                     >
-                      {cat.label}
+                      {t(cat.labelKey)}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <ThemedText style={styles.label}>Priorität</ThemedText>
+              <ThemedText style={styles.label}>{t('feature.priority')}</ThemedText>
               <View style={styles.priorityContainer}>
                 {PRIORITIES.map((prio) => (
                   <TouchableOpacity
@@ -213,17 +226,17 @@ export default function FeatureRequestsScreen() {
                         priority === prio.value && styles.priorityButtonTextActive,
                       ]}
                     >
-                      {prio.label}
+                      {t(prio.labelKey)}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <ThemedText style={styles.label}>Beschreibung</ThemedText>
+              <ThemedText style={styles.label}>{t('feature.description')}</ThemedText>
               <TextInput
                 value={description}
                 onChangeText={setDescription}
-                placeholder="Was genau möchtest du verbessert haben? Je detaillierter, desto besser können wir deinen Vorschlag umsetzen."
+                placeholder={t('feature.descriptionPlaceholder')}
                 placeholderTextColor="rgba(0,0,0,0.35)"
                 style={[styles.input, styles.textarea]}
                 multiline
@@ -241,14 +254,14 @@ export default function FeatureRequestsScreen() {
                 {isSubmitting ? (
                   <ActivityIndicator color="#5C4033" />
                 ) : (
-                  <ThemedText style={styles.submitButtonText}>Vorschlag einreichen</ThemedText>
+                  <ThemedText style={styles.submitButtonText}>{t('feature.submit')}</ThemedText>
                 )}
               </TouchableOpacity>
             </LiquidGlassCard>
 
             {/* Liste der Vorschläge */}
             <LiquidGlassCard style={styles.card} intensity={26} overlayColor={GLASS_OVERLAY}>
-              <ThemedText style={styles.sectionTitle}>Deine Vorschläge</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('feature.yours')}</ThemedText>
 
               {isLoading ? (
                 <View style={styles.loadingContainer}>
@@ -258,7 +271,7 @@ export default function FeatureRequestsScreen() {
                 <View style={styles.emptyContainer}>
                   <IconSymbol name="tray" size={40} color={theme.tabIconDefault} />
                   <ThemedText style={styles.emptyText}>
-                    Du hast noch keine Vorschläge eingereicht.
+                    {t('feature.empty')}
                   </ThemedText>
                 </View>
               ) : (
@@ -291,12 +304,12 @@ export default function FeatureRequestsScreen() {
                             style={[styles.priorityTag, { backgroundColor: priorityInfo.color }]}
                           >
                             <ThemedText style={styles.priorityTagText}>
-                              {priorityInfo.label}
+                              {t(priorityInfo.labelKey)}
                             </ThemedText>
                           </View>
                           <View style={styles.categoryTag}>
                             <ThemedText style={styles.categoryTagText}>
-                              {categoryInfo.label}
+                              {t(categoryInfo.labelKey)}
                             </ThemedText>
                           </View>
                         </View>

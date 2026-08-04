@@ -29,6 +29,17 @@ import ViewShot from 'react-native-view-shot';
 import { ThemedText } from '@/components/ThemedText';
 import { babyImageForLevel } from '@/lib/lottiBabyImages';
 import type { DayCounts, DayPointBreakdown, LottiLevelInfo } from '@/lib/lottiPoints';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  formatWeeklyMomentDuration,
+  formatWeeklyMomentRange,
+  getWeeklyMomentMood,
+  translateWeeklyMomentText,
+  WEEKLY_MOMENT_DAY_NAMES,
+  WEEKLY_MOMENT_DAY_SHORT_NAMES,
+  type WeeklyMomentLocale,
+  type WeeklyMomentTranslationKey,
+} from '@/lib/weeklyMomentTranslations';
 
 const DAY_NAMES = [
   'Montag',
@@ -80,21 +91,12 @@ const formatRange = (start: Date, end: Date) => {
 /** „Wort der Woche" — abgeleitet aus dem dominanten Bereich. */
 export function getWochenkarteMood(
   data: Pick<WochenkarteData, 'counts'>,
+  locale: WeeklyMomentLocale = 'de',
 ): { word: string; emoji: string } {
-  const { feeding, care, sleep } = data.counts;
-  const total = feeding + care + sleep;
-  if (total === 0) return { word: 'Ruhig', emoji: '🕊️' };
-  const max = Math.max(feeding, care, sleep);
-  // Ausgeglichen, wenn kein Bereich klar dominiert
-  if (max / total < 0.45 && feeding > 0 && care > 0 && sleep > 0) {
-    return { word: 'Im Gleichgewicht', emoji: '✨' };
-  }
-  if (max === sleep) return { word: 'Verträumt', emoji: '🌙' };
-  if (max === feeding) return { word: 'Genussvoll', emoji: '🍼' };
-  return { word: 'Kuschelig', emoji: '🤍' };
+  return getWeeklyMomentMood(locale, data.counts);
 }
 
-function strongestDay(data: WochenkarteData): { name: string; points: number } | null {
+function strongestDay(data: WochenkarteData, locale: WeeklyMomentLocale): { name: string; points: number } | null {
   let bestIdx = -1;
   let best = 0;
   data.dayPoints.forEach((dp, idx) => {
@@ -104,7 +106,7 @@ function strongestDay(data: WochenkarteData): { name: string; points: number } |
     }
   });
   if (bestIdx === -1) return null;
-  return { name: DAY_NAMES[bestIdx], points: best };
+  return { name: WEEKLY_MOMENT_DAY_NAMES[locale][bestIdx], points: best };
 }
 
 const formatSleep = (minutes: number) => {
@@ -117,6 +119,8 @@ const formatSleep = (minutes: number) => {
 };
 
 export function WochenkarteStory({ visible, onClose, data }: Props) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
   const [page, setPage] = useState(0);
   const pageCount = 5;
   const viewShotRef = useRef<React.ElementRef<typeof ViewShot> | null>(null);
@@ -146,25 +150,25 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
         await Sharing.shareAsync(uri);
       } else {
         await Share.share({
-          title: 'Unsere Lotti-Woche',
-          message: `Unsere Woche mit Lotti: ${totalMoments} Momente, +${data.weekPoints} Herzen 🤍`,
+          title: t('story.shareTitle'),
+          message: t('story.shareMessage', { moments: totalMoments, points: data.weekPoints }),
           url: uri,
         });
       }
     } catch {
       Alert.alert(
-        'Teilen nicht möglich',
-        'Beim Teilen ist etwas schiefgegangen. Bitte versucht es später noch einmal.',
+        t('story.shareFailedTitle'),
+        t('story.shareFailed'),
       );
     }
   };
 
   const totalMoments =
     data.counts.feeding + data.counts.care + data.counts.sleep;
-  const word = useMemo(() => getWochenkarteMood(data), [data]);
-  const record = useMemo(() => strongestDay(data), [data]);
-  const sleepTotal = formatSleep(data.totalSleepMinutes);
-  const rangeLabel = formatRange(data.weekStart, data.weekEnd);
+  const word = useMemo(() => getWochenkarteMood(data, locale), [data, locale]);
+  const record = useMemo(() => strongestDay(data, locale), [data, locale]);
+  const sleepTotal = formatWeeklyMomentDuration(locale, data.totalSleepMinutes);
+  const rangeLabel = formatWeeklyMomentRange(locale, data.weekStart, data.weekEnd);
 
   return (
     <Modal
@@ -207,7 +211,7 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
           {page === 0 ? (
             <StoryPage key="p0">
               <ThemedText adaptive={false} style={styles.kicker}>
-                Eure Woche · {rangeLabel}
+                {t('story.week', { range: rangeLabel })}
               </ThemedText>
               <HeroEmoji emoji={word.emoji} />
               <ThemedText adaptive={false} style={styles.heroWord}>
@@ -215,8 +219,8 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
               </ThemedText>
               <ThemedText adaptive={false} style={styles.pageBody}>
                 {totalMoments === 0
-                  ? 'Eine stille Woche — auch die gehört zu eurer Geschichte.'
-                  : 'So hat sich eure Woche angefühlt. Tippt weiter für euren Rückblick.'}
+                  ? t('story.emptyWeek')
+                  : t('story.weekFeeling')}
               </ThemedText>
             </StoryPage>
           ) : null}
@@ -224,16 +228,16 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
           {page === 1 ? (
             <StoryPage key="p1">
               <ThemedText adaptive={false} style={styles.kicker}>
-                Festgehalten
+                {t('story.captured')}
               </ThemedText>
               <CountUpNumber value={totalMoments} />
               <ThemedText adaptive={false} style={styles.pageTitle}>
-                {totalMoments === 1 ? 'Moment' : 'Momente'} diese Woche
+                {t(totalMoments === 1 ? 'story.moment.one' : 'story.moment.other')}
               </ThemedText>
               <View style={styles.metricPillRow}>
-                <MetricPill emoji="🍼" label="Essen" value={data.counts.feeding} />
-                <MetricPill emoji="🤍" label="Pflege" value={data.counts.care} />
-                <MetricPill emoji="🌙" label="Schlaf" value={data.counts.sleep} />
+                <MetricPill emoji="🍼" label={t('story.feeding')} value={data.counts.feeding} />
+                <MetricPill emoji="🤍" label={t('story.care')} value={data.counts.care} />
+                <MetricPill emoji="🌙" label={t('story.sleep')} value={data.counts.sleep} />
               </View>
             </StoryPage>
           ) : null}
@@ -241,7 +245,7 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
           {page === 2 ? (
             <StoryPage key="p2">
               <ThemedText adaptive={false} style={styles.kicker}>
-                Euer Rekord
+                {t('story.record')}
               </ThemedText>
               <HeroEmoji emoji="⭐" compact />
               {record ? (
@@ -250,18 +254,18 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
                     {record.name}
                   </ThemedText>
                   <ThemedText adaptive={false} style={styles.pageBody}>
-                    war euer stärkster Tag — +{record.points} Herzen an einem Tag.
-                    {sleepTotal ? `\n\nInsgesamt hat Lotti ${sleepTotal} geschlafen. 🌙` : ''}
+                    {t('story.strongestDay', { points: record.points })}
+                    {sleepTotal ? `\n\n${t('story.totalSleep', { duration: sleepTotal })}` : ''}
                   </ThemedText>
                   <DayPointsStrip dayPoints={data.dayPoints} />
                 </>
               ) : (
                 <>
                   <ThemedText adaptive={false} style={styles.heroWord}>
-                    Nächste Woche
+                    {t('story.nextWeek')}
                   </ThemedText>
                   <ThemedText adaptive={false} style={styles.pageBody}>
-                    wartet euer erster Rekord. Jeder kleine Moment zählt.
+                    {t('story.firstRecord')}
                   </ThemedText>
                 </>
               )}
@@ -271,18 +275,18 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
           {page === 3 ? (
             <StoryPage key="p3">
               <ThemedText adaptive={false} style={styles.kicker}>
-                Eure Herzen
+                {t('story.yourHearts')}
               </ThemedText>
               <HeroEmoji emoji="🤍" compact />
               <CountUpNumber value={data.weekPoints} prefix="+" />
               <ThemedText adaptive={false} style={styles.pageTitle}>
-                Herzen gesammelt
+                {t('story.heartsCollected')}
               </ThemedText>
               <ThemedText adaptive={false} style={styles.pageBody}>
-                Stufe {data.level.level} · {data.level.name}
+                {t('story.level', { level: data.level.level, name: data.level.name })}
                 {data.level.nextLevelName
-                  ? `\nNoch ${data.level.pointsToNext} Herzen bis „${data.level.nextLevelName}“`
-                  : '\nHöchste Stufe erreicht 🤍'}
+                  ? `\n${t('card.untilLevel', { count: data.level.pointsToNext, name: data.level.nextLevelName })}`
+                  : `\n${t('card.maxLevel')}`}
               </ThemedText>
             </StoryPage>
           ) : null}
@@ -302,7 +306,7 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
                     />
                     <View style={styles.cardHeaderText}>
                       <ThemedText adaptive={false} style={styles.cardKicker}>
-                        Unsere Lotti-Woche
+                        {t('story.ourWeek')}
                       </ThemedText>
                       <ThemedText adaptive={false} style={styles.cardRange}>
                         {rangeLabel}
@@ -318,13 +322,13 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
                   </ThemedText>
 
                   <View style={styles.cardStatsRow}>
-                    <CardStat value={String(totalMoments)} label="Momente" />
-                    <CardStat value={`${data.activeDays}/7`} label="Tage" />
-                    <CardStat value={`+${data.weekPoints}`} label="Herzen" />
+                    <CardStat value={String(totalMoments)} label={t('story.moments')} />
+                    <CardStat value={`${data.activeDays}/7`} label={t('story.days')} />
+                    <CardStat value={`+${data.weekPoints}`} label={t('story.hearts')} />
                   </View>
 
                   <ThemedText adaptive={false} style={styles.cardFooter}>
-                    Stufe {data.level.level} · {data.level.name} 🤍 Lotti Baby
+                    {t('story.level', { level: data.level.level, name: data.level.name })} 🤍 Lotti Baby
                   </ThemedText>
                 </View>
               </ViewShot>
@@ -337,12 +341,12 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
                 ]}
               >
                 <ThemedText adaptive={false} style={styles.shareButtonText}>
-                  Wochenkarte teilen
+                  {t('story.share')}
                 </ThemedText>
               </Pressable>
               <Pressable onPress={handleClose} hitSlop={8}>
                 <ThemedText adaptive={false} style={styles.doneText}>
-                  Fertig
+                  {t('story.done')}
                 </ThemedText>
               </Pressable>
             </StoryPage>
@@ -361,7 +365,7 @@ export function WochenkarteStory({ visible, onClose, data }: Props) {
 
         {page < pageCount - 1 ? (
           <ThemedText adaptive={false} style={styles.tapHint}>
-            Tippen für weiter
+            {t('story.tapNext')}
           </ThemedText>
         ) : null}
       </LinearGradient>
@@ -472,10 +476,11 @@ function MetricPill({
 }
 
 function DayPointsStrip({ dayPoints }: { dayPoints: DayPointBreakdown[] }) {
+  const { locale } = useLocale();
   const max = Math.max(1, ...dayPoints.map((item) => item.total));
   return (
     <View style={styles.dayPointsStrip}>
-      {DAY_SHORT_NAMES.map((label, index) => {
+      {WEEKLY_MOMENT_DAY_SHORT_NAMES[locale].map((label, index) => {
         const value = dayPoints[index]?.total ?? 0;
         const height = 10 + Math.round((value / max) * 42);
         return (

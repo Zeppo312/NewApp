@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
@@ -28,7 +30,7 @@ import {
 } from '@/lib/supportTranslations';
 
 const SUPPORT_EMAIL = 'support@lottibaby.de';
-const ACTIVE_SUPPORT_LOCALE = DEFAULT_SUPPORT_LOCALE;
+let ACTIVE_SUPPORT_LOCALE = DEFAULT_SUPPORT_LOCALE;
 const t = (
   key: SupportTranslationKey,
   params?: Record<string, string | number>,
@@ -42,6 +44,7 @@ function buildMailtoUrl(email: string, subject: string, body: string) {
 }
 
 export default function SupportScreen() {
+  ACTIVE_SUPPORT_LOCALE = useLocale().locale;
   const router = useRouter();
   const adaptiveColors = useAdaptiveColors();
   const { user } = useAuth();

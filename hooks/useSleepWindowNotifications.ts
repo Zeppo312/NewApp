@@ -14,6 +14,8 @@ import {
   markReminderNotificationHandled,
   wasReminderNotificationHandled,
 } from '@/lib/reminderNotificationState';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateNotificationsText } from '@/lib/notificationsTranslations';
 
 /**
  * Hook for managing sleep window reminder notifications
@@ -35,6 +37,8 @@ export function useSleepWindowNotifications(
   currentDevicePushToken?: string | null,
   hasActiveSleepEntry: boolean = false
 ) {
+  const { locale, localeTag } = useLocale();
+  const t = useCallback((key: Parameters<typeof translateNotificationsText>[1], params: Record<string, string | number> = {}) => translateNotificationsText(locale, key, params), [locale]);
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
   const lastRemoteTokenRef = useRef<string | null>(null);
@@ -71,7 +75,7 @@ export function useSleepWindowNotifications(
           babyId,
           reminderType: 'sleep_window',
           scheduledFor,
-          title: '💤 Schlaffenster beginnt bald',
+          title: t('scheduled.sleepTitle'),
           body,
           scheduleKey,
           payload: {
@@ -84,7 +88,7 @@ export function useSleepWindowNotifications(
         console.error('Failed to sync remote sleep reminder:', error);
       }
     },
-    [userId, babyId, currentDevicePushToken]
+    [userId, babyId, currentDevicePushToken, t]
   );
 
   useEffect(() => {
@@ -149,11 +153,11 @@ export function useSleepWindowNotifications(
           }
 
           const minutesUntilStart = Math.max(1, Math.round(msUntilStart / 60000));
-          const immediateBody = `Das vorhergesagte Schlaffenster startet in ca. ${minutesUntilStart} Minuten`;
+          const immediateBody = t('scheduled.sleepImmediate', { minutes: minutesUntilStart });
 
           const immediateId = await Notifications.scheduleNotificationAsync({
             content: {
-              title: '💤 Schlaffenster beginnt bald',
+              title: t('scheduled.sleepTitle'),
               body: immediateBody,
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -196,16 +200,16 @@ export function useSleepWindowNotifications(
       await cancelCurrentScheduledNotification();
 
       // Format time for notification body
-      const timeString = recommendedStart.toLocaleTimeString('de-DE', {
+      const timeString = recommendedStart.toLocaleTimeString(localeTag, {
         hour: '2-digit',
         minute: '2-digit'
       });
-      const body = `In 15 Minuten beginnt das vorhergesagte Schlaffenster (${timeString})`;
+      const body = t('scheduled.sleepBody', { time: timeString });
 
       // Schedule local reminder as primary channel.
       const scheduledId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '💤 Schlaffenster beginnt bald',
+          title: t('scheduled.sleepTitle'),
           body,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -239,7 +243,7 @@ export function useSleepWindowNotifications(
       }
 
       lastScheduledRef.current = scheduleKey;
-      console.log('✅ Sleep window reminder scheduled locally for', fifteenMinBefore.toLocaleTimeString('de-DE'));
+      console.log('✅ Sleep window reminder scheduled locally for', fifteenMinBefore.toLocaleTimeString(localeTag));
       console.log('   Sleep window starts at:', timeString);
       console.log('   Confidence:', sleepPrediction.confidence);
     };
@@ -258,7 +262,9 @@ export function useSleepWindowNotifications(
     cancelCurrentScheduledNotification,
     cancelRemoteReminder,
     hasRemoteChannel,
+    localeTag,
     syncRemoteReminder,
+    t,
   ]);
 
   /**

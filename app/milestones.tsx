@@ -51,6 +51,8 @@ import {
   MILESTONE_SUGGESTION_KEYS,
   translateMilestoneText,
 } from '@/lib/milestoneTranslations';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 
 type CategoryFilter = 'all' | MilestoneCategory;
 
@@ -64,8 +66,8 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
 ];
 const PRIMARY_FILTERS: CategoryFilter[] = ['all', 'motorik', 'ernaehrung', 'sprache', 'zahn'];
 const MIN_VALID_MILESTONE_DATE = new Date(2000, 0, 1);
-const ACTIVE_MILESTONE_LOCALE = DEFAULT_MILESTONE_LOCALE;
-const MILESTONE_DATE_LOCALE = getMilestoneLocaleTag(ACTIVE_MILESTONE_LOCALE);
+let ACTIVE_MILESTONE_LOCALE = DEFAULT_MILESTONE_LOCALE;
+let MILESTONE_DATE_LOCALE = getMilestoneLocaleTag(ACTIVE_MILESTONE_LOCALE);
 const t = (key: string, params?: Record<string, string | number>) =>
   translateMilestoneText(ACTIVE_MILESTONE_LOCALE, key, params);
 const categoryLabel = (category: MilestoneCategory) =>
@@ -85,6 +87,9 @@ const fromDateOnly = (value: string) => {
 };
 
 export default function MilestonesScreen() {
+  const { locale } = useLocale();
+  ACTIVE_MILESTONE_LOCALE = locale;
+  MILESTONE_DATE_LOCALE = getMilestoneLocaleTag(locale);
   const shareCardRef = useRef<ViewShotRef>(null);
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();

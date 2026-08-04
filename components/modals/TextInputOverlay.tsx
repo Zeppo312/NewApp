@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   visible: boolean;
@@ -60,6 +61,8 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
   blurTint,
   resolvedAccentColor,
 }) => {
+  const { locale } = useLocale();
+  const actions = { de: { cancel: 'Abbrechen', done: 'Fertig' }, en: { cancel: 'Cancel', done: 'Done' }, es: { cancel: 'Cancelar', done: 'Listo' } }[locale];
   const [text, setText] = useState(value);
   const bottomLift = Platform.OS === "ios" ? 12 : 12;
 
@@ -117,7 +120,7 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
                   { color: palette.textSecondary },
                 ]}
               >
-                Abbrechen
+                {actions.cancel}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -127,7 +130,7 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
               ]}
               onPress={handleSubmit}
             >
-              <Text style={styles.actionPrimaryLabel}>{submitLabel || "Fertig"}</Text>
+              <Text style={styles.actionPrimaryLabel}>{submitLabel || actions.done}</Text>
             </TouchableOpacity>
           </View>
         </BlurView>

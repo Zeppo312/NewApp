@@ -13,6 +13,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { getSafePickerDate } from '@/lib/safeDate';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getAppLocaleTag } from '@/lib/localization';
 
 type PickerVariant = 'calendar' | 'spinner';
 const DEFAULT_MIN_DATE = new Date(2000, 0, 1);
@@ -42,10 +44,14 @@ export default function IOSBottomDatePicker({
   minimumDate,
   maximumDate,
   mode = 'date',
-  confirmLabel = 'Fertig',
-  cancelLabel = 'Abbrechen',
-  locale = 'de-DE',
+  confirmLabel,
+  cancelLabel,
+  locale,
 }: Props) {
+  const { locale: appLocale } = useLocale();
+  const resolvedConfirmLabel = confirmLabel ?? ({ de: 'Fertig', en: 'Done', es: 'Listo' } as const)[appLocale];
+  const resolvedCancelLabel = cancelLabel ?? ({ de: 'Abbrechen', en: 'Cancel', es: 'Cancelar' } as const)[appLocale];
+  const resolvedLocale = locale ?? getAppLocaleTag(appLocale);
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
 
@@ -126,11 +132,11 @@ export default function IOSBottomDatePicker({
         >
           <View style={styles.headerRow}>
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.headerAction, { color: textSecondary }]}>{cancelLabel}</Text>
+              <Text style={[styles.headerAction, { color: textSecondary }]}>{resolvedCancelLabel}</Text>
             </TouchableOpacity>
             <Text style={[styles.title, { color: textPrimary }]}>{title}</Text>
             <TouchableOpacity onPress={handleConfirm} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.headerAction, { color: accent }]}>{confirmLabel}</Text>
+              <Text style={[styles.headerAction, { color: accent }]}>{resolvedConfirmLabel}</Text>
             </TouchableOpacity>
           </View>
 
@@ -138,7 +144,7 @@ export default function IOSBottomDatePicker({
             value={getSafePickerDate(draft, new Date(), safeDateOptions)}
             mode={mode}
             display={display}
-            locale={locale}
+            locale={resolvedLocale}
             onChange={(_, date) => {
               if (!date) return;
               setDraft(getSafePickerDate(date, draft, safeDateOptions));

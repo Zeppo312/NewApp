@@ -19,6 +19,8 @@ import {
   type RuleSignals,
 } from './advisorRules.ts';
 import { generateAiText } from './advisorAi.ts';
+import { localizeAdvisorCandidate } from '../_shared/advisorLocalization.ts';
+import { normalizeLocale } from '../_shared/localization.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -39,6 +41,7 @@ const json = (body: unknown, status = 200) =>
 
 interface GenerateRequest {
   babyId: string;
+  locale?: string;
   /** Lokales Datum des Geräts (YYYY-MM-DD) — maßgeblich für den Tages-Upsert. */
   localDate: string;
   signals: RuleSignals;
@@ -73,6 +76,7 @@ serve(async (req: Request) => {
     }
 
     const admin = createClient(supabaseUrl, serviceKey);
+    const locale = normalizeLocale(body.locale);
 
     // Zugriff: in Erprobung nur Premiumtester/Admins.
     // TODO(Premium-Abo): später zusätzlich Premium-Entitlement zulassen.
@@ -122,7 +126,11 @@ serve(async (req: Request) => {
     const isAdmin = profile?.is_admin === true;
 
     const candidates = evaluateRules(body.signals);
-    const candidate = selectCandidate(candidates, { themes, recentRuleIds });
+    const candidate = localizeAdvisorCandidate(
+      selectCandidate(candidates, { themes, recentRuleIds }),
+      body.signals,
+      locale,
+    );
 
     // Kostenbremse: Hat sich die Regel seit dem letzten Speichern nicht
     // geändert, den bereits formulierten KI-Text wiederverwenden — kein
@@ -131,7 +139,8 @@ serve(async (req: Request) => {
       !isAdmin &&
       todayRow &&
       todayRow.rule_id === candidate.ruleId &&
-      todayRow.source === 'ai'
+      todayRow.source === 'ai' &&
+      (todayRow.facts as { locale?: string } | null)?.locale === locale
     ) {
       return json({
         main: {
@@ -158,7 +167,7 @@ serve(async (req: Request) => {
     let text = candidate.body;
     let source = 'rules';
     if (settings?.ai_enabled !== false && underCap) {
-      const ai = await generateAiText(candidate, body.signals);
+      const ai = await generateAiText(candidate, body.signals, locale);
       if (ai) {
         headline = ai.headline;
         text = ai.body;
@@ -183,7 +192,7 @@ serve(async (req: Request) => {
           tone: candidate.tone,
           category: candidate.category,
           priority: candidate.priority,
-          facts: { ...candidate.facts, reasons: candidate.reasons, ai_runs: aiRuns },
+          facts: { ...candidate.facts, reasons: candidate.reasons, ai_runs: aiRuns, locale },
           source,
         },
         { onConflict: 'user_id,baby_id,local_date' },

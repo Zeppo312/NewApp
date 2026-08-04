@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -45,6 +47,17 @@ import {
   useSubscriptionTier,
   type AppFeature,
 } from '@/lib/entitlements';
+import {
+  DEFAULT_HOME_LOCALE,
+  getHomeLocaleTag,
+  HomeTranslationKey,
+  translateHomeText,
+} from '@/lib/homeTranslations';
+
+let ACTIVE_HOME_LOCALE = DEFAULT_HOME_LOCALE;
+let HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
+const t = (key: HomeTranslationKey, params?: Record<string, string | number>) =>
+  translateHomeText(ACTIVE_HOME_LOCALE, key, params);
 
 type HomeActiveTimer = {
   source: 'sleep' | 'daily';
@@ -84,6 +97,11 @@ type HomeQuickAccessCardConfig = {
   blurIntensity?: number;
 };
 
+type HomeQuickAccessCardDefinition = Omit<HomeQuickAccessCardConfig, 'title' | 'description'> & {
+  titleKey: HomeTranslationKey;
+  descriptionKey: HomeTranslationKey;
+};
+
 const HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'home_quick_access_order';
 const HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'home_quick_access_hidden';
 
@@ -96,11 +114,11 @@ const QUICK_ACCESS_CARD_FEATURES: Partial<
   'recipe-generator': 'recipes',
 };
 
-const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
+const HOME_QUICK_ACCESS_CARD_DEFINITIONS: HomeQuickAccessCardDefinition[] = [
   {
     id: 'recipe-generator',
-    title: 'BLW-Rezepte',
-    description: 'Rezepte entdecken',
+    titleKey: 'card.recipes.title',
+    descriptionKey: 'card.recipes.description',
     iconName: 'fork.knife',
     destination: '/recipe-generator',
     cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
@@ -108,8 +126,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'shopping-list',
-    title: 'Einkauf & Vorräte',
-    description: 'Liste, Bestand, Scanner',
+    titleKey: 'card.shopping.title',
+    descriptionKey: 'card.shopping.description',
     iconName: 'cart',
     destination: '/shopping-list',
     cardBackgroundColor: 'rgba(210, 235, 215, 0.6)',
@@ -117,8 +135,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'baby',
-    title: 'Mein Baby',
-    description: 'Alle Infos & Entwicklungen',
+    titleKey: 'card.baby.title',
+    descriptionKey: 'card.baby.description',
     iconName: 'person.fill',
     destination: '/(tabs)/baby',
     cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
@@ -126,8 +144,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'planner',
-    title: 'Planer',
-    description: 'Tagesplan & To-dos',
+    titleKey: 'card.planner.title',
+    descriptionKey: 'card.planner.description',
     iconName: 'calendar',
     destination: '/planner',
     cardBackgroundColor: 'rgba(220, 200, 255, 0.6)',
@@ -135,8 +153,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'daily',
-    title: 'Unser Tag',
-    description: 'Tagesaktivitäten verwalten',
+    titleKey: 'card.daily.title',
+    descriptionKey: 'card.daily.description',
     iconName: 'list.bullet',
     destination: '/(tabs)/daily_old',
     cardBackgroundColor: 'rgba(255, 215, 180, 0.6)',
@@ -144,8 +162,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'selfcare',
-    title: 'Mama Selfcare',
-    description: 'Nimm dir Zeit für dich',
+    titleKey: 'card.selfcare.title',
+    descriptionKey: 'card.selfcare.description',
     iconName: 'heart.fill',
     destination: '/(tabs)/selfcare',
     cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
@@ -153,8 +171,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'babyweather',
-    title: 'Babywetter',
-    description: 'Aktuelle Wetterinfos',
+    titleKey: 'card.weather.title',
+    descriptionKey: 'card.weather.description',
     iconName: 'cloud.sun.fill',
     destination: '/(tabs)/babyweather',
     cardBackgroundColor: 'rgba(200, 225, 255, 0.6)',
@@ -163,8 +181,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'recommendations',
-    title: 'Lotti Baby Shop',
-    description: 'Prints shoppen',
+    titleKey: 'card.shop.title',
+    descriptionKey: 'card.shop.description',
     iconName: 'bag.fill',
     destination: '/prints-shop',
     cardBackgroundColor: 'rgba(255, 235, 200, 0.6)',
@@ -172,8 +190,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'weight-tracker',
-    title: 'Gewichtskurve',
-    description: 'Gewicht tracken',
+    titleKey: 'card.weight.title',
+    descriptionKey: 'card.weight.description',
     iconName: 'chart.line.uptrend.xyaxis',
     destination: '/(tabs)/weight-tracker',
     cardBackgroundColor: 'rgba(200, 240, 200, 0.6)',
@@ -181,8 +199,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'size-tracker',
-    title: 'Größenkurve',
-    description: 'Babygröße tracken',
+    titleKey: 'card.size.title',
+    descriptionKey: 'card.size.description',
     iconName: 'ruler',
     destination: '/(tabs)/size-tracker',
     cardBackgroundColor: 'rgba(200, 230, 240, 0.6)',
@@ -190,8 +208,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
   {
     id: 'tooth-tracker',
-    title: 'Zahn-Tracker',
-    description: 'Erste Zähnchen',
+    titleKey: 'card.teeth.title',
+    descriptionKey: 'card.teeth.description',
     iconName: 'mouth.fill',
     destination: '/tooth-tracker',
     cardBackgroundColor: 'rgba(200, 220, 255, 0.6)',
@@ -200,8 +218,8 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   // Period-Tracker-Kachel vorerst ausgeblendet (Screen bleibt erhalten).
   {
     id: 'milestones',
-    title: 'Meilensteine',
-    description: 'Erste Male festhalten',
+    titleKey: 'card.milestones.title',
+    descriptionKey: 'card.milestones.description',
     iconName: 'flag.fill',
     destination: '/milestones',
     cardBackgroundColor: 'rgba(255, 228, 195, 0.6)',
@@ -209,7 +227,7 @@ const HOME_QUICK_ACCESS_CARDS: HomeQuickAccessCardConfig[] = [
   },
 ];
 
-const HOME_QUICK_ACCESS_ORDER = HOME_QUICK_ACCESS_CARDS.map(({ id }) => id);
+const HOME_QUICK_ACCESS_ORDER = HOME_QUICK_ACCESS_CARD_DEFINITIONS.map(({ id }) => id);
 
 const normalizeHomeQuickAccessOrder = (value: unknown): HomeQuickAccessCardId[] => {
   if (!Array.isArray(value)) return [...HOME_QUICK_ACCESS_ORDER];
@@ -347,9 +365,9 @@ function buildSleepHomeTimer(entries: SleepEntry[] | undefined): HomeActiveTimer
     source: 'sleep',
     start,
     route: '/(tabs)/sleep-tracker',
-    label: 'Sleeptracker',
-    title: 'Schlaf läuft gerade',
-    hint: 'Tippe, um direkt in den Sleeptracker zu springen',
+    label: t('timer.sleep.label'),
+    title: t('timer.sleep.title'),
+    hint: t('timer.sleep.hint'),
     iconName: 'moon.fill',
     accentColor: '#4FA9FF',
     accentBackground: 'rgba(79, 169, 255, 0.18)',
@@ -373,15 +391,15 @@ function buildDailyHomeTimer(entry: {
   const feedingType = typeof entry.feeding_type === 'string' ? entry.feeding_type : null;
   const config =
     feedingType === 'BREAST'
-      ? { title: 'Stillen läuft', iconName: 'heart.fill', accentColor: '#FF8EB0', accentBackground: 'rgba(255, 142, 176, 0.18)' }
+      ? { title: t('timer.breast'), iconName: 'heart.fill', accentColor: '#FF8EB0', accentBackground: 'rgba(255, 142, 176, 0.18)' }
       : feedingType === 'BOTTLE'
-      ? { title: 'Fläschchen läuft', iconName: 'drop.fill', accentColor: '#F2A65A', accentBackground: 'rgba(242, 166, 90, 0.18)' }
+      ? { title: t('timer.bottle'), iconName: 'drop.fill', accentColor: '#F2A65A', accentBackground: 'rgba(242, 166, 90, 0.18)' }
       : feedingType === 'SOLIDS'
-      ? { title: 'Beikost läuft', iconName: 'fork.knife', accentColor: '#A274FF', accentBackground: 'rgba(162, 116, 255, 0.18)' }
+      ? { title: t('timer.solids'), iconName: 'fork.knife', accentColor: '#A274FF', accentBackground: 'rgba(162, 116, 255, 0.18)' }
       : feedingType === 'PUMP'
-      ? { title: 'Abpumpen läuft', iconName: 'drop.circle.fill', accentColor: '#76C7C0', accentBackground: 'rgba(118, 199, 192, 0.18)' }
+      ? { title: t('timer.pump'), iconName: 'drop.circle.fill', accentColor: '#76C7C0', accentBackground: 'rgba(118, 199, 192, 0.18)' }
       : feedingType === 'WATER'
-      ? { title: 'Wasser läuft', iconName: 'drop.fill', accentColor: '#5BB6E6', accentBackground: 'rgba(91, 182, 230, 0.18)' }
+      ? { title: t('timer.water'), iconName: 'drop.fill', accentColor: '#5BB6E6', accentBackground: 'rgba(91, 182, 230, 0.18)' }
       : null;
 
   if (!config) {
@@ -392,9 +410,9 @@ function buildDailyHomeTimer(entry: {
     source: 'daily',
     start,
     route: '/(tabs)/daily_old',
-    label: 'Unser Tag',
+    label: t('timer.daily.label'),
     title: config.title,
-    hint: 'Tippe, um direkt in Unser Tag weiterzumachen',
+    hint: t('timer.daily.hint'),
     iconName: config.iconName,
     accentColor: config.accentColor,
     accentBackground: config.accentBackground,
@@ -614,6 +632,9 @@ function TipHighlightDots() {
 }
 
 export default function HomeScreen() {
+  const { locale } = useLocale();
+  ACTIVE_HOME_LOCALE = locale;
+  HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
   // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -685,8 +706,18 @@ export default function HomeScreen() {
     [activeBabyId, user?.id],
   );
   const quickAccessCardById = useMemo(
-    () => new Map(HOME_QUICK_ACCESS_CARDS.map((card) => [card.id, card] as const)),
-    [],
+    () =>
+      new Map(
+        HOME_QUICK_ACCESS_CARD_DEFINITIONS.map(({ titleKey, descriptionKey, ...card }) => [
+          card.id,
+          {
+            ...card,
+            title: translateHomeText(locale, titleKey),
+            description: translateHomeText(locale, descriptionKey),
+          },
+        ] as const),
+      ),
+    [locale],
   );
   const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
   const subscriptionTier = useSubscriptionTier();
@@ -788,7 +819,7 @@ export default function HomeScreen() {
   const handleHideQuickAccessCard = useCallback(
     (itemId: HomeQuickAccessCardId) => {
       if (orderedQuickAccessCards.length <= 1) {
-        Alert.alert('Hinweis', 'Mindestens eine Schnellzugriff-Kachel muss sichtbar bleiben.');
+        Alert.alert(t('common.notice'), t('alert.keepTile'));
         return;
       }
 
@@ -1085,7 +1116,7 @@ export default function HomeScreen() {
       month: 'long',
       day: 'numeric'
     };
-    return new Date().toLocaleDateString('de-DE', options);
+    return new Date().toLocaleDateString(HOME_LOCALE_TAG, options);
   };
 
   // Berechne die Anzahl der heutigen Windelwechsel
@@ -1277,7 +1308,7 @@ export default function HomeScreen() {
         : selectedActivityType;
 
     if (entryType !== 'feeding' && entryType !== 'diaper') {
-      Alert.alert('Fehler', 'Unbekannter Eintragstyp. Bitte erneut versuchen.');
+      Alert.alert(t('common.error'), t('alert.unknownEntry'));
       return;
     }
 
@@ -1301,7 +1332,7 @@ export default function HomeScreen() {
 
     if (error) {
       console.error('Error saving baby care entry:', error);
-      Alert.alert('Fehler', 'Eintrag konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.entrySaveFailed'));
       return;
     }
 
@@ -1352,7 +1383,7 @@ export default function HomeScreen() {
 
   const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
     if (!user?.id) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um Schlaf zu speichern.');
+      Alert.alert(t('common.notice'), t('alert.signInForSleep'));
       return;
     }
     try {
@@ -1369,7 +1400,7 @@ export default function HomeScreen() {
       const { error } = await supabase.from('sleep_entries').insert(payload);
       if (error) {
         console.error('Error saving sleep entry:', error);
-        Alert.alert('Fehler', 'Schlaf konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('alert.sleepSaveFailed'));
         return;
       }
 
@@ -1384,7 +1415,7 @@ export default function HomeScreen() {
       await fetchTodaySleepMinutes(startOfDay, endOfDay);
     } catch (err) {
       console.error('Failed to save sleep entry:', err);
-      Alert.alert('Fehler', 'Schlafeintrag konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.sleepEntrySaveFailed'));
     }
   };
 
@@ -1410,7 +1441,7 @@ export default function HomeScreen() {
       typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name : '';
     const metadataFullName =
       typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
-    const displayName = userName || metadataFirstName || metadataFullName || 'Mama';
+    const displayName = userName || metadataFirstName || metadataFullName || t('greeting.fallbackName');
     const activeTimerElapsedSeconds = activeHomeTimer
       ? Math.max(0, Math.floor((activeHomeTimerNow - activeHomeTimer.start) / 1000))
       : 0;
@@ -1440,7 +1471,7 @@ export default function HomeScreen() {
             <View style={styles.greetingHeader}>
               <View>
                 <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
-                  Hallo {displayName}!
+                  {t('greeting.hello', { name: displayName })}
                 </ThemedText>
                 <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                   {formatDate()}
@@ -1483,7 +1514,7 @@ export default function HomeScreen() {
                     {formatDurationSeconds(activeTimerElapsedSeconds)}
                   </ThemedText>
                   <ThemedText adaptive={false} style={[styles.activeTimerSince, { color: textSecondary }]}>
-                    seit {new Date(activeHomeTimer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                    {t('timer.since', { time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' }) })}
                   </ThemedText>
                 </View>
 
@@ -1512,17 +1543,17 @@ export default function HomeScreen() {
 
     let feedingStatValue = `${feedingOverview.totalBottleMl}`;
     let feedingStatUnit: 'ml' | 'times' = 'ml';
-    let todayFeedingsPrimaryDetail = 'Keine Mahlzeit heute';
+    let todayFeedingsPrimaryDetail = t('summary.noMeal');
     let todayFeedingsSecondaryDetail: string | null = null;
 
     if (feedingOverview.totalFeedingCount > 0) {
       if (hasBottleFeedings) {
-        todayFeedingsPrimaryDetail = `Flasche ${feedingOverview.bottleCount}×`;
+        todayFeedingsPrimaryDetail = t('summary.bottle', { count: feedingOverview.bottleCount });
         todayFeedingsSecondaryDetail = [
-          hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
-          hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
-          hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
-          hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+          hasBreastFeedings ? t('summary.breast', { count: feedingOverview.breastCount }) : null,
+          hasSolidFeedings ? t('summary.solids', { count: feedingOverview.solidsCount }) : null,
+          hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+          hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
         ]
           .filter(Boolean)
           .join(' • ') || null;
@@ -1533,21 +1564,21 @@ export default function HomeScreen() {
         feedingStatUnit = 'times';
         if (useBreastAsPrimary) {
           feedingStatValue = `${feedingOverview.breastCount}`;
-          todayFeedingsPrimaryDetail = 'Stillen';
+          todayFeedingsPrimaryDetail = t('summary.breastOnly');
           todayFeedingsSecondaryDetail = [
-            hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
-            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
-            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+            hasSolidFeedings ? t('summary.solids', { count: feedingOverview.solidsCount }) : null,
+            hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+            hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
           ]
             .filter(Boolean)
             .join(' • ') || null;
         } else {
           feedingStatValue = `${feedingOverview.solidsCount}`;
-          todayFeedingsPrimaryDetail = 'Beikost';
+          todayFeedingsPrimaryDetail = t('summary.solidsOnly');
           todayFeedingsSecondaryDetail = [
-            hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
-            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
-            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+            hasBreastFeedings ? t('summary.breast', { count: feedingOverview.breastCount }) : null,
+            hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+            hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
           ]
             .filter(Boolean)
             .join(' • ') || null;
@@ -1555,8 +1586,8 @@ export default function HomeScreen() {
       }
     } else if (hasPumpEntries || hasWaterEntries) {
       todayFeedingsSecondaryDetail = [
-        hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
-        hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+        hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+        hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
       ]
         .filter(Boolean)
         .join(' • ') || null;
@@ -1587,7 +1618,7 @@ export default function HomeScreen() {
           >
             <View style={styles.sectionTitleContainer}>
               <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
-                Dein Tag im Überblick
+                {t('summary.title')}
               </ThemedText>
               <View style={styles.liquidGlassChevron}>
                 <IconSymbol name="chevron.right" size={20} color={textSecondary} />
@@ -1664,7 +1695,7 @@ export default function HomeScreen() {
                     textShadowRadius: 2,
                   }]}>{todayDiaperChanges}</ThemedText>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Windeln</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.diapers')}</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1689,7 +1720,7 @@ export default function HomeScreen() {
                     textShadowRadius: 2,
                   }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>Schlaf</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.sleep')}</ThemedText>
               </TouchableOpacity>
             </View>
           </ThemedView>
@@ -1702,7 +1733,7 @@ export default function HomeScreen() {
     const cardHeightStyle = {
       height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT,
     };
-    const buttonLabel = 'Shop';
+    const buttonLabel = t('shop.button');
     const showShopCard = true;
 
     return (
@@ -1730,7 +1761,7 @@ export default function HomeScreen() {
                   onPress={handleFocusRecommendation}
                   activeOpacity={0.9}
                   accessibilityRole="button"
-                  accessibilityLabel="Lotti Baby Shop öffnen"
+                  accessibilityLabel={t('shop.accessibility')}
                 >
                   <Image
                     source={require('../../assets/images/lotti-baby-shop-hero.png')}
@@ -1749,15 +1780,15 @@ export default function HomeScreen() {
                   />
                   <View style={styles.recommendationContentPane}>
                     <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
-                      Lotti Baby Shop
+                      {t('shop.eyebrow')}
                     </ThemedText>
                     <View style={styles.recommendationFooter}>
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={styles.recommendationTitle}>
-                          Prints zum Aufbügeln
+                          {t('shop.title')}
                         </ThemedText>
                         <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={2}>
-                          Lieblingsmotiv wählen und direkt bestellen
+                          {t('shop.description')}
                         </ThemedText>
                       </View>
                       <View style={styles.recommendationButton}>
@@ -1774,14 +1805,14 @@ export default function HomeScreen() {
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
                   <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
-                    Lotti Baby Shop
+                    {t('shop.eyebrow')}
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
                 </View>
                 <View style={styles.recommendationEmpty}>
                   <IconSymbol name="bag.fill" size={20} color={textSecondary} />
                   <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
-                    Prints ansehen und bestellen.
+                    {t('shop.empty')}
                   </ThemedText>
                 </View>
               </View>
@@ -1862,8 +1893,8 @@ export default function HomeScreen() {
       items.push({
         key: 'advisor',
         emoji: '🌿',
-        title: 'Lottis Fürsorge',
-        subtitle: 'Persönliche Hinweise aus Schlaf, Wetter & Ernährung',
+        title: t('premium.advisor'),
+        subtitle: t('premium.advisorDescription'),
         onPress: () => handleNavigate('/lottis-fuersorge'),
       });
     }
@@ -1871,8 +1902,8 @@ export default function HomeScreen() {
       items.push({
         key: 'voice-log',
         emoji: '🎙️',
-        title: 'Per Sprache eintragen',
-        subtitle: 'Schlaf, Füttern & Windeln einsprechen',
+        title: t('premium.voice'),
+        subtitle: t('premium.voiceDescription'),
         onPress: () => setShowVoiceLogModal(true),
       });
     }
@@ -1924,7 +1955,7 @@ export default function HomeScreen() {
                 onPress={() => handleHideQuickAccessCard(item.id)}
                 activeOpacity={0.85}
                 accessibilityRole="button"
-                accessibilityLabel={`${item.title} ausblenden`}
+                accessibilityLabel={t('quick.hideAccessibility', { title: item.title })}
               >
                 <IconSymbol name="eye.slash" size={14} color="#FFFFFF" />
               </TouchableOpacity>
@@ -1976,12 +2007,12 @@ export default function HomeScreen() {
         <View style={styles.quickAccessHiddenHeader}>
           <View style={styles.quickAccessHiddenHeaderText}>
             <ThemedText adaptive={false} style={[styles.quickAccessHiddenTitle, { color: textSecondary }]}>
-              Ausgeblendet
+              {t('quick.hiddenTitle')}
             </ThemedText>
             <ThemedText adaptive={false} style={[styles.quickAccessHiddenSubtitle, { color: textSecondary }]}>
               {hiddenQuickAccessCards.length === 1
-                ? '1 Kachel ist ausgeblendet.'
-                : `${hiddenQuickAccessCards.length} Kacheln sind ausgeblendet.`}
+                ? t('quick.hidden.one')
+                : t('quick.hidden.other', { count: hiddenQuickAccessCards.length })}
             </ThemedText>
           </View>
           <TouchableOpacity
@@ -1995,12 +2026,12 @@ export default function HomeScreen() {
             onPress={handleRestoreAllQuickAccessCards}
             activeOpacity={0.85}
           >
-            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>Alle einblenden</Text>
+            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>{t('quick.restoreAll')}</Text>
           </TouchableOpacity>
         </View>
 
         <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
-          Tippe auf eine ausgeblendete Kachel, um sie wieder anzuzeigen.
+          {t('quick.restoreHint')}
         </ThemedText>
 
         <View style={styles.quickAccessHiddenGrid}>
@@ -2054,7 +2085,7 @@ export default function HomeScreen() {
                     {card.title}
                   </ThemedText>
                   <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
-                    Einblenden
+                    {t('quick.restore')}
                   </ThemedText>
                 </View>
               </BlurView>
@@ -2068,7 +2099,7 @@ export default function HomeScreen() {
   const renderQuickAccessCards = () => (
     <View style={styles.cardsSection}>
       <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary, fontSize: 22 }]}>
-        Schnellzugriff
+        {t('quick.title')}
       </ThemedText>
 
       {isQuickAccessEditMode ? (
@@ -2084,7 +2115,7 @@ export default function HomeScreen() {
             onPress={closeQuickAccessEditor}
             activeOpacity={0.85}
           >
-            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>Fertig</Text>
+            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>{t('quick.done')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -2115,12 +2146,12 @@ export default function HomeScreen() {
       />
       <ThemedText adaptive={false} style={[styles.quickAccessHint, { color: textSecondary }]}>
         {isQuickAccessEditMode
-          ? 'Kacheln verschieben, ausblenden und mit "Fertig" speichern.'
-          : 'Lange auf eine Kachel drücken, um die Reihenfolge anzupassen.'}
+          ? t('quick.editHint')
+          : t('quick.longPressHint')}
       </ThemedText>
       {isQuickAccessEditMode && hiddenQuickAccessCards.length > 0 ? (
         <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
-          Ausgeblendete Kacheln kannst du unten wieder einblenden.
+          {t('quick.hiddenHint')}
         </ThemedText>
       ) : null}
       {renderHiddenQuickAccessSection()}
@@ -2139,7 +2170,7 @@ export default function HomeScreen() {
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Lade deine persönliche Übersicht...</ThemedText>
+            <ThemedText style={styles.loadingText}>{t('loading.title')}</ThemedText>
           </View>
         ) : (
           <ScrollView 
@@ -2163,7 +2194,7 @@ export default function HomeScreen() {
                 onRefresh={onRefresh}
                 colors={['#7D5A50']}
                 tintColor={theme.text}
-                title="Aktualisiere..."
+                title={t('loading.refresh')}
                 titleColor={theme.text}
               />
             }

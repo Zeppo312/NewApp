@@ -7,6 +7,7 @@ import {
   type PaywallPlanPrices,
 } from '@/components/paywall/PaywallPlansExperience';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { invalidatePremiumStatusCache } from '@/lib/appCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown } from '@/lib/paywall';
@@ -35,12 +36,14 @@ import {
   type SubscriptionInterval,
   type SubscriptionTier,
 } from '@/lib/revenuecat';
+import { localizePaywallPlansContent, translatePaywall } from '@/lib/paywallTranslations';
 
 const APPLE_EULA_URL =
   'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
 const buildPlanPrices = (
   storePricing: RevenueCatPlanPricing,
+  localeTag: string,
 ): PaywallPlanPrices => {
   const resolve = (
     fromStore: { price: number; priceString: string } | undefined,
@@ -48,7 +51,7 @@ const buildPlanPrices = (
   ) =>
     fromStore
       ? { amount: fromStore.price, label: fromStore.priceString }
-      : { amount: fallbackAmount, label: formatEuroAmount(fallbackAmount) };
+      : { amount: fallbackAmount, label: formatEuroAmount(fallbackAmount, localeTag) };
 
   return {
     premiumMonthly: resolve(
@@ -87,13 +90,15 @@ export default function PaywallScreen() {
   }>();
   const router = useRouter();
   const { user } = useAuth();
+  const { locale, localeTag } = useLocale();
+  const t = (key: Parameters<typeof translatePaywall>[1]) => translatePaywall(locale, key);
 
   const nextRoute =
     typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const isAdminPreview = preview === 'admin';
   const isTrialExpired = trialExpired === '1';
   const [plansContent, setPlansContent] = useState<PaywallPlansContent>(() =>
-    clonePaywallPlansContent(DEFAULT_PAYWALL_CONTENT.plans),
+    localizePaywallPlansContent(locale, DEFAULT_PAYWALL_CONTENT.plans),
   );
   const [storePricing, setStorePricing] = useState<RevenueCatPlanPricing>({});
   const [pendingAction, setPendingAction] = useState<
@@ -112,21 +117,21 @@ export default function PaywallScreen() {
     isPurchasesSupported && (!isRevenueCatConfigured || !user || !!pendingAction);
   const billingLabel =
     Platform.OS === 'ios'
-      ? 'Abrechnung über den App Store'
+      ? t('billingApple')
       : Platform.OS === 'android'
-        ? 'Abrechnung über Google Play'
-        : 'Abrechnung';
+        ? t('billingGoogle')
+        : t('billing');
   const storeProvider =
     Platform.OS === 'ios'
       ? 'Apple'
       : Platform.OS === 'android'
         ? 'Google Play'
-        : 'der Store';
-  const visiblePurchaseError = purchaseError ?? revenueCatConfigurationIssue;
+        : t('store');
+  const visiblePurchaseError = purchaseError ?? (revenueCatConfigurationIssue ? t('unavailable') : null);
 
   const planPrices = useMemo(
-    () => buildPlanPrices(storePricing),
-    [storePricing],
+    () => buildPlanPrices(storePricing, localeTag),
+    [localeTag, storePricing],
   );
 
   useEffect(() => {
@@ -136,7 +141,7 @@ export default function PaywallScreen() {
       try {
         const record = await fetchPaywallContent();
         if (!cancelled) {
-          setPlansContent(record.content.plans);
+          setPlansContent(localizePaywallPlansContent(locale, record.content.plans));
         }
       } catch (error) {
         console.error('Failed to load paywall content:', error);
@@ -148,7 +153,7 @@ export default function PaywallScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     if (!isPurchasesSupported || !isRevenueCatConfigured || !user) return;
@@ -196,14 +201,13 @@ export default function PaywallScreen() {
     }
 
     if (!user) {
-      setPurchaseError('Bitte zuerst anmelden.');
+      setPurchaseError(t('signIn'));
       return;
     }
 
     if (!isRevenueCatConfigured) {
       setPurchaseError(
-        revenueCatConfigurationIssue ??
-          'Zahlungen sind aktuell nicht verfügbar (RevenueCat nicht konfiguriert).',
+        t('unavailable'),
       );
       return;
     }
@@ -216,7 +220,7 @@ export default function PaywallScreen() {
 
       if (!hasAccess) {
         setPurchaseError(
-          'Kauf abgeschlossen – der Status wird noch synchronisiert. Bitte tippe „Status aktualisieren“.',
+          t('syncing'),
         );
         return;
       }
@@ -233,7 +237,7 @@ export default function PaywallScreen() {
         return;
       }
       setPurchaseError(
-        err?.message ?? 'Kauf fehlgeschlagen. Bitte versuche es erneut.',
+        err?.message ?? t('purchaseFailed'),
       );
     } finally {
       setPendingAction(null);
@@ -247,14 +251,13 @@ export default function PaywallScreen() {
     }
 
     if (!user) {
-      setPurchaseError('Bitte zuerst anmelden.');
+      setPurchaseError(t('signIn'));
       return;
     }
 
     if (!isRevenueCatConfigured) {
       setPurchaseError(
-        revenueCatConfigurationIssue ??
-          'Zahlungen sind aktuell nicht verfügbar (RevenueCat nicht konfiguriert).',
+        t('unavailable'),
       );
       return;
     }
@@ -279,11 +282,11 @@ export default function PaywallScreen() {
         return;
       }
 
-      setPurchaseError('Kein aktives Abo gefunden.');
+      setPurchaseError(t('noneFound'));
     } catch (err: any) {
       setPurchaseError(
         err?.message ??
-          'Status-Aktualisierung fehlgeschlagen. Bitte versuche es erneut.',
+          t('refreshFailed'),
       );
     } finally {
       setPendingAction(null);

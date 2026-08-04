@@ -67,6 +67,13 @@ import {
   toggleGroupNestedCommentLike,
   toggleGroupPostLike,
 } from '@/lib/groupPosts';
+import {
+  CommunityLocale,
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  formatCommunityRelativeDate,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
 
 type CommunityQaFeedProps = {
   onSwitchToBlog?: () => void;
@@ -78,6 +85,7 @@ type CommunityQaFeedProps = {
   onBackPress?: () => void;
   headerExtraContent?: React.ReactNode;
   headerRightContent?: React.ReactNode;
+  locale?: CommunityLocale;
 };
 
 type CommunityFeedFilter = 'all' | 'hot' | 'today' | 'questions';
@@ -92,25 +100,6 @@ type CommunityTopicChip = {
 const COMMUNITY_FEED_PAGE_SIZE = 20;
 
 // ─── Helpers ────────────────────────────────────────────────────────────
-const formatRelativeDate = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.max(0, Math.floor(diffMs / 60000));
-  const diffHours = Math.floor(diffMin / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMin < 1) return 'gerade eben';
-  if (diffMin < 60) return `${diffMin} Min.`;
-  if (diffHours < 24) return `${diffHours} Std.`;
-  if (diffDays === 1) return 'Gestern';
-  if (diffDays < 7) return `${diffDays} T.`;
-  return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
-};
-
 const getInitials = (name?: string | null) => {
   const cleaned = (name || '').trim();
   if (!cleaned) return 'LB';
@@ -174,11 +163,11 @@ const isTodayPost = (post: Post) => {
   return Date.now() - createdAt < 24 * 60 * 60 * 1000;
 };
 
-const COMMUNITY_FILTER_META: Record<CommunityFeedFilter, { label: string; emoji: string }> = {
-  all: { label: 'Alle', emoji: '\uD83D\uDCAC' },
-  hot: { label: 'Beliebt', emoji: '\uD83D\uDD25' },
-  today: { label: 'Heute', emoji: '\u2728' },
-  questions: { label: 'Fragen', emoji: '\u2753' },
+const COMMUNITY_FILTER_META: Record<CommunityFeedFilter, { labelKey: CommunityTranslationKey; emoji: string }> = {
+  all: { labelKey: 'feed.filter.all', emoji: '\uD83D\uDCAC' },
+  hot: { labelKey: 'feed.filter.hot', emoji: '\uD83D\uDD25' },
+  today: { labelKey: 'feed.filter.today', emoji: '\u2728' },
+  questions: { labelKey: 'feed.filter.questions', emoji: '\u2753' },
 };
 
 // ─── Animated Heart ─────────────────────────────────────────────────────
@@ -219,7 +208,17 @@ export default function CommunityQaFeed({
   onBackPress,
   headerExtraContent,
   headerRightContent,
+  locale = DEFAULT_COMMUNITY_LOCALE,
 }: CommunityQaFeedProps) {
+  const t = useCallback(
+    (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+      translateCommunityText(locale, key, params),
+    [locale],
+  );
+  const formatRelativeDate = useCallback(
+    (value?: string) => formatCommunityRelativeDate(value, locale),
+    [locale],
+  );
   const colorScheme = useColorScheme() ?? 'light';
   const adaptiveColors = useAdaptiveColors();
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -369,7 +368,7 @@ export default function CommunityQaFeed({
 
     if (error) {
       console.error('Fehler beim Laden der Community-Posts:', error);
-      Alert.alert('Community', 'Die Community konnte gerade nicht geladen werden.');
+      Alert.alert(t('common.community'), t('feed.loadFailed'));
       if (mode === 'replace') {
         setPosts([]);
         setFeedCursor(null);
@@ -387,7 +386,7 @@ export default function CommunityQaFeed({
     setIsLoading(false);
     setIsRefreshing(false);
     setIsLoadingMore(false);
-  }, [groupId]);
+  }, [groupId, t]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -406,13 +405,13 @@ export default function CommunityQaFeed({
       : await getComments(post.id);
     if (error) {
       console.error('Fehler beim Laden der Antworten:', error);
-      Alert.alert('Antworten', 'Die Antworten konnten gerade nicht geladen werden.');
+      Alert.alert(t('common.replies'), t('feed.repliesLoadFailed'));
       setComments([]);
     } else {
       setComments(await hydrateCommentsWithReplies(data || []));
     }
     setIsCommentsLoading(false);
-  }, [closeInlineReplyComposer, groupId, hydrateCommentsWithReplies]);
+  }, [closeInlineReplyComposer, groupId, hydrateCommentsWithReplies, t]);
 
   useEffect(() => {
     if (!targetPostId || posts.length === 0 || showThreadModal) return;
@@ -445,7 +444,7 @@ export default function CommunityQaFeed({
         ? await toggleGroupPostLike(post.id)
         : await togglePostLike(post.id);
       if (error) {
-        Alert.alert('Community', 'Der Beitrag konnte gerade nicht aktualisiert werden.');
+        Alert.alert(t('common.community'), t('feed.postUpdateFailed'));
         return;
       }
       const liked = !!data?.liked;
@@ -462,7 +461,7 @@ export default function CommunityQaFeed({
         );
       }
     },
-    [groupId, selectedPost?.id],
+    [groupId, selectedPost?.id, t],
   );
 
   const handleToggleCommentLike = useCallback(async (comment: Comment) => {
@@ -470,7 +469,7 @@ export default function CommunityQaFeed({
       ? await toggleGroupCommentLike(comment.id)
       : await toggleCommentLike(comment.id);
     if (error) {
-      Alert.alert('Antworten', 'Die Antwort konnte gerade nicht aktualisiert werden.');
+      Alert.alert(t('common.replies'), t('feed.replyUpdateFailed'));
       return;
     }
     const liked = !!data?.liked;
@@ -481,14 +480,14 @@ export default function CommunityQaFeed({
           : item,
       ),
     );
-  }, [groupId]);
+  }, [groupId, t]);
 
   const handleToggleNestedReplyLike = useCallback(async (parentCommentId: string, reply: NestedComment) => {
     const { data, error } = groupId
       ? await toggleGroupNestedCommentLike(reply.id)
       : await toggleNestedCommentLike(reply.id);
     if (error) {
-      Alert.alert('Antworten', 'Die Antwort konnte gerade nicht aktualisiert werden.');
+      Alert.alert(t('common.replies'), t('feed.replyUpdateFailed'));
       return;
     }
     const liked = !!data?.liked;
@@ -506,15 +505,15 @@ export default function CommunityQaFeed({
             },
       ),
     );
-  }, [groupId]);
+  }, [groupId, t]);
 
   const handleCreatePost = useCallback(async () => {
     if (!user?.id) {
-      Alert.alert('Community', 'Bitte melde dich erneut an.');
+      Alert.alert(t('common.community'), t('feed.signInAgain'));
       return;
     }
     if (!newQuestion.trim()) {
-      Alert.alert('Community', 'Bitte formuliere zuerst deine Frage oder dein Thema.');
+      Alert.alert(t('common.community'), t('feed.postRequired'));
       return;
     }
     setIsSavingPost(true);
@@ -523,7 +522,7 @@ export default function CommunityQaFeed({
       : await createPost(newQuestion.trim(), isAnonymousPost);
     setIsSavingPost(false);
     if (error) {
-      Alert.alert('Community', 'Dein Beitrag konnte gerade nicht erstellt werden.');
+      Alert.alert(t('common.community'), t('feed.postCreateFailed'));
       return;
     }
     setNewQuestion('');
@@ -531,12 +530,12 @@ export default function CommunityQaFeed({
     setShowCreateModal(false);
     setIsLoading(true);
     loadPosts();
-  }, [groupId, isAnonymousPost, loadPosts, newQuestion, user?.id]);
+  }, [groupId, isAnonymousPost, loadPosts, newQuestion, t, user?.id]);
 
   const handleCreateComment = useCallback(async () => {
     if (!selectedPost) return;
     if (!newAnswer.trim()) {
-      Alert.alert('Antworten', 'Bitte schreibe zuerst eine Antwort.');
+      Alert.alert(t('common.replies'), t('feed.replyRequired'));
       return;
     }
     setIsSavingAnswer(true);
@@ -545,7 +544,7 @@ export default function CommunityQaFeed({
       : await createComment(selectedPost.id, newAnswer.trim(), isAnonymousAnswer);
     setIsSavingAnswer(false);
     if (error) {
-      Alert.alert('Antworten', 'Deine Antwort konnte gerade nicht gespeichert werden.');
+      Alert.alert(t('common.replies'), t('feed.replySaveFailed'));
       return;
     }
     setNewAnswer('');
@@ -554,11 +553,11 @@ export default function CommunityQaFeed({
     setSelectedPost(updatedPost);
     setPosts((cur) => cur.map((post) => (post.id === selectedPost.id ? updatedPost : post)));
     await loadCommentsForPost(updatedPost);
-  }, [groupId, isAnonymousAnswer, loadCommentsForPost, newAnswer, selectedPost]);
+  }, [groupId, isAnonymousAnswer, loadCommentsForPost, newAnswer, selectedPost, t]);
 
   const handleCreateReply = useCallback(async (comment: Comment) => {
     if (!replyText.trim()) {
-      Alert.alert('Antworten', 'Bitte schreibe zuerst eine Antwort.');
+      Alert.alert(t('common.replies'), t('feed.replyRequired'));
       return;
     }
 
@@ -569,7 +568,7 @@ export default function CommunityQaFeed({
     setIsSavingReply(false);
 
     if (error) {
-      Alert.alert('Antworten', 'Deine Antwort auf den Kommentar konnte gerade nicht gespeichert werden.');
+      Alert.alert(t('common.replies'), t('feed.nestedReplySaveFailed'));
       return;
     }
 
@@ -578,7 +577,7 @@ export default function CommunityQaFeed({
       cur.map((item) => (item.id === comment.id ? { ...item, replies } : item)),
     );
     closeInlineReplyComposer();
-  }, [closeInlineReplyComposer, groupId, isAnonymousReply, loadRepliesForComment, replyText]);
+  }, [closeInlineReplyComposer, groupId, isAnonymousReply, loadRepliesForComment, replyText, t]);
 
   const closeThreadModal = useCallback(() => {
     setShowThreadModal(false);
@@ -595,19 +594,19 @@ export default function CommunityQaFeed({
 
   const handleDeletePost = useCallback((post: Post) => {
     Alert.alert(
-      'Beitrag löschen',
-      'Möchtest du deinen Beitrag wirklich löschen?',
+      t('feed.deletePostTitle'),
+      t('feed.deletePostMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const { error } = groupId
               ? await deleteGroupPost(post.id)
               : await deletePost(post.id);
             if (error) {
-              Alert.alert('Community', 'Dein Beitrag konnte gerade nicht gelöscht werden.');
+              Alert.alert(t('common.community'), t('feed.deletePostFailed'));
               return;
             }
 
@@ -620,23 +619,23 @@ export default function CommunityQaFeed({
         },
       ],
     );
-  }, [closeThreadModal, groupId, selectedPost?.id]);
+  }, [closeThreadModal, groupId, selectedPost?.id, t]);
 
   const handleDeleteComment = useCallback((comment: Comment) => {
     Alert.alert(
-      'Antwort löschen',
-      'Möchtest du deine Antwort wirklich löschen?',
+      t('feed.deleteReplyTitle'),
+      t('feed.deleteReplyMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const { error } = groupId
               ? await deleteGroupComment(comment.id)
               : await deleteComment(comment.id);
             if (error) {
-              Alert.alert('Antworten', 'Deine Antwort konnte gerade nicht gelöscht werden.');
+              Alert.alert(t('common.replies'), t('feed.deleteReplyFailed'));
               return;
             }
 
@@ -657,23 +656,23 @@ export default function CommunityQaFeed({
         },
       ],
     );
-  }, [closeInlineReplyComposer, groupId, replyingToCommentId, selectedPost]);
+  }, [closeInlineReplyComposer, groupId, replyingToCommentId, selectedPost, t]);
 
   const handleDeleteReply = useCallback((parentCommentId: string, reply: NestedComment) => {
     Alert.alert(
-      'Antwort löschen',
-      'Möchtest du deine Antwort auf den Kommentar wirklich löschen?',
+      t('feed.deleteReplyTitle'),
+      t('feed.deleteNestedReplyMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const { error } = groupId
               ? await deleteGroupNestedComment(reply.id)
               : await deleteNestedComment(reply.id);
             if (error) {
-              Alert.alert('Antworten', 'Deine Antwort konnte gerade nicht gelöscht werden.');
+              Alert.alert(t('common.replies'), t('feed.deleteReplyFailed'));
               return;
             }
 
@@ -691,7 +690,7 @@ export default function CommunityQaFeed({
         },
       ],
     );
-  }, [groupId]);
+  }, [groupId, t]);
 
   // ─── Trending Topics ───────────────────────────────────────────────
   const filterCounts = useMemo(() => {
@@ -734,21 +733,24 @@ export default function CommunityQaFeed({
       .filter((filterId) => filterId === 'all' || filterCounts[filterId] > 0 || selectedFilter === filterId)
       .map((filterId) => ({
         id: filterId,
-        label: COMMUNITY_FILTER_META[filterId].label,
+        label: t(COMMUNITY_FILTER_META[filterId].labelKey),
         count: filterCounts[filterId],
         emoji: COMMUNITY_FILTER_META[filterId].emoji,
       })) satisfies CommunityTopicChip[];
-  }, [filterCounts, selectedFilter]);
+  }, [filterCounts, selectedFilter, t]);
 
-  const activeFilterMeta = COMMUNITY_FILTER_META[selectedFilter];
+  const activeFilterLabel = t(COMMUNITY_FILTER_META[selectedFilter].labelKey);
 
   // ─── List Header ──────────────────────────────────────────────────
   const listHeader = (
     <View style={styles.listHeader}>
       {/* Header */}
       <Header
-        title={groupName || 'Community'}
-        subtitle={`${filteredPosts.length} ${filteredPosts.length === 1 ? 'Beitrag' : 'Beiträge'}${selectedFilter === 'all' ? '' : ` · ${activeFilterMeta.label}`}`}
+        title={groupName || t('common.community')}
+        subtitle={t(filteredPosts.length === 1 ? 'feed.headerSubtitle.one' : 'feed.headerSubtitle.other', {
+          count: filteredPosts.length,
+          filter: selectedFilter === 'all' ? '' : ` · ${activeFilterLabel}`,
+        })}
         showBackButton={!!groupId}
         onBackPress={onBackPress}
         showBabySwitcher={false}
@@ -775,7 +777,7 @@ export default function CommunityQaFeed({
           <View style={styles.groupHeroTopRow}>
             <View style={[styles.groupVisibilityBadge, { backgroundColor: isDark ? 'rgba(233,201,182,0.15)' : 'rgba(200,159,129,0.12)' }]}>
               <ThemedText style={[styles.groupVisibilityBadgeText, { color: isDark ? '#E9C9B6' : '#C89F81' }]}>
-                {groupVisibility === 'private' ? 'Private Gruppe' : 'Öffentliche Gruppe'}
+                {t(groupVisibility === 'private' ? 'feed.group.private' : 'feed.group.public')}
               </ThemedText>
             </View>
           </View>
@@ -793,7 +795,7 @@ export default function CommunityQaFeed({
           {/* Segment Tabs */}
           <View style={[styles.segmentRow, { borderBottomColor: dividerColor }]}>
             <TouchableOpacity style={styles.segmentTab} activeOpacity={0.9}>
-              <ThemedText style={[styles.segmentTextActive, { color: primaryText }]}>Fragen</ThemedText>
+              <ThemedText style={[styles.segmentTextActive, { color: primaryText }]}>{t('feed.tab.questions')}</ThemedText>
               <View style={[styles.segmentIndicator, { backgroundColor: isDark ? '#E9C9B6' : '#C89F81' }]} />
             </TouchableOpacity>
             <TouchableOpacity
@@ -801,7 +803,7 @@ export default function CommunityQaFeed({
               activeOpacity={0.7}
               onPress={() => router.push('/(tabs)/groups' as any)}
             >
-              <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>Gruppen</ThemedText>
+              <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>{t('feed.tab.groups')}</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.segmentTab}
@@ -811,7 +813,7 @@ export default function CommunityQaFeed({
                 router.push('/(tabs)/blog' as any);
               }}
             >
-              <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>Blog</ThemedText>
+              <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>{t('feed.tab.blog')}</ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.segmentTab}
@@ -820,7 +822,7 @@ export default function CommunityQaFeed({
             >
               <View style={styles.segmentLabelRow}>
                 <ThemedText style={[styles.segmentText, styles.segmentTextCompact, { color: tertiaryText }]}>
-                  Chats
+                  {t('feed.tab.chats')}
                 </ThemedText>
                 {renderBadge(unreadMessageCount + unreadGroupChatCount, true)}
               </View>
@@ -881,7 +883,7 @@ export default function CommunityQaFeed({
   // ─── Post Card ────────────────────────────────────────────────────
   const renderPost = ({ item }: { item: Post }) => {
     const isHighlighted = item.id === targetPostId;
-    const displayName = item.user_name || 'Community Mitglied';
+    const displayName = item.user_name || t('common.communityMember');
     const isQuestion = (item.content || '').includes('?');
     const commentCount = item.comments_count || 0;
     const likeCount = item.likes_count || 0;
@@ -914,7 +916,7 @@ export default function CommunityQaFeed({
                 </ThemedText>
                 {isQuestion && (
                   <View style={[styles.typeBadge, { backgroundColor: isDark ? 'rgba(233,201,182,0.15)' : 'rgba(200,159,129,0.12)' }]}>
-                    <ThemedText style={[styles.typeBadgeText, { color: isDark ? '#E9C9B6' : '#C89F81' }]}>Frage</ThemedText>
+                    <ThemedText style={[styles.typeBadgeText, { color: isDark ? '#E9C9B6' : '#C89F81' }]}>{t('feed.questionBadge')}</ThemedText>
                   </View>
                 )}
               </View>
@@ -961,13 +963,13 @@ export default function CommunityQaFeed({
           <View style={[styles.engagementRow, { borderTopColor: dividerColor }]}>
             {likeCount > 0 && (
               <ThemedText style={[styles.engagementText, { color: tertiaryText }]}>
-                {likeCount} {likeCount === 1 ? 'Gefällt mir' : 'Likes'}
+                {t(likeCount === 1 ? 'feed.like.one' : 'feed.like.other', { count: likeCount })}
               </ThemedText>
             )}
             {commentCount > 0 && (
               <TouchableOpacity onPress={() => loadCommentsForPost(item)} activeOpacity={0.7}>
                 <ThemedText style={[styles.engagementText, { color: tertiaryText }]}>
-                  {commentCount} {commentCount === 1 ? 'Antwort' : 'Antworten'}
+                  {t(commentCount === 1 ? 'feed.reply.one' : 'feed.reply.other', { count: commentCount })}
                 </ThemedText>
               </TouchableOpacity>
             )}
@@ -996,7 +998,7 @@ export default function CommunityQaFeed({
 
   // ─── Comment Card ─────────────────────────────────────────────────
   const renderNestedReply = (parentCommentId: string, reply: NestedComment) => {
-    const displayName = reply.user_name || 'Community Mitglied';
+    const displayName = reply.user_name || t('common.communityMember');
     const isOwnReply = reply.user_id === user?.id;
 
     return (
@@ -1022,7 +1024,7 @@ export default function CommunityQaFeed({
             {isOwnReply && (
               <TouchableOpacity onPress={() => handleDeleteReply(parentCommentId, reply)} activeOpacity={0.7} style={styles.replyDeleteBtn}>
                 <IconSymbol name="trash" size={12} color={tertiaryText} />
-                <ThemedText style={[styles.replyDeleteText, { color: tertiaryText }]}>Löschen</ThemedText>
+                <ThemedText style={[styles.replyDeleteText, { color: tertiaryText }]}>{t('common.delete')}</ThemedText>
               </TouchableOpacity>
             )}
           </View>
@@ -1033,7 +1035,7 @@ export default function CommunityQaFeed({
 
   const renderComment = ({ item }: { item: Comment }) => {
     const isHighlighted = item.id === targetCommentId;
-    const displayName = item.user_name || 'Community Mitglied';
+    const displayName = item.user_name || t('common.communityMember');
     const isOwnComment = item.user_id === user?.id;
     const replyCount = item.replies?.length || 0;
     const isReplying = replyingToCommentId === item.id;
@@ -1076,18 +1078,18 @@ export default function CommunityQaFeed({
             >
               <IconSymbol name="arrowshape.turn.up.left" size={13} color={isReplying ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText} />
               <ThemedText style={[styles.commentReplyText, { color: isReplying ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText }]}>
-                Antworten
+                {t('feed.replyAction')}
               </ThemedText>
             </TouchableOpacity>
             {replyCount > 0 && (
               <ThemedText style={[styles.commentRepliesCount, { color: tertiaryText }]}>
-                {replyCount} {replyCount === 1 ? 'Antwort' : 'Antworten'}
+                {t(replyCount === 1 ? 'feed.reply.one' : 'feed.reply.other', { count: replyCount })}
               </ThemedText>
             )}
             {isOwnComment && (
               <TouchableOpacity onPress={() => handleDeleteComment(item)} activeOpacity={0.7} style={styles.commentDeleteBtn}>
                 <IconSymbol name="trash" size={13} color={tertiaryText} />
-                <ThemedText style={[styles.commentDeleteText, { color: tertiaryText }]}>Löschen</ThemedText>
+                <ThemedText style={[styles.commentDeleteText, { color: tertiaryText }]}>{t('common.delete')}</ThemedText>
               </TouchableOpacity>
             )}
           </View>
@@ -1096,7 +1098,7 @@ export default function CommunityQaFeed({
               <TextInput
                 value={replyText}
                 onChangeText={setReplyText}
-                placeholder={`Auf ${displayName} antworten...`}
+                placeholder={t('feed.replyPlaceholder', { name: displayName })}
                 placeholderTextColor={tertiaryText}
                 style={[styles.inlineReplyInput, { color: primaryText }]}
                 multiline
@@ -1113,12 +1115,12 @@ export default function CommunityQaFeed({
                     color={isAnonymousReply ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText}
                   />
                   <ThemedText style={[styles.anonToggleText, { color: isAnonymousReply ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText }]}>
-                    {isAnonymousReply ? 'Anonym' : 'Sichtbar'}
+                    {t(isAnonymousReply ? 'common.anonymous' : 'common.visible')}
                   </ThemedText>
                 </TouchableOpacity>
                 <View style={styles.inlineReplyActions}>
                   <TouchableOpacity onPress={closeInlineReplyComposer} activeOpacity={0.7} style={styles.inlineReplyCancelBtn}>
-                    <ThemedText style={[styles.inlineReplyCancelText, { color: tertiaryText }]}>Abbrechen</ThemedText>
+                    <ThemedText style={[styles.inlineReplyCancelText, { color: tertiaryText }]}>{t('common.cancel')}</ThemedText>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleCreateReply(item)}
@@ -1129,7 +1131,7 @@ export default function CommunityQaFeed({
                     {isSavingReply ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
                     ) : (
-                      <ThemedText style={styles.inlineReplySendText}>Antworten</ThemedText>
+                      <ThemedText style={styles.inlineReplySendText}>{t('feed.replyAction')}</ThemedText>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -1154,14 +1156,14 @@ export default function CommunityQaFeed({
         <ThemedText style={styles.emptyEmoji}>{'\uD83D\uDCAC'}</ThemedText>
       </View>
       <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-        {isFilterEmpty ? `Keine ${activeFilterMeta.label.toLowerCase()} Beiträge` : 'Noch keine Beiträge'}
+        {t(isFilterEmpty ? 'feed.emptyFilteredTitle' : 'feed.emptyTitle')}
       </ThemedText>
       <ThemedText style={[styles.emptyText, { color: tertiaryText }]}>
         {isFilterEmpty
-          ? 'Für diesen Filter gibt es aktuell keine passenden Beiträge. Du kannst den Filter zurücksetzen oder später noch einmal nachsehen.'
+          ? t('feed.emptyFilteredText')
           : groupId
-          ? 'Starte den Austausch in dieser Gruppe mit dem ersten Beitrag.'
-          : 'Sei die Erste! Stelle eine Frage oder teile deine Erfahrungen mit der Community.'}
+          ? t('feed.emptyGroupText')
+          : t('feed.emptyCommunityText')}
       </ThemedText>
       <TouchableOpacity
         style={[styles.emptyBtn]}
@@ -1182,7 +1184,7 @@ export default function CommunityQaFeed({
         >
           <IconSymbol name="plus" size={16} color="#FFFFFF" />
           <ThemedText style={styles.emptyBtnText}>
-            {isFilterEmpty ? 'Alle Beiträge anzeigen' : groupId ? 'Ersten Beitrag schreiben' : 'Erste Frage stellen'}
+            {t(isFilterEmpty ? 'feed.showAll' : groupId ? 'feed.writeFirstGroupPost' : 'feed.askFirstQuestion')}
           </ThemedText>
         </LinearGradient>
       </TouchableOpacity>
@@ -1266,10 +1268,10 @@ export default function CommunityQaFeed({
                         onPress={() => { setShowCreateModal(false); setNewQuestion(''); setIsAnonymousPost(false); }}
                         activeOpacity={0.7}
                       >
-                        <ThemedText style={[styles.createCancel, { color: tertiaryText }]}>Abbrechen</ThemedText>
+                        <ThemedText style={[styles.createCancel, { color: tertiaryText }]}>{t('common.cancel')}</ThemedText>
                       </TouchableOpacity>
                       <ThemedText style={[styles.createTitle, { color: primaryText }]}>
-                        {groupId ? 'Neuer Gruppenbeitrag' : 'Neuer Beitrag'}
+                        {t(groupId ? 'feed.newGroupPost' : 'feed.newPost')}
                       </ThemedText>
                       <TouchableOpacity
                         style={[styles.createPostBtn, { opacity: isSavingPost || !newQuestion.trim() ? 0.4 : 1 }]}
@@ -1286,7 +1288,7 @@ export default function CommunityQaFeed({
                           {isSavingPost ? (
                             <ActivityIndicator color="#FFFFFF" size="small" />
                           ) : (
-                            <ThemedText style={styles.createPostBtnText}>Posten</ThemedText>
+                            <ThemedText style={styles.createPostBtnText}>{t('feed.publish')}</ThemedText>
                           )}
                         </LinearGradient>
                       </TouchableOpacity>
@@ -1297,9 +1299,9 @@ export default function CommunityQaFeed({
                       <CommunityAvatar name={user?.user_metadata?.display_name} avatarUrl={null} isAnonymous={isAnonymousPost} size={38} />
                       <View style={styles.composerMeta}>
                         <ThemedText style={[styles.composerName, { color: primaryText }]}>
-                          {isAnonymousPost ? 'Anonym' : (user?.user_metadata?.display_name || 'Du')}
+                          {isAnonymousPost ? t('common.anonymous') : (user?.user_metadata?.display_name || t('common.you'))}
                         </ThemedText>
-                        <ThemedText style={[styles.composerHint, { color: tertiaryText }]}>Öffentlich</ThemedText>
+                        <ThemedText style={[styles.composerHint, { color: tertiaryText }]}>{t('common.public')}</ThemedText>
                       </View>
                     </View>
 
@@ -1307,7 +1309,9 @@ export default function CommunityQaFeed({
                       value={newQuestion}
                       onChangeText={setNewQuestion}
                       multiline
-                      placeholder={groupId ? `Was möchtest du in ${groupName || 'dieser Gruppe'} teilen?` : 'Was beschäftigt dich gerade?'}
+                      placeholder={groupId
+                        ? t('feed.groupPostPlaceholder', { group: groupName || t('common.group').toLowerCase() })
+                        : t('feed.postPlaceholder')}
                       placeholderTextColor={tertiaryText}
                       style={[styles.createInput, { color: primaryText }]}
                       autoFocus
@@ -1318,8 +1322,8 @@ export default function CommunityQaFeed({
                       <View style={styles.anonInfo}>
                         <IconSymbol name="eye.slash" size={18} color={tertiaryText} />
                         <View style={styles.anonTextWrap}>
-                          <ThemedText style={[styles.anonLabel, { color: secondaryText }]}>Anonym posten</ThemedText>
-                          <ThemedText style={[styles.anonHint, { color: tertiaryText }]}>Dein Name wird nicht angezeigt</ThemedText>
+                          <ThemedText style={[styles.anonLabel, { color: secondaryText }]}>{t('feed.postAsAnonymous')}</ThemedText>
+                          <ThemedText style={[styles.anonHint, { color: tertiaryText }]}>{t('feed.anonymousHint')}</ThemedText>
                         </View>
                       </View>
                       <Switch
@@ -1354,7 +1358,7 @@ export default function CommunityQaFeed({
 
                   {/* Thread Header */}
                   <View style={[styles.threadHeader, { borderBottomColor: dividerColor }]}>
-                    <ThemedText style={[styles.threadTitle, { color: primaryText }]}>Antworten</ThemedText>
+                    <ThemedText style={[styles.threadTitle, { color: primaryText }]}>{t('feed.threadTitle')}</ThemedText>
                     <TouchableOpacity onPress={closeThreadModal} style={[styles.threadCloseBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
                       <IconSymbol name="xmark" size={16} color={tertiaryText} />
                     </TouchableOpacity>
@@ -1372,7 +1376,7 @@ export default function CommunityQaFeed({
                         />
                         <View>
                           <ThemedText style={[styles.threadOriginalName, { color: primaryText }]}>
-                            {selectedPost.user_name || 'Community Mitglied'}
+                            {selectedPost.user_name || t('common.communityMember')}
                           </ThemedText>
                           <ThemedText style={[styles.threadOriginalTime, { color: tertiaryText }]}>
                             {formatRelativeDate(selectedPost.created_at)}
@@ -1411,7 +1415,7 @@ export default function CommunityQaFeed({
                         ListEmptyComponent={
                           <View style={styles.emptyComments}>
                             <ThemedText style={[styles.emptyCommentsText, { color: tertiaryText }]}>
-                              Noch keine Antworten — sei die Erste!
+                              {t('feed.noReplies')}
                             </ThemedText>
                           </View>
                         }
@@ -1426,7 +1430,7 @@ export default function CommunityQaFeed({
                       <TextInput
                         value={newAnswer}
                         onChangeText={setNewAnswer}
-                        placeholder="Antwort schreiben..."
+                        placeholder={t('feed.answerPlaceholder')}
                         placeholderTextColor={tertiaryText}
                         style={[styles.threadInput, { backgroundColor: inputBg, color: primaryText, borderColor: cardBorder }]}
                         multiline
@@ -1455,7 +1459,7 @@ export default function CommunityQaFeed({
                         color={isAnonymousAnswer ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText}
                       />
                       <ThemedText style={[styles.anonToggleText, { color: isAnonymousAnswer ? (isDark ? '#E9C9B6' : '#C89F81') : tertiaryText }]}>
-                        {isAnonymousAnswer ? 'Anonym' : 'Sichtbar'}
+                        {t(isAnonymousAnswer ? 'common.anonymous' : 'common.visible')}
                       </ThemedText>
                     </TouchableOpacity>
                   </View>

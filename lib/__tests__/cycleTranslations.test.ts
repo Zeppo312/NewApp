@@ -4,8 +4,11 @@ import {
 } from '../cycleTranslations';
 
 describe('cycle translations', () => {
-  it('keeps the German and English catalogs in sync', () => {
+  it('keeps all locale catalogs in sync', () => {
     expect(Object.keys(CYCLE_TRANSLATIONS.en).sort()).toEqual(
+      Object.keys(CYCLE_TRANSLATIONS.de).sort(),
+    );
+    expect(Object.keys(CYCLE_TRANSLATIONS.es).sort()).toEqual(
       Object.keys(CYCLE_TRANSLATIONS.de).sort(),
     );
   });
@@ -18,5 +21,9 @@ describe('cycle translations', () => {
 
   it('returns the configured German copy', () => {
     expect(translateCycleText('de', 'screen.title')).toBe('Zyklus');
+  });
+
+  it('returns the configured Spanish copy', () => {
+    expect(translateCycleText('es', 'screen.title')).toBe('Ciclo');
   });
 });

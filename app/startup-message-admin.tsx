@@ -25,6 +25,7 @@ import {
   LiquidGlassCard,
 } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLocale } from '@/contexts/LocaleContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getCachedUserProfile, invalidateUserProfileCache } from '@/lib/appCache';
@@ -39,51 +40,29 @@ import {
   type StartupMessageDraft,
 } from '@/lib/startupMessages';
 
-const CONTENT_TYPE_OPTIONS: {
-  value: StartupMessageContentType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: 'text',
-    label: 'Text',
-    description: 'Einfacher Text direkt im Popup.',
-  },
-  {
-    value: 'html',
-    label: 'HTML',
-    description: 'HTML-Inhalt im eingebetteten Viewer.',
-  },
-  {
-    value: 'remote_url',
-    label: 'Webseite',
-    description: 'Externe HTTPS-Seite direkt im Popup.',
-  },
-];
-
-const formatAdminDate = (value: string) => {
-  if (!value) return 'Unbekannt';
+const formatAdminDate = (value: string, localeTag: string, unknown: string) => {
+  if (!value) return unknown;
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return 'Unbekannt';
+    return unknown;
   }
 
-  return date.toLocaleString('de-DE');
-};
-
-const getModeHint = (contentType: StartupMessageContentType) => {
-  switch (contentType) {
-    case 'html':
-      return 'HTML wird im Popup mit deaktiviertem JavaScript gerendert.';
-    case 'remote_url':
-      return 'Die HTTPS-Seite wird direkt im Popup geladen.';
-    default:
-      return 'Kurze Release Notes oder Hinweise als Text.';
-  }
+  return date.toLocaleString(localeTag);
 };
 
 export default function StartupMessageAdminScreen() {
+  const { locale, localeTag } = useLocale();
+  const c = locale === 'en' ? {
+    unknown: 'Unknown', text: 'Text', textDesc: 'Plain text shown directly in the popup.', html: 'HTML', htmlDesc: 'HTML content in the embedded viewer.', web: 'Website', webDesc: 'External HTTPS page in the popup.', hintText: 'Short release notes or notices as text.', hintHtml: 'HTML is rendered in the popup with JavaScript disabled.', hintWeb: 'The HTTPS page is loaded directly in the popup.', loadFailed: 'Startup messages could not be loaded.', saved: 'Saved', updated: 'The startup message was updated.', created: 'The new startup message was created.', saveFailed: 'The startup message could not be saved.', deleteTitle: 'Delete message', deleteQuestion: 'Do you really want to delete this startup message? Existing confirmations remain removed historically.', cancel: 'Cancel', delete: 'Delete', deleteFailed: 'The startup message could not be deleted.', title: 'Startup messages', subtitle: 'Manage popup messages shown when the app starts', loading: 'Loading startup messages …', adminsOnly: 'This section is only for admins with profiles.is_admin = true.', editor: 'Editor', editorText: 'Create a new message or edit an existing one.', new: 'New', info: 'To show a message to everyone again, create a new one. Messages already confirmed with “Okay” stay hidden for that user.', fieldTitle: 'Title', titlePlaceholder: 'e.g. New update available', intro: 'Short introduction', introPlaceholder: 'Optional teaser below the title', displayType: 'Display type', url: 'HTTPS URL', content: 'Message', contentPlaceholder: 'Add release notes or a notice here.', button: 'Button text', active: 'Active immediately', activeHint: 'Only active messages are shown when the app starts.', saveChanges: 'Save changes', createMessage: 'Create message', existing: 'Existing messages', existingHint: 'Each user sees the newest active message they have not confirmed.', empty: 'No startup messages yet.', activeStatus: 'Active', inactiveStatus: 'Inactive', type: 'Type', lastUpdated: 'Updated',
+  } : locale === 'es' ? {
+    unknown: 'Desconocido', text: 'Texto', textDesc: 'Texto sencillo directamente en la ventana.', html: 'HTML', htmlDesc: 'Contenido HTML en el visor integrado.', web: 'Sitio web', webDesc: 'Página HTTPS externa dentro de la ventana.', hintText: 'Notas de versión o avisos breves en texto.', hintHtml: 'El HTML se muestra con JavaScript desactivado.', hintWeb: 'La página HTTPS se carga directamente en la ventana.', loadFailed: 'No se pudieron cargar los mensajes de inicio.', saved: 'Guardado', updated: 'El mensaje de inicio se ha actualizado.', created: 'El nuevo mensaje se ha creado.', saveFailed: 'No se pudo guardar el mensaje.', deleteTitle: 'Eliminar mensaje', deleteQuestion: '¿Quieres eliminar este mensaje de inicio? Las confirmaciones existentes seguirán eliminadas del historial.', cancel: 'Cancelar', delete: 'Eliminar', deleteFailed: 'No se pudo eliminar el mensaje.', title: 'Mensajes de inicio', subtitle: 'Gestiona las ventanas que aparecen al iniciar la app', loading: 'Cargando mensajes de inicio …', adminsOnly: 'Esta sección solo está disponible para administradores con profiles.is_admin = true.', editor: 'Editor', editorText: 'Crea un mensaje o modifica uno existente.', new: 'Nuevo', info: 'Para volver a mostrar un mensaje a todos, crea uno nuevo. Los mensajes ya confirmados seguirán ocultos para ese usuario.', fieldTitle: 'Título', titlePlaceholder: 'p. ej., nueva actualización disponible', intro: 'Introducción breve', introPlaceholder: 'Texto opcional bajo el título', displayType: 'Tipo de visualización', url: 'URL HTTPS', content: 'Mensaje', contentPlaceholder: 'Añade aquí notas de versión o avisos.', button: 'Texto del botón', active: 'Activo de inmediato', activeHint: 'Solo los mensajes activos aparecen al iniciar la app.', saveChanges: 'Guardar cambios', createMessage: 'Crear mensaje', existing: 'Mensajes existentes', existingHint: 'Cada usuario ve el mensaje activo más reciente que no haya confirmado.', empty: 'Aún no hay mensajes de inicio.', activeStatus: 'Activo', inactiveStatus: 'Inactivo', type: 'Tipo', lastUpdated: 'Actualizado',
+  } : {
+    unknown: 'Unbekannt', text: 'Text', textDesc: 'Einfacher Text direkt im Popup.', html: 'HTML', htmlDesc: 'HTML-Inhalt im eingebetteten Viewer.', web: 'Webseite', webDesc: 'Externe HTTPS-Seite direkt im Popup.', hintText: 'Kurze Release Notes oder Hinweise als Text.', hintHtml: 'HTML wird im Popup mit deaktiviertem JavaScript gerendert.', hintWeb: 'Die HTTPS-Seite wird direkt im Popup geladen.', loadFailed: 'Die Startmeldungen konnten nicht geladen werden.', saved: 'Gespeichert', updated: 'Die Startmeldung wurde aktualisiert.', created: 'Die neue Startmeldung wurde angelegt.', saveFailed: 'Die Startmeldung konnte nicht gespeichert werden.', deleteTitle: 'Nachricht löschen', deleteQuestion: 'Willst du diese Startmeldung wirklich löschen? Bereits bestätigte Einträge bleiben historisch entfernt.', cancel: 'Abbrechen', delete: 'Löschen', deleteFailed: 'Die Startmeldung konnte nicht gelöscht werden.', title: 'Startmeldungen', subtitle: 'Popup-Nachrichten für den App-Start verwalten', loading: 'Startmeldungen werden geladen …', adminsOnly: 'Dieser Bereich ist nur für Admins mit profiles.is_admin = true.', editor: 'Editor', editorText: 'Neue Nachricht anlegen oder bestehende Nachricht anpassen.', new: 'Neu', info: 'Für eine erneute Ausspielung an alle Nutzer am besten eine neue Nachricht anlegen. Bereits mit „Okay“ bestätigte Nachrichten bleiben pro Nutzer ausgeblendet.', fieldTitle: 'Titel', titlePlaceholder: 'z. B. Neues Update verfügbar', intro: 'Kurze Einleitung', introPlaceholder: 'Optionaler Teaser unter dem Titel', displayType: 'Anzeigetyp', url: 'HTTPS-URL', content: 'Nachricht', contentPlaceholder: 'Hier stehen deine Release Notes oder Hinweise.', button: 'Button-Text', active: 'Sofort aktiv', activeHint: 'Nur aktive Nachrichten werden beim App-Start angezeigt.', saveChanges: 'Änderungen speichern', createMessage: 'Nachricht anlegen', existing: 'Bestehende Nachrichten', existingHint: 'Die neueste aktive und noch nicht bestätigte Nachricht wird pro Nutzer beim Start gezeigt.', empty: 'Noch keine Startmeldungen angelegt.', activeStatus: 'Aktiv', inactiveStatus: 'Inaktiv', type: 'Typ', lastUpdated: 'Aktualisiert',
+  };
+  const contentTypeOptions: { value: StartupMessageContentType; label: string; description: string }[] = [
+    { value: 'text', label: c.text, description: c.textDesc }, { value: 'html', label: c.html, description: c.htmlDesc }, { value: 'remote_url', label: c.web, description: c.webDesc },
+  ];
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const adaptiveColors = useAdaptiveColors();
@@ -100,6 +79,7 @@ export default function StartupMessageAdminScreen() {
   const [draft, setDraft] = useState<StartupMessageDraft>({
     ...DEFAULT_STARTUP_MESSAGE_DRAFT,
   });
+  const modeHint = draft.contentType === 'html' ? c.hintHtml : draft.contentType === 'remote_url' ? c.hintWeb : c.hintText;
 
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -136,7 +116,7 @@ export default function StartupMessageAdminScreen() {
         console.error('Failed to load startup message admin screen:', error);
         if (!mounted) return;
         setErrorMessage(
-          error?.message ?? 'Die Startmeldungen konnten nicht geladen werden.',
+          c.loadFailed,
         );
       } finally {
         if (mounted) {
@@ -207,15 +187,15 @@ export default function StartupMessageAdminScreen() {
       const savedMessage = await saveStartupMessage(draft);
       await reloadMessages(savedMessage.id);
       Alert.alert(
-        'Gespeichert',
+        c.saved,
         draft.id
-          ? 'Die Startmeldung wurde aktualisiert.'
-          : 'Die neue Startmeldung wurde angelegt.',
+          ? c.updated
+          : c.created,
       );
     } catch (error: any) {
       console.error('Failed to save startup message:', error);
       setErrorMessage(
-        error?.message ?? 'Die Startmeldung konnte nicht gespeichert werden.',
+        c.saveFailed,
       );
     } finally {
       setIsSaving(false);
@@ -229,12 +209,12 @@ export default function StartupMessageAdminScreen() {
     }
 
     Alert.alert(
-      'Nachricht löschen',
-      'Willst du diese Startmeldung wirklich löschen? Bereits bestätigte Einträge bleiben historisch entfernt.',
+      c.deleteTitle,
+      c.deleteQuestion,
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: c.cancel, style: 'cancel' },
         {
-          text: 'Löschen',
+          text: c.delete,
           style: 'destructive',
           onPress: () => {
             void (async () => {
@@ -246,7 +226,7 @@ export default function StartupMessageAdminScreen() {
               } catch (error: any) {
                 console.error('Failed to delete startup message:', error);
                 setErrorMessage(
-                  error?.message ?? 'Die Startmeldung konnte nicht gelöscht werden.',
+                  c.deleteFailed,
                 );
               } finally {
                 setDeletingId(null);
@@ -270,8 +250,8 @@ export default function StartupMessageAdminScreen() {
         />
 
         <Header
-          title="Startmeldungen"
-          subtitle="Popup-Nachrichten für den App-Start verwalten"
+          title={c.title}
+          subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
           onBackPress={() => router.push('/app-settings')}
@@ -281,14 +261,14 @@ export default function StartupMessageAdminScreen() {
           <View style={styles.centerState}>
             <ActivityIndicator color={theme.accent} />
             <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-              Startmeldungen werden geladen…
+              {c.loading}
             </ThemedText>
           </View>
         ) : !isAdmin ? (
           <View style={styles.centerState}>
             <IconSymbol name="lock.fill" size={22} color={textSecondary} />
             <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-              Dieser Bereich ist nur für Admins mit `profiles.is_admin = true`.
+              {c.adminsOnly}
             </ThemedText>
           </View>
         ) : (
@@ -305,52 +285,51 @@ export default function StartupMessageAdminScreen() {
             >
               <View style={styles.sectionHeaderRow}>
                 <View>
-                  <ThemedText style={styles.sectionTitle}>Editor</ThemedText>
+                  <ThemedText style={styles.sectionTitle}>{c.editor}</ThemedText>
                   <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-                    Neue Nachricht anlegen oder bestehende Nachricht anpassen.
+                    {c.editorText}
                   </ThemedText>
                 </View>
 
                 <TouchableOpacity style={styles.newButton} onPress={handleCreateNew}>
                   <IconSymbol name="plus" size={16} color="#FFFFFF" />
-                  <ThemedText style={styles.newButtonText}>Neu</ThemedText>
+                  <ThemedText style={styles.newButtonText}>{c.new}</ThemedText>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.infoBanner}>
                 <IconSymbol name="info.circle.fill" size={16} color="#A55E3A" />
                 <ThemedText style={styles.infoBannerText}>
-                  Für eine erneute Ausspielung an alle Nutzer am besten eine neue Nachricht anlegen.
-                  Bereits mit `Okay` bestätigte Nachrichten bleiben pro Nutzer ausgeblendet.
+                  {c.info}
                 </ThemedText>
               </View>
 
               <View style={styles.fieldGroup}>
-                <ThemedText style={styles.label}>Titel</ThemedText>
+                <ThemedText style={styles.label}>{c.fieldTitle}</ThemedText>
                 <TextInput
                   value={draft.title}
                   onChangeText={(value) => handleFieldChange('title', value)}
-                  placeholder="z. B. Neues Update verfügbar"
+                  placeholder={c.titlePlaceholder}
                   placeholderTextColor="rgba(125,90,80,0.55)"
                   style={[styles.input, { color: textPrimary }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <ThemedText style={styles.label}>Kurze Einleitung</ThemedText>
+                <ThemedText style={styles.label}>{c.intro}</ThemedText>
                 <TextInput
                   value={draft.summary}
                   onChangeText={(value) => handleFieldChange('summary', value)}
-                  placeholder="Optionaler Teaser unter dem Titel"
+                  placeholder={c.introPlaceholder}
                   placeholderTextColor="rgba(125,90,80,0.55)"
                   style={[styles.input, { color: textPrimary }]}
                 />
               </View>
 
               <View style={styles.fieldGroup}>
-                <ThemedText style={styles.label}>Anzeigetyp</ThemedText>
+                <ThemedText style={styles.label}>{c.displayType}</ThemedText>
                 <View style={styles.typeOptions}>
-                  {CONTENT_TYPE_OPTIONS.map((option) => {
+                  {contentTypeOptions.map((option) => {
                     const selected = draft.contentType === option.value;
 
                     return (
@@ -383,13 +362,13 @@ export default function StartupMessageAdminScreen() {
                   })}
                 </View>
                 <ThemedText style={[styles.fieldHint, { color: textSecondary }]}>
-                  {getModeHint(draft.contentType)}
+                  {modeHint}
                 </ThemedText>
               </View>
 
               {draft.contentType === 'remote_url' ? (
                 <View style={styles.fieldGroup}>
-                  <ThemedText style={styles.label}>HTTPS-URL</ThemedText>
+                  <ThemedText style={styles.label}>{c.url}</ThemedText>
                   <TextInput
                     value={draft.sourceUrl}
                     onChangeText={(value) => handleFieldChange('sourceUrl', value)}
@@ -403,7 +382,7 @@ export default function StartupMessageAdminScreen() {
               ) : (
                 <View style={styles.fieldGroup}>
                   <ThemedText style={styles.label}>
-                    {draft.contentType === 'html' ? 'HTML-Inhalt' : 'Nachricht'}
+                    {draft.contentType === 'html' ? 'HTML' : c.content}
                   </ThemedText>
                   <TextInput
                     value={draft.content}
@@ -411,7 +390,7 @@ export default function StartupMessageAdminScreen() {
                     placeholder={
                       draft.contentType === 'html'
                         ? '<h1>Release Notes</h1><p>...</p>'
-                        : 'Hier stehen deine Release Notes oder Hinweise.'
+                        : c.contentPlaceholder
                     }
                     placeholderTextColor="rgba(125,90,80,0.55)"
                     multiline
@@ -422,7 +401,7 @@ export default function StartupMessageAdminScreen() {
               )}
 
               <View style={styles.fieldGroup}>
-                <ThemedText style={styles.label}>Button-Text</ThemedText>
+                <ThemedText style={styles.label}>{c.button}</ThemedText>
                 <TextInput
                   value={draft.buttonLabel}
                   onChangeText={(value) => handleFieldChange('buttonLabel', value)}
@@ -434,9 +413,9 @@ export default function StartupMessageAdminScreen() {
 
               <View style={styles.toggleRow}>
                 <View style={styles.toggleCopy}>
-                  <ThemedText style={styles.label}>Sofort aktiv</ThemedText>
+                  <ThemedText style={styles.label}>{c.active}</ThemedText>
                   <ThemedText style={[styles.fieldHint, { color: textSecondary }]}>
-                    Nur aktive Nachrichten werden beim App-Start angezeigt.
+                    {c.activeHint}
                   </ThemedText>
                 </View>
                 <Switch
@@ -474,7 +453,7 @@ export default function StartupMessageAdminScreen() {
                     <>
                       <IconSymbol name="checkmark.circle.fill" size={18} color="#FFFFFF" />
                       <ThemedText style={styles.primaryButtonText}>
-                        {draft.id ? 'Änderungen speichern' : 'Nachricht anlegen'}
+                        {draft.id ? c.saveChanges : c.createMessage}
                       </ThemedText>
                     </>
                   )}
@@ -494,7 +473,7 @@ export default function StartupMessageAdminScreen() {
                     <>
                       <IconSymbol name="trash" size={16} color="#A55E3A" />
                       <ThemedText style={styles.secondaryButtonText}>
-                        Löschen
+                        {c.delete}
                       </ThemedText>
                     </>
                   )}
@@ -507,9 +486,9 @@ export default function StartupMessageAdminScreen() {
               intensity={26}
               overlayColor={glassOverlay}
             >
-              <ThemedText style={styles.sectionTitle}>Bestehende Nachrichten</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{c.existing}</ThemedText>
               <ThemedText style={[styles.sectionDescription, { color: textSecondary }]}>
-                Die neueste aktive und noch nicht bestätigte Nachricht wird pro Nutzer beim Start gezeigt.
+                {c.existingHint}
               </ThemedText>
 
               {messages.length === 0 ? (
@@ -520,7 +499,7 @@ export default function StartupMessageAdminScreen() {
                     color={textSecondary}
                   />
                   <ThemedText style={[styles.stateText, { color: textSecondary }]}>
-                    Noch keine Startmeldungen angelegt.
+                    {c.empty}
                   </ThemedText>
                 </View>
               ) : (
@@ -557,13 +536,13 @@ export default function StartupMessageAdminScreen() {
                                   : styles.statusChipTextInactive,
                               ]}
                             >
-                              {message.is_active ? 'Aktiv' : 'Inaktiv'}
+                              {message.is_active ? c.activeStatus : c.inactiveStatus}
                             </ThemedText>
                           </View>
                         </View>
 
                         <ThemedText style={[styles.messageMeta, { color: textSecondary }]}>
-                          Typ: {message.content_type} · Aktualisiert: {formatAdminDate(message.updated_at)}
+                          {c.type}: {message.content_type} · {c.lastUpdated}: {formatAdminDate(message.updated_at, localeTag, c.unknown)}
                         </ThemedText>
 
                         {message.summary ? (

@@ -17,12 +17,14 @@ import { Stack } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Code128Barcode } from '@/components/code-128-barcode';
+import { useLocale } from '@/contexts/LocaleContext';
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { canEncodeCode128 } from '@/lib/code-128';
+import { translateLoyaltyCards, type LoyaltyCardsTranslationKey } from '@/lib/loyaltyCardsTranslations';
 import {
   createLoyaltyCard,
   deleteLoyaltyCard,
@@ -59,6 +61,9 @@ const readableBarcodeType = (type: string) => {
 };
 
 export default function LoyaltyCardsScreen() {
+  const { locale } = useLocale();
+  const t = useCallback((key: LoyaltyCardsTranslationKey, params?: Record<string, string | number>) =>
+    translateLoyaltyCards(locale, key, params), [locale]);
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [cards, setCards] = useState<LoyaltyCard[]>([]);
@@ -81,7 +86,7 @@ export default function LoyaltyCardsScreen() {
       setIsLoading(false);
       if (error || !data) {
         console.error('Failed to load loyalty cards:', error);
-        Alert.alert('Nicht geladen', 'Deine Kundenkarten konnten nicht geladen werden.');
+        Alert.alert(t('loadTitle'), t('loadMessage'));
         return;
       }
       setCards(data);
@@ -89,7 +94,7 @@ export default function LoyaltyCardsScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const resetDraft = useCallback(() => {
     setCardName(DEFAULT_PRESET.name);
@@ -116,15 +121,12 @@ export default function LoyaltyCardsScreen() {
       granted = permission.granted;
     }
     if (!granted) {
-      Alert.alert(
-        'Kamera nicht erlaubt',
-        'Du kannst die Kartennummer stattdessen unten manuell eingeben.'
-      );
+      Alert.alert(t('cameraTitle'), t('cameraMessage'));
       return;
     }
     setIsAddVisible(false);
     setIsScannerVisible(true);
-  }, [cameraPermission?.granted, requestCameraPermission]);
+  }, [cameraPermission?.granted, requestCameraPermission, t]);
 
   const handleBarcodeScanned = useCallback((result: BarcodeScanningResult) => {
     const now = Date.now();
@@ -135,10 +137,7 @@ export default function LoyaltyCardsScreen() {
     lastScanRef.current = { value: result.data, at: now };
 
     if (!canEncodeCode128(result.data)) {
-      Alert.alert(
-        'Barcode noch nicht unterstützt',
-        'Der Test unterstützt lineare Barcodes mit Zahlen und lateinischen Zeichen.'
-      );
+      Alert.alert(t('unsupportedTitle'), t('unsupportedMessage'));
       return;
     }
 
@@ -147,24 +146,21 @@ export default function LoyaltyCardsScreen() {
     setScannedType(result.type);
     setIsScannerVisible(false);
     setIsAddVisible(true);
-  }, []);
+  }, [t]);
 
   const saveCard = useCallback(async () => {
     const trimmedName = cardName.trim();
     const trimmedBarcode = barcode.trim();
     if (!trimmedName) {
-      Alert.alert('Name fehlt', 'Gib der Karte bitte einen Namen.');
+      Alert.alert(t('nameMissingTitle'), t('nameMissingMessage'));
       return;
     }
     if (!trimmedBarcode) {
-      Alert.alert('Barcode fehlt', 'Scanne den Barcode oder gib die Kartennummer ein.');
+      Alert.alert(t('barcodeMissingTitle'), t('barcodeMissingMessage'));
       return;
     }
     if (!canEncodeCode128(trimmedBarcode)) {
-      Alert.alert(
-        'Kartennummer nicht unterstützt',
-        'Verwende bitte nur Zahlen und lateinische Zeichen ohne Umlaute.'
-      );
+      Alert.alert(t('numberUnsupportedTitle'), t('numberUnsupportedMessage'));
       return;
     }
 
@@ -178,7 +174,7 @@ export default function LoyaltyCardsScreen() {
     setIsSaving(false);
     if (error || !data) {
       console.error('Failed to create loyalty card:', error);
-      Alert.alert('Nicht gespeichert', 'Die Karte konnte nicht gespeichert werden.');
+      Alert.alert(t('saveFailedTitle'), t('saveFailedMessage'));
       return;
     }
 
@@ -186,20 +182,20 @@ export default function LoyaltyCardsScreen() {
     setIsAddVisible(false);
     resetDraft();
     if (process.env.EXPO_OS === 'ios') void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [barcode, cardColor, cardName, resetDraft, scannedType]);
+  }, [barcode, cardColor, cardName, resetDraft, scannedType, t]);
 
   const deleteCard = useCallback(
     (card: LoyaltyCard) => {
-      Alert.alert('Karte löschen', `„${card.name}“ wirklich entfernen?`, [
-        { text: 'Abbrechen', style: 'cancel' },
+      Alert.alert(t('deleteTitle'), t('deleteMessage', { name: card.name }), [
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('delete'),
           style: 'destructive',
           onPress: async () => {
             const { error } = await deleteLoyaltyCard(card.id);
             if (error) {
               console.error('Failed to delete loyalty card:', error);
-              Alert.alert('Nicht gelöscht', 'Die Karte konnte nicht gelöscht werden.');
+              Alert.alert(t('deleteFailedTitle'), t('deleteFailedMessage'));
               return;
             }
             setCards((currentCards) => currentCards.filter((entry) => entry.id !== card.id));
@@ -208,7 +204,7 @@ export default function LoyaltyCardsScreen() {
         },
       ]);
     },
-    []
+    [t]
   );
 
   const cardColumns = width >= 700 ? 3 : 2;
@@ -223,8 +219,8 @@ export default function LoyaltyCardsScreen() {
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header
-          title="Kundenkarten"
-          subtitle="Beim Einkauf schnell griffbereit"
+          title={t('title')}
+          subtitle={t('subtitle')}
           showBackButton
           showBabySwitcher={false}
         />
@@ -239,9 +235,9 @@ export default function LoyaltyCardsScreen() {
                 <IconSymbol name="wallet.pass.fill" size={24} color={PRIMARY} />
               </View>
               <View style={styles.introText}>
-                <ThemedText style={styles.introTitle}>Deine Karten an einem Ort</ThemedText>
+                <ThemedText style={styles.introTitle}>{t('introTitle')}</ThemedText>
                 <ThemedText style={styles.helperText}>
-                  Barcode einmal scannen und an der Kasse jederzeit wieder öffnen. Die Daten bleiben auf diesem Gerät.
+                  {t('introText')}
                 </ThemedText>
               </View>
             </View>
@@ -250,7 +246,7 @@ export default function LoyaltyCardsScreen() {
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator color={PRIMARY} size="large" />
-              <ThemedText style={styles.helperText}>Karten werden geladen …</ThemedText>
+              <ThemedText style={styles.helperText}>{t('loading')}</ThemedText>
             </View>
           ) : cards.length === 0 ? (
             <LiquidGlassCard style={styles.emptyCard}>
@@ -258,28 +254,28 @@ export default function LoyaltyCardsScreen() {
                 <View style={styles.emptyIllustration}>
                   <IconSymbol name="creditcard.fill" size={36} color={PRIMARY} />
                 </View>
-                <ThemedText style={styles.emptyTitle}>Noch keine Kundenkarte</ThemedText>
+                <ThemedText style={styles.emptyTitle}>{t('emptyTitle')}</ThemedText>
                 <ThemedText style={[styles.helperText, styles.emptyText]}>
-                  Starte zum Testen zum Beispiel mit PAYBACK, Kaufland Card oder EDEKA.
+                  {t('emptyText')}
                 </ThemedText>
                 <TouchableOpacity style={styles.primaryButton} onPress={openAddSheet}>
                   <IconSymbol name="plus" size={18} color="#FFFFFF" />
-                  <ThemedText style={styles.primaryButtonText}>Erste Karte hinzufügen</ThemedText>
+                  <ThemedText style={styles.primaryButtonText}>{t('firstCard')}</ThemedText>
                 </TouchableOpacity>
               </View>
             </LiquidGlassCard>
           ) : (
             <View style={styles.cardsSection}>
               <View style={styles.sectionHeader}>
-                <ThemedText style={styles.sectionTitle}>Meine Karten</ThemedText>
+                <ThemedText style={styles.sectionTitle}>{t('myCards')}</ThemedText>
                 <ThemedText style={styles.sectionCount}>{cards.length}</ThemedText>
               </View>
               <View style={styles.cardGrid}>
                 {cards.map((card) => (
                   <TouchableOpacity
                     key={card.id}
-                    accessibilityHint="Öffnet den Barcode in groß"
-                    accessibilityLabel={`${card.name} öffnen`}
+                    accessibilityHint={t('openHint')}
+                    accessibilityLabel={t('openCard', { name: card.name })}
                     activeOpacity={0.86}
                     onPress={() => setSelectedCard(card)}
                     style={[styles.loyaltyCard, { backgroundColor: card.color, width: cardWidth }]}
@@ -305,7 +301,7 @@ export default function LoyaltyCardsScreen() {
           <View style={[styles.bottomDock, { paddingBottom: Math.max(insets.bottom, 12) }]}>
             <TouchableOpacity style={styles.primaryButton} onPress={openAddSheet}>
               <IconSymbol name="plus" size={18} color="#FFFFFF" />
-              <ThemedText style={styles.primaryButtonText}>Karte hinzufügen</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>{t('addCard')}</ThemedText>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -324,11 +320,11 @@ export default function LoyaltyCardsScreen() {
               <View style={styles.sheetHandle} />
               <View style={styles.sheetHeader}>
                 <View style={styles.sheetHeaderText}>
-                  <ThemedText style={styles.sheetTitle}>Karte hinzufügen</ThemedText>
-                  <ThemedText style={styles.helperText}>Anbieter wählen und Barcode übernehmen</ThemedText>
+                  <ThemedText style={styles.sheetTitle}>{t('addCard')}</ThemedText>
+                  <ThemedText style={styles.helperText}>{t('addSubtitle')}</ThemedText>
                 </View>
                 <TouchableOpacity
-                  accessibilityLabel="Schließen"
+                  accessibilityLabel={t('close')}
                   onPress={() => setIsAddVisible(false)}
                   style={styles.closeButton}
                 >
@@ -341,7 +337,7 @@ export default function LoyaltyCardsScreen() {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                <ThemedText style={styles.inputLabel}>Anbieter</ThemedText>
+                <ThemedText style={styles.inputLabel}>{t('provider')}</ThemedText>
                 <View style={styles.presetGrid}>
                   {CARD_PRESETS.map((preset) => {
                     const isSelected = cardName === preset.name && cardColor === preset.color;
@@ -354,37 +350,37 @@ export default function LoyaltyCardsScreen() {
                       >
                         <View style={[styles.presetDot, { backgroundColor: preset.color }]} />
                         <ThemedText numberOfLines={1} style={styles.presetText}>
-                          {preset.name}
+                          {preset.name === 'Andere Karte' ? t('otherCard') : preset.name}
                         </ThemedText>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                <ThemedText style={styles.inputLabel}>Name der Karte</ThemedText>
+                <ThemedText style={styles.inputLabel}>{t('cardName')}</ThemedText>
                 <TextInput
                   onChangeText={setCardName}
-                  placeholder="z. B. PAYBACK"
+                  placeholder={t('cardNamePlaceholder')}
                   placeholderTextColor="rgba(111,85,74,0.45)"
                   style={styles.input}
                   value={cardName}
                 />
 
-                <ThemedText style={styles.inputLabel}>Barcode</ThemedText>
+                <ThemedText style={styles.inputLabel}>{t('barcode')}</ThemedText>
                 <TouchableOpacity onPress={openScanner} style={styles.scanButton}>
                   <View style={styles.scanButtonIcon}>
                     <IconSymbol name="barcode.viewfinder" size={24} color={PRIMARY} />
                   </View>
                   <View style={styles.scanButtonText}>
-                    <ThemedText style={styles.scanButtonTitle}>Barcode scannen</ThemedText>
-                    <ThemedText style={styles.helperText}>Kamera auf den Code der Karte richten</ThemedText>
+                    <ThemedText style={styles.scanButtonTitle}>{t('scan')}</ThemedText>
+                    <ThemedText style={styles.helperText}>{t('scanHint')}</ThemedText>
                   </View>
                   <IconSymbol name="chevron.right" size={20} color="rgba(111,85,74,0.55)" />
                 </TouchableOpacity>
 
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
-                  <ThemedText style={styles.dividerText}>oder manuell</ThemedText>
+                  <ThemedText style={styles.dividerText}>{t('manualDivider')}</ThemedText>
                   <View style={styles.divider} />
                 </View>
 
@@ -395,14 +391,14 @@ export default function LoyaltyCardsScreen() {
                     setBarcode(value);
                     setScannedType('manual');
                   }}
-                  placeholder="Kartennummer eingeben"
+                  placeholder={t('numberPlaceholder')}
                   placeholderTextColor="rgba(111,85,74,0.45)"
                   style={[styles.input, styles.barcodeInput]}
                   value={barcode}
                 />
                 {barcode ? (
                   <ThemedText selectable style={styles.scanResult}>
-                    {scannedType === 'manual' ? 'Eingetragen' : `${readableBarcodeType(scannedType)} gescannt`}: {maskedBarcode}
+                    {scannedType === 'manual' ? t('entered') : t('scanned', { type: readableBarcodeType(scannedType) })}: {maskedBarcode}
                   </ThemedText>
                 ) : null}
 
@@ -417,7 +413,7 @@ export default function LoyaltyCardsScreen() {
                     <IconSymbol name="checkmark" size={18} color="#FFFFFF" />
                   )}
                   <ThemedText style={styles.primaryButtonText}>
-                    {isSaving ? 'Wird gespeichert …' : 'Karte speichern'}
+                    {isSaving ? t('saving') : t('saveCard')}
                   </ThemedText>
                 </TouchableOpacity>
               </ScrollView>
@@ -445,7 +441,7 @@ export default function LoyaltyCardsScreen() {
             <SafeAreaView edges={['top', 'bottom']} style={styles.scannerOverlay}>
               <View style={styles.scannerHeader}>
                 <TouchableOpacity
-                  accessibilityLabel="Scanner schließen"
+                  accessibilityLabel={t('closeScanner')}
                   onPress={() => {
                     setIsScannerVisible(false);
                     setIsAddVisible(true);
@@ -454,13 +450,13 @@ export default function LoyaltyCardsScreen() {
                 >
                   <IconSymbol name="xmark" size={20} color="#FFFFFF" />
                 </TouchableOpacity>
-                <ThemedText style={styles.scannerTitle}>Kartenbarcode scannen</ThemedText>
+                <ThemedText style={styles.scannerTitle}>{t('scannerTitle')}</ThemedText>
                 <View style={styles.scannerHeaderSpacer} />
               </View>
               <View style={styles.scannerFocusArea}>
                 <View style={styles.scannerFrame} />
                 <ThemedText style={styles.scannerHint}>
-                  Barcode vollständig in den Rahmen halten
+                  {t('scannerHint')}
                 </ThemedText>
               </View>
             </SafeAreaView>
@@ -477,15 +473,15 @@ export default function LoyaltyCardsScreen() {
             <SafeAreaView edges={['top', 'bottom']} style={styles.cardDetail}>
               <View style={styles.detailHeader}>
                 <TouchableOpacity
-                  accessibilityLabel="Karte schließen"
+                  accessibilityLabel={t('closeCard')}
                   onPress={() => setSelectedCard(null)}
                   style={styles.detailHeaderButton}
                 >
                   <IconSymbol name="xmark" size={21} color="#2B2421" />
                 </TouchableOpacity>
-                <ThemedText style={styles.detailHeaderTitle}>Kundenkarte</ThemedText>
+                <ThemedText style={styles.detailHeaderTitle}>{t('detailTitle')}</ThemedText>
                 <TouchableOpacity
-                  accessibilityLabel="Karte löschen"
+                  accessibilityLabel={t('deleteCard')}
                   onPress={() => deleteCard(selectedCard)}
                   style={styles.detailHeaderButton}
                 >
@@ -504,7 +500,7 @@ export default function LoyaltyCardsScreen() {
 
                 <View style={styles.barcodeCard}>
                   <ThemedText style={styles.barcodeInstruction}>
-                    Diesen Code an der Kasse vorzeigen
+                    {t('checkoutHint')}
                   </ThemedText>
                   <Code128Barcode
                     height={width < 390 ? 110 : 132}
@@ -520,7 +516,7 @@ export default function LoyaltyCardsScreen() {
                 <View style={styles.brightnessHint}>
                   <IconSymbol name="sun.max.fill" size={20} color="#B57A13" />
                   <ThemedText style={styles.brightnessHintText}>
-                    Bei Scanproblemen die Displayhelligkeit kurz erhöhen.
+                    {t('brightnessHint')}
                   </ThemedText>
                 </View>
               </ScrollView>

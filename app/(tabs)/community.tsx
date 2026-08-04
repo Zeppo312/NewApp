@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,6 +18,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getAppSettings, saveAppSettings, supabase } from '@/lib/supabase';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 type ProfileIdentityRecord = {
   username?: string | null;
@@ -24,6 +35,7 @@ type ProfileIdentityRecord = {
 };
 
 export default function CommunityTabScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const { user } = useAuth();
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
@@ -120,7 +132,7 @@ export default function CommunityTabScreen() {
 
   const handleUseRealName = useCallback(async () => {
     if (communityAvatarChoice === null) {
-      Alert.alert('Community', 'Bitte entscheide auch, ob dein Profilbild in Community und Benachrichtigungen genutzt werden soll.');
+      Alert.alert(t('common.community'), t('identity.avatarRequired'));
       return;
     }
 
@@ -137,12 +149,12 @@ export default function CommunityTabScreen() {
     } catch (error) {
       console.error('Failed to save real-name community identity:', error);
       Alert.alert(
-        'Community',
-        'Deine Auswahl konnte gerade nicht gespeichert werden. Du kannst es erneut versuchen oder einmal mit Vor- und Nachnamen fortfahren.',
+        t('common.community'),
+        t('identity.saveFailed'),
         [
-          { text: 'Erneut versuchen', style: 'cancel' },
+          { text: t('common.retry'), style: 'cancel' },
           {
-            text: 'Einmal fortfahren',
+            text: t('common.continueOnce'),
             onPress: () => {
               setSessionIdentityBypass(true);
               setShowIdentityPrompt(false);
@@ -157,7 +169,7 @@ export default function CommunityTabScreen() {
 
   const handleSetupUsername = useCallback(() => {
     if (communityAvatarChoice === null) {
-      Alert.alert('Community', 'Bitte entscheide auch, ob dein Profilbild in Community und Benachrichtigungen genutzt werden soll.');
+      Alert.alert(t('common.community'), t('identity.avatarRequired'));
       return;
     }
 
@@ -174,7 +186,7 @@ export default function CommunityTabScreen() {
 
   return (
     <View style={styles.container}>
-      <CommunityQaFeed />
+      <CommunityQaFeed locale={ACTIVE_COMMUNITY_LOCALE} />
 
       <Modal
         visible={showIdentityPrompt}
@@ -184,14 +196,14 @@ export default function CommunityTabScreen() {
       >
         <View style={styles.overlay}>
           <View style={[styles.sheet, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-            <ThemedText style={[styles.title, { color: primaryText }]}>Wie möchtest du in der Community auftreten?</ThemedText>
+            <ThemedText style={[styles.title, { color: primaryText }]}>{t('identity.title')}</ThemedText>
             <ThemedText style={[styles.body, { color: secondaryText }]}>
-              Du kannst entweder mit deinem Vor- und Nachnamen schreiben oder zuerst einen Username anlegen.
+              {t('identity.description')}
             </ThemedText>
 
             <View style={styles.preferenceBlock}>
               <ThemedText style={[styles.preferenceTitle, { color: primaryText }]}>
-                Profilbild in Community und Benachrichtigungen verwenden?
+                {t('identity.avatarQuestion')}
               </ThemedText>
               <View style={styles.preferenceRow}>
                 <TouchableOpacity
@@ -208,7 +220,7 @@ export default function CommunityTabScreen() {
                       communityAvatarChoice === true && styles.preferenceButtonTextActive,
                     ]}
                   >
-                    Ja, mit Profilbild
+                    {t('identity.avatarYes')}
                   </ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -225,7 +237,7 @@ export default function CommunityTabScreen() {
                       communityAvatarChoice === false && styles.preferenceButtonTextActive,
                     ]}
                   >
-                    Nein, ohne Profilbild
+                    {t('identity.avatarNo')}
                   </ThemedText>
                 </TouchableOpacity>
               </View>
@@ -237,7 +249,7 @@ export default function CommunityTabScreen() {
               activeOpacity={0.85}
               disabled={isSavingChoice}
             >
-              <ThemedText style={styles.primaryButtonText}>Username anlegen</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>{t('identity.setupUsername')}</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -250,7 +262,7 @@ export default function CommunityTabScreen() {
                 <ActivityIndicator size="small" color="#7D5A50" />
               ) : (
                 <ThemedText style={[styles.secondaryButtonText, { color: primaryText }]}>
-                  Mit Vor- und Nachnamen fortfahren
+                  {t('identity.useRealName')}
                 </ThemedText>
               )}
             </TouchableOpacity>

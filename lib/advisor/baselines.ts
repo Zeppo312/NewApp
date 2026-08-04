@@ -22,6 +22,8 @@ export type SleepBaseline = {
   currentAwakeMinutes: number | null;
   typicalWakeMinutes: number | null;
   wakeSampleCount: number;
+  typicalNapMinutes: number | null;
+  napSampleCount: number;
   lastNightMinutes: number | null;
   typicalNightMinutes: number | null;
   nightSampleDays: number;
@@ -196,6 +198,15 @@ export const buildSleepBaseline = (
     .find((item) => item.end != null && item.end <= now);
 
   const wakeIntervals: number[] = [];
+  const napDurations: number[] = [];
+  for (const item of parsed) {
+    if (!item.end) continue;
+    const startHour = item.start.getHours();
+    const duration = entryDurationMinutes(item.entry, item.start, item.end, now);
+    if (startHour >= 5 && startHour < 20 && duration >= 10 && duration <= 240) {
+      napDurations.push(duration);
+    }
+  }
   for (let index = 1; index < parsed.length; index += 1) {
     const previous = parsed[index - 1];
     const current = parsed[index];
@@ -266,6 +277,8 @@ export const buildSleepBaseline = (
         : Math.max(0, Math.round((now.getTime() - lastEnded.end.getTime()) / 60_000)),
     typicalWakeMinutes: wakeIntervals.length >= 4 ? median(wakeIntervals) : null,
     wakeSampleCount: wakeIntervals.length,
+    typicalNapMinutes: napDurations.length >= 3 ? median(napDurations) : null,
+    napSampleCount: napDurations.length,
     lastNightMinutes,
     typicalNightMinutes,
     nightSampleDays: historicalNights.length,

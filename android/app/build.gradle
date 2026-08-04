@@ -97,6 +97,8 @@ android {
         versionCode 5
         versionName "1.0.19"
 
+        resourceConfigurations += ["de", "en", "es"]
+
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
     signingConfigs {

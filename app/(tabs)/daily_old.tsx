@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -75,6 +77,11 @@ import {
   saveVitaminDCompletion,
   type VitaminDChecks,
 } from '@/lib/vitaminDReminder';
+import { DailyTranslationKey, DEFAULT_DAILY_LOCALE, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
+
+let ACTIVE_DAILY_LOCALE = DEFAULT_DAILY_LOCALE;
+let DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
+const t = (key: DailyTranslationKey, params?: Record<string, string | number>) => translateDailyText(ACTIVE_DAILY_LOCALE, key, params);
 
 // Design Tokens now imported from DesignGuide
 
@@ -90,7 +97,7 @@ const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTER);
 const MAX_BAR_H = 140;
 const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
-  'Du bist im Babymodus zur Vorschau. Tracking ist hier nur nach der Geburt moeglich.';
+  t('preview.message');
 
 function toDateKey(d: Date) {
   const copy = new Date(d);
@@ -120,6 +127,9 @@ type QuickActionType =
   | 'diaper_both';
 
 type QuickActionButtonConfig = { icon: string; label: string; action: QuickActionType };
+type QuickActionButtonDefinition = Omit<QuickActionButtonConfig, 'label'> & {
+  labelKey: DailyTranslationKey;
+};
 type QuickActionRowItem =
   | { key: string; type: 'action'; item: QuickActionButtonConfig }
   | { key: string; type: 'restore-toggle' };
@@ -139,7 +149,7 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
     <View style={s.dateSpiderWrap}>
       <GlassCard style={s.dateSpiderCard} intensity={22} overlayColor="rgba(255,255,255,0.24)">
         <Text style={[s.dateSpiderText, { color: textPrimary }]}>
-          {date.toLocaleDateString('de-DE', {
+          {date.toLocaleDateString(DAILY_LOCALE_TAG, {
             weekday: 'long',
             day: '2-digit',
             month: 'long',
@@ -176,22 +186,22 @@ const TimerBanner: React.FC<{
 
   const timerLabel =
     timer.type === 'BREAST'
-      ? '🤱 Stillen'
+      ? t('action.breast')
       : timer.type === 'BOTTLE'
-      ? '🍼 Fläschchen'
+        ? t('action.bottle')
       : timer.type === 'PUMP'
-      ? '🥛 Abpumpen'
+          ? t('action.pump')
       : timer.type === 'WATER'
-      ? '🚰 Wasser'
+            ? t('action.water')
       : timer.type === 'SOLIDS'
-      ? '🥄 Beikost'
-      : '🧷 Wickeln';
+              ? t('action.solids')
+              : t('action.diaper');
 
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
         <Text style={[s.timerType, { color: textPrimary }]}>
-          {timerLabel} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+          {timerLabel} {t('action.running')} {new Date(timer.start).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}
         </Text>
         <Text style={[s.timerTime, { color: textSecondary }]}>{formatDurationSeconds(elapsed)}</Text>
       </View>
@@ -210,18 +220,18 @@ const TimerBanner: React.FC<{
 const QUICK_ACTION_HIDDEN_STORAGE_PREFIX = 'daily_old_hidden_quick_actions';
 const QUICK_ACTION_ORDER_STORAGE_PREFIX = 'daily_old_quick_actions_order';
 
-const quickBtns: QuickActionButtonConfig[] = [
-  { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
-  { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
-  { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
-  { action: 'feeding_pump', label: 'Abpumpen', icon: '🥛' },
-  { action: 'feeding_water', label: 'Wasser', icon: '🚰' },
-  { action: 'diaper_wet', label: 'Nass', icon: '💧' },
-  { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
-  { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
+const QUICK_ACTION_DEFINITIONS: QuickActionButtonDefinition[] = [
+  { action: 'feeding_breast', labelKey: 'feeding.breast', icon: '🤱' },
+  { action: 'feeding_bottle', labelKey: 'feeding.bottle', icon: '🍼' },
+  { action: 'feeding_solids', labelKey: 'feeding.solids', icon: '🥄' },
+  { action: 'feeding_pump', labelKey: 'feeding.pump', icon: '🥛' },
+  { action: 'feeding_water', labelKey: 'feeding.water', icon: '🚰' },
+  { action: 'diaper_wet', labelKey: 'diaper.wet', icon: '💧' },
+  { action: 'diaper_dirty', labelKey: 'diaper.dirty', icon: '💩' },
+  { action: 'diaper_both', labelKey: 'diaper.both', icon: '💧💩' },
 ];
 
-const QUICK_ACTION_ORDER = quickBtns.map(({ action }) => action);
+const QUICK_ACTION_ORDER = QUICK_ACTION_DEFINITIONS.map(({ action }) => action);
 
 const getEntryTimelineTimestamp = (entry: Partial<DailyEntry>): number | null => {
   const rawValue = entry.start_time ?? entry.entry_date ?? null;
@@ -238,14 +248,14 @@ const formatBottleGapLabel = (diffMinutes: number): string | null => {
   const minutes = diffMinutes % 60;
 
   if (hours <= 0) {
-    return `🍼 Letzte Flasche vor ${minutes} Min.`;
+    return t('daily.lastBottleMinutes', { minutes });
   }
 
   if (minutes === 0) {
-    return `🍼 Letzte Flasche vor ${hours} Std.`;
+    return t('daily.lastBottleHours', { hours });
   }
 
-  return `🍼 Letzte Flasche vor ${hours} Std. ${minutes} Min.`;
+  return t('daily.lastBottleHoursMinutes', { hours, minutes });
 };
 
 type FeedingOverviewCategoryKey = 'BOTTLE' | 'WATER' | 'SOLIDS' | 'BREAST' | 'PUMP';
@@ -359,7 +369,7 @@ const formatDurationMinutesCompact = (minutes: number): string => {
 
 const formatClockTime = (timestamp: number | null): string | null => {
   if (!timestamp || !Number.isFinite(timestamp)) return null;
-  return new Date(timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return new Date(timestamp).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' });
 };
 
 const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCategorySummary[] => {
@@ -414,36 +424,36 @@ const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCatego
   return FEEDING_OVERVIEW_CARD_ORDER.map((key) => {
     const bucket = buckets[key];
     const lastTime = formatClockTime(bucket.lastAt);
-    const defaultSecondary = lastTime ? `Zuletzt um ${lastTime} Uhr` : 'Heute noch nichts erfasst';
+    const defaultSecondary = lastTime ? t('daily.lastAt', { time: lastTime }) : t('empty.today');
 
-    let metric = bucket.count > 0 ? `${bucket.count}× dokumentiert` : 'Noch kein Eintrag';
+    let metric = bucket.count > 0 ? t('daily.documented', { count: bucket.count }) : t('empty.entry');
     let secondary = defaultSecondary;
 
     if (key === 'BOTTLE') {
-      metric = bucket.totalMl > 0 ? `${bucket.totalMl} ml insgesamt` : metric;
+      metric = bucket.totalMl > 0 ? t('daily.totalMl', { amount: bucket.totalMl }) : metric;
     } else if (key === 'WATER') {
-      metric = bucket.totalMl > 0 ? `${bucket.totalMl} ml getrunken` : metric;
+      metric = bucket.totalMl > 0 ? t('daily.drunkMl', { amount: bucket.totalMl }) : metric;
     } else if (key === 'SOLIDS') {
-      metric = bucket.count > 0 ? `${bucket.count}× angeboten` : 'Noch keine Beikost';
+      metric = bucket.count > 0 ? t('daily.offered', { count: bucket.count }) : t('empty.solids');
     } else if (key === 'BREAST') {
-      metric = bucket.totalMinutes > 0 ? `${formatDurationMinutesCompact(bucket.totalMinutes)} gesamt` : metric;
+      metric = bucket.totalMinutes > 0 ? t('daily.total', { duration: formatDurationMinutesCompact(bucket.totalMinutes) }) : metric;
 
       const sideSummary = [
         bucket.leftCount > 0 ? `L ${bucket.leftCount}` : null,
         bucket.rightCount > 0 ? `R ${bucket.rightCount}` : null,
-        bucket.bothCount > 0 ? `Beide ${bucket.bothCount}` : null,
+        bucket.bothCount > 0 ? `${t('input.both')} ${bucket.bothCount}` : null,
       ]
         .filter(Boolean)
         .join(' • ');
 
       secondary = sideSummary || defaultSecondary;
     } else if (key === 'PUMP') {
-      metric = bucket.totalMl > 0 ? `${bucket.totalMl} ml abgepumpt` : metric;
+      metric = bucket.totalMl > 0 ? t('daily.pumpedMl', { amount: bucket.totalMl }) : metric;
 
       const sideSummary = [
         bucket.leftCount > 0 ? `L ${bucket.leftCount}` : null,
         bucket.rightCount > 0 ? `R ${bucket.rightCount}` : null,
-        bucket.bothCount > 0 ? `Beide ${bucket.bothCount}` : null,
+        bucket.bothCount > 0 ? `${t('input.both')} ${bucket.bothCount}` : null,
       ]
         .filter(Boolean)
         .join(' • ');
@@ -454,6 +464,7 @@ const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCatego
     return {
       key,
       ...FEEDING_OVERVIEW_CARD_META[key],
+      label: key === 'BOTTLE' ? t('feeding.bottle') : key === 'WATER' ? t('feeding.water') : key === 'SOLIDS' ? t('feeding.solids') : key === 'BREAST' ? t('feeding.breast') : t('feeding.pump'),
       count: bucket.count,
       totalMl: bucket.totalMl,
       totalMinutes: bucket.totalMinutes,
@@ -474,7 +485,7 @@ const normalizeHiddenQuickActions = (value: unknown): QuickActionType[] => {
     hiddenSet.add(entry as QuickActionType);
   }
 
-  return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, quickBtns.length - 1);
+  return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, QUICK_ACTION_DEFINITIONS.length - 1);
 };
 
 const normalizeQuickActionOrder = (value: unknown): QuickActionType[] => {
@@ -523,16 +534,25 @@ const QuickActionRow: React.FC<{
   actionOrder,
   disabled = false,
 }) => {
+  const { locale } = useLocale();
   // Adaptive Farben für Dark Mode
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const quickBtns = useMemo<QuickActionButtonConfig[]>(
+    () =>
+      QUICK_ACTION_DEFINITIONS.map(({ labelKey, ...button }) => ({
+        ...button,
+        label: translateDailyText(locale, labelKey),
+      })),
+    [locale],
+  );
   const hiddenActionSet = useMemo(() => new Set(hiddenActions), [hiddenActions]);
   const orderedQuickBtns = useMemo(
     () => actionOrder.map((action) => quickBtns.find((btn) => btn.action === action)).filter((item): item is QuickActionButtonConfig => !!item),
-    [actionOrder],
+    [actionOrder, quickBtns],
   );
   const visibleQuickBtns = useMemo(
     () => orderedQuickBtns.filter(({ action }) => !hiddenActionSet.has(action)),
@@ -559,7 +579,7 @@ const QuickActionRow: React.FC<{
   const handleHidePress = useCallback(
     (action: QuickActionType) => {
       if (visibleQuickBtns.length <= 1) {
-        Alert.alert('Mindestens eine Quick Action', 'Eine Quick Action muss sichtbar bleiben.');
+      Alert.alert(t('quick.minimumTitle'), t('quick.minimumMessage'));
         return;
       }
 
@@ -572,14 +592,14 @@ const QuickActionRow: React.FC<{
     if (hiddenQuickBtns.length === 0) return;
 
     Alert.alert(
-      'Quick Action einblenden',
-      'Welche Action soll wieder sichtbar sein?',
+      t('quick.restoreTitle'),
+      t('quick.restoreQuestion'),
       [
         ...hiddenQuickBtns.map((hiddenBtn) => ({
           text: `${hiddenBtn.icon} ${hiddenBtn.label}`,
           onPress: () => onRestoreAction(hiddenBtn.action),
         })),
-        { text: 'Abbrechen', style: 'cancel' as const },
+        { text: t('common.cancel'), style: 'cancel' as const },
       ],
     );
   }, [hiddenQuickBtns, onRestoreAction]);
@@ -602,8 +622,10 @@ const QuickActionRow: React.FC<{
               <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#44C38A' : '#1F9D55' }]}>
                 <Text style={s.quickActionPlusBadgeText}>+</Text>
               </View>
-              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]}>Zurück</Text>
-              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]}>{hiddenQuickBtns.length} verborgen</Text>
+              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]}>{t('common.back')}</Text>
+              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]}>
+                {translateDailyText(locale, 'quick.hiddenCount', { count: hiddenQuickBtns.length })}
+              </Text>
             </TouchableOpacity>
           </GlassCard>
         </View>
@@ -667,7 +689,7 @@ const QuickActionRow: React.FC<{
             onPress={() => setIsEditMode(false)}
             activeOpacity={0.85}
           >
-            <Text style={[s.quickActionDoneText, { color: textPrimary }]}>Fertig</Text>
+            <Text style={[s.quickActionDoneText, { color: textPrimary }]}>{t('common.done')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -718,6 +740,9 @@ const QuickActionRow: React.FC<{
 };
 
 export default function DailyScreen() {
+  const { locale } = useLocale();
+  ACTIVE_DAILY_LOCALE = locale;
+  DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
   // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -820,7 +845,7 @@ export default function DailyScreen() {
     [activeBabyId, user?.id],
   );
   const showReadOnlyPreviewAlert = useCallback(() => {
-    Alert.alert('Nur Vorschau', BABY_MODE_PREVIEW_READ_ONLY_MESSAGE);
+    Alert.alert(t('preview.title'), t('preview.message'));
   }, []);
   const ensureWritableInCurrentMode = useCallback(() => {
     if (!isReadOnlyPreviewMode) return true;
@@ -1086,7 +1111,7 @@ export default function DailyScreen() {
 
     return labelMap;
   }, [entries, latestBottleEntryId, latestBottleGapLabel]);
-  const feedingOverviewCards = useMemo(() => buildFeedingOverviewCards(entries), [entries]);
+  const feedingOverviewCards = useMemo(() => buildFeedingOverviewCards(entries), [entries, locale]);
   const feedingOverviewEntryCount = useMemo(
     () => feedingOverviewCards.reduce((sum, card) => sum + card.count, 0),
     [feedingOverviewCards],
@@ -1107,15 +1132,15 @@ export default function DailyScreen() {
     const pumpCard = feedingOverviewCards.find((card) => card.key === 'PUMP');
 
     return [
-      bottleCard && bottleCard.totalMl > 0 ? `🍼 ${bottleCard.totalMl} ml Fläschchen` : null,
-      waterCard && waterCard.totalMl > 0 ? `🚰 ${waterCard.totalMl} ml Wasser` : null,
-      solidsCard && solidsCard.count > 0 ? `🥄 ${solidsCard.count}× Beikost` : null,
+      bottleCard && bottleCard.totalMl > 0 ? `🍼 ${bottleCard.totalMl} ml ${bottleCard.label}` : null,
+      waterCard && waterCard.totalMl > 0 ? `🚰 ${waterCard.totalMl} ml ${waterCard.label}` : null,
+      solidsCard && solidsCard.count > 0 ? `🥄 ${solidsCard.count}× ${solidsCard.label}` : null,
       breastCard && breastCard.totalMinutes > 0
-        ? `🤱 ${formatDurationMinutesCompact(breastCard.totalMinutes)} Stillen`
+        ? `🤱 ${formatDurationMinutesCompact(breastCard.totalMinutes)} ${breastCard.label}`
         : null,
-      pumpCard && pumpCard.totalMl > 0 ? `🥛 ${pumpCard.totalMl} ml abgepumpt` : null,
+      pumpCard && pumpCard.totalMl > 0 ? `🥛 ${t('daily.pumpedMl', { amount: pumpCard.totalMl })}` : null,
     ].filter((item): item is string => !!item);
-  }, [feedingOverviewCards]);
+  }, [feedingOverviewCards, locale]);
 
   const handleToggleVitaminDCompletion = useCallback(async () => {
     if (!userId || !activeBabyId || vitaminDBusy) return;
@@ -1132,7 +1157,7 @@ export default function DailyScreen() {
       setVitaminDChecks(nextChecks);
     } catch (error) {
       console.error('Daily: failed to save Vitamin-D status', error);
-      Alert.alert('Fehler', 'Der Vitamin-D-Status konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.vitaminFailed'));
     } finally {
       setVitaminDBusy(false);
     }
@@ -1601,8 +1626,8 @@ export default function DailyScreen() {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert(
-        'Kein Kind ausgewählt',
-        'Bitte wähle zuerst ein Kind aus.'
+        t('alert.noBabyTitle'),
+        t('alert.noBaby')
       );
       return;
     }
@@ -1641,7 +1666,7 @@ export default function DailyScreen() {
         data = res.data; error = res.error;
       }
       if (error) {
-        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
+        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFeedingFailed')));
         return;
       }
       if (timerRequested && feedingType) {
@@ -1737,7 +1762,7 @@ export default function DailyScreen() {
         data = res.data; error = res.error;
       }
       if (error) {
-        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
+        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFailed')));
         return;
       }
       if (timerRequested) {
@@ -1755,7 +1780,7 @@ export default function DailyScreen() {
         timerRequested
       );
     } else {
-      Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
+      Alert.alert(t('common.notice'), t('alert.otherUnavailable'));
     }
     setShowInputModal(false);
     setEditingEntry(null);
@@ -1787,45 +1812,45 @@ export default function DailyScreen() {
     setSplashEmoji(emoji);
     // Texte je Kontext
     if (kind === 'feeding_breast') {
-      setSplashTitle(timerStarted ? 'Stillen läuft' : 'Stillen gespeichert');
-      setSplashSubtitle(timerStarted ? 'Nimm dir Zeit. Genieße diese besonderen Momente.' : 'Eintrag ohne Timer gesichert.');
-      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Du gibst deinem Baby alles, was es braucht');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.breast') }));
+      setSplashSubtitle(timerStarted ? t('daily.takeTime') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.breastHint'));
       setSplashHintEmoji('💕');
       setSplashText('');
     } else if (kind === 'feeding_bottle') {
-      setSplashTitle(timerStarted ? 'Fläschchen läuft' : 'Fläschchen gespeichert');
-      setSplashSubtitle(timerStarted ? 'Ganz in Ruhe – du machst das super.' : 'Eintrag ohne Timer gesichert.');
-      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn ihr fertig seid' : 'Nähe und Ernährung – perfekt kombiniert');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.bottle') }));
+      setSplashSubtitle(timerStarted ? t('daily.bottleCalm') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.bottleHint'));
       setSplashHintEmoji('🤍');
       setSplashText('');
     } else if (kind === 'feeding_solids') {
-      setSplashTitle(timerStarted ? 'Beikost läuft' : 'Beikost gespeichert');
-      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Jeder Löffel ein kleiner Fortschritt.');
-      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, sobald ihr fertig seid.' : 'Weiter so – ihr wachst gemeinsam!');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.solids') }));
+      setSplashSubtitle(timerStarted ? t('daily.timerUntilStop') : t('daily.solidsSaved'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.solidsHint'));
       setSplashHintEmoji('');
       setSplashText('');
     } else if (kind === 'feeding_pump') {
-      setSplashTitle('Abpumpen gespeichert');
-      setSplashSubtitle('Die abgepumpte Milch ist jetzt dokumentiert.');
+      setSplashTitle(t('daily.saved', { name: t('feeding.pump') }));
+      setSplashSubtitle(t('daily.pumpBody'));
       setSplashStatus('');
-      setSplashHint('So behältst du Menge und Zeitpunkt im Blick');
+      setSplashHint(t('daily.pumpHint'));
       setSplashHintEmoji('🥛');
       setSplashText('');
     } else if (kind === 'feeding_water') {
-      setSplashTitle('Wasser gespeichert');
-      setSplashSubtitle('Die Wasseraufnahme ist jetzt dokumentiert.');
+      setSplashTitle(t('daily.saved', { name: t('feeding.water') }));
+      setSplashSubtitle(t('daily.waterBody'));
       setSplashStatus('');
-      setSplashHint('So behältst du die Trinkmenge im Blick');
+      setSplashHint(t('daily.waterHint'));
       setSplashHintEmoji('🚰');
       setSplashText('');
     } else {
-      setSplashTitle(timerStarted ? 'Wickeln läuft' : 'Wickeln gespeichert');
-      setSplashSubtitle(timerStarted ? 'Timer läuft mit, bis du stoppst.' : 'Alles frisch – wohlfühlen ist wichtig.');
-      setSplashStatus(timerStarted ? 'Timer gestartet...' : '');
-      setSplashHint(timerStarted ? 'Stoppe, wenn du fertig bist' : 'Danke für deine liebevolle Fürsorge');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('summary.diaper') }));
+      setSplashSubtitle(timerStarted ? t('daily.timerUntilStop') : t('daily.diaperFresh'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopSingle') : t('daily.diaperHint'));
       setSplashHintEmoji('✨');
       setSplashText('');
     }
@@ -1855,7 +1880,7 @@ export default function DailyScreen() {
     const timerToStop = activeTimer;
     const { error } = await stopBabyCareEntryTimer(timerToStop.id, activeBabyId);
     if (error) {
-      Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
+      Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('common.unknownError')));
       return;
     }
 
@@ -1882,7 +1907,7 @@ export default function DailyScreen() {
       loadEntries();
     }
 
-    Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
+    Alert.alert(t('common.success'), t('daily.timerStopped'));
   }, [
     ensureWritableInCurrentMode,
     activeBabyId,
@@ -1974,10 +1999,10 @@ export default function DailyScreen() {
 
   const handleDeleteEntry = async (id: string) => {
     if (!ensureWritableInCurrentMode()) return;
-    Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('alert.deleteTitle'), t('alert.deleteQuestion'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           if (!ensureWritableInCurrentMode()) return;
@@ -2002,7 +2027,7 @@ export default function DailyScreen() {
             loadEntries();
           }
 
-          Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
+          Alert.alert(t('common.success'), t('alert.deleted'));
         },
       },
     ]);
@@ -2028,7 +2053,7 @@ export default function DailyScreen() {
             activeOpacity={0.85}
           >
             <Text style={[s.topTabText, { color: textSecondary }, selectedTab === tab && s.activeTopTabText]}>
-              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+              {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
             </Text>
           </TouchableOpacity>
         </GlassCard>
@@ -2087,9 +2112,9 @@ export default function DailyScreen() {
           </TouchableOpacity>
 
           <View style={s.weekHeaderCenter}>
-            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Wochenübersicht</Text>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
             <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
-              {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+              {weekStart.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })}
             </Text>
           </View>
 
@@ -2100,7 +2125,7 @@ export default function DailyScreen() {
 
         {/* Wickeln diese Woche - Design Guide konform mit Liquid Glass (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={[s.chartTitle, { color: textSecondary }]}>Wickeln diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('week.diapers')}</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -2143,7 +2168,7 @@ export default function DailyScreen() {
 
         {/* Mahlzeiten diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={[s.chartTitle, { color: textSecondary }]}>Mahlzeiten diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('week.meals')}</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -2201,15 +2226,15 @@ export default function DailyScreen() {
           <View style={s.chartLegend}>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBreast]} />
-              <Text style={[s.legendLabel, { color: textSecondary }]}>Stillen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.breast')}</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBottle]} />
-              <Text style={[s.legendLabel, { color: textSecondary }]}>Fläschchen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.bottle')}</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendSolids]} />
-              <Text style={[s.legendLabel, { color: textSecondary }]}>Beikost</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.solids')}</Text>
             </View>
           </View>
         </LiquidGlassCard>
@@ -2217,17 +2242,17 @@ export default function DailyScreen() {
         {/* Wochenzusammenfassung - Design Guide konform (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.weekSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={[s.summaryTitle, { color: textSecondary }]}>Wochenzusammenfassung</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('week.summary')}</Text>
             <View style={s.summaryStats}>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>🍼</Text>
                   <Text style={[s.statValue, { color: textPrimary }]}>{totalFeedings}</Text>
-                  <Text style={[s.statLabel, { color: textSecondary }]}>Mahlzeiten</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.meals')}</Text>
                 </View>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>💧</Text>
                   <Text style={[s.statValue, { color: textPrimary }]}>{totalDiapers}</Text>
-                  <Text style={[s.statLabel, { color: textSecondary }]}>Windeln</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.diapers')}</Text>
                 </View>
             </View>
           </View>
@@ -2368,9 +2393,9 @@ export default function DailyScreen() {
           </TouchableOpacity>
 
           <View style={s.weekHeaderCenter}>
-            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Monatsübersicht</Text>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
             <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
-              {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+              {refMonthDate.toLocaleDateString(DAILY_LOCALE_TAG, { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
@@ -2385,7 +2410,7 @@ export default function DailyScreen() {
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={[s.chartTitle, { color: textSecondary }]}>Aktivitätskalender</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('month.calendar')}</Text>
           <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={s.weekdayHeader}>
@@ -2462,17 +2487,17 @@ export default function DailyScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={s.monthSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={[s.summaryTitle, { color: textSecondary }]}>Monatsübersicht</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
             <View style={s.summaryStats}>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>🍼</Text>
                 <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP' && e.feeding_type !== 'WATER').length}</Text>
-                <Text style={[s.statLabel, { color: textSecondary }]}>Mahlzeiten</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.meals')}</Text>
               </View>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>💧</Text>
                 <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
-                <Text style={[s.statLabel, { color: textSecondary }]}>Windeln</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.diapers')}</Text>
               </View>
             </View>
           </View>
@@ -2495,12 +2520,12 @@ export default function DailyScreen() {
 
     let feedingStatValue = `${feedingOverview.totalBottleMl}`;
     let feedingStatUnit: 'ml' | 'times' = 'ml';
-    let feedingPrimaryDetail = 'Keine Mahlzeit heute';
+    let feedingPrimaryDetail = t('summary.noMeal');
     let feedingSecondaryDetail: string | null = null;
 
     if (feedingOverview.totalFeedingCount > 0) {
       if (hasBottleFeedings) {
-        feedingPrimaryDetail = `Flasche ${feedingOverview.bottleCount}×`;
+        feedingPrimaryDetail = t('daily.bottleCount', { count: feedingOverview.bottleCount });
         feedingSecondaryDetail = [
           hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
           hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
@@ -2555,8 +2580,8 @@ export default function DailyScreen() {
       .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
 
     const lastDiaperTime = lastDiaperEntry
-      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-      : 'Nie';
+      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })
+      : t('summary.never');
 
     return (
       <View style={s.kpiRow}>
@@ -2565,7 +2590,7 @@ export default function DailyScreen() {
           activeOpacity={0.92}
           onPress={() => setShowFeedingOverviewModal(true)}
           accessibilityRole="button"
-          accessibilityLabel="Mahlzeitenübersicht öffnen"
+          accessibilityLabel={t('summary.mealsAccessibility')}
         >
           <GlassCard
             style={[s.kpiCard, s.kpiCardInteractive]}
@@ -2576,7 +2601,7 @@ export default function DailyScreen() {
             <View style={[s.kpiHeaderRow, s.kpiHeaderRowSpaced]}>
               <View style={s.kpiHeaderCopy}>
                 <Text style={s.kpiEmoji}>🍼</Text>
-                <Text style={[s.kpiTitle, { color: textSecondary }]}>Mahlzeiten</Text>
+                <Text style={[s.kpiTitle, { color: textSecondary }]}>{t('summary.meals')}</Text>
               </View>
               <IconSymbol name="chevron.right" size={14} color={textSecondary} />
             </View>
@@ -2593,7 +2618,7 @@ export default function DailyScreen() {
               </Text>
             ) : (
               <Text numberOfLines={1} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
-                Tippe für die Übersicht
+                {t('summary.tap')}
               </Text>
             )}
           </GlassCard>
@@ -2609,11 +2634,11 @@ export default function DailyScreen() {
             <View style={s.kpiHeaderRow}>
               <View style={s.kpiHeaderCopy}>
                 <Text style={s.kpiEmoji}>🧷</Text>
-                <Text style={[s.kpiTitle, { color: textSecondary }]}>Wickeln</Text>
+                <Text style={[s.kpiTitle, { color: textSecondary }]}>{t('summary.diaper')}</Text>
               </View>
             </View>
             <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>{diaperEntries.length}</Text>
-            <Text style={[s.kpiSub, { color: textSecondary }]}>Letzter: {lastDiaperTime}</Text>
+            <Text style={[s.kpiSub, { color: textSecondary }]}>{t('summary.last')} {lastDiaperTime}</Text>
           </GlassCard>
         </View>
       </View>
@@ -2621,8 +2646,8 @@ export default function DailyScreen() {
   };
 
   const headerSubtitle = isReadOnlyPreviewMode
-    ? 'Vorschau-Modus: nur ansehen'
-    : 'Euer Tag – voller kleiner Meilensteine ✨';
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
 
   return (
     <ThemedBackground style={s.backgroundImage}>
@@ -2630,7 +2655,7 @@ export default function DailyScreen() {
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
         <Header
-          title="Unser Tag"
+          title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
@@ -2640,9 +2665,9 @@ export default function DailyScreen() {
 
         {isReadOnlyPreviewMode && (
           <View style={s.readOnlyPreviewBanner}>
-            <Text style={s.readOnlyPreviewTitle}>Nur Vorschau aktiv</Text>
+            <Text style={s.readOnlyPreviewTitle}>{t('preview.active')}</Text>
             <Text style={s.readOnlyPreviewText}>
-              Du schaust den Babymodus an. Eintraege, Timer und Bearbeitung sind gesperrt.
+              {t('preview.banner')}
             </Text>
           </View>
         )}
@@ -2654,10 +2679,10 @@ export default function DailyScreen() {
           onCancel={async () => {
             if (!ensureWritableInCurrentMode()) return;
             if (!activeTimer) return;
-            Alert.alert('Timer abbrechen', 'Willst du den laufenden Eintrag wirklich verwerfen?', [
-              { text: 'Nein', style: 'cancel' },
+            Alert.alert(t('timer.cancelTitle'), t('timer.cancelQuestion'), [
+              { text: t('timer.no'), style: 'cancel' },
               {
-                text: 'Ja, verwerfen',
+                text: t('timer.discard'),
                 style: 'destructive',
                 onPress: async () => {
                   const timerToCancel = activeTimer;
@@ -2695,9 +2720,9 @@ export default function DailyScreen() {
                   <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
                 </TouchableOpacity>
                 <View style={s.weekHeaderCenter}>
-                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>Tagesansicht</Text>
+                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
                   <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
-                    {selectedDate.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}
+                    {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -2740,7 +2765,7 @@ export default function DailyScreen() {
                     </View>
 
                     <View style={s.vitaminDStripCopy}>
-                      <Text style={[s.vitaminDTitle, { color: textPrimary }]}>Vitamin D</Text>
+                      <Text style={[s.vitaminDTitle, { color: textPrimary }]}>{t('vitamin.title')}</Text>
                       <View style={s.vitaminDSignalsRow}>
                         <View style={s.vitaminDSignal}>
                           <View
@@ -2758,11 +2783,11 @@ export default function DailyScreen() {
                           <Text style={[s.vitaminDSignalText, { color: textSecondary }]}>
                             {isSelectedDateToday
                               ? isVitaminDCompleted
-                                ? 'Heute erledigt'
-                                : 'Heute offen'
+                                ? t('vitamin.done')
+                                : t('vitamin.open')
                               : isVitaminDCompleted
-                              ? 'Tag erledigt'
-                              : 'Tag offen'}
+                              ? t('vitamin.dayDone')
+                              : t('vitamin.dayOpen')}
                           </Text>
                         </View>
 
@@ -2782,8 +2807,8 @@ export default function DailyScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={
                           isVitaminDCompleted
-                            ? 'Vitamin-D-Eintrag zurücksetzen'
-                            : 'Vitamin D als gegeben markieren'
+                            ? t('vitamin.resetAccessibility')
+                            : t('vitamin.markAccessibility')
                         }
                       >
                         <Text
@@ -2800,7 +2825,7 @@ export default function DailyScreen() {
                 </GlassCard>
               )}
 
-              <Text style={[s.sectionTitle, { color: textSecondary }]}>Kennzahlen</Text>
+              <Text style={[s.sectionTitle, { color: textSecondary }]}>{t('section.metrics')}</Text>
               {KPISection()}
 
               <View style={s.recipeButtonSection}>
@@ -2810,12 +2835,12 @@ export default function DailyScreen() {
                   onPress={() => router.push('/recipe-generator')}
                 >
                   <IconSymbol name="fork.knife.circle.fill" size={22} color={textPrimary} />
-                  <Text style={[s.recipeText, { color: textPrimary }]}>BLW-Rezepte entdecken</Text>
+                  <Text style={[s.recipeText, { color: textPrimary }]}>{t('section.recipes')}</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={s.timelineSection}>
-                <Text style={[s.sectionTitle, { color: textSecondary }]}>Timeline</Text>
+                <Text style={[s.sectionTitle, { color: textSecondary }]}>{t('section.timeline')}</Text>
 
                 <View style={s.entriesSection}>
                   {showVitaminDTimelinePoint && (
@@ -2878,11 +2903,11 @@ export default function DailyScreen() {
                           >
                             {isSelectedDateToday
                               ? isVitaminDCompleted
-                                ? 'Vitamin D gegeben'
-                                : 'Vitamin D noch offen'
+                                ? t('vitamin.given')
+                                : t('vitamin.notGiven')
                               : isVitaminDCompleted
-                              ? 'Vitamin D dokumentiert'
-                              : 'Vitamin D offen'}
+                              ? t('vitamin.documented')
+                              : t('vitamin.pending')}
                           </Text>
 
                           <View style={s.vitaminDTimelineActions}>
@@ -2901,7 +2926,7 @@ export default function DailyScreen() {
                               onPress={handleToggleVitaminDCompletion}
                               disabled={vitaminDBusy}
                               accessibilityRole="button"
-                              accessibilityLabel="Vitamin-D-Eintrag zurücksetzen"
+                              accessibilityLabel={t('vitamin.resetAccessibility')}
                             >
                               <Text
                                 style={[
@@ -2941,7 +2966,7 @@ export default function DailyScreen() {
                     />
                   ))}
                   {entries.length === 0 && !showVitaminDTimelinePoint && (
-                    <EmptyState type="day" message="Tippe auf ein Symbol um einen Eintrag zu erstellen" />
+                    <EmptyState type="day" message={t('section.createAccessibility')} />
                   )}
                 </View>
               </View>
@@ -2984,9 +3009,9 @@ export default function DailyScreen() {
 
               <View style={s.feedingOverviewHeader}>
                 <View style={s.feedingOverviewHeaderCopy}>
-                  <Text style={[s.feedingOverviewTitle, { color: textPrimary }]}>Mahlzeiten im Überblick</Text>
+                  <Text style={[s.feedingOverviewTitle, { color: textPrimary }]}>{t('meals.title')}</Text>
                   <Text style={[s.feedingOverviewSubtitle, { color: textSecondary }]}>
-                    {selectedDate.toLocaleDateString('de-DE', {
+                    {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, {
                       weekday: 'long',
                       day: '2-digit',
                       month: 'long',
@@ -3024,15 +3049,15 @@ export default function DailyScreen() {
                   style={s.feedingOverviewHero}
                 >
                   <View style={s.feedingOverviewHeroTop}>
-                    <Text style={s.feedingOverviewHeroEyebrow}>HEUTE ERFASST</Text>
+                    <Text style={s.feedingOverviewHeroEyebrow}>{t('meals.eyebrow')}</Text>
                     <Text style={s.feedingOverviewHeroValue}>{feedingOverviewEntryCount}</Text>
                     <Text style={s.feedingOverviewHeroLabel}>
-                      {feedingOverviewEntryCount === 1 ? 'Eintrag rund um Mahlzeiten' : 'Einträge rund um Mahlzeiten'}
+                      {feedingOverviewEntryCount === 1 ? t('meals.one') : t('meals.other')}
                     </Text>
                     <Text style={s.feedingOverviewHeroSubLabel}>
                       {feedingOverviewLatestTime
-                        ? `Letzte Aktivität um ${formatClockTime(feedingOverviewLatestTime)} Uhr`
-                        : 'Noch keine Mahlzeit an diesem Tag dokumentiert'}
+                        ? t('meals.latest', { time: formatClockTime(feedingOverviewLatestTime) ?? '' })
+                        : t('meals.empty')}
                     </Text>
                   </View>
 
@@ -3046,7 +3071,7 @@ export default function DailyScreen() {
                     ) : (
                       <View style={s.feedingOverviewHeroHintCard}>
                         <Text style={s.feedingOverviewHeroHintText}>
-                          Schnell sehen, was gegessen, getrunken oder abgepumpt wurde.
+                          {t('meals.description')}
                         </Text>
                       </View>
                     )}

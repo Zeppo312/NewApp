@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet,
@@ -41,6 +43,9 @@ import {
   DEFAULT_COUNTDOWN_LOCALE,
   getCountdownFruitComparison,
   getCountdownLocaleTag,
+  getLocalizedOverdueInfo,
+  getLocalizedPregnancyInfo,
+  getLocalizedPregnancySymptoms,
   localizeBirthPreparationMeasure,
   translateCountdownText,
 } from '@/lib/countdownTranslations';
@@ -55,13 +60,10 @@ const ACCENT_MINT = '#389D91';
 const ACCENT_ORANGE = '#FF8C42';
 const WARN = '#E57373';
 const TIMELINE_INSET = 8;
-const ACTIVE_COUNTDOWN_LOCALE = DEFAULT_COUNTDOWN_LOCALE;
-const COUNTDOWN_LOCALE_TAG = getCountdownLocaleTag(ACTIVE_COUNTDOWN_LOCALE);
+let ACTIVE_COUNTDOWN_LOCALE = DEFAULT_COUNTDOWN_LOCALE;
+let COUNTDOWN_LOCALE_TAG = getCountdownLocaleTag(ACTIVE_COUNTDOWN_LOCALE);
 const t = (key: CountdownTranslationKey, params?: Record<string, string | number>) =>
   translateCountdownText(ACTIVE_COUNTDOWN_LOCALE, key, params);
-const localizedBirthPreparationMeasures = birthPreparationMeasures.map((measure) =>
-  localizeBirthPreparationMeasure(ACTIVE_COUNTDOWN_LOCALE, measure),
-);
 
 const fruitEmoji: Record<string, string> = {
   'Mohnkorn': '🌱',
@@ -226,6 +228,11 @@ const overdueInfo: Record<number, DayInfo> & { default: DayInfo } = {
 };
 
 export default function CountdownScreen() {
+  ACTIVE_COUNTDOWN_LOCALE = useLocale().locale;
+  COUNTDOWN_LOCALE_TAG = getCountdownLocaleTag(ACTIVE_COUNTDOWN_LOCALE);
+  const localizedBirthPreparationMeasures = birthPreparationMeasures.map((measure) =>
+    localizeBirthPreparationMeasure(ACTIVE_COUNTDOWN_LOCALE, measure),
+  );
   const params = useLocalSearchParams<{ focus?: string }>();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -574,6 +581,9 @@ export default function CountdownScreen() {
   }
 
   const isOverdue = !!dueDate && new Date() > dueDate;
+  const displayedWeek = currentWeek && currentWeek < 43 ? currentWeek : 42;
+  const germanDayInfo = (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default);
+  const localizedOverdueInfo = getLocalizedOverdueInfo(ACTIVE_COUNTDOWN_LOCALE, daysOverdue) ?? germanDayInfo;
 
   return (
     <ThemedBackground style={{ flex: 1 }}>
@@ -610,7 +620,7 @@ export default function CountdownScreen() {
           contentContainerStyle={styles.scrollContent}
         >
           {/* Countdown im Glas-Card */}
-          <LiquidGlassCard style={[styles.sectionCard, styles.heroCard]} intensity={30} overlayColor={glassOverlay}>
+          <LiquidGlassCard style={styles.sectionCard} intensity={30} overlayColor={glassOverlay}>
             <View style={styles.heroHeader}>
               <View style={styles.heroCopy}>
                 <ThemedText style={[styles.heroEyebrow, { color: accentPurple }]}>
@@ -642,7 +652,7 @@ export default function CountdownScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('babySize.accessibility', { week: currentWeek })}
               >
-                <LiquidGlassCard style={[styles.sectionCard, styles.babySizeCard]} intensity={26} overlayColor={glassOverlay}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.babySizeRow}>
                     <View style={[styles.babySizeEmojiWrap, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.12)', borderColor: pillPrimaryBorder }]}>
                       <ThemedText style={styles.babySizeEmoji}>{emoji}</ThemedText>
@@ -753,8 +763,8 @@ export default function CountdownScreen() {
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
-                    ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).baby
-                    : pregnancyWeekInfo[currentWeek < 43 ? currentWeek : 42]}
+                    ? localizedOverdueInfo.baby
+                    : getLocalizedPregnancyInfo(ACTIVE_COUNTDOWN_LOCALE, displayedWeek, 'baby', pregnancyWeekInfo[displayedWeek])}
                 </ThemedText>
               </View>
 
@@ -768,8 +778,8 @@ export default function CountdownScreen() {
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
-                    ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).mother
-                    : pregnancyMotherInfo[currentWeek < 43 ? currentWeek : 42]}
+                    ? localizedOverdueInfo.mother
+                    : getLocalizedPregnancyInfo(ACTIVE_COUNTDOWN_LOCALE, displayedWeek, 'mother', pregnancyMotherInfo[displayedWeek])}
                 </ThemedText>
               </View>
 
@@ -783,8 +793,8 @@ export default function CountdownScreen() {
                 </View>
                 <ThemedText style={[styles.infoText, { color: textSecondary }]}>
                   {isOverdue
-                    ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).partner
-                    : pregnancyPartnerInfo[currentWeek < 43 ? currentWeek : 42]}
+                    ? localizedOverdueInfo.partner
+                    : getLocalizedPregnancyInfo(ACTIVE_COUNTDOWN_LOCALE, displayedWeek, 'partner', pregnancyPartnerInfo[displayedWeek])}
                 </ThemedText>
               </View>
             </LiquidGlassCard>
@@ -803,8 +813,8 @@ export default function CountdownScreen() {
 
               <View style={styles.symptomList}>
                 {(isOverdue
-                  ? (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default).symptoms
-                  : pregnancySymptoms[currentWeek < 43 ? currentWeek : 42]
+                  ? localizedOverdueInfo.symptoms
+                  : getLocalizedPregnancySymptoms(ACTIVE_COUNTDOWN_LOCALE, displayedWeek, pregnancySymptoms[displayedWeek])
                 ).map((symptom: string, idx: number) => (
                   <View key={idx} style={styles.symptomItem}>
                     <IconSymbol name="circle.fill" size={8} color={isOverdue ? warnColor : accentMint} />
@@ -1033,17 +1043,13 @@ const styles = StyleSheet.create({
   },
   readOnlyPreviewTextDark: { color: '#FFD889' },
 
-  heroCard: {
-    paddingHorizontal: 18,
-    paddingTop: 22,
-    paddingBottom: 14,
-  },
   heroHeader: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingHorizontal: 24,
+    paddingTop: 20,
     gap: 12,
   },
   heroCopy: { flex: 1 },
@@ -1178,8 +1184,13 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
-  babySizeCard: { paddingVertical: 22, paddingHorizontal: 20 },
-  babySizeRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 2 },
+  babySizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
   babySizeEmojiWrap: {
     width: 68, height: 68, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',

@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, {
   useCallback,
   useEffect,
@@ -69,9 +71,20 @@ import {
 } from "@/lib/plannerCalendarSync";
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
+import {
+  DEFAULT_PLANNER_LOCALE,
+  getPlannerLocaleTag,
+  PlannerTranslationKey,
+  translatePlannerText,
+} from '@/lib/plannerTranslations';
+
+let ACTIVE_PLANNER_LOCALE = DEFAULT_PLANNER_LOCALE;
+let PLANNER_LOCALE_TAG = getPlannerLocaleTag(ACTIVE_PLANNER_LOCALE);
+const t = (key: PlannerTranslationKey, params?: Record<string, string | number>) =>
+  translatePlannerText(ACTIVE_PLANNER_LOCALE, key, params);
 
 function formatDateHeader(d: Date) {
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
     weekday: "long",
     day: "2-digit",
     month: "short",
@@ -90,7 +103,7 @@ function formatWeekRangeHeader(d: Date) {
   const start = startOfWeek(d);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  const formatter = new Intl.DateTimeFormat("de-DE", {
+  const formatter = new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
     day: "2-digit",
     month: "short",
   });
@@ -98,7 +111,7 @@ function formatWeekRangeHeader(d: Date) {
 }
 
 function formatMonthHeader(d: Date) {
-  return new Intl.DateTimeFormat("de-DE", {
+  return new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
     month: "long",
     year: "numeric",
   }).format(d);
@@ -119,10 +132,10 @@ function buildMonthGrid(date: Date) {
 }
 
 const WEEK_BLOCKS = [
-  { key: "morning", label: "Morgen", start: 5, end: 12 },
-  { key: "midday", label: "Mittag", start: 12, end: 15 },
-  { key: "afternoon", label: "Nachmittag", start: 15, end: 18 },
-  { key: "evening", label: "Abend", start: 18, end: 23.99 },
+  { key: "morning", label: t('dayPart.morning'), start: 5, end: 12 },
+  { key: "midday", label: t('dayPart.midday'), start: 12, end: 15 },
+  { key: "afternoon", label: t('dayPart.afternoon'), start: 15, end: 18 },
+  { key: "evening", label: t('dayPart.evening'), start: 18, end: 23.99 },
 ];
 
 const toRgba = (hex: string, opacity = 1) => {
@@ -175,6 +188,8 @@ function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
 
 // Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function PlannerScreen() {
+  ACTIVE_PLANNER_LOCALE = useLocale().locale;
+  PLANNER_LOCALE_TAG = getPlannerLocaleTag(ACTIVE_PLANNER_LOCALE);
   const access = useFeatureAccess('planner');
 
   if (access.hasAccess === null) return null;
@@ -289,7 +304,7 @@ function PlannerScreenContent() {
     return babies
       .map((baby) => ({
         id: baby.id ?? "",
-        label: baby.name ?? "Baby",
+        label: baby.name ?? t('person.baby'),
       }))
       .filter((opt) => opt.id.length > 0);
   }, [babies]);
@@ -364,7 +379,7 @@ function PlannerScreenContent() {
   const getOwnerLabel = useCallback(
     (ownerId?: string) => {
       if (!ownerId) return undefined;
-      return ownerLabelById[ownerId] ?? "Partner";
+      return ownerLabelById[ownerId] ?? t('person.partner');
     },
     [ownerLabelById],
   );
@@ -374,7 +389,7 @@ function PlannerScreenContent() {
       if (!assignee) return undefined;
 
       if (assignee === "me") {
-        return "Ich";
+        return t('person.me');
       }
 
       if (assignee === "partner") {
@@ -382,20 +397,20 @@ function PlannerScreenContent() {
         if (partnerUser) {
           return displayNameForLinkedUser(partnerUser, 0);
         }
-        return "Partner";
+        return t('person.partner');
       }
 
       if (assignee === "child" && babyId) {
         const baby = babies.find((b) => b.id === babyId);
-        return baby?.name ?? "Kind";
+        return baby?.name ?? t('person.child');
       }
 
       if (assignee === "child") {
-        return "Kind";
+        return t('person.child');
       }
 
       if (assignee === "family") {
-        return "Familie";
+        return t('person.family');
       }
 
       return undefined;
@@ -406,9 +421,9 @@ function PlannerScreenContent() {
   const getDisplayAssigneeLabel = useCallback(
     (assignee?: string, babyId?: string, ownerId?: string) => {
       const assigneeLabel = getAssigneeLabel(assignee, babyId, ownerId);
-      if (assigneeLabel && assigneeLabel !== "Ich") return assigneeLabel;
+      if (assigneeLabel && assigneeLabel !== t('person.me')) return assigneeLabel;
       const ownerLabel = getOwnerLabel(ownerId);
-      if (ownerLabel && ownerLabel !== "Ich") return ownerLabel;
+      if (ownerLabel && ownerLabel !== t('person.me')) return ownerLabel;
       return undefined;
     },
     [getAssigneeLabel, getOwnerLabel],
@@ -524,9 +539,9 @@ function PlannerScreenContent() {
   }, [selectedDate, selectedTab]);
 
   const navTitle = useMemo(() => {
-    if (selectedTab === "week") return "Wochenübersicht";
-    if (selectedTab === "month") return "Monatsübersicht";
-    return "Tagesübersicht";
+    if (selectedTab === "week") return t('view.weekOverview');
+    if (selectedTab === "month") return t('view.monthOverview');
+    return t('view.dayOverview');
   }, [selectedTab]);
 
   const weekDays = useMemo(() => {
@@ -576,24 +591,24 @@ function PlannerScreenContent() {
   const greeting = useMemo(() => {
     const now = new Date();
     const hour = now.getHours();
-    let base = "Hallo";
-    let sub = "Schön, dass du da bist.";
+    let base = t('greeting.hello');
+    let sub = t('greeting.welcome');
 
     if (hour >= 5 && hour < 11) {
-      base = "Guten Morgen";
-      sub = "Bereit für einen neuen Tag?";
+      base = t('greeting.morning');
+      sub = t('greeting.morningSub');
     } else if (hour >= 11 && hour < 17) {
-      base = "Guten Tag";
-      sub = "Was steht heute noch an?";
+      base = t('greeting.day');
+      sub = t('greeting.daySub');
     } else if (hour >= 17 && hour < 22) {
-      base = "Guten Abend";
-      sub = "Lass den Tag entspannt ausklingen.";
+      base = t('greeting.evening');
+      sub = t('greeting.eveningSub');
     } else {
-      base = "Gute Nacht";
-      sub = "Zeit zum Abschalten und Ausruhen.";
+      base = t('greeting.night');
+      sub = t('greeting.nightSub');
     }
 
-    const safeName = profileName?.trim().length ? profileName.trim() : "du";
+    const safeName = profileName?.trim().length ? profileName.trim() : t('greeting.you');
     const nameCapitalized =
       safeName.charAt(0).toUpperCase() + safeName.slice(1);
 
@@ -788,7 +803,7 @@ function PlannerScreenContent() {
       return settings;
     } catch (err) {
       console.error("Planner: failed to load calendar sync settings", err);
-      setCalendarSyncError("Kalender-Sync konnte nicht geladen werden.");
+      setCalendarSyncError(t('sync.loadFailed'));
       return null;
     }
   }, [userId]);
@@ -817,13 +832,13 @@ function PlannerScreenContent() {
             result.deletedApple;
           setCalendarSyncSummary(
             changes > 0
-              ? `${changes} Änderungen synchronisiert`
-              : "Alles aktuell",
+              ? t('sync.changes', { count: changes })
+              : t('sync.current'),
           );
         }
       } catch (err) {
         console.error("Planner: calendar sync failed", err);
-        setCalendarSyncError("Kalender-Sync ist fehlgeschlagen.");
+        setCalendarSyncError(t('sync.failed'));
       } finally {
         calendarSyncRunningRef.current = false;
         if (!options.silent) {
@@ -873,8 +888,8 @@ function PlannerScreenContent() {
       console.error("Planner: calendar sync toggle failed", err);
       setCalendarSyncError(
         enabled
-          ? "Kalender-Sync konnte nicht aktiviert werden."
-          : "Kalender-Sync konnte nicht deaktiviert werden.",
+          ? t('sync.enableFailed')
+          : t('sync.disableFailed'),
       );
     } finally {
       setCalendarSyncLoading(false);
@@ -949,12 +964,12 @@ function PlannerScreenContent() {
       const recurring = parseRecurringId(id);
       if (recurring) {
         Alert.alert(
-          "Wiederkehrenden Eintrag löschen",
-          "Soll nur dieser Tag oder die gesamte Serie gelöscht werden?",
+          t('delete.recurringTitle'),
+          t('delete.recurringQuestion'),
           [
-            { text: "Abbrechen", style: "cancel" },
+            { text: t('common.cancel'), style: "cancel" },
             {
-              text: "Nur diesen Tag löschen",
+              text: t('delete.onlyDay'),
               style: "destructive",
               onPress: () =>
                 handleDeleteItem(
@@ -962,7 +977,7 @@ function PlannerScreenContent() {
                 ),
             },
             {
-              text: "Alle Wiederholungen löschen",
+              text: t('delete.series'),
               style: "destructive",
               onPress: () =>
                 handleDeleteItem(`delete-series:${recurring.seriesId}`),
@@ -981,7 +996,7 @@ function PlannerScreenContent() {
 
       if (error) {
         console.error("Planner: failed to delete item", error);
-        Alert.alert("Fehler", "Der Eintrag konnte nicht gelöscht werden.");
+        Alert.alert(t('common.error'), t('delete.failed'));
       } else {
         await refetch();
         await runCalendarSync({ silent: true });
@@ -989,7 +1004,7 @@ function PlannerScreenContent() {
       }
     } catch (err) {
       console.error("Planner: delete error", err);
-      Alert.alert("Fehler", "Ein Fehler ist aufgetreten.");
+      Alert.alert(t('common.error'), t('delete.unexpected'));
     }
   };
 
@@ -1113,7 +1128,7 @@ function PlannerScreenContent() {
       payload.recurringOccurrenceDate ?? recurringEdit?.occurrenceDate ?? toDateKey(selectedDate);
 
     if (payload.type === "event" && !safeStart) {
-      Alert.alert("Ungültige Zeit", "Der Termin enthält keine gültige Startzeit.");
+      Alert.alert(t('validation.timeTitle'), t('validation.timeMessage'));
       return;
     }
 
@@ -1153,8 +1168,8 @@ function PlannerScreenContent() {
               editingItem.type !== payload.type
             ) {
               Alert.alert(
-                "Nicht unterstützt",
-                "Der Typ kann für nur einen einzelnen Serien-Tag nicht geändert werden.",
+                t('validation.unsupportedTitle'),
+                t('validation.unsupportedMessage'),
               );
               return;
             }
@@ -1284,7 +1299,7 @@ function PlannerScreenContent() {
   };
 
   const calendarSyncLastLabel = calendarSyncSettings?.last_synced_at
-    ? new Intl.DateTimeFormat("de-DE", {
+    ? new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
         day: "2-digit",
         month: "2-digit",
         hour: "2-digit",
@@ -1335,10 +1350,10 @@ function PlannerScreenContent() {
                       ]}
                     >
                       {tab === "day"
-                        ? "Tag"
+                        ? t('view.day')
                         : tab === "week"
-                          ? "Woche"
-                          : "Monat"}
+                          ? t('view.week')
+                          : t('view.month')}
                     </Text>
                   </TouchableOpacity>
                 </GlassCard>
@@ -1363,10 +1378,10 @@ function PlannerScreenContent() {
               accessibilityRole="button"
               accessibilityLabel={
                 selectedTab === "day"
-                  ? "Vorheriger Tag"
+                  ? t('navigation.previousDay')
                   : selectedTab === "week"
-                    ? "Vorherige Woche"
-                    : "Vorheriger Monat"
+                    ? t('navigation.previousWeek')
+                    : t('navigation.previousMonth')
               }
             >
               <ThemedText
@@ -1405,10 +1420,10 @@ function PlannerScreenContent() {
               accessibilityRole="button"
               accessibilityLabel={
                 selectedTab === "day"
-                  ? "Nächster Tag"
+                  ? t('navigation.nextDay')
                   : selectedTab === "week"
-                    ? "Nächste Woche"
-                    : "Nächster Monat"
+                    ? t('navigation.nextWeek')
+                    : t('navigation.nextMonth')
               }
             >
               <ThemedText
@@ -1446,7 +1461,7 @@ function PlannerScreenContent() {
                         { paddingHorizontal: 4, color: textSecondary },
                       ]}
                     >
-                      Heute
+                      {t('common.today')}
                     </ThemedText>
                     <TouchableOpacity
                       style={[
@@ -1465,7 +1480,7 @@ function PlannerScreenContent() {
                       activeOpacity={0.85}
                       onPress={() => setCalendarSyncPanelVisible((prev) => !prev)}
                       accessibilityRole="button"
-                      accessibilityLabel="Apple Kalender Sync Einstellungen"
+                      accessibilityLabel={t('sync.settingsAccessibility')}
                     >
                       {calendarSyncLoading ? (
                         <ActivityIndicator size="small" color={accentEventColor} />
@@ -1507,7 +1522,7 @@ function PlannerScreenContent() {
                                 { color: textPrimary },
                               ]}
                             >
-                              Apple Kalender
+                              {t('sync.title')}
                             </ThemedText>
                             <Text
                               style={[
@@ -1518,9 +1533,9 @@ function PlannerScreenContent() {
                             >
                               {calendarSyncSettings?.enabled
                                 ? calendarSyncLastLabel
-                                  ? `Lotti Baby · zuletzt ${calendarSyncLastLabel}`
-                                  : "Lotti Baby · bereit"
-                                : "Sync ist ausgeschaltet"}
+                                  ? t('sync.last', { time: calendarSyncLastLabel })
+                                  : t('sync.ready')
+                                : t('sync.off')}
                             </Text>
                           </View>
                         </View>
@@ -1557,7 +1572,7 @@ function PlannerScreenContent() {
                             >
                               {calendarSyncError ??
                                 calendarSyncSummary ??
-                                "Bereit zum Synchronisieren"}
+                                t('sync.readyAction')}
                             </Text>
                           )}
                           {calendarSyncSettings?.enabled && (
@@ -1573,7 +1588,7 @@ function PlannerScreenContent() {
                               disabled={calendarSyncLoading}
                               onPress={() => runCalendarSync()}
                               accessibilityRole="button"
-                              accessibilityLabel="Apple Kalender jetzt synchronisieren"
+                              accessibilityLabel={t('sync.actionAccessibility')}
                             >
                               <IconSymbol
                                 name="arrow.triangle.2.circlepath"
@@ -1619,7 +1634,7 @@ function PlannerScreenContent() {
                         { color: textSecondary },
                       ]}
                     >
-                      Aufgaben
+                      {t('tasks.title')}
                     </ThemedText>
                     <View
                       style={[
@@ -1640,7 +1655,7 @@ function PlannerScreenContent() {
                           { color: textPrimary },
                         ]}
                       >
-                        {floatingTodos.length} offen
+                        {t('tasks.open', { count: floatingTodos.length })}
                       </Text>
                     </View>
                   </View>
@@ -1652,8 +1667,8 @@ function PlannerScreenContent() {
                         todo.userId,
                       );
                       const subtitle = displayLabel
-                        ? `Flexibel · ${displayLabel}`
-                        : "Flexibel";
+                        ? t('tasks.flexibleWith', { name: displayLabel })
+                        : t('tasks.flexible');
 
                       return (
                         <View key={todo.id}>
@@ -1698,7 +1713,7 @@ function PlannerScreenContent() {
                             { color: textMuted },
                           ]}
                         >
-                          Keine offenen Aufgaben ohne Datum
+                          {t('tasks.empty')}
                         </Text>
                       </View>
                     )}
@@ -1724,8 +1739,8 @@ function PlannerScreenContent() {
                         accessibilityRole="button"
                         accessibilityLabel={
                           showCompletedFloatingTodos
-                            ? "Erledigte Aufgaben ausblenden"
-                            : "Erledigte Aufgaben anzeigen"
+                            ? t('tasks.hideDone')
+                            : t('tasks.showDone')
                         }
                       >
                         <ThemedText
@@ -1734,7 +1749,7 @@ function PlannerScreenContent() {
                             { color: textPrimary },
                           ]}
                         >
-                          Erledigt
+                          {t('tasks.done')}
                         </ThemedText>
                         <View style={styles.completedToggleRight}>
                           <View
@@ -1778,8 +1793,8 @@ function PlannerScreenContent() {
                               todo.userId,
                             );
                             const subtitle = displayLabel
-                              ? `Flexibel · ${displayLabel}`
-                              : "Flexibel";
+                              ? t('tasks.flexibleWith', { name: displayLabel })
+                              : t('tasks.flexible');
 
                             return (
                               <View key={todo.id}>
@@ -1831,7 +1846,7 @@ function PlannerScreenContent() {
                 <ThemedText
                   style={[styles.calendarTitle, { color: textSecondary }]}
                 >
-                  Wochenplan
+                  {t('calendar.week')}
                 </ThemedText>
 
                 <ScrollView
@@ -1928,7 +1943,7 @@ function PlannerScreenContent() {
                               isToday && { color: accentColor },
                             ]}
                           >
-                            {new Intl.DateTimeFormat("de-DE", {
+                            {new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
                               weekday: "short",
                             }).format(date)}
                           </ThemedText>
@@ -1964,7 +1979,7 @@ function PlannerScreenContent() {
                         <ThemedText
                           style={[styles.weekDateLabel, { color: textMuted }]}
                         >
-                          {new Intl.DateTimeFormat("de-DE", {
+                          {new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
                             month: "short",
                             day: "2-digit",
                           }).format(date)}
@@ -1990,7 +2005,7 @@ function PlannerScreenContent() {
                                 : accentColor;
                             const safeTime = parseSafeDate(item.time);
                             const timeLabel = safeTime
-                              ? new Intl.DateTimeFormat("de-DE", {
+                              ? new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 }).format(safeTime)
@@ -2095,7 +2110,7 @@ function PlannerScreenContent() {
                                           { color: textMuted },
                                         ]}
                                       >
-                                        Ganztägig
+                                        {t('common.allDay')}
                                       </Text>
                                     </>
                                   ) : (
@@ -2195,10 +2210,10 @@ function PlannerScreenContent() {
                   <ThemedText
                     style={[styles.calendarTitle, { color: textSecondary }]}
                   >
-                    Monatskalender
+                    {t('calendar.month')}
                   </ThemedText>
                   <View style={styles.monthHeaderRow}>
-                    {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map((d) => (
+                    {[t('weekday.mon'), t('weekday.tue'), t('weekday.wed'), t('weekday.thu'), t('weekday.fri'), t('weekday.sat'), t('weekday.sun')].map((d) => (
                       <ThemedText
                         key={d}
                         style={[styles.monthHeaderLabel, { color: textMuted }]}

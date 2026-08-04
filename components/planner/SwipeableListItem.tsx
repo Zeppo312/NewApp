@@ -17,6 +17,7 @@ import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { PRIMARY, TEXT_PRIMARY } from "@/constants/PlannerDesign";
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   id: string;
@@ -55,6 +56,12 @@ export const SwipeableListItem: React.FC<Props> = ({
   titleStyle,
   subtitleStyle,
 }) => {
+  const { locale } = useLocale();
+  const c = {
+    de: { done: 'Erledigt', delete: 'Löschen', deleteTitle: 'Eintrag löschen', deleteBody: 'Möchtest du diesen Eintrag wirklich löschen?', cancel: 'Abbrechen', actions: 'Aktionen', edit: 'Bearbeiten', move: 'Zu Block verschieben', tags: 'Tags', task: 'Aufgabe', event: 'Termin', completed: 'erledigt', recurring: 'wiederkehrend', hint: 'Doppeltippen für Optionen, nach rechts wischen zum Erledigen, nach links zum Löschen' },
+    en: { done: 'Done', delete: 'Delete', deleteTitle: 'Delete item', deleteBody: 'Are you sure you want to delete this item?', cancel: 'Cancel', actions: 'Actions', edit: 'Edit', move: 'Move to block', tags: 'Tags', task: 'Task', event: 'Appointment', completed: 'completed', recurring: 'recurring', hint: 'Double-tap for options, swipe right to complete, swipe left to delete' },
+    es: { done: 'Hecho', delete: 'Eliminar', deleteTitle: 'Eliminar entrada', deleteBody: '¿Seguro que quieres eliminar esta entrada?', cancel: 'Cancelar', actions: 'Acciones', edit: 'Editar', move: 'Mover a un bloque', tags: 'Etiquetas', task: 'Tarea', event: 'Cita', completed: 'completada', recurring: 'recurrente', hint: 'Toca dos veces para ver opciones, desliza a la derecha para completar y a la izquierda para eliminar' },
+  }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -85,13 +92,13 @@ export const SwipeableListItem: React.FC<Props> = ({
   const leftActions = () => (
     <View style={[styles.action, styles.left]}>
       <IconSymbol name="checklist" color="#fff" size={24} />
-      <Text style={styles.actionText}>Erledigt</Text>
+      <Text style={styles.actionText}>{c.done}</Text>
     </View>
   );
   const rightActions = () => (
     <View style={[styles.action, styles.right]}>
       <IconSymbol name="trash" color="#fff" size={24} />
-      <Text style={styles.actionText}>Löschen</Text>
+      <Text style={styles.actionText}>{c.delete}</Text>
     </View>
   );
 
@@ -126,12 +133,12 @@ export const SwipeableListItem: React.FC<Props> = ({
             return;
           }
           Alert.alert(
-            "Eintrag löschen",
-            "Möchtest du diesen Eintrag wirklich löschen?",
+            c.deleteTitle,
+            c.deleteBody,
             [
-              { text: "Abbrechen", style: "cancel" },
+              { text: c.cancel, style: "cancel" },
               {
-                text: "Löschen",
+                text: c.delete,
                 style: "destructive",
                 onPress: () => onDelete(id),
               },
@@ -150,17 +157,17 @@ export const SwipeableListItem: React.FC<Props> = ({
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           if (onLongPress) onLongPress(id);
           else
-            Alert.alert("Aktionen", title, [
-              { text: "Bearbeiten" },
-              { text: "Zu Block verschieben" },
-              { text: "Tags" },
-              { text: "Löschen", style: "destructive" },
-              { text: "Abbrechen", style: "cancel" },
+            Alert.alert(c.actions, title, [
+              { text: c.edit },
+              { text: c.move },
+              { text: c.tags },
+              { text: c.delete, style: "destructive" },
+              { text: c.cancel, style: "cancel" },
             ]);
         }}
         accessibilityRole="button"
-        accessibilityLabel={`${type === "todo" ? "Aufgabe" : "Termin"}: ${title}${completed ? ", erledigt" : ""}${isRecurring ? ", wiederkehrend" : ""}`}
-        accessibilityHint="Doppeltippen für Optionen, nach rechts wischen zum Erledigen, nach links zum Verschieben auf morgen"
+        accessibilityLabel={`${type === "todo" ? c.task : c.event}: ${title}${completed ? `, ${c.completed}` : ""}${isRecurring ? `, ${c.recurring}` : ""}`}
+        accessibilityHint={c.hint}
         style={[styles.item, style]}
       >
         {/* Leading area */}

@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
@@ -49,7 +51,7 @@ import {
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
 const BABY_BLUE = '#87CEEB';
-const ACTIVE_PROFILE_LOCALE = DEFAULT_PROFILE_LOCALE;
+let ACTIVE_PROFILE_LOCALE = DEFAULT_PROFILE_LOCALE;
 const t = (
   key: ProfileTranslationKey,
   params?: Record<string, string | number>,
@@ -79,6 +81,7 @@ const lightenHex = (hex: string, amount = 0.35) => {
 };
 
 export default function ProfilScreen() {
+  ACTIVE_PROFILE_LOCALE = useLocale().locale;
   const params = useLocalSearchParams<{
     focus?: string | string[];
     communitySetup?: string | string[];

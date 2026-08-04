@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
+import { useLocale } from '@/contexts/LocaleContext';
 
 interface ConnectionStatusProps {
   showAlways?: boolean; // Show status even when connected
@@ -13,6 +14,12 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   autoCheck = true,
   onRetry
 }) => {
+  const { locale } = useLocale();
+  const c = {
+    de: { failed: 'Verbindungstest fehlgeschlagen', checking: 'Verbindung wird geprüft…', connected: 'Verbindung zur Datenbank aktiv', offline: 'Keine Verbindung zur Datenbank', retry: 'Erneut versuchen' },
+    en: { failed: 'Connection check failed', checking: 'Checking connection…', connected: 'Database connection active', offline: 'No database connection', retry: 'Try again' },
+    es: { failed: 'Falló la comprobación de conexión', checking: 'Comprobando conexión…', connected: 'Conexión con la base de datos activa', offline: 'Sin conexión con la base de datos', retry: 'Reintentar' },
+  }[locale];
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
@@ -26,7 +33,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       setError(result.error || null);
     } catch (err) {
       setIsConnected(false);
-      setError('Verbindungstest fehlgeschlagen');
+      setError(c.failed);
     } finally {
       setIsChecking(false);
     }
@@ -64,7 +71,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         icon: '🔄',
         color: '#ffa500',
         bgColor: 'rgba(255, 165, 0, 0.1)',
-        message: 'Verbindung wird geprüft...'
+        message: c.checking
       };
     }
 
@@ -73,7 +80,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
         icon: '✅',
         color: '#28a745',
         bgColor: 'rgba(40, 167, 69, 0.1)',
-        message: 'Verbindung zur Datenbank aktiv'
+        message: c.connected
       };
     }
 
@@ -81,7 +88,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       icon: '⚠️',
       color: '#dc3545',
       bgColor: 'rgba(220, 53, 69, 0.1)',
-      message: error || 'Keine Verbindung zur Datenbank'
+      message: error || c.offline
     };
   };
 
@@ -100,7 +107,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       
       {!isConnected && !isChecking && (
         <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-          <Text style={styles.retryText}>Erneut versuchen</Text>
+          <Text style={styles.retryText}>{c.retry}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -145,4 +152,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#666',
   },
-}); 
+});

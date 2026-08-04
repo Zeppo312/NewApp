@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Animated, Text, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -41,8 +43,8 @@ interface SelfcareEntry {
   created_at?: string;
 }
 
-const ACTIVE_SELFCARE_LOCALE = DEFAULT_SELFCARE_LOCALE;
-const SELFCARE_LOCALE_TAG = getSelfcareLocaleTag(ACTIVE_SELFCARE_LOCALE);
+let ACTIVE_SELFCARE_LOCALE = DEFAULT_SELFCARE_LOCALE;
+let SELFCARE_LOCALE_TAG = getSelfcareLocaleTag(ACTIVE_SELFCARE_LOCALE);
 const t = (
   key: SelfcareTranslationKey,
   params?: Record<string, string | number>,
@@ -132,6 +134,8 @@ const normalizeDate = (date: Date) => {
 };
 
 export default function SelfcareScreen() {
+  ACTIVE_SELFCARE_LOCALE = useLocale().locale;
+  SELFCARE_LOCALE_TAG = getSelfcareLocaleTag(ACTIVE_SELFCARE_LOCALE);
   const { width: windowWidth } = useWindowDimensions();
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;

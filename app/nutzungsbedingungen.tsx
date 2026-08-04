@@ -8,6 +8,9 @@ import { ThemedText } from '@/components/ThemedText';
 import { LAYOUT_PAD } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getLegalDocument } from '@/lib/legalTranslations';
+import { LocalizedLegalDocument } from '@/components/LocalizedLegalDocument';
 
 const BulletList = ({ items }: { items: string[] }) => (
   <View style={styles.list}>
@@ -31,6 +34,9 @@ const APPLE_EULA_URL = 'https://www.apple.com/legal/internet-services/itunes/dev
 export default function NutzungsbedingungenScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const { locale } = useLocale();
+  const localizedDocument = getLegalDocument(locale, 'terms');
+  if (localizedDocument) return <LocalizedLegalDocument document={localizedDocument} />;
 
   return (
     <>

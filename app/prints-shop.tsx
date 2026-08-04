@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useLocale } from '@/contexts/LocaleContext';
 
 const PRINTS_URL = 'https://lottibaby.de';
 
@@ -35,6 +36,12 @@ const SHOP_WEBVIEW_CUSTOMIZATION = `
 `;
 
 export default function PrintsShopScreen() {
+  const { locale } = useLocale();
+  const copy = {
+    de: { subtitle: 'Shop & Kasse', errorTitle: 'Shop konnte nicht geladen werden', errorText: 'Bitte prüfe deine Verbindung und versuche es erneut.', retry: 'Neu laden' },
+    en: { subtitle: 'Shop & checkout', errorTitle: 'The shop could not be loaded', errorText: 'Check your connection and try again.', retry: 'Reload' },
+    es: { subtitle: 'Tienda y pago', errorTitle: 'No se pudo cargar la tienda', errorText: 'Comprueba tu conexión e inténtalo de nuevo.', retry: 'Volver a cargar' },
+  }[locale];
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
@@ -56,7 +63,7 @@ export default function PrintsShopScreen() {
       <SafeAreaView style={styles.container}>
         <Header
           title="Lotti Baby Shop"
-          subtitle="Shop & Checkout"
+          subtitle={copy.subtitle}
           showBackButton
           onBackPress={handleBackPress}
           showBabySwitcher={false}
@@ -112,9 +119,9 @@ export default function PrintsShopScreen() {
           {loadError ? (
             <View style={styles.errorOverlay}>
               <IconSymbol name="exclamationmark.triangle.fill" size={26} color={theme.accent} />
-              <ThemedText style={styles.errorTitle}>Shop konnte nicht geladen werden</ThemedText>
+              <ThemedText style={styles.errorTitle}>{copy.errorTitle}</ThemedText>
               <ThemedText style={styles.errorText}>
-                Bitte prüfe deine Verbindung und versuche es erneut.
+                {copy.errorText}
               </ThemedText>
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.accent }]}
@@ -123,7 +130,7 @@ export default function PrintsShopScreen() {
                   webViewRef.current?.reload();
                 }}
               >
-                <ThemedText style={styles.retryButtonText}>Neu laden</ThemedText>
+                <ThemedText style={styles.retryButtonText}>{copy.retry}</ThemedText>
               </TouchableOpacity>
             </View>
           ) : null}

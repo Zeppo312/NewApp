@@ -26,6 +26,8 @@ import TextInputOverlay from "@/components/modals/TextInputOverlay";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { getSafePickerDate, parseSafeDate } from "@/lib/safeDate";
 import IOSBottomDatePicker from "@/components/modals/IOSBottomDatePicker";
+import { useLocale } from "@/contexts/LocaleContext";
+import { getPlannerLocaleTag, PlannerTranslationKey, translatePlannerText } from "@/lib/plannerTranslations";
 
 export type PlannerCaptureType = "todo" | "event";
 type FocusField = "title" | "location" | "notes";
@@ -104,13 +106,13 @@ const WEEKDAY_OPTIONS = [
   { value: 7, label: "So" },
 ] as const;
 
-const formatReminderLabel = (minutes?: number | null) => {
-  if (minutes === null || minutes === undefined) return "Keine Erinnerung";
-  if (minutes === 0) return "Zum Start";
-  if (minutes === 60) return "1 Std vorher";
-  if (minutes === 120) return "2 Std vorher";
-  if (minutes === 1440) return "1 Tag vorher";
-  return `${minutes} Min vorher`;
+const formatReminderLabel = (minutes: number | null | undefined, t: (key: PlannerTranslationKey, params?: Record<string, string | number>) => string) => {
+  if (minutes === null || minutes === undefined) return t("reminder.none");
+  if (minutes === 0) return t("reminder.atStart");
+  if (minutes === 60) return t("reminder.oneHour");
+  if (minutes === 120) return t("reminder.twoHours");
+  if (minutes === 1440) return t("reminder.oneDay");
+  return t("reminder.minutes", { count: minutes });
 };
 
 const toRgba = (hex: string, opacity = 1) => {
@@ -158,6 +160,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   onSave,
   onDelete,
 }) => {
+  const { locale } = useLocale();
+  const t = useCallback((key: PlannerTranslationKey, params?: Record<string, string | number>) => translatePlannerText(locale, key, params), [locale]);
+  const localeTag = getPlannerLocaleTag(locale);
   const initialStart = useMemo(() => {
     const d = getSafePickerDate(baseDate, new Date());
     d.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
@@ -223,12 +228,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   const partnerLabel = useMemo(() => {
-    if (!ownerOptions || ownerOptions.length === 0) return "Partner";
+    if (!ownerOptions || ownerOptions.length === 0) return t("person.partner");
     const partnerOption = ownerOptions.find(
       (opt) => opt.id && opt.id !== defaultOwnerId,
     );
-    return partnerOption?.label ?? "Partner";
-  }, [ownerOptions, defaultOwnerId]);
+    return partnerOption?.label ?? t("person.partner");
+  }, [ownerOptions, defaultOwnerId, t]);
 
   const assigneeOptions: {
     key: string;
@@ -237,13 +242,13 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     babyId?: string | null;
   }[] = useMemo(() => {
     const base = [
-      { key: "me", value: "me" as PlannerAssignee, label: "Ich" },
+      { key: "me", value: "me" as PlannerAssignee, label: t("person.me") },
       {
         key: "partner",
         value: "partner" as PlannerAssignee,
         label: partnerLabel,
       },
-      { key: "family", value: "family" as PlannerAssignee, label: "Familie" },
+      { key: "family", value: "family" as PlannerAssignee, label: t("person.family") },
     ];
 
     if (babyOptions && babyOptions.length > 0) {
@@ -261,11 +266,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       {
         key: "child:none",
         value: "child" as PlannerAssignee,
-        label: "Kind",
+        label: t("person.child"),
         babyId: null,
       },
     ];
-  }, [partnerLabel, babyOptions]);
+  }, [partnerLabel, babyOptions, t]);
 
   const selectedBabyLabel = useMemo(
     () => babyOptions?.find((b) => b.id === selectedBabyId)?.label,
@@ -276,14 +281,14 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     if (assignee === "child") {
       if (selectedBabyLabel) return selectedBabyLabel;
       if (babyOptions && babyOptions.length === 1) return babyOptions[0].label;
-      return "Kind";
+      return t("person.child");
     }
-    return assigneeOptions.find((opt) => opt.value === assignee)?.label ?? "Ich";
-  }, [assignee, assigneeOptions, selectedBabyLabel, babyOptions]);
+    return assigneeOptions.find((opt) => opt.value === assignee)?.label ?? t("person.me");
+  }, [assignee, assigneeOptions, selectedBabyLabel, babyOptions, t]);
 
   const selectedReminderLabel = useMemo(
-    () => formatReminderLabel(reminderMinutes),
-    [reminderMinutes],
+    () => formatReminderLabel(reminderMinutes, t),
+    [reminderMinutes, t],
   );
   const sanitizedRepeatDays = useMemo(
     () =>
@@ -305,7 +310,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     const dayKey = (date: Date) =>
       `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
     const timeLabel = (date: Date) =>
-      date.toLocaleTimeString("de-DE", {
+      date.toLocaleTimeString(localeTag, {
         hour: "2-digit",
         minute: "2-digit",
       });
@@ -318,10 +323,10 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
 
-      if (dayKey(date) === dayKey(today)) return "Heute";
-      if (dayKey(date) === dayKey(tomorrow)) return "Morgen";
-      if (dayKey(date) === dayKey(yesterday)) return "Gestern";
-      return new Intl.DateTimeFormat("de-DE", {
+      if (dayKey(date) === dayKey(today)) return t("common.today");
+      if (dayKey(date) === dayKey(tomorrow)) return t("common.tomorrow");
+      if (dayKey(date) === dayKey(yesterday)) return t("common.yesterday");
+      return new Intl.DateTimeFormat(localeTag, {
         day: "2-digit",
         month: "2-digit",
         ...(withYear ? { year: "2-digit" } : {}),
@@ -331,8 +336,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     if (isAllDay) {
       const startLabel = dayLabel(startTime);
       const endLabel = dayLabel(endTime ?? startTime);
-      if (startLabel === endLabel) return `${startLabel} · Ganztägig`;
-      return `${startLabel}–${endLabel} · Ganztägig`;
+      if (startLabel === endLabel) return `${startLabel} · ${t("common.allDay")}`;
+      return `${startLabel}–${endLabel} · ${t("common.allDay")}`;
     }
 
     if (showEnd && endTime) {
@@ -344,8 +349,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       return `${dayLabel(startTime, true)} ${timeLabel(startTime)} – ${dayLabel(endTime, true)} ${timeLabel(endTime)}`;
     }
 
-    return `${dayLabel(startTime)} · ab ${timeLabel(startTime)}`;
-  }, [isAllDay, startTime, endTime, showEnd]);
+    return `${dayLabel(startTime)} · ${t("capture.fromTime", { time: timeLabel(startTime) })}`;
+  }, [isAllDay, startTime, endTime, showEnd, localeTag, t]);
 
   const setEventMode = (nextIsAllDay: boolean) => {
     if (nextIsAllDay === isAllDay) return;
@@ -567,7 +572,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       {Platform.OS === "ios" ? (
         <IOSBottomDatePicker
           visible={visible}
-          title={dateOnly ? `${label} wählen` : label}
+          title={dateOnly ? t("capture.choose", { label }) : label}
           value={getSafePickerDate(value, new Date())}
           mode={dateOnly ? "date" : "datetime"}
           onClose={() => setVisible(false)}
@@ -610,7 +615,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     }
 
     if (repeatEnabled && sanitizedRepeatDays.length === 0) {
-      Alert.alert("Wochentage fehlen", "Bitte wähle mindestens einen Wochentag aus.");
+      Alert.alert(t("capture.weekdaysMissingTitle"), t("capture.weekdaysMissingBody"));
       return;
     }
 
@@ -632,24 +637,24 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     })();
 
     if (currentType === "event" && !safeStart) {
-      Alert.alert("Ungültige Zeit", "Bitte wähle eine gültige Startzeit.");
+      Alert.alert(t("validation.timeTitle"), t("capture.invalidStart"));
       return;
     }
 
     if (currentType === "event" && showEnd && !isAllDay && endTime && !safeEnd) {
-      Alert.alert("Ungültige Zeit", "Bitte wähle eine gültige Endzeit.");
+      Alert.alert(t("validation.timeTitle"), t("capture.invalidEnd"));
       return;
     }
 
     if (currentType === "todo" && hasDueTime && !safeDue && !safeStart) {
-      Alert.alert("Ungültige Zeit", "Bitte wähle einen gültigen Zeitpunkt.");
+      Alert.alert(t("validation.timeTitle"), t("capture.invalidTime"));
       return;
     }
 
     if (repeatEnabled && currentType === "todo" && !hasDueTime) {
       Alert.alert(
-        "Zeit fehlt",
-        "Wiederkehrende Aufgaben brauchen eine Uhrzeit oder ein Fälligkeitsdatum.",
+        t("capture.timeMissingTitle"),
+        t("capture.timeMissingBody"),
       );
       return;
     }
@@ -662,8 +667,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       safeStart.toDateString() !== safeEnd.toDateString()
     ) {
       Alert.alert(
-        "Nicht unterstützt",
-        "Wiederkehrende Termine können in dieser Version nur am selben Tag stattfinden.",
+        t("validation.unsupportedTitle"),
+        t("capture.recurringMultiDay"),
       );
       return;
     }
@@ -674,8 +679,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       normalizedRecurringEnd.getTime() < recurrenceStartReference.getTime()
     ) {
       Alert.alert(
-        "Enddatum ungültig",
-        "Das Enddatum darf nicht vor dem ersten Termin der Serie liegen.",
+        t("capture.invalidEndDateTitle"),
+        t("capture.invalidEndDateBody"),
       );
       return;
     }
@@ -764,12 +769,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       const nextRecurringEndsOn = toDateOnlyKey(payload.recurringEndsOn);
       if (originalRecurringEndsOn !== nextRecurringEndsOn) {
         Alert.alert(
-          "Enddatum ändern",
-          "Das Enddatum gilt immer für die gesamte Serie.",
+          t("capture.changeEndTitle"),
+          t("capture.changeEndBody"),
           [
-            { text: "Abbrechen", style: "cancel" },
+            { text: t("common.cancel"), style: "cancel" },
             {
-              text: "Gesamte Serie",
+              text: t("capture.entireSeries"),
               onPress: () =>
                 submitPayload({
                   ...payload,
@@ -781,12 +786,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
         return;
       }
       Alert.alert(
-        "Änderungen speichern",
-        "Soll die Änderung nur für diesen Tag oder für die gesamte Serie gelten?",
+        t("capture.saveChangesTitle"),
+        t("capture.saveChangesBody"),
         [
-          { text: "Abbrechen", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Nur diesen Tag",
+            text: t("capture.onlyDay"),
             onPress: () =>
               submitPayload({
                 ...payload,
@@ -794,7 +799,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               }),
           },
           {
-            text: "Gesamte Serie",
+            text: t("capture.entireSeries"),
             onPress: () =>
               submitPayload({
                 ...payload,
@@ -818,12 +823,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       editingItem.item.occurrenceDate
     ) {
       Alert.alert(
-        "Wiederkehrenden Eintrag löschen",
-        "Möchtest du nur diesen Tag oder die gesamte Serie löschen?",
+        t("delete.recurringTitle"),
+        t("capture.deleteRecurringBody"),
         [
-          { text: "Abbrechen", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Nur diesen Tag löschen",
+            text: t("delete.onlyDay"),
             style: "destructive",
             onPress: () => {
               onDelete(
@@ -833,7 +838,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             },
           },
           {
-            text: "Alle Wiederholungen löschen",
+            text: t("delete.series"),
             style: "destructive",
             onPress: () => {
               onDelete(`delete-series:${editingItem.item.seriesId}`);
@@ -847,12 +852,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
     if (editingItem.item.isRecurring) {
       Alert.alert(
-        "Eintrag löschen",
-        "Die Serienmetadaten konnten nicht gelesen werden. Möchtest du diesen Eintrag wirklich löschen?",
+        t("capture.deleteTitle"),
+        t("capture.deleteMetadataBody"),
         [
-          { text: "Abbrechen", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text: "Löschen",
+            text: t("common.delete"),
             style: "destructive",
             onPress: () => {
               onDelete(editingItem.item.id);
@@ -865,12 +870,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     }
 
     Alert.alert(
-      "Eintrag löschen",
-      "Möchtest du diesen Eintrag wirklich löschen?",
+      t("capture.deleteTitle"),
+      t("capture.deleteBody"),
       [
-        { text: "Abbrechen", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Löschen",
+          text: t("common.delete"),
           style: "destructive",
           onPress: () => {
             onDelete(editingItem.item.id);
@@ -883,8 +888,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
   const formatDateTime = (date: Date | null) => {
     const safeDate = parseSafeDate(date);
-    if (!safeDate) return "Offen";
-    return safeDate.toLocaleString("de-DE", {
+    if (!safeDate) return t("common.open");
+    return safeDate.toLocaleString(localeTag, {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -894,8 +899,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
   const formatDate = (date: Date | null) => {
     const safeDate = parseSafeDate(date);
-    if (!safeDate) return "Offen";
-    return safeDate.toLocaleDateString("de-DE", {
+    if (!safeDate) return t("common.open");
+    return safeDate.toLocaleDateString(localeTag, {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -1017,20 +1022,20 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               <Text style={[styles.title, { color: theme.text }]}>
                 {editingItem
                   ? currentType === "todo"
-                    ? "Aufgabe bearbeiten"
-                    : "Termin bearbeiten"
+                    ? t("capture.editTodo")
+                    : t("capture.editEvent")
                   : currentType === "todo"
-                    ? "Neue Aufgabe"
-                    : "Neuer Termin"}
+                    ? t("capture.newTodo")
+                    : t("capture.newEvent")}
               </Text>
               <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                {showAdvancedOptions ? "Details bearbeiten" : "Schnell erfassen"}
+                {showAdvancedOptions ? t("capture.details") : t("capture.quick")}
               </Text>
             </View>
             <TouchableOpacity
               style={[styles.roundButton, { backgroundColor: accentColor }]}
               onPress={handleSave}
-              accessibilityLabel="Speichern"
+              accessibilityLabel={t("common.save")}
             >
               <Text style={[styles.roundButtonLabel, { color: "#fff" }]}>
                 ✓
@@ -1072,7 +1077,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               styles.typeSwitchLabelActive,
                           ]}
                         >
-                          {btnType === "todo" ? "Aufgabe" : "Termin"}
+                          {btnType === "todo" ? t("capture.todo") : t("capture.event")}
                         </Text>
                       </TouchableOpacity>
                     ),
@@ -1080,12 +1085,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 </View>
                 {renderInlineField(
                   title,
-                  "Titel",
+                  t("capture.title"),
                   () =>
                     openFocusEditor({
                       field: "title",
-                      label: "Titel",
-                      placeholder: "Titel",
+                      label: t("capture.title"),
+                      placeholder: t("capture.title"),
                     }),
                   [styles.titleInput, { backgroundColor: theme.field }],
                   false,
@@ -1109,8 +1114,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   accessibilityRole="button"
                   accessibilityLabel={
                     showAdvancedOptions
-                      ? "Weniger Optionen anzeigen"
-                      : "Mehr Optionen anzeigen"
+                      ? t("capture.lessA11y")
+                      : t("capture.moreA11y")
                   }
                 >
                   <Text
@@ -1119,7 +1124,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       { color: showAdvancedOptions ? accentColor : theme.text },
                     ]}
                   >
-                    {showAdvancedOptions ? "Weniger Optionen" : "Mehr Optionen"}
+                    {showAdvancedOptions ? t("capture.less") : t("capture.more")}
                   </Text>
                   <Text
                     style={[
@@ -1138,7 +1143,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 {showAdvancedOptions && (
                   <View style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      👤 Für
+                      {t("capture.for")}
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1167,7 +1172,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 <View style={styles.section}>
                   <View style={styles.recurrenceToggleRow}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      🔄 Wiederholen
+                      {t("capture.repeat")}
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1188,7 +1193,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           { color: repeatEnabled ? "#fff" : theme.text },
                         ]}
                       >
-                        {repeatEnabled ? "An" : "Aus"}
+                        {repeatEnabled ? t("capture.on") : t("capture.off")}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1219,7 +1224,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               },
                             ]}
                           >
-                            Jeden Tag
+                            {t("capture.daily")}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1245,7 +1250,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               },
                             ]}
                           >
-                            Wochentags (Mo-Fr)
+                            {t("capture.weekdays")}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -1276,7 +1281,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                                   { color: selected ? "#fff" : theme.text },
                                 ]}
                               >
-                                {day.label}
+                                {t((['weekday.mon', 'weekday.tue', 'weekday.wed', 'weekday.thu', 'weekday.fri', 'weekday.sat', 'weekday.sun'] as PlannerTranslationKey[])[day.value - 1])}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -1289,12 +1294,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           { color: theme.textSecondary },
                         ]}
                       >
-                        Serienende
+                        {t("capture.seriesEnd")}
                       </Text>
                       {recurrenceEndsOn ? (
                         <>
                           {renderDateSelector(
-                            "Endet am",
+                            t("capture.endsOn"),
                             recurrenceEndsOn,
                             showRecurrenceEndPicker,
                             setShowRecurrenceEndPicker,
@@ -1321,7 +1326,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                                 { color: theme.text },
                               ]}
                             >
-                              Ohne Enddatum
+                              {t("capture.noEnd")}
                             </Text>
                           </TouchableOpacity>
                         </>
@@ -1344,7 +1349,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               { color: theme.text },
                             ]}
                           >
-                            Enddatum hinzufügen
+                            {t("capture.addEndDate")}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -1356,7 +1361,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 {currentType === "event" && (
                   <View style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      Zeitraum
+                      {t("capture.period")}
                     </Text>
                     <TouchableOpacity
                       style={[
@@ -1381,12 +1386,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                     {showAdvancedOptions &&
                       renderInlineField(
                         location,
-                        "Ort (optional)",
+                        t("capture.locationOptional"),
                         () =>
                           openFocusEditor({
                             field: "location",
-                            label: "Ort",
-                            placeholder: "Ort (optional)",
+                            label: t("capture.location"),
+                            placeholder: t("capture.locationOptional"),
                           }),
                         [
                           styles.locationField,
@@ -1405,7 +1410,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             { color: theme.textSecondary },
                           ]}
                         >
-                          Erinnerung
+                          {t("capture.reminder")}
                         </Text>
                         <TouchableOpacity
                           style={[
@@ -1436,12 +1441,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 {currentType !== "event" && (
                   <View style={styles.section}>
                     <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      🕒 Zeitpunkt
+                      {t("capture.time")}
                     </Text>
                     {hasDueTime ? (
                       <>
                         {renderDateSelector(
-                          "Fällig",
+                          t("capture.due"),
                           dueTime ?? startTime,
                           showDuePicker,
                           setShowDuePicker,
@@ -1467,7 +1472,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                               { color: theme.text },
                             ]}
                           >
-                            {repeatEnabled ? "Zeit erforderlich" : "Kein Datum setzen"}
+                            {repeatEnabled ? t("capture.timeRequired") : t("capture.noDate")}
                           </Text>
                         </TouchableOpacity>
                       </>
@@ -1489,7 +1494,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             { color: theme.text },
                           ]}
                         >
-                          Datum hinzufügen
+                          {t("capture.addDate")}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1508,7 +1513,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         { marginBottom: 0, color: theme.text },
                       ]}
                     >
-                      📝 Notizen
+                      {t("capture.notes")}
                     </Text>
                     <Text
                       style={[
@@ -1527,12 +1532,12 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   {notesExpanded &&
                     renderInlineField(
                       notes,
-                      "Details hinzufügen...",
+                      t("capture.detailsPlaceholder"),
                       () =>
                         openFocusEditor({
                           field: "notes",
-                          label: "Notizen",
-                          placeholder: "Details hinzufügen...",
+                          label: t("capture.notesPlain"),
+                          placeholder: t("capture.detailsPlaceholder"),
                           multiline: true,
                         }),
                       [
@@ -1566,7 +1571,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         { color: theme.deleteText },
                       ]}
                     >
-                      🗑️ Eintrag löschen
+                      {t("capture.deleteEntry")}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1607,7 +1612,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               >
                 <View style={styles.pickerHeader}>
                   <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    Für wen?
+                    {t("capture.forWhom")}
                   </Text>
                   <TouchableOpacity onPress={() => setShowAssigneePicker(false)}>
                     <Text
@@ -1700,7 +1705,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               >
                 <View style={styles.pickerHeader}>
                   <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    Zeitraum
+                    {t("capture.period")}
                   </Text>
                   <TouchableOpacity
                     onPress={() => {
@@ -1712,7 +1717,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       styles.modalDoneButton,
                       { backgroundColor: accentColor },
                     ]}
-                    accessibilityLabel="Zeitraum übernehmen"
+                    accessibilityLabel={t("capture.applyPeriod")}
                   >
                     <Text
                       style={[styles.modalDoneLabel, { color: "#fff" }]}
@@ -1729,7 +1734,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                     <Text
                       style={[styles.sectionLabel, { color: theme.textSecondary }]}
                     >
-                      🕒 Uhrzeit
+                      {t("capture.clock")}
                     </Text>
                     <View style={styles.timeModeRow}>
                       <TouchableOpacity
@@ -1755,7 +1760,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             isAllDay && styles.timeModeOptionLabelActive,
                           ]}
                         >
-                          Ganztägig
+                          {t("common.allDay")}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -1781,7 +1786,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                             !isAllDay && styles.timeModeOptionLabelActive,
                           ]}
                         >
-                          Mit Uhrzeit
+                          {t("capture.withTime")}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -1790,7 +1795,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   {isAllDay ? (
                     <>
                       {renderDateSelector(
-                        "Von",
+                        t("capture.from"),
                         startTime,
                         showStartPicker,
                         setShowStartPicker,
@@ -1808,7 +1813,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         true,
                       )}
                       {renderDateSelector(
-                        "Bis",
+                        t("capture.to"),
                         endTime ?? startTime,
                         showEndPicker,
                         setShowEndPicker,
@@ -1829,7 +1834,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                   ) : (
                     <>
                       {renderDateSelector(
-                        "Start",
+                        t("capture.start"),
                         startTime,
                         showStartPicker,
                         setShowStartPicker,
@@ -1844,7 +1849,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                       {showEnd && endTime ? (
                         <>
                           {renderDateSelector(
-                            "Ende",
+                            t("capture.end"),
                             endTime,
                             showEndPicker,
                             setShowEndPicker,
@@ -1865,7 +1870,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                                   { color: theme.textSecondary },
                                 ]}
                               >
-                                Endzeit entfernen
+                                {t("capture.removeEnd")}
                               </Text>
                             </TouchableOpacity>
                           )}
@@ -1888,7 +1893,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           <Text
                             style={[styles.timeButtonLabel, { color: theme.text }]}
                           >
-                            Endzeit hinzufügen
+                            {t("capture.addEnd")}
                           </Text>
                         </TouchableOpacity>
                       )}
@@ -1932,7 +1937,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               >
                 <View style={styles.pickerHeader}>
                   <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    Erinnerung
+                    {t("capture.reminder")}
                   </Text>
                   <TouchableOpacity onPress={() => setShowReminderPicker(false)}>
                     <Text
@@ -1970,7 +1975,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                           },
                         ]}
                       >
-                        {formatReminderLabel(minutes)}
+                        {formatReminderLabel(minutes, t)}
                       </Text>
                     </TouchableOpacity>
                   ))}

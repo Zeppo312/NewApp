@@ -32,6 +32,8 @@ import {
   RecipeRecord,
   RecipeUpdate,
 } from '@/lib/recipes';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getRecipeAllergenLabel, RecipeTranslationKey, translateRecipeText } from '@/lib/recipeTranslations';
 
 const AGE_LIMITS = { min: 4, max: 24 };
 
@@ -51,6 +53,9 @@ const CARD_INTERNAL_PADDING = 32;
 const CARD_SPACING = 16;
 
 const MyRecipesScreen = () => {
+  const { locale } = useLocale();
+  const t = (key: RecipeTranslationKey, params?: Record<string, string | number>) =>
+    translateRecipeText(locale, key, params);
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
 
@@ -82,8 +87,8 @@ const MyRecipesScreen = () => {
     } catch (error) {
       console.error('Error loading my recipes:', error);
       Alert.alert(
-        'Fehler beim Laden',
-        'Deine Rezepte konnten nicht geladen werden. Bitte versuche es später erneut.'
+        t('load.errorTitle'),
+        t('load.errorMessage')
       );
     } finally {
       setIsLoading(false);
@@ -152,8 +157,8 @@ const MyRecipesScreen = () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Berechtigung erforderlich',
-          'Wir benötigen Zugriff auf deine Fotos, um Bilder hinzuzufügen.'
+          t('photo.permissionTitle'),
+          t('photo.permissionMessage')
         );
         return;
       }
@@ -186,7 +191,7 @@ const MyRecipesScreen = () => {
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Fehler', 'Das Bild konnte nicht ausgewählt werden.');
+      Alert.alert(t('common.error'), t('photo.pickFailed'));
     }
   };
 
@@ -194,17 +199,17 @@ const MyRecipesScreen = () => {
     if (!selectedRecipe) return;
 
     if (!editTitle.trim()) {
-      Alert.alert('Hinweis', 'Bitte gib einen Rezepttitel ein.');
+      Alert.alert(t('common.notice'), t('validation.titleRequired'));
       return;
     }
 
     if (editIngredients.length === 0) {
-      Alert.alert('Hinweis', 'Bitte füge mindestens eine Zutat hinzu.');
+      Alert.alert(t('common.notice'), t('validation.ingredientsRequired'));
       return;
     }
 
     if (!editInstructions.trim()) {
-      Alert.alert('Hinweis', 'Beschreibe kurz die Zubereitung.');
+      Alert.alert(t('common.notice'), t('validation.instructionsRequired'));
       return;
     }
 
@@ -243,12 +248,12 @@ const MyRecipesScreen = () => {
       }
 
       closeEditModal();
-      Alert.alert('Erfolg', 'Dein Rezept wurde aktualisiert.');
+      Alert.alert(t('common.success'), t('my.updated'));
     } catch (error) {
       console.error('Error updating recipe:', error);
       const message =
-        error instanceof Error ? error.message : 'Beim Aktualisieren ist ein Fehler aufgetreten.';
-      Alert.alert('Fehler', message);
+        error instanceof Error ? error.message : t('my.updateFailed');
+      Alert.alert(t('common.error'), message);
     } finally {
       setIsSubmitting(false);
     }
@@ -256,12 +261,12 @@ const MyRecipesScreen = () => {
 
   const handleDeleteRecipe = (recipe: RecipeRecord) => {
     Alert.alert(
-      'Rezept löschen',
-      `Möchtest du "${recipe.title}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      t('my.deleteTitle'),
+      t('my.deleteQuestion'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('my.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -271,14 +276,14 @@ const MyRecipesScreen = () => {
                 throw error;
               }
               setRecipes((prev) => prev.filter((item) => item.id !== recipe.id));
-              Alert.alert('Erfolg', 'Das Rezept wurde gelöscht.');
+              Alert.alert(t('common.success'), t('my.deleted'));
             } catch (error) {
               console.error('Error deleting recipe:', error);
               const message =
                 error instanceof Error
                   ? error.message
-                  : 'Beim Löschen ist ein Fehler aufgetreten.';
-              Alert.alert('Fehler', message);
+                  : t('my.deleteFailed');
+              Alert.alert(t('common.error'), message);
             } finally {
               setIsDeleting(false);
             }
@@ -295,8 +300,8 @@ const MyRecipesScreen = () => {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
           <Header
-            title='Meine Rezepte'
-            subtitle='Bearbeite und verwalte deine eigenen Rezepte'
+            title={t('my.title')}
+            subtitle={t('my.subtitle')}
             showBackButton
             onBackPress={() => router.back()}
           />
@@ -309,7 +314,7 @@ const MyRecipesScreen = () => {
               {isLoading ? (
                 <View style={styles.loadingWrapper}>
                   <ActivityIndicator size='large' color={PRIMARY} />
-                  <ThemedText style={styles.loadingText}>Rezepte werden geladen ...</ThemedText>
+                  <ThemedText style={styles.loadingText}>{t('catalog.loading')}</ThemedText>
                 </View>
               ) : recipes.length === 0 ? (
                 <LiquidGlassCard
@@ -321,10 +326,10 @@ const MyRecipesScreen = () => {
                   <View style={styles.emptyStateBody}>
                     <IconSymbol name='sparkles' size={24} color={PRIMARY} />
                     <ThemedText style={styles.emptyStateTitle}>
-                      Noch keine eigenen Rezepte
+                      {t('my.emptyTitle')}
                     </ThemedText>
                     <ThemedText style={styles.emptyStateText}>
-                      Erstelle dein erstes Rezept im Rezept-Generator!
+                      {t('my.emptyText')}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
@@ -354,14 +359,14 @@ const MyRecipesScreen = () => {
                         <View style={styles.imageHeaderBadge}>
                           <IconSymbol name='clock' size={14} color='#FFFFFF' />
                           <ThemedText style={styles.imageHeaderBadgeText}>
-                            ab {recipe.min_months} M
+                            {t('age.fromShort', { count: recipe.min_months })}
                           </ThemedText>
                         </View>
                         {!!recipe.allergens.length && (
                           <View style={[styles.imageHeaderBadge, styles.imageHeaderWarn]}>
                             <IconSymbol name='exclamationmark.triangle.fill' size={14} color='#FFFFFF' />
                             <ThemedText style={styles.imageHeaderBadgeText}>
-                              {recipe.allergens.join(', ')}
+                              {recipe.allergens.map((allergen) => getRecipeAllergenLabel(locale, allergen)).join(', ')}
                             </ThemedText>
                           </View>
                         )}
@@ -377,19 +382,19 @@ const MyRecipesScreen = () => {
                         numberOfLines={2}
                         ellipsizeMode='tail'
                       >
-                        {recipe.description ?? 'Leckeres BLW-Gericht.'}
+                        {recipe.description ?? t('catalog.fallbackDescription')}
                       </ThemedText>
                       <View style={styles.catalogMetaRow}>
                         <View style={styles.statPill}>
                           <IconSymbol name='checklist' size={14} color={PRIMARY} />
                           <ThemedText style={styles.statText}>
-                            {recipe.ingredients.length} Zutaten
+                            {t(recipe.ingredients.length === 1 ? 'recipe.ingredients.one' : 'recipe.ingredients.other', { count: recipe.ingredients.length })}
                           </ThemedText>
                         </View>
                         {recipe.video_url ? (
                           <View style={styles.statPill}>
                             <IconSymbol name='play.rectangle.fill' size={14} color={PRIMARY} />
-                            <ThemedText style={styles.statText}>Videokurs</ThemedText>
+                            <ThemedText style={styles.statText}>{t('video.badge')}</ThemedText>
                           </View>
                         ) : null}
                       </View>
@@ -402,7 +407,7 @@ const MyRecipesScreen = () => {
                         activeOpacity={0.85}
                       >
                         <IconSymbol name='pencil' size={18} color='#FFFFFF' />
-                        <ThemedText style={styles.editButtonText}>Bearbeiten</ThemedText>
+                        <ThemedText style={styles.editButtonText}>{t('my.edit')}</ThemedText>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.deleteButton}
@@ -411,7 +416,7 @@ const MyRecipesScreen = () => {
                         disabled={isDeleting}
                       >
                         <IconSymbol name='trash' size={18} color='#FFFFFF' />
-                        <ThemedText style={styles.deleteButtonText}>Löschen</ThemedText>
+                        <ThemedText style={styles.deleteButtonText}>{t('my.delete')}</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </LiquidGlassCard>
@@ -453,9 +458,9 @@ const MyRecipesScreen = () => {
                 <IconSymbol name='xmark' size={18} color='#7D5A50' />
               </TouchableOpacity>
               <View style={styles.recipeModalHeaderCenter}>
-                <ThemedText style={styles.recipeModalHeaderTitle}>Rezept bearbeiten</ThemedText>
+                <ThemedText style={styles.recipeModalHeaderTitle}>{t('my.editTitle')}</ThemedText>
                 <ThemedText style={styles.recipeModalHeaderSubtitle}>
-                  Aktualisiere dein Rezept
+                  {t('my.editSubtitle')}
                 </ThemedText>
               </View>
               <View style={styles.recipeModalHeaderSpacer} />
@@ -465,20 +470,20 @@ const MyRecipesScreen = () => {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Titel</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.name')}</ThemedText>
                 <TextInput
                   style={styles.formInput}
-                  placeholder='z. B. Cremige Kürbis-Pasta'
+                  placeholder={t('form.namePlaceholder')}
                   value={editTitle}
                   onChangeText={setEditTitle}
                   placeholderTextColor='rgba(0,0,0,0.35)'
                 />
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Kurzbeschreibung</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.description')}</ThemedText>
                 <TextInput
                   style={[styles.formInput, styles.formMultiline]}
-                  placeholder='Was macht das Rezept besonders?'
+                  placeholder={t('form.descriptionPlaceholder')}
                   value={editDescription}
                   onChangeText={setEditDescription}
                   multiline
@@ -488,7 +493,7 @@ const MyRecipesScreen = () => {
               </View>
               <View style={styles.formRow}>
                 <View style={styles.formRowItem}>
-                  <ThemedText style={styles.formLabel}>Alter (Monate)</ThemedText>
+                  <ThemedText style={styles.formLabel}>{t('form.age')}</ThemedText>
                   <TextInput
                     style={styles.formInput}
                     placeholder={`${AGE_LIMITS.min}-${AGE_LIMITS.max}`}
@@ -500,10 +505,10 @@ const MyRecipesScreen = () => {
                   />
                 </View>
                 <View style={styles.formRowItem}>
-                  <ThemedText style={styles.formLabel}>Optionaler Tipp</ThemedText>
+                  <ThemedText style={styles.formLabel}>{t('form.tip')}</ThemedText>
                   <TextInput
                     style={styles.formInput}
-                    placeholder='Tricks oder Variation'
+                    placeholder={t('form.tipPlaceholder')}
                     value={editTip}
                     onChangeText={setEditTip}
                     placeholderTextColor='rgba(0,0,0,0.35)'
@@ -511,11 +516,11 @@ const MyRecipesScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Zutaten</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.ingredients')}</ThemedText>
                 <View style={styles.formRow}>
                   <TextInput
                     style={[styles.formInput, styles.formRowInput]}
-                    placeholder='Zutat eingeben'
+                    placeholder={t('form.ingredientPlaceholder')}
                     value={editIngredientInput}
                     onChangeText={setEditIngredientInput}
                     onSubmitEditing={addIngredientToForm}
@@ -532,7 +537,7 @@ const MyRecipesScreen = () => {
                 <View style={styles.formChipRow}>
                   {editIngredients.length === 0 ? (
                     <ThemedText style={styles.formChipHint}>
-                      Noch keine Zutaten hinzugefügt.
+                      {t('form.noIngredients')}
                     </ThemedText>
                   ) : (
                     editIngredients.map((ingredient) => (
@@ -550,7 +555,7 @@ const MyRecipesScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Allergene</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.allergens')}</ThemedText>
                 <View style={styles.formChipRow}>
                   {ALLERGEN_OPTIONS.map((option) => {
                     const isSelected = editAllergens.includes(option.id);
@@ -570,7 +575,7 @@ const MyRecipesScreen = () => {
                             isSelected && styles.formAllergenLabelSelected,
                           ]}
                         >
-                          {option.label}
+                          {getRecipeAllergenLabel(locale, option.id)}
                         </ThemedText>
                       </TouchableOpacity>
                     );
@@ -578,10 +583,10 @@ const MyRecipesScreen = () => {
                 </View>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Anleitung</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.instructions')}</ThemedText>
                 <TextInput
                   style={[styles.formInput, styles.formMultiline, styles.formInstructions]}
-                  placeholder='Beschreibe die Zubereitungsschritte'
+                  placeholder={t('form.instructionsPlaceholder')}
                   value={editInstructions}
                   onChangeText={setEditInstructions}
                   multiline
@@ -590,10 +595,10 @@ const MyRecipesScreen = () => {
                 />
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Videokurs-Link (optional)</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.video')}</ThemedText>
                 <TextInput
                   style={styles.formInput}
-                  placeholder='YouTube-Link einfuegen'
+                  placeholder={t('form.videoPlaceholder')}
                   value={editVideoUrl}
                   onChangeText={setEditVideoUrl}
                   autoCapitalize='none'
@@ -602,11 +607,11 @@ const MyRecipesScreen = () => {
                   placeholderTextColor='rgba(0,0,0,0.35)'
                 />
                 <ThemedText style={styles.formChipHint}>
-                  Der Link wird in der App als reduzierter Start/Stop-Videokurs eingebettet.
+                  {t('form.videoHint')}
                 </ThemedText>
               </View>
               <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Bild (optional)</ThemedText>
+                <ThemedText style={styles.formLabel}>{t('form.image')}</ThemedText>
                 {editImage ? (
                   <View style={styles.formImagePreviewWrapper}>
                     <Image source={{ uri: editImage }} style={styles.formImagePreview} />
@@ -619,7 +624,7 @@ const MyRecipesScreen = () => {
                       activeOpacity={0.85}
                     >
                       <IconSymbol name='trash' size={18} color='#FFFFFF' />
-                      <ThemedText style={styles.formImageRemoveText}>Entfernen</ThemedText>
+                      <ThemedText style={styles.formImageRemoveText}>{t('common.remove')}</ThemedText>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -630,7 +635,7 @@ const MyRecipesScreen = () => {
                   >
                     <IconSymbol name='camera' size={22} color={PRIMARY} />
                     <ThemedText style={styles.formImagePickerText}>
-                      Bild aus der Mediathek wählen
+                      {t('form.imagePicker')}
                     </ThemedText>
                   </TouchableOpacity>
                 )}
@@ -642,7 +647,7 @@ const MyRecipesScreen = () => {
                   activeOpacity={0.85}
                   disabled={isSubmitting}
                 >
-                  <ThemedText style={styles.formCancelText}>Abbrechen</ThemedText>
+                  <ThemedText style={styles.formCancelText}>{t('common.cancel')}</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.formActionButton, styles.formSubmitButton]}
@@ -653,7 +658,7 @@ const MyRecipesScreen = () => {
                   {isSubmitting ? (
                     <ActivityIndicator color='#FFFFFF' />
                   ) : (
-                    <ThemedText style={styles.formSubmitText}>Speichern</ThemedText>
+                    <ThemedText style={styles.formSubmitText}>{t('common.save')}</ThemedText>
                   )}
                 </TouchableOpacity>
               </View>

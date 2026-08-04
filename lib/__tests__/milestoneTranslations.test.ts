@@ -7,8 +7,11 @@ import {
 } from '../milestoneTranslations';
 
 describe('milestone translations', () => {
-  it('keeps the German and English catalogs in sync', () => {
+  it('keeps all locale catalogs in sync', () => {
     expect(Object.keys(MILESTONE_TRANSLATIONS.en).sort()).toEqual(
+      Object.keys(MILESTONE_TRANSLATIONS.de).sort(),
+    );
+    expect(Object.keys(MILESTONE_TRANSLATIONS.es).sort()).toEqual(
       Object.keys(MILESTONE_TRANSLATIONS.de).sort(),
     );
   });
@@ -16,6 +19,7 @@ describe('milestone translations', () => {
   it('translates categories and interpolates values', () => {
     expect(getMilestoneCategoryLabel('de', 'ernaehrung')).toBe('Ernährung');
     expect(getMilestoneCategoryLabel('en', 'ernaehrung')).toBe('Food');
+    expect(getMilestoneCategoryLabel('es', 'ernaehrung')).toBe('Alimentación');
     expect(translateMilestoneText('en', 'card.page', { number: '03' })).toBe('PAGE 03');
   });
 

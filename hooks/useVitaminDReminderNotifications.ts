@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import { cancelVitaminDReminder, syncVitaminDReminderSchedule } from '@/lib/vitaminDReminder';
+import { useLocale } from '@/contexts/LocaleContext';
 
 export function useVitaminDReminderNotifications(
   enabled: boolean,
@@ -8,6 +9,7 @@ export function useVitaminDReminderNotifications(
   minute: number,
   userId?: string | null,
 ) {
+  const { locale } = useLocale();
   useEffect(() => {
     if (!userId) {
       return;
@@ -26,6 +28,7 @@ export function useVitaminDReminderNotifications(
         enabled,
         hour,
         minute,
+        locale,
       });
 
       if (!active) {
@@ -47,5 +50,5 @@ export function useVitaminDReminderNotifications(
     return () => {
       active = false;
     };
-  }, [enabled, hour, minute, userId]);
+  }, [enabled, hour, locale, minute, userId]);
 }

@@ -1,5 +1,6 @@
 import type { SleepEntry } from '@/lib/sleepData';
 import type { BabyCareEntry } from '@/lib/supabase';
+import { getAppLocaleTag, type AppLocale } from '@/lib/localization';
 
 export type CareAnalyticsPeriod = 'week' | 'month' | 'year';
 export type CareMetricKey = 'sleep' | 'feeding' | 'diaper';
@@ -57,11 +58,11 @@ export type CareAnalyticsReport = {
   relationship: CareRelationship;
 };
 
-const METRIC_META: Record<CareMetricKey, { label: string; emoji: string }> = {
-  sleep: { label: 'Schlaf', emoji: '💤' },
-  feeding: { label: 'Mahlzeiten', emoji: '🍼' },
-  diaper: { label: 'Windeln', emoji: '💧' },
-};
+const metricMeta = (locale: AppLocale): Record<CareMetricKey, { label: string; emoji: string }> => ({
+  sleep: { label: locale === 'en' ? 'Sleep' : locale === 'es' ? 'Sueño' : 'Schlaf', emoji: '💤' },
+  feeding: { label: locale === 'en' ? 'Feeds' : locale === 'es' ? 'Tomas' : 'Mahlzeiten', emoji: '🍼' },
+  diaper: { label: locale === 'en' ? 'Diapers' : locale === 'es' ? 'Pañales' : 'Windeln', emoji: '💧' },
+});
 
 const startOfDay = (value: Date) => {
   const date = new Date(value);
@@ -204,21 +205,21 @@ const percentChange = (current: number | null, previous: number | null) => {
   return ((current - previous) / previous) * 100;
 };
 
-const dailyTrend = (days: DailyCareMetric[]): CareTrendPoint[] =>
+const dailyTrend = (days: DailyCareMetric[], locale: AppLocale): CareTrendPoint[] =>
   days.map((day, index) => ({
     key: day.key,
     label:
       days.length <= 7
-        ? day.date.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '')
+        ? day.date.toLocaleDateString(getAppLocaleTag(locale), { weekday: 'short' }).replace('.', '')
         : index === 0 || index === days.length - 1 || index % 5 === 0
-          ? day.date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+          ? day.date.toLocaleDateString(getAppLocaleTag(locale), { day: '2-digit', month: '2-digit' })
           : '',
     sleep: day.sleepMinutes > 0 ? day.sleepMinutes : null,
     feeding: day.feedingCount > 0 ? day.feedingCount : null,
     diaper: day.diaperCount > 0 ? day.diaperCount : null,
   }));
 
-const monthlyTrend = (days: DailyCareMetric[]): CareTrendPoint[] => {
+const monthlyTrend = (days: DailyCareMetric[], locale: AppLocale): CareTrendPoint[] => {
   const buckets = new Map<string, DailyCareMetric[]>();
   days.forEach((day) => {
     const key = `${day.date.getFullYear()}-${day.date.getMonth()}`;
@@ -228,7 +229,7 @@ const monthlyTrend = (days: DailyCareMetric[]): CareTrendPoint[] => {
     const month = bucket[0].date;
     return {
       key,
-      label: month.toLocaleDateString('de-DE', { month: 'short' }).replace('.', ''),
+      label: month.toLocaleDateString(getAppLocaleTag(locale), { month: 'short' }).replace('.', ''),
       sleep: averageRecorded(bucket, 'sleep').value,
       feeding: averageRecorded(bucket, 'feeding').value,
       diaper: averageRecorded(bucket, 'diaper').value,
@@ -254,9 +255,9 @@ const pearson = (pairs: { x: number; y: number }[]): number | null => {
   return denominator > 0 ? numerator / denominator : null;
 };
 
-const relationshipLabel = (metric: CareMetricKey) => METRIC_META[metric].label;
+const relationshipLabel = (metric: CareMetricKey, locale: AppLocale) => metricMeta(locale)[metric].label;
 
-const buildRelationship = (days: DailyCareMetric[]): CareRelationship => {
+const buildRelationship = (days: DailyCareMetric[], locale: AppLocale): CareRelationship => {
   const candidates: [CareMetricKey, CareMetricKey][] = [
     ['feeding', 'sleep'],
     ['diaper', 'sleep'],
@@ -273,71 +274,73 @@ const buildRelationship = (days: DailyCareMetric[]): CareRelationship => {
 
   const best = ranked[0];
   const coefficient = best.coefficient;
-  const title = `${relationshipLabel(best.x)} & ${relationshipLabel(best.y)}`;
+  const title = `${relationshipLabel(best.x, locale)} & ${relationshipLabel(best.y, locale)}`;
   if (coefficient === null) {
     return {
       ...best,
       coefficient,
       sampleDays: best.points.length,
       title,
-      description: `Für eine belastbare Gegenüberstellung braucht Lotti mindestens 8 Tage mit beiden Werten. Aktuell sind es ${best.points.length}.`,
+      description: locale === 'en' ? `Lotti needs at least 8 days with both values for a reliable comparison. There are currently ${best.points.length}.` : locale === 'es' ? `Lotti necesita al menos 8 días con ambos valores para una comparación fiable. Ahora hay ${best.points.length}.` : `Für eine belastbare Gegenüberstellung braucht Lotti mindestens 8 Tage mit beiden Werten. Aktuell sind es ${best.points.length}.`,
     };
   }
 
-  const strength = Math.abs(coefficient) >= 0.6 ? 'deutlicher' : Math.abs(coefficient) >= 0.35 ? 'leichter' : 'kein klarer';
-  const direction = coefficient >= 0 ? 'gleichläufiger' : 'gegenläufiger';
+  const clear = Math.abs(coefficient) >= 0.35;
   return {
     ...best,
     coefficient,
     sampleDays: best.points.length,
     title,
     description:
-      strength === 'kein klarer'
-        ? `In ${best.points.length} gemeinsamen Tagen zeigt sich kein klarer Zusammenhang.`
-        : `In ${best.points.length} gemeinsamen Tagen zeigt sich ein ${strength} ${direction} Zusammenhang. Das ist ein Muster, keine Ursache.`,
+      !clear
+        ? locale === 'en' ? `No clear relationship appears across ${best.points.length} shared days.` : locale === 'es' ? `No aparece una relación clara en ${best.points.length} días comunes.` : `In ${best.points.length} gemeinsamen Tagen zeigt sich kein klarer Zusammenhang.`
+        : locale === 'en' ? `A ${Math.abs(coefficient) >= 0.6 ? 'clear' : 'slight'} ${coefficient >= 0 ? 'parallel' : 'inverse'} relationship appears across ${best.points.length} shared days. This is a pattern, not a cause.` : locale === 'es' ? `En ${best.points.length} días comunes aparece una relación ${Math.abs(coefficient) >= 0.6 ? 'clara' : 'leve'} ${coefficient >= 0 ? 'paralela' : 'inversa'}. Es un patrón, no una causa.` : `In ${best.points.length} gemeinsamen Tagen zeigt sich ein ${Math.abs(coefficient) >= 0.6 ? 'deutlicher' : 'leichter'} ${coefficient >= 0 ? 'gleichläufiger' : 'gegenläufiger'} Zusammenhang. Das ist ein Muster, keine Ursache.`,
   };
 };
 
-const formatMinutes = (minutes: number) => {
+const formatMinutes = (minutes: number, locale: AppLocale) => {
   const rounded = Math.round(minutes);
   const hours = Math.floor(rounded / 60);
   const rest = rounded % 60;
-  return hours > 0 ? `${hours} Std${rest ? ` ${rest} Min` : ''}` : `${rest} Min`;
+  const hour = locale === 'de' ? 'Std' : locale === 'en' ? 'hr' : 'h';
+  const minute = locale === 'de' ? 'Min' : 'min';
+  return hours > 0 ? `${hours} ${hour}${rest ? ` ${rest} ${minute}` : ''}` : `${rest} ${minute}`;
 };
 
-const buildNarrative = (summaries: CareMetricSummary[], coverageDays: number, totalDays: number) => {
+const buildNarrative = (summaries: CareMetricSummary[], coverageDays: number, totalDays: number, locale: AppLocale) => {
   const comparable = summaries
     .filter((summary) => summary.changePercent !== null)
     .sort((a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0));
   const strongest = comparable[0];
   const headline = strongest && Math.abs(strongest.changePercent ?? 0) >= 5
-    ? `${strongest.label} ${strongest.changePercent! >= 0 ? 'über' : 'unter'} dem Vergleichszeitraum`
+    ? locale === 'en' ? `${strongest.label} ${strongest.changePercent! >= 0 ? 'above' : 'below'} the comparison period` : locale === 'es' ? `${strongest.label} ${strongest.changePercent! >= 0 ? 'por encima' : 'por debajo'} del periodo de comparación` : `${strongest.label} ${strongest.changePercent! >= 0 ? 'über' : 'unter'} dem Vergleichszeitraum`
     : coverageDays >= Math.min(totalDays, 5)
-      ? 'Euer Rhythmus wird sichtbar'
-      : 'Lotti sammelt noch euren Rhythmus';
+      ? locale === 'en' ? 'Your rhythm is becoming visible' : locale === 'es' ? 'Vuestro ritmo empieza a verse' : 'Euer Rhythmus wird sichtbar'
+      : locale === 'en' ? 'Lotti is still learning your rhythm' : locale === 'es' ? 'Lotti aún está aprendiendo vuestro ritmo' : 'Lotti sammelt noch euren Rhythmus';
 
   const insightLines: string[] = [];
   comparable.slice(0, 2).forEach((summary) => {
     const change = Math.round(Math.abs(summary.changePercent ?? 0));
     if (change < 3) {
-      insightLines.push(`${summary.label} war nahezu stabil gegenüber dem Vergleichszeitraum.`);
+      insightLines.push(locale === 'en' ? `${summary.label} was almost stable compared with the previous period.` : locale === 'es' ? `${summary.label} se mantuvo casi estable frente al periodo anterior.` : `${summary.label} war nahezu stabil gegenüber dem Vergleichszeitraum.`);
     } else {
-      insightLines.push(`${summary.label} lag im Tagesdurchschnitt ${change} % ${summary.changePercent! >= 0 ? 'höher' : 'niedriger'}.`);
+      insightLines.push(locale === 'en' ? `${summary.label} averaged ${change}% ${summary.changePercent! >= 0 ? 'higher' : 'lower'} per day.` : locale === 'es' ? `${summary.label} tuvo una media diaria un ${change} % ${summary.changePercent! >= 0 ? 'mayor' : 'menor'}.` : `${summary.label} lag im Tagesdurchschnitt ${change} % ${summary.changePercent! >= 0 ? 'höher' : 'niedriger'}.`);
     }
   });
   if (insightLines.length === 0) {
-    insightLines.push('Sobald in beiden Zeiträumen mehrere Tage erfasst sind, zeigt Lotti Veränderungen zuverlässig an.');
+    insightLines.push(locale === 'en' ? 'Once several days are recorded in both periods, Lotti can show changes reliably.' : locale === 'es' ? 'Cuando haya varios días registrados en ambos periodos, Lotti mostrará los cambios de forma fiable.' : 'Sobald in beiden Zeiträumen mehrere Tage erfasst sind, zeigt Lotti Veränderungen zuverlässig an.');
   }
   const sleep = summaries.find((summary) => summary.key === 'sleep');
   if (sleep?.value !== null && sleep?.value !== undefined) {
-    insightLines.push(`An erfassten Schlaftagen waren es im Mittel ${formatMinutes(sleep.value)}.`);
+    insightLines.push(locale === 'en' ? `Recorded sleep days averaged ${formatMinutes(sleep.value, locale)}.` : locale === 'es' ? `En los días con sueño registrado, la media fue de ${formatMinutes(sleep.value, locale)}.` : `An erfassten Schlaftagen waren es im Mittel ${formatMinutes(sleep.value, locale)}.`);
   }
   return { headline, insightLines: insightLines.slice(0, 3) };
 };
 
-const formatRange = (start: Date, end: Date) => {
+const formatRange = (start: Date, end: Date, locale: AppLocale) => {
   const sameYear = start.getFullYear() === end.getFullYear();
-  return `${start.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: sameYear ? undefined : 'numeric' })} – ${end.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  const localeTag = getAppLocaleTag(locale);
+  return `${start.toLocaleDateString(localeTag, { day: '2-digit', month: 'short', year: sameYear ? undefined : 'numeric' })} – ${end.toLocaleDateString(localeTag, { day: '2-digit', month: 'short', year: 'numeric' })}`;
 };
 
 export const getCareAnalyticsEarliestDate = (now = new Date()) => {
@@ -350,11 +353,13 @@ export const buildCareAnalyticsReport = ({
   careEntries,
   sleepEntries,
   now = new Date(),
+  locale = 'de',
 }: {
   period: CareAnalyticsPeriod;
   careEntries: BabyCareEntry[];
   sleepEntries: SleepEntry[];
   now?: Date;
+  locale?: AppLocale;
 }): CareAnalyticsReport => {
   const range = periodRange(period, now);
   const currentDays = buildDailyMetrics(
@@ -374,12 +379,13 @@ export const buildCareAnalyticsReport = ({
   const coverageDays = currentDays.filter(
     (day) => day.sleepMinutes > 0 || day.feedingCount > 0 || day.diaperCount > 0,
   ).length;
-  const summaries = (Object.keys(METRIC_META) as CareMetricKey[]).map((key) => {
+  const meta = metricMeta(locale);
+  const summaries = (Object.keys(meta) as CareMetricKey[]).map((key) => {
     const current = averageRecorded(currentDays, key);
     const previous = averageRecorded(previousDays, key);
     return {
       key,
-      ...METRIC_META[key],
+      ...meta[key],
       value: current.value,
       previousValue: previous.value,
       changePercent:
@@ -389,21 +395,21 @@ export const buildCareAnalyticsReport = ({
       recordedDays: current.recordedDays,
     };
   });
-  const narrative = buildNarrative(summaries, coverageDays, currentDays.length);
+  const narrative = buildNarrative(summaries, coverageDays, currentDays.length, locale);
 
   return {
     period,
-    title: period === 'week' ? 'Wochenbericht' : period === 'month' ? 'Monatsbericht' : 'Jahresbericht',
-    rangeLabel: formatRange(range.currentStart, range.currentEnd),
-    comparisonLabel: period === 'year' ? 'gleicher Zeitraum im Vorjahr' : 'vorheriger Zeitraum',
+    title: period === 'week' ? (locale === 'en' ? 'Weekly report' : locale === 'es' ? 'Informe semanal' : 'Wochenbericht') : period === 'month' ? (locale === 'en' ? 'Monthly report' : locale === 'es' ? 'Informe mensual' : 'Monatsbericht') : (locale === 'en' ? 'Annual report' : locale === 'es' ? 'Informe anual' : 'Jahresbericht'),
+    rangeLabel: formatRange(range.currentStart, range.currentEnd, locale),
+    comparisonLabel: period === 'year' ? (locale === 'en' ? 'same period last year' : locale === 'es' ? 'mismo periodo del año anterior' : 'gleicher Zeitraum im Vorjahr') : (locale === 'en' ? 'previous period' : locale === 'es' ? 'periodo anterior' : 'vorheriger Zeitraum'),
     coverageDays,
     totalDays: currentDays.length,
     hasData: coverageDays > 0,
     summaries,
-    currentTrend: period === 'year' ? monthlyTrend(currentDays) : dailyTrend(currentDays),
-    previousTrend: period === 'year' ? monthlyTrend(previousDays) : dailyTrend(previousDays),
+    currentTrend: period === 'year' ? monthlyTrend(currentDays, locale) : dailyTrend(currentDays, locale),
+    previousTrend: period === 'year' ? monthlyTrend(previousDays, locale) : dailyTrend(previousDays, locale),
     headline: narrative.headline,
     insightLines: narrative.insightLines,
-    relationship: buildRelationship(currentDays),
+    relationship: buildRelationship(currentDays, locale),
   };
 };

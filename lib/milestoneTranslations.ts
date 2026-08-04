@@ -11,7 +11,7 @@ import type { MilestoneCategory } from './milestones';
  * i18n boundary for the milestones screen and its generated photobook.
  * Keep persisted category values language-neutral and translate only at the UI boundary.
  */
-export type MilestoneLocale = 'de' | 'en';
+export type MilestoneLocale = 'de' | 'en' | 'es';
 export const DEFAULT_MILESTONE_LOCALE: MilestoneLocale = 'de';
 
 type Catalog = Record<string, string>;
@@ -288,7 +288,22 @@ const en: Catalog = {
   'pdf.defaultFileName': 'Baby',
 };
 
-export const MILESTONE_TRANSLATIONS: Record<MilestoneLocale, Catalog> = { de, en };
+const es: Catalog = {
+  'common.error': 'Error', 'common.notice': 'Aviso', 'common.cancel': 'Cancelar', 'common.done': 'Listo', 'common.delete': 'Eliminar', 'common.save': 'Guardar', 'common.saving': 'Guardando…',
+  'screen.title': 'Hitos', 'screen.subtitle': 'Primeras veces y momentos especiales', 'screen.previewSubtitle': 'Modo de vista previa: solo lectura',
+  'preview.title': 'Solo vista previa', 'preview.body': 'Estás viendo el modo bebé. Los hitos están bloqueados aquí.', 'preview.alertTitle': 'Solo vista previa', 'preview.alertBody': 'Estás viendo el modo bebé. Los hitos se podrán editar después del nacimiento.',
+  'category.all': 'Todos', 'category.motorik': 'Movimiento', 'category.ernaehrung': 'Alimentación', 'category.sprache': 'Lenguaje', 'category.zahn': 'Dientes', 'category.schlaf': 'Sueño', 'category.sonstiges': 'Otros',
+  'suggestion.crawling': 'Gateó por primera vez', 'suggestion.steps': 'Primeros pasos', 'suggestion.puree': 'Primera comida sólida', 'suggestion.word': 'Primera palabra', 'suggestion.tooth': 'Primer diente', 'suggestion.sleepingThrough': 'Primera noche del tirón',
+  'alert.loadFailed': 'No se pudieron cargar los hitos.', 'alert.selectBaby': 'Selecciona primero un bebé.', 'alert.enterTitle': 'Introduce un título.', 'alert.saveFailed': 'No se pudo guardar el hito.', 'alert.createFailed': 'No se pudo crear el hito.', 'alert.deleteFailed': 'No se pudo eliminar el hito.', 'alert.photoPermissionTitle': 'Permiso necesario', 'alert.photoPermissionBody': 'Permite el acceso a tus fotos.', 'alert.changePhotoTitle': 'Cambiar foto', 'alert.selectPhotoTitle': 'Seleccionar foto', 'alert.photoChoiceBody': '¿Quieres usar la imagen completa o recortarla primero?', 'alert.useOriginal': 'Usar original', 'alert.cropSquare': 'Recortar en cuadrado', 'alert.deleteTitle': 'Eliminar hito', 'alert.deleteBody': '¿Seguro que quieres eliminar este hito?',
+  'share.unavailableTitle': 'No se puede compartir', 'share.imageUnavailableBody': 'No se pueden compartir imágenes en este dispositivo.', 'share.captureFailed': 'No se pudo crear la tarjeta para compartir', 'share.dialogTitle': 'Compartir hito', 'share.failedTitle': 'No se pudo compartir', 'share.failedBody': 'No se pudo compartir el recuerdo. Inténtalo de nuevo.', 'share.modalTitle': 'Compartir recuerdo', 'share.modalSubtitle': 'Así se compartirá tu tarjeta', 'share.close': 'Cerrar', 'share.eyebrowWithName': 'HITO DE {{name}}', 'share.eyebrowDefault': 'NUESTRO HITO', 'share.button': 'Compartir como imagen', 'share.creating': 'Creando tarjeta…', 'share.loadingPhoto': 'Cargando foto…', 'share.accessibility': 'Compartir el hito como imagen',
+  'photobook.exportAccessibility': 'Exportar álbum como PDF', 'photobook.exporting': 'Creando álbum…', 'photobook.exportTitle': 'Álbum en PDF', 'photobook.exportSubtitle': 'Exporta todos los recuerdos con un diseño cuidado', 'photobook.emptyTitle': 'Aún no hay recuerdos', 'photobook.emptyBody': 'Añade primero al menos un hito al álbum.', 'photobook.pdfUnavailableBody': 'Se ha creado el PDF, pero no se puede compartir en este dispositivo.', 'photobook.shareDialogTitle': 'Guardar álbum de LottiBaby', 'photobook.createdTitle': 'Álbum creado', 'photobook.warning.one': 'Se han creado {{pages}} páginas. No se pudo cargar una foto.', 'photobook.warning.other': 'Se han creado {{pages}} páginas. No se pudieron cargar {{warnings}} fotos.', 'photobook.failedTitle': 'No se creó el PDF', 'photobook.failedBody': 'No se pudo crear el álbum. Inténtalo de nuevo.',
+  'list.loading': 'Cargando hitos…', 'list.emptyTitle': 'Aún no hay hitos', 'list.emptyBody': 'Añade, por ejemplo, «Gateó por primera vez» o «Primera comida sólida».',
+  'card.eyebrow': 'NUESTRO ÁLBUM', 'card.placeholder': 'Un momento para recordar', 'card.page': 'PÁGINA {{number}}', 'card.fullscreenAccessibility': 'Ver {{title}} a pantalla completa', 'card.shareAccessibility': 'Compartir {{title}}', 'card.closeFullscreen': 'Cerrar pantalla completa', 'card.specialMoment': 'Un momento especial', 'card.brand': 'LOTTI BABY',
+  'form.editTitle': 'Editar hito', 'form.createTitle': 'Nuevo hito', 'form.suggestions': 'Sugerencias', 'form.title': 'Título', 'form.titlePlaceholder': 'p. ej., Primeros pasos', 'form.category': 'Categoría', 'form.date': 'Fecha', 'form.chooseDate': 'Elegir fecha', 'form.notes': 'Nota (opcional)', 'form.notesPlaceholder': 'Anota brevemente cómo fue…', 'form.photo': 'Foto (opcional)', 'form.changeImage': 'Cambiar imagen', 'form.selectImage': 'Seleccionar imagen', 'form.removeImage': 'Eliminar imagen',
+  'age.year.one': '{{count}} año', 'age.year.other': '{{count}} años', 'age.month.one': '{{count}} mes', 'age.month.other': '{{count}} meses', 'age.day.one': '{{count}} día', 'age.day.other': '{{count}} días', 'age.at': 'Con {{age}}', 'age.birthDay': 'El día del nacimiento',
+  'pdf.defaultBabyName': 'nuestro bebé', 'pdf.dateRange': '{{from}} a {{to}}', 'pdf.memory': 'RECUERDO', 'pdf.memoriesBy': 'RECUERDOS DE {{name}}', 'pdf.memoryBy': 'RECUERDO DE {{name}}', 'pdf.thoughts': 'PARA VUESTROS PENSAMIENTOS', 'pdf.coverKicker': 'ÁLBUM DE LOTTI BABY', 'pdf.coverTitle': 'Nuestros<br />hitos', 'pdf.coverSubtitle': 'Las primeras veces y los momentos especiales de {{name}}.', 'pdf.ourPhotobook': 'Nuestro álbum', 'pdf.ourStory': 'Nuestra historia', 'pdf.memoryCount.one': '{{count}} recuerdo', 'pdf.memoryCount.other': '{{count}} recuerdos', 'pdf.emptyError': 'Aún no hay recuerdos para el álbum.', 'pdf.cacheError': 'El directorio temporal de la aplicación no está disponible.', 'pdf.photoWarning': 'No se pudo añadir al PDF la foto de «{{title}}».', 'pdf.fileLabel': 'Álbum', 'pdf.defaultFileName': 'Bebé',
+};
+export const MILESTONE_TRANSLATIONS: Record<MilestoneLocale, Catalog> = { de, en, es };
 
 export const MILESTONE_SUGGESTION_KEYS = [
   'suggestion.crawling',
@@ -300,7 +315,7 @@ export const MILESTONE_SUGGESTION_KEYS = [
 ] as const;
 
 export const getMilestoneLocaleTag = (locale: MilestoneLocale) =>
-  locale === 'de' ? 'de-DE' : 'en-US';
+  ({ de: 'de-DE', en: 'en-US', es: 'es-ES' })[locale];
 
 export const translateMilestoneText = (
   locale: MilestoneLocale,

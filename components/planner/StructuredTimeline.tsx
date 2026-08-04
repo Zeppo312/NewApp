@@ -22,6 +22,7 @@ import { IconSymbol, type IconSymbolName } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { parseSafeDate } from "@/lib/safeDate";
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   date: Date;
@@ -115,6 +116,12 @@ export const StructuredTimeline: React.FC<Props> = ({
   onEditTodo,
   onEditEvent,
 }) => {
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { me: 'Ich', flexible: 'Flexibel', allDay: 'Ganztägig', allDayEvent: 'Ganztägiger Termin', event: 'Termin', recurring: 'wiederkehrend', empty: 'Noch nichts geplant', emptySub: 'Tippe auf +, um deinen Tag zu füllen.' },
+    en: { me: 'Me', flexible: 'Flexible', allDay: 'All day', allDayEvent: 'All-day appointment', event: 'Appointment', recurring: 'recurring', empty: 'Nothing planned yet', emptySub: 'Tap + to fill your day.' },
+    es: { me: 'Yo', flexible: 'Flexible', allDay: 'Todo el día', allDayEvent: 'Cita de todo el día', event: 'Cita', recurring: 'recurrente', empty: 'Aún no hay nada planeado', emptySub: 'Toca + para organizar tu día.' },
+  }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -168,9 +175,9 @@ export const StructuredTimeline: React.FC<Props> = ({
         event.userId,
       );
       const metaLabel =
-        assigneeLabel && assigneeLabel !== "Ich"
+        assigneeLabel && assigneeLabel !== c.me
           ? assigneeLabel
-          : ownerLabel && ownerLabel !== "Ich"
+          : ownerLabel && ownerLabel !== c.me
             ? ownerLabel
             : "";
       const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
@@ -207,13 +214,13 @@ export const StructuredTimeline: React.FC<Props> = ({
         todo.userId,
       );
       const metaLabel =
-        assigneeLabel && assigneeLabel !== "Ich"
+        assigneeLabel && assigneeLabel !== c.me
           ? assigneeLabel
-          : ownerLabel && ownerLabel !== "Ich"
+          : ownerLabel && ownerLabel !== c.me
             ? ownerLabel
             : "";
       const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
-      const timeLabel = `${dueDate ? dueDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Flexibel"}${metaSuffix}`;
+      const timeLabel = `${dueDate ? dueDate.toLocaleTimeString(localeTag, { hour: "2-digit", minute: "2-digit" }) : c.flexible}${metaSuffix}`;
       const recurring = isRecurringId(todo.id);
       entries.push({
         kind: "todo",
@@ -440,7 +447,7 @@ export const StructuredTimeline: React.FC<Props> = ({
       showNowLine,
       nowTop,
     };
-  }, [accentColor, date, getAssigneeLabel, getEventColor, getOwnerLabel, timedEvents, todos]);
+  }, [accentColor, c.flexible, c.me, date, getAssigneeLabel, getEventColor, getOwnerLabel, localeTag, timedEvents, todos]);
 
   const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } =
     timeline;
@@ -455,7 +462,7 @@ export const StructuredTimeline: React.FC<Props> = ({
         <View style={styles.allDaySection}>
           <View style={styles.allDayHeader}>
             <ThemedText style={[styles.allDayLabel, { color: textSecondary }]}>
-              Ganztägig
+              {c.allDay}
             </ThemedText>
           </View>
           <View style={styles.allDayEventsContainer}>
@@ -470,9 +477,9 @@ export const StructuredTimeline: React.FC<Props> = ({
                 getEventColor?.(event.assignee, event.babyId, event.userId) ??
                 accentColor;
               const metaLabel =
-                assigneeLabel && assigneeLabel !== "Ich"
+                assigneeLabel && assigneeLabel !== c.me
                   ? assigneeLabel
-                  : ownerLabel && ownerLabel !== "Ich"
+                  : ownerLabel && ownerLabel !== c.me
                     ? ownerLabel
                     : "";
               const metaSuffix = metaLabel ? ` · ${metaLabel}` : "";
@@ -489,7 +496,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                   activeOpacity={0.9}
                   onPress={readOnly ? undefined : () => onEditEvent?.(event.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Ganztägiger Termin ${event.title}${event.isRecurring ? ", wiederkehrend" : ""}`}
+                  accessibilityLabel={`${c.allDayEvent} ${event.title}${event.isRecurring ? `, ${c.recurring}` : ""}`}
                   style={styles.allDayEventCard}
                 >
                   <BlurView
@@ -658,7 +665,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                   activeOpacity={0.9}
                   onPress={readOnly ? undefined : () => onEditEvent?.(item.id)}
                   accessibilityRole="button"
-                  accessibilityLabel={`Termin ${item.title}${item.isRecurring ? ", wiederkehrend" : ""}`}
+                  accessibilityLabel={`${c.event} ${item.title}${item.isRecurring ? `, ${c.recurring}` : ""}`}
                   style={[
                     styles.eventCard,
                     totalColumns > 1 && { paddingHorizontal: 10 },
@@ -906,10 +913,10 @@ export const StructuredTimeline: React.FC<Props> = ({
               ]}
             />
             <ThemedText style={[styles.emptyTitle, { color: textPrimary }]}>
-              Noch nichts geplant
+              {c.empty}
             </ThemedText>
             <ThemedText style={[styles.emptySub, { color: textSecondary }]}>
-              Tippe auf +, um deinen Tag zu füllen.
+              {c.emptySub}
             </ThemedText>
           </View>
         )}

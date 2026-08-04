@@ -8,6 +8,9 @@ import { ThemedText } from '@/components/ThemedText';
 import { LAYOUT_PAD } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getLegalDocument } from '@/lib/legalTranslations';
+import { LocalizedLegalDocument } from '@/components/LocalizedLegalDocument';
 
 type BulletItem = string | { label: string; text: string };
 
@@ -46,6 +49,9 @@ const Subsection = ({ title, children }: { title: string; children: React.ReactN
 export default function DatenschutzScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const { locale } = useLocale();
+  const localizedDocument = getLegalDocument(locale, 'privacy');
+  if (localizedDocument) return <LocalizedLegalDocument document={localizedDocument} />;
 
   return (
     <>

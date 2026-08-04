@@ -14,8 +14,15 @@ import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import type { BabyCareEntry } from '@/lib/supabase';
 import type { SleepEntry } from '@/lib/sleepData';
+import { useLocale } from '@/contexts/LocaleContext';
 
 export default function DebugNotificationsScreen() {
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { title: 'Benachrichtigungs-Debug', linked: 'Partner verknüpft', yes: 'JA', no: 'NEIN', none: 'KEINE', feeding: '🍼 Fütterungsprognose prüfen', sleep: '💤 Schlaffenster prüfen', chain: '🧪 PUSH-KETTE TESTEN', tokens: '📱 Push-Tokens prüfen', partner: '1. Partner-Verknüpfung prüfen', database: '2. DB-Benachrichtigungen prüfen', unread: '3. Anzahl ungelesener prüfen', poll: '4. Manuelle Abfrage starten', entry: '5. Testeintrag erstellen', clear: 'Protokolle löschen', logs: 'Protokolle:' },
+    en: { title: 'Notification debug', linked: 'Partner linked', yes: 'YES', no: 'NO', none: 'NONE', feeding: '🍼 Check feeding prediction', sleep: '💤 Check sleep window', chain: '🧪 TEST PUSH CHAIN', tokens: '📱 Check push tokens', partner: '1. Check partner link', database: '2. Check DB notifications', unread: '3. Check unread count', poll: '4. Trigger manual poll', entry: '5. Create test entry', clear: 'Clear logs', logs: 'Logs:' },
+    es: { title: 'Depuración de notificaciones', linked: 'Pareja vinculada', yes: 'SÍ', no: 'NO', none: 'NINGUNA', feeding: '🍼 Comprobar predicción de tomas', sleep: '💤 Comprobar ventana de sueño', chain: '🧪 PROBAR CADENA PUSH', tokens: '📱 Comprobar tokens push', partner: '1. Comprobar vínculo de pareja', database: '2. Comprobar notificaciones de BD', unread: '3. Comprobar no leídas', poll: '4. Iniciar consulta manual', entry: '5. Crear registro de prueba', clear: 'Borrar registros', logs: 'Registros:' },
+  }[locale];
   const [logs, setLogs] = useState<string[]>([]);
   const { isPartnerLinked, partnerId, triggerPoll } = usePartnerNotifications();
   const { activeBabyId } = useActiveBaby();
@@ -23,7 +30,7 @@ export default function DebugNotificationsScreen() {
   const { preferences: notifPrefs } = useNotificationPreferences();
 
   const addLog = (message: string) => {
-    const timestamp = new Date().toLocaleTimeString();
+    const timestamp = new Date().toLocaleTimeString(localeTag);
     setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 20));
     console.log(message);
   };
@@ -712,14 +719,14 @@ export default function DebugNotificationsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.content}>
-        <Text style={styles.title}>Notification Debug Screen</Text>
+        <Text style={styles.title}>{c.title}</Text>
 
         <View style={styles.status}>
           <Text style={styles.statusText}>
-            Partner Linked: {isPartnerLinked ? '✅ YES' : '❌ NO'}
+            {c.linked}: {isPartnerLinked ? `✅ ${c.yes}` : `❌ ${c.no}`}
           </Text>
           <Text style={styles.statusText}>
-            Partner ID: {partnerId || 'NONE'}
+            Partner ID: {partnerId || c.none}
           </Text>
         </View>
 
@@ -728,57 +735,57 @@ export default function DebugNotificationsScreen() {
             style={[styles.button, styles.feedingButton]}
             onPress={testFeedingPrediction}
           >
-            <Text style={styles.buttonText}>🍼 Feeding Prediction Debug</Text>
+            <Text style={styles.buttonText}>{c.feeding}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, styles.sleepButton]}
             onPress={testSleepPrediction}
           >
-            <Text style={styles.buttonText}>💤 Sleep Window Debug</Text>
+            <Text style={styles.buttonText}>{c.sleep}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, styles.primaryButton]}
             onPress={testPushNotificationChain}
           >
-            <Text style={styles.buttonText}>🧪 TEST PUSH NOTIFICATION CHAIN</Text>
+            <Text style={styles.buttonText}>{c.chain}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testPushTokens}>
-            <Text style={styles.buttonText}>📱 Check Push Tokens</Text>
+            <Text style={styles.buttonText}>{c.tokens}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testPartnerLink}>
-            <Text style={styles.buttonText}>1. Test Partner Link</Text>
+            <Text style={styles.buttonText}>{c.partner}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testDatabaseNotifications}>
-            <Text style={styles.buttonText}>2. Check DB Notifications</Text>
+            <Text style={styles.buttonText}>{c.database}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testUnreadCount}>
-            <Text style={styles.buttonText}>3. Test Unread Count</Text>
+            <Text style={styles.buttonText}>{c.unread}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testPoll}>
-            <Text style={styles.buttonText}>4. Trigger Manual Poll</Text>
+            <Text style={styles.buttonText}>{c.poll}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.button} onPress={testCreateNotification}>
-            <Text style={styles.buttonText}>5. Create Test Entry</Text>
+            <Text style={styles.buttonText}>{c.entry}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, styles.clearButton]}
             onPress={() => setLogs([])}
           >
-            <Text style={styles.buttonText}>Clear Logs</Text>
+            <Text style={styles.buttonText}>{c.clear}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.logs}>
-          <Text style={styles.logsTitle}>Logs:</Text>
+          <Text style={styles.logsTitle}>{c.logs}</Text>
           {logs.map((log, i) => (
             <Text key={i} style={styles.logText}>{log}</Text>
           ))}

@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -75,8 +77,8 @@ type ShoppingSortKey = 'newest' | 'category' | 'name';
 type InventorySortKey = 'low_stock' | 'name' | 'category' | 'days_left';
 type ShoppingViewMode = 'list' | 'tiles';
 
-const ACTIVE_SHOPPING_LOCALE = DEFAULT_SHOPPING_LOCALE;
-const SHOPPING_LOCALE_TAG = getShoppingLocaleTag(ACTIVE_SHOPPING_LOCALE);
+let ACTIVE_SHOPPING_LOCALE = DEFAULT_SHOPPING_LOCALE;
+let SHOPPING_LOCALE_TAG = getShoppingLocaleTag(ACTIVE_SHOPPING_LOCALE);
 const t = (key: string, params?: Record<string, string | number>) =>
   translateShoppingText(ACTIVE_SHOPPING_LOCALE, key, params);
 const formatQuantity = (value: number, unit: string) =>
@@ -218,6 +220,8 @@ type ScanSheetState =
 
 // Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 export default function ShoppingListScreen() {
+  ACTIVE_SHOPPING_LOCALE = useLocale().locale;
+  SHOPPING_LOCALE_TAG = getShoppingLocaleTag(ACTIVE_SHOPPING_LOCALE);
   const access = useFeatureAccess('shoppingList');
 
   if (access.hasAccess === null) return null;

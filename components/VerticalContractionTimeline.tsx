@@ -6,6 +6,8 @@ import { ThemedView } from './ThemedView';
 import { Colors, QualityColors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { LiquidGlassCard, GLASS_OVERLAY, RADIUS } from '@/constants/DesignGuide';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getContractionLocaleTag, translateContractionText } from '@/lib/contractionTranslations';
 
 // Typ für die Wehen-Daten
 type Contraction = {
@@ -49,17 +51,17 @@ const formatTime = (date: Date): string => {
 };
 
 // Formatierung des Datums für die Anzeige
-const formatDate = (date: Date): string => {
+const formatDate = (date: Date, todayLabel: string, yesterdayLabel: string, localeTag: string): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
   if (isSameDay(date, today)) {
-    return 'Heute';
+    return todayLabel;
   } else if (isSameDay(date, yesterday)) {
-    return 'Gestern';
+    return yesterdayLabel;
   } else {
-    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+    return date.toLocaleDateString(localeTag);
   }
 };
 
@@ -99,6 +101,9 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   onEdit,
   containerStyle
 }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateContractionText>[1]) => translateContractionText(locale, key);
+  const localeTag = getContractionLocaleTag(locale);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -128,7 +133,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
       <LiquidGlassCard style={[styles.glass, containerStyle]} intensity={26} overlayColor={GLASS_OVERLAY}>
         <View style={styles.inner}>
           <ThemedText style={styles.noDataText}>
-            Noch keine Wehen aufgezeichnet.
+            {t('history.emptyAll')}
           </ThemedText>
         </View>
       </LiquidGlassCard>
@@ -145,15 +150,15 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
     if (!onDelete) return;
 
     Alert.alert(
-      'Wehe löschen',
-      'Möchtest du diese Wehe wirklich löschen?',
+      t('item.deleteTitle'),
+      t('item.deleteQuestion'),
       [
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel'
         },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
@@ -177,23 +182,23 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
 
     // Zeige einen Dialog zur Auswahl der Intensität
     Alert.alert(
-      'Intensität bearbeiten',
-      'Wähle die neue Intensität der Wehe:',
+      t('item.editTitle'),
+      t('item.editQuestion'),
       [
         {
-          text: '🟢 Schwach',
+          text: t('intensity.weakEmoji'),
           onPress: () => onEdit(id, 'schwach')
         },
         {
-          text: '🟠 Mittel',
+          text: t('intensity.mediumEmoji'),
           onPress: () => onEdit(id, 'mittel')
         },
         {
-          text: '🔴 Stark',
+          text: t('intensity.strongEmoji'),
           onPress: () => onEdit(id, 'stark')
         },
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel'
         }
       ]
@@ -203,7 +208,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
   return (
     <LiquidGlassCard style={[styles.glass, containerStyle]} intensity={26} overlayColor={GLASS_OVERLAY}>
       <View style={styles.inner}>
-        <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
+        <ThemedText style={styles.title}>{t('history.title')}</ThemedText>
 
         <ScrollView style={styles.scrollView}>
           {Object.keys(groupedContractions).map(dateKey => {
@@ -214,7 +219,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
             <View key={dateKey} style={styles.dayContainer}>
               <View style={styles.dateHeader}>
                 <ThemedText style={styles.dateText}>
-                  {formatDate(date)}
+                  {formatDate(date, t('date.today'), t('date.yesterday'), localeTag)}
                 </ThemedText>
               </View>
 
@@ -258,7 +263,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                             <View style={styles.cardHeader}>
                               <View style={styles.cardTitleContainer}>
                                 <ThemedText style={styles.cardTitle}>
-                                  Wehe #{dayContractions.length - index}
+                                  {t('item.contraction')} #{dayContractions.length - index}
                                 </ThemedText>
                                 {contraction.intensity && (
                                   <View style={[
@@ -266,7 +271,13 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                     { backgroundColor: getIntensityColor(contraction.intensity) }
                                   ]}>
                                     <ThemedText style={styles.intensityText}>
-                                      {contraction.intensity}
+                                      {contraction.intensity.toLowerCase() === 'schwach'
+                                        ? t('intensity.weak')
+                                        : contraction.intensity.toLowerCase() === 'mittel'
+                                          ? t('intensity.medium')
+                                          : contraction.intensity.toLowerCase() === 'stark'
+                                            ? t('intensity.strong')
+                                            : contraction.intensity}
                                     </ThemedText>
                                   </View>
                                 )}
@@ -275,7 +286,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
 
                             <View style={styles.cardDetails}>
                               <View style={styles.detailRow}>
-                                <ThemedText style={styles.detailLabel}>Dauer:</ThemedText>
+                                <ThemedText style={styles.detailLabel}>{t('item.duration')}</ThemedText>
                                 <ThemedText style={styles.detailValue}>
                                   {contraction.duration ? formatDuration(contraction.duration) : '--:--'}
                                 </ThemedText>
@@ -283,14 +294,14 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
 
                               {isLast ? (
                                 <View style={styles.detailRow}>
-                                  <ThemedText style={styles.detailLabel}>Start:</ThemedText>
+                                  <ThemedText style={styles.detailLabel}>{t('item.start')}</ThemedText>
                                   <ThemedText style={styles.detailValue}>
                                     {formatTime(new Date(contraction.startTime))}
                                   </ThemedText>
                                 </View>
                               ) : (
                                 <View style={styles.detailRow}>
-                                  <ThemedText style={styles.detailLabel}>Abstand:</ThemedText>
+                                  <ThemedText style={styles.detailLabel}>{t('item.interval')}</ThemedText>
                                   <ThemedText style={styles.detailValue}>
                                     {contraction.interval && contraction.interval > 0 ? formatInterval(contraction.interval) : '--:--'}
                                   </ThemedText>
@@ -301,14 +312,14 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                 <View style={styles.expandedDetails}>
                                   <View style={styles.divider} />
                                   <View style={styles.detailRow}>
-                                    <ThemedText style={styles.detailLabel}>Startzeit:</ThemedText>
+                                    <ThemedText style={styles.detailLabel}>{t('item.startTime')}</ThemedText>
                                     <ThemedText style={styles.detailValue}>
                                       {formatTime(new Date(contraction.startTime))}
                                     </ThemedText>
                                   </View>
                                   {contraction.endTime && (
                                     <View style={styles.detailRow}>
-                                      <ThemedText style={styles.detailLabel}>Endzeit:</ThemedText>
+                                      <ThemedText style={styles.detailLabel}>{t('item.endTime')}</ThemedText>
                                       <ThemedText style={styles.detailValue}>
                                         {formatTime(new Date(contraction.endTime))}
                                       </ThemedText>
@@ -327,7 +338,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                         }}
                                       >
                                         <Ionicons name="pencil-outline" size={16} color="#4A90E2" />
-                                        <ThemedText style={styles.editButtonText}>Bearb.</ThemedText>
+                                        <ThemedText style={styles.editButtonText}>{t('item.editShort')}</ThemedText>
                                       </TouchableOpacity>
                                     )}
 
@@ -341,7 +352,7 @@ const VerticalContractionTimeline: React.FC<VerticalContractionTimelineProps> = 
                                         }}
                                       >
                                         <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
-                                        <ThemedText style={styles.deleteButtonText}>Lösch.</ThemedText>
+                                        <ThemedText style={styles.deleteButtonText}>{t('item.deleteShort')}</ThemedText>
                                       </TouchableOpacity>
                                     )}
                                   </View>

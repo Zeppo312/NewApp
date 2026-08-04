@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { supabase, addBabyCareEntry } from '@/lib/supabase';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
+import { DailyLocale, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 import { inferRecentMilkPreference } from './feedingPreference';
 import { getVoiceLogEntryEmoji } from './presentation';
@@ -31,41 +32,21 @@ export const localTimeToDate = (local: string | null): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const formatTime = (date: Date): string =>
-  `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+const formatTime = (date: Date, locale: DailyLocale): string =>
+  date.toLocaleTimeString(getDailyLocaleTag(locale), { hour: '2-digit', minute: '2-digit' });
 
 const isSameLocalDay = (a: Date, b: Date): boolean =>
   a.getFullYear() === b.getFullYear() &&
   a.getMonth() === b.getMonth() &&
   a.getDate() === b.getDate();
 
-const formatDayPrefix = (date: Date): string => {
+const formatDayPrefix = (date: Date, locale: DailyLocale): string => {
   const now = new Date();
   if (isSameLocalDay(date, now)) return '';
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (isSameLocalDay(date, yesterday)) return 'Gestern, ';
-  return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}., `;
-};
-
-const FEEDING_LABELS: Record<string, string> = {
-  BREAST: 'Gestillt',
-  BOTTLE: 'Fläschchen',
-  SOLIDS: 'Beikost',
-  PUMP: 'Abgepumpte Milch',
-  WATER: 'Wasser/Tee',
-};
-
-const SIDE_LABELS: Record<string, string> = {
-  LEFT: 'links',
-  RIGHT: 'rechts',
-  BOTH: 'beide Seiten',
-};
-
-const DIAPER_LABELS: Record<string, string> = {
-  WET: 'Nass',
-  DIRTY: 'Stuhlgang',
-  BOTH: 'Nass + Stuhlgang',
+  if (isSameLocalDay(date, yesterday)) return translateDailyText(locale, 'voice.yesterday');
+  return `${date.toLocaleDateString(getDailyLocaleTag(locale), { day: '2-digit', month: '2-digit' })}, `;
 };
 
 const fetchRecentMilkPreference = async (
@@ -98,19 +79,21 @@ const fetchRecentMilkPreference = async (
 /** Kurzbeschreibung für die Bestätigungs-Liste, z. B. "Fläschchen 120 ml · 14:30". */
 export const describeVoiceLogEntry = (
   entry: VoiceLogParsedEntry,
+  locale: DailyLocale = 'de',
 ): { emoji: string; title: string; timeText: string } => {
+  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const start = localTimeToDate(entry.start_local);
   const end = localTimeToDate(entry.end_local);
   const displayEnd =
     start && end && end.getTime() > start.getTime() ? end : null;
   const timeText = start
-    ? `${formatDayPrefix(start)}${formatTime(start)}${displayEnd ? ` – ${formatTime(displayEnd)}` : ''}`
+    ? `${formatDayPrefix(start, locale)}${formatTime(start, locale)}${displayEnd ? ` – ${formatTime(displayEnd, locale)}` : ''}`
     : '';
 
   if (entry.type === 'sleep') {
     return {
       emoji: getVoiceLogEntryEmoji(entry),
-      title: entry.timer_requested ? 'Schlaf · Timer läuft' : 'Schlaf',
+      title: entry.timer_requested ? t('voice.sleepTimer') : t('voice.sleep'),
       timeText,
     };
   }
@@ -118,14 +101,15 @@ export const describeVoiceLogEntry = (
     const diaperType = entry.diaper_type ?? 'WET';
     return {
       emoji: getVoiceLogEntryEmoji(entry),
-      title: `Windel · ${DIAPER_LABELS[diaperType] ?? 'Nass'}`,
+      title: `${t('voice.diaper')} · ${diaperType === 'DIRTY' ? t('voice.dirty') : diaperType === 'BOTH' ? t('voice.wetDirty') : t('diaper.wet')}`,
       timeText,
     };
   }
-  const parts = [FEEDING_LABELS[entry.feeding_type ?? ''] ?? 'Fütterung'];
+  const feedingLabel = entry.feeding_type === 'BREAST' ? t('voice.fedBreast') : entry.feeding_type === 'BOTTLE' ? t('card.bottle') : entry.feeding_type === 'SOLIDS' ? t('feeding.solids') : entry.feeding_type === 'PUMP' ? t('voice.pumpedMilk') : entry.feeding_type === 'WATER' ? t('voice.waterTea') : t('voice.feeding');
+  const parts = [feedingLabel];
   if (entry.feeding_volume_ml) parts.push(`${entry.feeding_volume_ml} ml`);
-  if (entry.feeding_side) parts.push(SIDE_LABELS[entry.feeding_side]);
-  if (entry.timer_requested) parts.push('Timer läuft');
+  if (entry.feeding_side) parts.push(entry.feeding_side === 'LEFT' ? t('input.left') : entry.feeding_side === 'RIGHT' ? t('input.right') : t('voice.bothSides'));
+  if (entry.timer_requested) parts.push(t('input.timerRunning'));
   return {
     emoji: getVoiceLogEntryEmoji(entry),
     title: parts.join(' · '),
@@ -142,7 +126,9 @@ export const parseVoiceRecording = async (
   mimeType: string,
   babyName?: string | null,
   babyId?: string | null,
+  locale: DailyLocale = 'de',
 ): Promise<VoiceLogParseResult> => {
+  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const [audioBase64, recentMilkPreference] = await Promise.all([
     FileSystem.readAsStringAsync(localUri, { encoding: 'base64' }),
     fetchRecentMilkPreference(babyId),
@@ -155,6 +141,7 @@ export const parseVoiceRecording = async (
         audioBase64,
         mimeType,
         deviceNow: formatLocalDateTime(new Date()),
+        locale,
         babyName: babyName ?? null,
         recentMilkPreference,
       },
@@ -176,20 +163,20 @@ export const parseVoiceRecording = async (
       if (response.status === 429) {
         throw new Error(
           body?.message ??
-            'Du hast gerade viele Aufnahmen gemacht. Bitte versuche es später noch einmal.',
+            t('voice.rateLimit'),
         );
       }
       if (response.status === 403) {
-        throw new Error('Sprach-Logging ist für dein Konto noch nicht freigeschaltet.');
+        throw new Error(t('voice.notEnabled'));
       }
       if (response.status === 413) {
-        throw new Error('Die Aufnahme ist zu lang. Bitte halte dich an maximal eine Minute.');
+        throw new Error(t('voice.tooLong'));
       }
     }
-    throw new Error('Die Aufnahme konnte nicht verarbeitet werden. Bitte versuche es erneut.');
+    throw new Error(t('voice.processFailed'));
   }
   if (!data || !Array.isArray(data.entries)) {
-    throw new Error('Unerwartete Antwort vom Server. Bitte versuche es erneut.');
+    throw new Error(t('voice.serverUnexpected'));
   }
   return data;
 };

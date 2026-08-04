@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -37,6 +39,15 @@ import {
   joinPublicGroup,
   respondToGroupInvite,
 } from '@/lib/groups';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 // ── Pastel avatar palette ────────────────────────────────────────
 const AVATAR_LIGHT = [
@@ -107,10 +118,10 @@ const GroupCard = ({
   const isPrivate = group.visibility === 'private';
   const roleName =
     group.current_user_role === 'owner'
-      ? 'Besitzerin'
+      ? t('common.owner')
       : group.current_user_role === 'admin'
-        ? 'Admin'
-        : 'Mitglied';
+        ? t('common.admin')
+        : t('common.member');
 
   return (
     <LiquidGlassCard onPress={onOpen} activeOpacity={0.92}>
@@ -137,7 +148,7 @@ const GroupCard = ({
                   { color: isPrivate ? '#D65441' : '#C89F81' },
                 ]}
               >
-                {isPrivate ? 'Privat' : 'Öffentlich'}
+                {t(isPrivate ? 'common.private' : 'common.public')}
               </ThemedText>
             </View>
           </View>
@@ -155,7 +166,7 @@ const GroupCard = ({
             <View style={styles.memberRow}>
               <IconSymbol name="person.2.fill" size={12} color={tertiaryText} />
               <ThemedText style={[styles.memberCount, { color: tertiaryText }]}>
-                {group.member_count || 0} Mitglieder
+                {t((group.member_count || 0) === 1 ? 'groups.members.one' : 'groups.members.other', { count: group.member_count || 0 })}
               </ThemedText>
             </View>
             {group.is_member ? (
@@ -182,7 +193,7 @@ const GroupCard = ({
                   {joining ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <ThemedText style={styles.joinText}>Beitreten</ThemedText>
+                    <ThemedText style={styles.joinText}>{t('groups.join')}</ThemedText>
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -230,6 +241,7 @@ const SectionHeader = ({
 
 // ── Main screen ──────────────────────────────────────────────────
 export default function GroupsHubScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const router = useRouter();
@@ -277,7 +289,7 @@ export default function GroupsHubScreen() {
       setPendingInvites(invites || []);
     } catch (error) {
       console.error('Failed to load groups hub data:', error);
-      Alert.alert('Gruppen', 'Die Gruppen konnten gerade nicht geladen werden.');
+      Alert.alert(t('common.groups'), t('groups.loadFailed'));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -329,7 +341,7 @@ export default function GroupsHubScreen() {
   const handleCreateGroup = useCallback(async () => {
     const trimmedName = newGroupName.trim();
     if (!trimmedName) {
-      Alert.alert('Gruppen', 'Bitte gib einen Gruppennamen ein.');
+      Alert.alert(t('common.groups'), t('groups.nameRequired'));
       return;
     }
 
@@ -343,8 +355,8 @@ export default function GroupsHubScreen() {
 
     if (error || !data) {
       Alert.alert(
-        'Gruppen',
-        error instanceof Error ? error.message : 'Die Gruppe konnte nicht erstellt werden.',
+        t('common.groups'),
+        error instanceof Error ? error.message : t('groups.createFailed'),
       );
       return;
     }
@@ -367,7 +379,7 @@ export default function GroupsHubScreen() {
       setJoiningGroupId(null);
 
       if (error) {
-        Alert.alert('Gruppen', error instanceof Error ? error.message : 'Beitritt nicht möglich.');
+        Alert.alert(t('common.groups'), error instanceof Error ? error.message : t('groups.joinFailed'));
         return;
       }
 
@@ -388,10 +400,10 @@ export default function GroupsHubScreen() {
 
       if (error) {
         Alert.alert(
-          'Einladung',
+          t('common.invitation'),
           error instanceof Error
             ? error.message
-            : 'Die Einladung konnte nicht verarbeitet werden.',
+            : t('groups.inviteFailed'),
         );
         return;
       }
@@ -413,8 +425,10 @@ export default function GroupsHubScreen() {
       <ThemedView style={styles.screen}>
         <SafeAreaView style={styles.safe}>
           <Header
-            title="Gruppen"
-            subtitle={myGroups.length > 0 ? `${myGroups.length} Gruppen` : undefined}
+            title={t('common.groups')}
+            subtitle={myGroups.length > 0
+              ? t(myGroups.length === 1 ? 'groups.count.one' : 'groups.count.other', { count: myGroups.length })
+              : undefined}
             showBackButton
             onBackPress={() => router.push('/(tabs)/community')}
             showBabySwitcher={false}
@@ -438,7 +452,7 @@ export default function GroupsHubScreen() {
             >
               <View style={styles.section}>
                 <SectionHeader
-                  title="Gruppen suchen"
+                  title={t('groups.searchTitle')}
                   count={filteredDiscoverable.length > 0 ? filteredDiscoverable.length : undefined}
                   primaryText={primaryText}
                   tertiaryText={tertiaryText}
@@ -457,7 +471,7 @@ export default function GroupsHubScreen() {
                   <TextInput
                     value={discoverQuery}
                     onChangeText={setDiscoverQuery}
-                    placeholder="Öffentliche Gruppen suchen"
+                    placeholder={t('groups.searchPlaceholder')}
                     placeholderTextColor={tertiaryText}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -471,7 +485,7 @@ export default function GroupsHubScreen() {
               {pendingInvites.length > 0 && (
                 <View style={styles.section}>
                   <SectionHeader
-                    title="Einladungen"
+                    title={t('groups.invitations')}
                     count={pendingInvites.length}
                     primaryText={primaryText}
                     tertiaryText={tertiaryText}
@@ -482,7 +496,7 @@ export default function GroupsHubScreen() {
                       <View style={styles.inviteInner}>
                         <View style={styles.inviteTop}>
                           <GroupAvatar
-                            name={invite.group?.name || 'Gruppe'}
+                            name={invite.group?.name || t('common.group')}
                             size={42}
                             isDark={isDark}
                           />
@@ -491,10 +505,10 @@ export default function GroupsHubScreen() {
                               style={[styles.inviteName, { color: primaryText }]}
                               numberOfLines={1}
                             >
-                              {invite.group?.name || 'Private Gruppe'}
+                              {invite.group?.name || t('groups.privateTitle')}
                             </ThemedText>
                             <ThemedText style={[styles.inviteBy, { color: secondaryText }]}>
-                              von {invite.invited_by_name || 'jemandem'}
+                              {t('groups.invitedBy', { name: invite.invited_by_name || t('common.someone') })}
                             </ThemedText>
                           </View>
                         </View>
@@ -508,7 +522,7 @@ export default function GroupsHubScreen() {
                             <ThemedText
                               style={[styles.declineBtnText, { color: tertiaryText }]}
                             >
-                              Ablehnen
+                              {t('groups.decline')}
                             </ThemedText>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -526,7 +540,7 @@ export default function GroupsHubScreen() {
                               {processingInviteId === invite.id ? (
                                 <ActivityIndicator color="#FFF" size="small" />
                               ) : (
-                                <ThemedText style={styles.acceptBtnText}>Annehmen</ThemedText>
+                                <ThemedText style={styles.acceptBtnText}>{t('groups.accept')}</ThemedText>
                               )}
                             </LinearGradient>
                           </TouchableOpacity>
@@ -540,7 +554,7 @@ export default function GroupsHubScreen() {
               {/* ── My groups ── */}
               <View style={styles.section}>
                 <SectionHeader
-                  title="Meine Gruppen"
+                  title={t('groups.myGroups')}
                   count={filteredMyGroups.length}
                   primaryText={primaryText}
                   tertiaryText={tertiaryText}
@@ -579,12 +593,12 @@ export default function GroupsHubScreen() {
                         <IconSymbol name="person.2" size={24} color="#C89F81" />
                       </View>
                       <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-                        {discoverQuery.trim() ? 'Keine eigenen Gruppen gefunden' : 'Noch keine Gruppen'}
+                        {t(discoverQuery.trim() ? 'groups.noOwnSearchTitle' : 'groups.noOwnTitle')}
                       </ThemedText>
                       <ThemedText style={[styles.emptyText, { color: secondaryText }]}>
                         {discoverQuery.trim()
-                          ? 'Für deine Suche wurde in deinen Gruppen nichts gefunden.'
-                          : `Erstelle eine eigene Gruppe oder tritt einer${'\n'}öffentlichen Gruppe bei.`}
+                          ? t('groups.noOwnSearchText')
+                          : t('groups.noOwnText')}
                       </ThemedText>
                     </View>
                   </LiquidGlassCard>
@@ -594,7 +608,7 @@ export default function GroupsHubScreen() {
               {/* ── Discover ── */}
               <View style={styles.section}>
                 <SectionHeader
-                  title="Entdecken"
+                  title={t('groups.discover')}
                   count={filteredDiscoverable.length > 0 ? filteredDiscoverable.length : undefined}
                   primaryText={primaryText}
                   tertiaryText={tertiaryText}
@@ -635,12 +649,12 @@ export default function GroupsHubScreen() {
                         <IconSymbol name="sparkles" size={24} color="#C89F81" />
                       </View>
                       <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-                        {discoverQuery.trim() ? 'Keine Gruppen gefunden' : 'Keine weiteren Gruppen'}
+                        {t(discoverQuery.trim() ? 'groups.noSearchTitle' : 'groups.noMoreTitle')}
                       </ThemedText>
                       <ThemedText style={[styles.emptyText, { color: secondaryText }]}>
                         {discoverQuery.trim()
-                          ? 'Für deine Suche wurde keine öffentliche Gruppe gefunden.'
-                          : `Du bist bereits in allen öffentlichen Gruppen${'\n'}oder es gibt noch keine weiteren.`}
+                          ? t('groups.noSearchText')
+                          : t('groups.noMoreText')}
                       </ThemedText>
                     </View>
                   </LiquidGlassCard>
@@ -705,11 +719,11 @@ export default function GroupsHubScreen() {
                       activeOpacity={0.7}
                     >
                       <ThemedText style={[styles.modalCancel, { color: tertiaryText }]}>
-                        Abbrechen
+                        {t('common.cancel')}
                       </ThemedText>
                     </TouchableOpacity>
                     <ThemedText style={[styles.modalTitle, { color: primaryText }]}>
-                      Neue Gruppe
+                      {t('groups.new')}
                     </ThemedText>
                     <View style={styles.modalPlaceholder} />
                   </View>
@@ -717,7 +731,7 @@ export default function GroupsHubScreen() {
                   <TextInput
                     value={newGroupName}
                     onChangeText={setNewGroupName}
-                    placeholder="Gruppenname"
+                    placeholder={t('groups.namePlaceholder')}
                     placeholderTextColor={tertiaryText}
                     style={[
                       styles.input,
@@ -732,7 +746,7 @@ export default function GroupsHubScreen() {
                   <TextInput
                     value={newGroupDescription}
                     onChangeText={setNewGroupDescription}
-                    placeholder="Worum geht es in der Gruppe?"
+                    placeholder={t('groups.descriptionPlaceholder')}
                     placeholderTextColor={tertiaryText}
                     multiline
                     style={[
@@ -754,12 +768,12 @@ export default function GroupsHubScreen() {
                   >
                     <View style={styles.visTextWrap}>
                       <ThemedText style={[styles.visTitle, { color: primaryText }]}>
-                        {isPrivateGroup ? 'Private Gruppe' : 'Öffentliche Gruppe'}
+                        {t(isPrivateGroup ? 'groups.privateTitle' : 'groups.publicTitle')}
                       </ThemedText>
                       <ThemedText style={[styles.visHint, { color: secondaryText }]}>
                         {isPrivateGroup
-                          ? 'Mitglieder treten nur per Einladung bei.'
-                          : 'Jede Nutzerin kann direkt beitreten.'}
+                          ? t('groups.privateHint')
+                          : t('groups.publicHint')}
                       </ThemedText>
                     </View>
                     <Switch
@@ -788,7 +802,7 @@ export default function GroupsHubScreen() {
                       {savingGroup ? (
                         <ActivityIndicator color="#FFFFFF" size="small" />
                       ) : (
-                        <ThemedText style={styles.submitBtnText}>Gruppe erstellen</ThemedText>
+                        <ThemedText style={styles.submitBtnText}>{t('groups.create')}</ThemedText>
                       )}
                     </LinearGradient>
                   </TouchableOpacity>

@@ -5,6 +5,8 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { followUser, unfollowUser, isFollowingUser } from '@/lib/follows';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateCommunityText } from '@/lib/communityTranslations';
 
 interface FollowButtonProps {
   userId: string;
@@ -23,6 +25,9 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
   showIcon = true,
   style
 }) => {
+  const { locale } = useLocale();
+  const t = (key: 'follow.action' | 'follow.following' | 'follow.loadFailed' | 'follow.updateFailed') =>
+    translateCommunityText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   
@@ -47,7 +52,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
         setIsFollowing(following);
       } catch (err) {
         console.error('Fehler beim Prüfen des Folge-Status:', err);
-        setError('Fehler beim Laden des Status');
+        setError(t('follow.loadFailed'));
       } finally {
         setLoading(false);
       }
@@ -93,7 +98,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
       }
     } catch (err) {
       console.error('Fehler beim Ändern des Folge-Status:', err);
-      setError('Fehler bei der Verarbeitung');
+      setError(t('follow.updateFailed'));
     } finally {
       setLoading(false);
     }
@@ -164,7 +169,7 @@ export const FollowButton: React.FC<FollowButtonProps> = ({
                 }
               ]}
             >
-              {isFollowing ? 'Folge ich' : 'Folgen'}
+              {isFollowing ? t('follow.following') : t('follow.action')}
             </ThemedText>
           )}
         </>

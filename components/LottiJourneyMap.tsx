@@ -38,6 +38,8 @@ import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { LOTTI_LEVELS, type LottiLevel } from '@/lib/lottiPoints';
 import { babyImageForLevel } from '@/lib/lottiBabyImages';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateWeeklyMomentText, type WeeklyMomentTranslationKey } from '@/lib/weeklyMomentTranslations';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const BROWN = '#5C4033';
@@ -100,6 +102,8 @@ export function LottiJourneyMap({
   width: widthProp,
   onCollectPress,
 }: Props) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
   const router = useRouter();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
@@ -334,10 +338,10 @@ export function LottiJourneyMap({
     <View style={styles.root}>
       <View style={styles.heading}>
         <ThemedText adaptive={false} style={[styles.title, { color: textPrimary }]}>
-          Eure Lotti-Reise
+          {t('journey.title')}
         </ThemedText>
         <ThemedText adaptive={false} style={[styles.subtitle, { color: textSecondary }]}>
-          Jede Woche wachst ihr ein kleines Stück weiter.
+          {t('journey.subtitle')}
         </ThemedText>
       </View>
 
@@ -539,6 +543,8 @@ function JourneyStationNode({
   textTertiary: string;
   onPress: () => void;
 }) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
   const isCurrent = station.state === 'current';
   const isPast = station.state === 'past';
   const isNext = station.state === 'next';
@@ -734,13 +740,13 @@ function JourneyStationNode({
             ]}
           >
             <ThemedText adaptive={false} style={styles.currentStatus}>
-              Aktuell
+              {t('journey.current')}
             </ThemedText>
             <ThemedText
               adaptive={false}
               style={[styles.currentStage, { color: textTertiary }]}
             >
-              Stufe {station.level}
+              {t('journey.stage', { level: station.level })}
             </ThemedText>
             <ThemedText
               adaptive={false}
@@ -822,7 +828,7 @@ function JourneyStationNode({
                   },
                 ]}
               >
-                {isPast ? 'Erreicht' : isNext ? 'Als Nächstes' : `Stufe ${station.level}`}
+                {isPast ? t('journey.reached') : isNext ? t('journey.next') : t('journey.stage', { level: station.level })}
               </ThemedText>
               <ThemedText
                 adaptive={false}
@@ -872,6 +878,8 @@ function JourneyCompassCard({
   textTertiary: string;
   onPress: () => void;
 }) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
   if (!level) return null;
   const isMax = !nextLevelName;
 
@@ -903,7 +911,7 @@ function JourneyCompassCard({
               style={[styles.compassTitle, { color: textPrimary }]}
               numberOfLines={1}
             >
-              Stufe {level.level} · {level.name}
+              {t('story.level', { level: level.level, name: level.name })}
             </ThemedText>
             <ThemedText
               adaptive={false}
@@ -911,8 +919,8 @@ function JourneyCompassCard({
               numberOfLines={2}
             >
               {isMax
-                ? `${totalPoints} ${POINTS_NOUN} gesammelt`
-                : `Noch ${pointsToNext} ${POINTS_NOUN} bis „${nextLevelName}“`}
+                ? t('journey.collected', { count: totalPoints })
+                : t('journey.untilNext', { count: pointsToNext, name: nextLevelName ?? '' })}
             </ThemedText>
           </View>
         </View>
@@ -945,7 +953,7 @@ function JourneyCompassCard({
             adaptive={false}
             style={[styles.compassMeta, { color: textTertiary }]}
           >
-            {Math.round(clamp01(progressFraction) * 100)}% dieses Moments
+            {t('journey.progress', { percent: Math.round(clamp01(progressFraction) * 100) })}
           </ThemedText>
           <Pressable
             onPress={onPress}
@@ -955,7 +963,7 @@ function JourneyCompassCard({
             ]}
           >
             <ThemedText adaptive={false} style={styles.collectButtonText}>
-              Weiter sammeln
+              {t('journey.keepCollecting')}
             </ThemedText>
             <IconSymbol name="chevron.right" size={13} color="#FFFFFF" />
           </Pressable>
@@ -1159,6 +1167,8 @@ function LevelDetailSheet({
   textSecondary,
   textTertiary,
 }: SheetProps) {
+  const { locale } = useLocale();
+  const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
   if (!level) {
     return (
       <Modal visible={false} transparent animationType="slide">
@@ -1169,16 +1179,16 @@ function LevelDetailSheet({
 
   const stateLabel =
     level.level < currentLevel
-      ? 'Erreicht'
+      ? t('journey.reached')
       : level.level === currentLevel
-        ? 'Aktuell'
-        : 'Als Nächstes';
+        ? t('journey.current')
+        : t('journey.next');
   const stateMessage =
     level.level < currentLevel
-      ? 'Diese Station gehört schon zu eurer Reise.'
+      ? t('journey.pastMessage')
       : level.level === currentLevel
-        ? 'Hier seid ihr gerade.'
-        : 'Mit jedem kleinen Moment kommt ihr ein Stück näher.';
+        ? t('journey.currentMessage')
+        : t('journey.futureMessage');
   const sheetBabyImage = babyImageForLevel(level.level);
 
   return (
@@ -1224,7 +1234,7 @@ function LevelDetailSheet({
                 </View>
                 <View style={styles.sheetHeaderText}>
                   <ThemedText adaptive={false} style={styles.sheetState}>
-                    Stufe {level.level} · {stateLabel}
+                    {t('journey.stage', { level: level.level })} · {stateLabel}
                   </ThemedText>
                   <ThemedText adaptive={false} style={[styles.sheetTitle, { color: textPrimary }]}>
                     {level.name}
@@ -1238,11 +1248,11 @@ function LevelDetailSheet({
                 {stateMessage}
               </ThemedText>
               <ThemedText adaptive={false} style={[styles.sheetThreshold, { color: textTertiary }]}>
-                ab {level.threshold} {POINTS_NOUN}
+                {t('journey.threshold', { count: level.threshold })}
               </ThemedText>
               <Pressable onPress={onClose} style={styles.sheetCloseButton}>
                 <ThemedText adaptive={false} style={styles.sheetCloseText}>
-                  Schließen
+                  {t('journey.close')}
                 </ThemedText>
               </Pressable>
             </View>

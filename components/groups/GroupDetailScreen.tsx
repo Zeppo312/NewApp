@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -36,6 +38,15 @@ import {
   respondToGroupInvite,
   searchProfilesForGroupInvite,
 } from '@/lib/groups';
+import {
+  CommunityTranslationKey,
+  DEFAULT_COMMUNITY_LOCALE,
+  translateCommunityText,
+} from '@/lib/communityTranslations';
+
+let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
+const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
+  translateCommunityText(ACTIVE_COMMUNITY_LOCALE, key, params);
 
 // ── Pastel avatar palette (shared with hub) ──────────────────────
 const AVATAR_LIGHT = [
@@ -84,6 +95,7 @@ const GroupAvatar = ({ name, size = 46, isDark }: { name: string; size?: number;
 
 // ── Main screen ──────────────────────────────────────────────────
 export default function GroupDetailScreen() {
+  ACTIVE_COMMUNITY_LOCALE = useLocale().locale;
   const { groupId } = useLocalSearchParams<{ groupId?: string | string[] }>();
   const resolvedGroupId = Array.isArray(groupId) ? groupId[0] : groupId;
   const router = useRouter();
@@ -131,7 +143,7 @@ export default function GroupDetailScreen() {
       }
     } catch (error) {
       console.error('Failed to load group detail:', error);
-      Alert.alert('Gruppe', 'Die Gruppe konnte gerade nicht geladen werden.');
+      Alert.alert(t('common.group'), t('groups.detailLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -190,7 +202,7 @@ export default function GroupDetailScreen() {
     setJoining(false);
 
     if (error) {
-      Alert.alert('Gruppe', error instanceof Error ? error.message : 'Beitritt nicht möglich.');
+      Alert.alert(t('common.group'), error instanceof Error ? error.message : t('groups.joinFailed'));
       return;
     }
 
@@ -207,10 +219,10 @@ export default function GroupDetailScreen() {
 
       if (error) {
         Alert.alert(
-          'Einladung',
+          t('common.invitation'),
           error instanceof Error
             ? error.message
-            : 'Die Einladung konnte nicht verarbeitet werden.',
+            : t('groups.inviteFailed'),
         );
         return;
       }
@@ -235,8 +247,8 @@ export default function GroupDetailScreen() {
 
       if (error) {
         Alert.alert(
-          'Einladen',
-          error instanceof Error ? error.message : 'Einladung konnte nicht verschickt werden.',
+          t('common.invite'),
+          error instanceof Error ? error.message : t('groups.inviteSendFailed'),
         );
         return;
       }
@@ -244,7 +256,7 @@ export default function GroupDetailScreen() {
       setInviteQuery('');
       setInviteResults([]);
       setShowInviteModal(false);
-      Alert.alert('Einladung', `${user.display_name} wurde eingeladen.`);
+      Alert.alert(t('common.invitation'), t('groups.invitedSuccess', { name: user.display_name }));
     },
     [group],
   );
@@ -252,10 +264,10 @@ export default function GroupDetailScreen() {
   const handleLeaveGroup = useCallback(async () => {
     if (!group) return;
 
-    Alert.alert('Gruppe verlassen', 'Möchtest du diese Gruppe wirklich verlassen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    Alert.alert(t('groups.leaveTitle'), t('groups.leaveMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Verlassen',
+        text: t('groups.leave'),
         style: 'destructive',
         onPress: async () => {
           setLeaving(true);
@@ -264,10 +276,10 @@ export default function GroupDetailScreen() {
 
           if (error) {
             Alert.alert(
-              'Gruppe',
+              t('common.group'),
               error instanceof Error
                 ? error.message
-                : 'Die Gruppe konnte nicht verlassen werden.',
+                : t('groups.leaveFailed'),
             );
             return;
           }
@@ -300,7 +312,7 @@ export default function GroupDetailScreen() {
         <ThemedView style={styles.screen}>
           <SafeAreaView style={styles.safe}>
             <Header
-              title="Gruppe"
+              title={t('common.group')}
               showBackButton
               onBackPress={() => router.push('/(tabs)/groups' as any)}
               showBabySwitcher={false}
@@ -319,7 +331,7 @@ export default function GroupDetailScreen() {
                 <IconSymbol name="person.2" size={28} color="#C89F81" />
               </View>
               <ThemedText style={[styles.emptyTitle, { color: primaryText }]}>
-                Gruppe nicht gefunden
+                {t('groups.notFound')}
               </ThemedText>
             </View>
           </SafeAreaView>
@@ -367,14 +379,14 @@ export default function GroupDetailScreen() {
                         { color: isPrivate ? '#D65441' : '#C89F81' },
                       ]}
                     >
-                      {isPrivate ? 'Privat' : 'Öffentlich'}
+                      {t(isPrivate ? 'common.private' : 'common.public')}
                     </ThemedText>
                   </View>
 
                   <View style={styles.heroMemberRow}>
                     <IconSymbol name="person.2.fill" size={13} color={tertiaryText} />
                     <ThemedText style={[styles.heroMemberText, { color: tertiaryText }]}>
-                      {group.member_count || 0} Mitglieder
+                      {t((group.member_count || 0) === 1 ? 'groups.members.one' : 'groups.members.other', { count: group.member_count || 0 })}
                     </ThemedText>
                   </View>
 
@@ -393,7 +405,7 @@ export default function GroupDetailScreen() {
                         activeOpacity={0.8}
                       >
                         <ThemedText style={[styles.declineBtnText, { color: tertiaryText }]}>
-                          Ablehnen
+                          {t('groups.decline')}
                         </ThemedText>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -410,7 +422,7 @@ export default function GroupDetailScreen() {
                             <ActivityIndicator color="#FFF" size="small" />
                           ) : (
                             <ThemedText style={styles.acceptBtnText}>
-                              Einladung annehmen
+                              {t('groups.acceptInvitation')}
                             </ThemedText>
                           )}
                         </LinearGradient>
@@ -430,7 +442,7 @@ export default function GroupDetailScreen() {
                         {joining ? (
                           <ActivityIndicator color="#FFF" size="small" />
                         ) : (
-                          <ThemedText style={styles.heroJoinText}>Gruppe beitreten</ThemedText>
+                          <ThemedText style={styles.heroJoinText}>{t('groups.join')}</ThemedText>
                         )}
                       </LinearGradient>
                     </TouchableOpacity>
@@ -443,7 +455,7 @@ export default function GroupDetailScreen() {
                     >
                       <IconSymbol name="lock.fill" size={14} color="#D65441" />
                       <ThemedText style={[styles.lockNoticeText, { color: secondaryText }]}>
-                        Diese Gruppe ist privat. Beitritt nur über eine Einladung.
+                        {t('groups.privateNotice')}
                       </ThemedText>
                     </View>
                   )}
@@ -505,14 +517,16 @@ export default function GroupDetailScreen() {
             </View>
 
             <ThemedText style={[styles.settingsTitle, { color: primaryText }]}>
-              Gruppeneinstellungen
+              {t('groups.settings')}
             </ThemedText>
 
             {/* Members info */}
             <View style={[styles.settingsRow, { borderColor: cardBorder }]}>
               <IconSymbol name="person.2.fill" size={18} color="#C89F81" />
               <ThemedText style={[styles.settingsRowText, { color: primaryText }]}>
-                {members.length > 0 ? members.length : group.member_count || 0} Mitglieder
+                {t((members.length > 0 ? members.length : group.member_count || 0) === 1 ? 'groups.members.one' : 'groups.members.other', {
+                  count: members.length > 0 ? members.length : group.member_count || 0,
+                })}
               </ThemedText>
             </View>
 
@@ -528,7 +542,7 @@ export default function GroupDetailScreen() {
               >
                 <IconSymbol name="person.badge.plus" size={18} color="#C89F81" />
                 <ThemedText style={[styles.settingsRowText, { color: primaryText }]}>
-                  Mitglieder einladen
+                  {t('groups.inviteMembers')}
                 </ThemedText>
                 <IconSymbol name="chevron.right" size={13} color={tertiaryText} style={{ marginLeft: 'auto' }} />
               </TouchableOpacity>
@@ -547,7 +561,7 @@ export default function GroupDetailScreen() {
               >
                 <IconSymbol name="rectangle.portrait.and.arrow.right" size={18} color="#D65441" />
                 <ThemedText style={[styles.settingsRowText, { color: '#D65441' }]}>
-                  Gruppe verlassen
+                  {t('groups.leaveTitle')}
                 </ThemedText>
               </TouchableOpacity>
             )}
@@ -595,11 +609,11 @@ export default function GroupDetailScreen() {
                   activeOpacity={0.7}
                 >
                   <ThemedText style={[styles.modalCancel, { color: tertiaryText }]}>
-                    Schließen
+                    {t('common.close')}
                   </ThemedText>
                 </TouchableOpacity>
                 <ThemedText style={[styles.modalTitle, { color: primaryText }]}>
-                  Mitglieder einladen
+                  {t('groups.inviteMembers')}
                 </ThemedText>
                 <View style={styles.modalPlaceholder} />
               </View>
@@ -607,7 +621,7 @@ export default function GroupDetailScreen() {
               <TextInput
                 value={inviteQuery}
                 onChangeText={setInviteQuery}
-                placeholder="Nach Name oder Username suchen"
+                placeholder={t('groups.searchPeoplePlaceholder')}
                 placeholderTextColor={tertiaryText}
                 style={[
                   styles.searchInput,
@@ -627,13 +641,13 @@ export default function GroupDetailScreen() {
                 ) : inviteQuery.trim().length < 2 ? (
                   <View style={styles.searchState}>
                     <ThemedText style={[styles.searchHint, { color: tertiaryText }]}>
-                      Mindestens 2 Zeichen eingeben.
+                      {t('groups.searchMinLength')}
                     </ThemedText>
                   </View>
                 ) : inviteResults.length === 0 ? (
                   <View style={styles.searchState}>
                     <ThemedText style={[styles.searchHint, { color: tertiaryText }]}>
-                      Keine passenden Nutzerinnen gefunden.
+                      {t('groups.noPeopleFound')}
                     </ThemedText>
                   </View>
                 ) : (
@@ -662,7 +676,7 @@ export default function GroupDetailScreen() {
                           {invitingUserId === user.id ? (
                             <ActivityIndicator size="small" color="#FFF" />
                           ) : (
-                            <ThemedText style={styles.userInviteText}>Einladen</ThemedText>
+                            <ThemedText style={styles.userInviteText}>{t('common.invite')}</ThemedText>
                           )}
                         </LinearGradient>
                       </TouchableOpacity>

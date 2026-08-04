@@ -350,8 +350,24 @@ export const formatBabyAge = (
   }
   parts.push(`${age.days} ${t(age.days === 1 ? 'unit.day.one' : 'unit.day.other')}`);
 
-  return new Intl.ListFormat(getBabyLocaleTag(locale), {
-    style: 'long',
-    type: 'conjunction',
-  }).format(parts);
+  const ListFormat = Intl.ListFormat;
+  if (typeof ListFormat === 'function') {
+    return new ListFormat(getBabyLocaleTag(locale), {
+      style: 'long',
+      type: 'conjunction',
+    }).format(parts);
+  }
+
+  if (parts.length <= 1) return parts[0] ?? '';
+
+  const conjunction = {
+    de: 'und',
+    en: 'and',
+    es: 'y',
+  }[locale];
+  const separator = locale === 'en' && parts.length > 2
+    ? `, ${conjunction} `
+    : ` ${conjunction} `;
+
+  return `${parts.slice(0, -1).join(', ')}${separator}${parts.at(-1)}`;
 };

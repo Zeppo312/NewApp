@@ -1,6 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { getPersistedAppLocale } from './localization';
+import { translateNotificationsText } from './notificationsTranslations';
 
 // Schlüssel für AsyncStorage
 const SLEEP_START_TIME_KEY = 'sleep-tracker-start-time';
@@ -37,10 +39,11 @@ export function formatElapsedTime(startTime: Date): string {
  */
 export async function initNotifications() {
   try {
+    const locale = await getPersistedAppLocale();
     // Für Android: Erstelle einen Kanal
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('sleep-tracking', {
-        name: 'Schlaftracker',
+        name: translateNotificationsText(locale, 'scheduled.sleepChannel'),
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#1E88E5',
@@ -68,12 +71,13 @@ export async function startSleepTracking(startTime: Date): Promise<void> {
 
     // Speichere Startzeit
     await AsyncStorage.setItem(SLEEP_START_TIME_KEY, startTime.toISOString());
+    const locale = await getPersistedAppLocale();
 
     // Zeige initiale Benachrichtigung
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Schlafaufzeichnung läuft',
-        body: 'Laufzeit: 00:00:00',
+        title: translateNotificationsText(locale, 'scheduled.sleepTrackingTitle'),
+        body: translateNotificationsText(locale, 'scheduled.elapsed', { time: '00:00:00' }),
         data: { startTime: startTime.toISOString() },
       },
       trigger: null,
@@ -110,12 +114,13 @@ export async function updateSleepTracking() {
 
     const startTime = new Date(startTimeStr);
     const elapsedTime = formatElapsedTime(startTime);
+    const locale = await getPersistedAppLocale();
 
     // Aktualisiere Benachrichtigung
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'Schlafaufzeichnung läuft',
-        body: `Laufzeit: ${elapsedTime}`,
+        title: translateNotificationsText(locale, 'scheduled.sleepTrackingTitle'),
+        body: translateNotificationsText(locale, 'scheduled.elapsed', { time: elapsedTime }),
         data: { startTime: startTimeStr },
       },
       trigger: null,

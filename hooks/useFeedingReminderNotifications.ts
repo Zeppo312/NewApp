@@ -14,6 +14,8 @@ import {
   markReminderNotificationHandled,
   wasReminderNotificationHandled,
 } from '@/lib/reminderNotificationState';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateNotificationsText } from '@/lib/notificationsTranslations';
 
 /**
  * Hook für Fütterungs-Erinnerungen
@@ -29,6 +31,8 @@ export function useFeedingReminderNotifications(
   currentDevicePushToken?: string | null,
   hasActiveFeedingEntry: boolean = false,
 ) {
+  const { locale, localeTag } = useLocale();
+  const t = useCallback((key: Parameters<typeof translateNotificationsText>[1], params: Record<string, string | number> = {}) => translateNotificationsText(locale, key, params), [locale]);
   const lastScheduledRef = useRef<string | null>(null);
   const scheduledNotificationIdRef = useRef<string | null>(null);
   const lastRemoteTokenRef = useRef<string | null>(null);
@@ -64,7 +68,7 @@ export function useFeedingReminderNotifications(
           babyId,
           reminderType: 'feeding',
           scheduledFor,
-          title: '🍼 Bald Zeit zum Füttern',
+          title: t('scheduled.feedingTitle'),
           body,
           scheduleKey,
           payload: {
@@ -78,7 +82,7 @@ export function useFeedingReminderNotifications(
         console.error('Failed to sync remote feeding reminder:', error);
       }
     },
-    [userId, babyId, currentDevicePushToken]
+    [userId, babyId, currentDevicePushToken, t]
   );
 
   useEffect(() => {
@@ -131,11 +135,11 @@ export function useFeedingReminderNotifications(
           }
 
           const minutesUntilFeeding = Math.max(1, Math.round(msUntilFeeding / 60000));
-          const immediateBody = `Das vorhergesagte Feeding ist in ca. ${minutesUntilFeeding} Minuten`;
+          const immediateBody = t('scheduled.feedingImmediate', { minutes: minutesUntilFeeding });
 
           const immediateId = await Notifications.scheduleNotificationAsync({
             content: {
-              title: '🍼 Bald Zeit zum Füttern',
+              title: t('scheduled.feedingTitle'),
               body: immediateBody,
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -176,16 +180,16 @@ export function useFeedingReminderNotifications(
       await cancelCurrentScheduledNotification();
 
       // Uhrzeit formatieren
-      const timeString = nextFeeding.toLocaleTimeString('de-DE', {
+      const timeString = nextFeeding.toLocaleTimeString(localeTag, {
         hour: '2-digit',
         minute: '2-digit',
       });
-      const body = `In ca. 10 Minuten könnte dein Baby wieder Hunger haben (ca. ${timeString})`;
+      const body = t('scheduled.feedingBody', { time: timeString });
 
       // Schedule local reminder as primary channel.
       const scheduledId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: '🍼 Bald Zeit zum Füttern',
+          title: t('scheduled.feedingTitle'),
           body,
           sound: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -219,7 +223,7 @@ export function useFeedingReminderNotifications(
       }
 
       lastScheduledRef.current = scheduleKey;
-      console.log('✅ Feeding reminder scheduled locally for', tenMinBefore.toLocaleTimeString('de-DE'));
+      console.log('✅ Feeding reminder scheduled locally for', tenMinBefore.toLocaleTimeString(localeTag));
       console.log('   Next feeding at:', timeString);
       console.log('   Interval:', prediction.intervalMinutes, 'min');
     };
@@ -238,7 +242,9 @@ export function useFeedingReminderNotifications(
     cancelRemoteReminder,
     hasRemoteChannel,
     hasActiveFeedingEntry,
+    localeTag,
     syncRemoteReminder,
+    t,
     userId,
     babyId,
   ]);

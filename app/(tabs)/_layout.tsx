@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import {
   Redirect,
   usePathname,
@@ -25,6 +27,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useCommunityUnreadCounts } from '@/hooks/useCommunityUnreadCounts';
 import { getOnboardingCompletionState } from '@/lib/onboarding';
+import {
+  DEFAULT_NAVIGATION_LOCALE,
+  NavigationTranslationKey,
+  translateNavigationText,
+} from '@/lib/navigationTranslations';
+
+let ACTIVE_NAVIGATION_LOCALE = DEFAULT_NAVIGATION_LOCALE;
+const t = (key: NavigationTranslationKey) =>
+  translateNavigationText(ACTIVE_NAVIGATION_LOCALE, key);
 
 const BottomTabNavigator = createBottomTabNavigator().Navigator;
 
@@ -108,6 +119,7 @@ const Tabs = Object.assign(
 );
 
 export default function TabLayout() {
+  ACTIVE_NAVIGATION_LOCALE = useLocale().locale;
   const router = useRouter();
   const segments = useSegments();
   const pathname = usePathname();
@@ -230,8 +242,6 @@ export default function TabLayout() {
     return <Redirect href="/(auth)/getUserInfo" />;
   }
 
-  // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
-  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
   const getTabVisibilityOptions = (hidden: boolean) =>
     hidden
       ? {
@@ -269,8 +279,8 @@ export default function TabLayout() {
     <Tabs
       initialRouteName={isBabyBorn ? 'home' : 'pregnancy-home'}
       screenOptions={{
-        tabBarActiveTintColor: useDarkMode ? adaptiveColors.tabIconSelected : theme.tint,
-        tabBarInactiveTintColor: useDarkMode ? adaptiveColors.tabIconDefault : undefined,
+        tabBarActiveTintColor: adaptiveColors.tabIconSelected,
+        tabBarInactiveTintColor: adaptiveColors.tabIconDefault,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
@@ -278,10 +288,10 @@ export default function TabLayout() {
           ios: {
             // Use a transparent background on iOS to show the blur effect
             position: 'absolute',
-            backgroundColor: useDarkMode ? adaptiveColors.tabBarBackground : undefined,
+            backgroundColor: 'transparent',
           },
           default: {
-            backgroundColor: useDarkMode ? adaptiveColors.tabBarBackground : theme.background,
+            backgroundColor: adaptiveColors.tabBarBackground,
           },
         }),
       }}>
@@ -289,7 +299,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="diary"
         options={{
-          title: 'Entwicklungssprünge',
+          title: t('tab.development'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -297,7 +307,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="baby"
         options={{
-          title: 'Mein Baby',
+          title: t('tab.baby'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -305,7 +315,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Checkliste',
+          title: t('tab.checklist'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="checklist" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -313,7 +323,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="geburtsplan"
         options={{
-          title: 'Geburtsplan',
+          title: t('tab.birthPlan'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -321,7 +331,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="selfcare"
         options={{
-          title: 'Mama Selfcare',
+          title: t('tab.selfcare'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -329,7 +339,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="babyweather"
         options={{
-          title: 'Babywetter',
+          title: t('tab.babyWeather'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="cloud.sun.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -337,7 +347,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="weight-tracker"
         options={{
-          title: 'Gewicht',
+          title: t('tab.weight'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="chart.line.uptrend.xyaxis" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -345,7 +355,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="size-tracker"
         options={{
-          title: 'Größe',
+          title: t('tab.size'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ruler" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -353,7 +363,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="period-tracker"
         options={{
-          title: 'Period Tracker',
+          title: t('tab.periodTracker'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="drop.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -364,7 +374,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="countdown"
         options={{
-          title: 'Countdown',
+          title: t('tab.countdown'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
           ...getTabVisibilityOptions(isBabyBorn),
         }}
@@ -374,7 +384,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Wehen',
+          title: t('tab.contractions'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="timer" color={color} />,
           ...getTabVisibilityOptions(isBabyBorn),
         }}
@@ -385,7 +395,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="sleep-tracker"
         options={{
-          title: 'Schlaftracker',
+          title: t('tab.sleepTracker'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bed.double.fill" color={color} />,
           ...getTabVisibilityOptions(!isBabyBorn),
         }}
@@ -394,7 +404,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="daily_old"
         options={{
-          title: 'Unser Tag',
+          title: t('tab.ourDay'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet" color={color} />,
           ...getTabVisibilityOptions(!isBabyBorn),
         }}
@@ -405,7 +415,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="pregnancy-home"
         options={{
-          title: 'Home',
+          title: t('tab.home'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
           ...getTabVisibilityOptions(isBabyBorn),
         }}
@@ -415,7 +425,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Home',
+          title: t('tab.home'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
           ...getTabVisibilityOptions(!isBabyBorn),
         }}
@@ -425,7 +435,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="blog"
         options={{
-          title: 'Blog',
+          title: t('tab.blog'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.text.image.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -434,7 +444,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Benachrichtigungen',
+          title: t('tab.notifications'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -444,7 +454,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="community"
         options={{
-          title: 'Community',
+          title: t('tab.community'),
           tabBarIcon: ({ color }) => renderCommunityTabIcon(color),
           ...getTabVisibilityOptions(false),
         }}
@@ -454,7 +464,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="debug"
         options={{
-          title: 'Debug',
+          title: t('tab.debug'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
           ...getTabVisibilityOptions(true),
         }}
@@ -463,7 +473,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="groups/index"
         options={{
-          title: 'Gruppen',
+          title: t('tab.groups'),
           ...getTabVisibilityOptions(true),
         }}
       />
@@ -471,7 +481,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="groups/[groupId]"
         options={{
-          title: 'Gruppe',
+          title: t('tab.group'),
           ...getTabVisibilityOptions(true),
         }}
       />
@@ -480,7 +490,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="more"
         options={{
-          title: 'Mehr',
+          title: t('tab.more'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="ellipsis.circle.fill" color={color} />,
           ...getTabVisibilityOptions(false),
         }}

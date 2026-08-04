@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, ActivityIndicator, Image, KeyboardAvoidingView, ScrollView, Keyboard, TouchableWithoutFeedback, InputAccessoryView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -19,6 +21,12 @@ import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import * as ImagePicker from 'expo-image-picker';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
+import {
+  DEFAULT_ONBOARDING_LOCALE,
+  getOnboardingLocaleTag,
+  OnboardingTranslationKey,
+  translateOnboardingText,
+} from '@/lib/onboardingTranslations';
 
 type StepKey =
   | 'firstName'
@@ -34,15 +42,24 @@ type StepKey =
 
 const MIN_VALID_PROFILE_DATE_YEAR = 2000;
 const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
+let ACTIVE_ONBOARDING_LOCALE = DEFAULT_ONBOARDING_LOCALE;
+let ONBOARDING_LOCALE_TAG = getOnboardingLocaleTag(ACTIVE_ONBOARDING_LOCALE);
+const t = (
+  key: OnboardingTranslationKey,
+  params?: Record<string, string | number>,
+) => translateOnboardingText(ACTIVE_ONBOARDING_LOCALE, key, params);
 
-const ONBOARDING_PRESET_OPTIONS: readonly { id: BackgroundPreset; label: string }[] = [
-  { id: 'default', label: 'Standard' },
-  { id: 'verspielt', label: 'Verspielt' },
-  { id: 'dunkler', label: 'Dunkler' },
-  { id: 'nightmode', label: 'Night Mode' },
-  { id: 'shadow', label: 'Shadow' },
-  { id: 'wave', label: 'Wave' },
-  { id: 'stone', label: 'Stone' },
+const ONBOARDING_PRESET_OPTIONS: readonly {
+  id: BackgroundPreset;
+  labelKey: OnboardingTranslationKey;
+}[] = [
+  { id: 'default', labelKey: 'preset.default' },
+  { id: 'verspielt', labelKey: 'preset.playful' },
+  { id: 'dunkler', labelKey: 'preset.darker' },
+  { id: 'nightmode', labelKey: 'preset.night' },
+  { id: 'shadow', labelKey: 'preset.shadow' },
+  { id: 'wave', labelKey: 'preset.wave' },
+  { id: 'stone', labelKey: 'preset.stone' },
 ];
 
 const ONBOARDING_STEP_ORDER: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
@@ -58,6 +75,8 @@ const PRESET_DARK_MODE_MAP: Record<BackgroundPreset, boolean> = {
 };
 
 export default function GetUserInfoScreen() {
+  ACTIVE_ONBOARDING_LOCALE = useLocale().locale;
+  ONBOARDING_LOCALE_TAG = getOnboardingLocaleTag(ACTIVE_ONBOARDING_LOCALE);
   const theme = Colors.light;
   const invitationAccessoryViewID = 'invitation-code-keyboard-accessory';
   const { user } = useAuth();
@@ -197,8 +216,8 @@ export default function GetUserInfoScreen() {
 
   // Formatieren eines Datums für die Anzeige
   const formatDate = (date: Date | null) => {
-    if (!date) return 'Nicht festgelegt';
-    return date.toLocaleDateString('de-DE', {
+    if (!date) return t('common.notSet');
+    return date.toLocaleDateString(ONBOARDING_LOCALE_TAG, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
@@ -215,13 +234,13 @@ export default function GetUserInfoScreen() {
 
     if (!user?.id) {
       if (shouldShowErrorAlert) {
-        Alert.alert('Hinweis', 'Bitte melde dich erneut an.');
+        Alert.alert(t('common.notice'), t('invitation.signInAgain'));
       }
       return false;
     }
 
     if (!normalizedCode) {
-      setInvitationError('Bitte gib einen Einladungscode ein.');
+      setInvitationError(t('invitation.enterCode'));
       return false;
     }
 
@@ -263,27 +282,30 @@ export default function GetUserInfoScreen() {
         }
 
         if (shouldShowSuccessAlert && !result.linkedUserId) {
-          Alert.alert('Einladung verknüpft', partnerName
-            ? `Du bist jetzt mit ${partnerName} verbunden.`
-            : 'Einladungscode wurde angenommen.');
+          Alert.alert(t('invitation.linkedTitle'), partnerName
+            ? t('invitation.linkedWith', { name: partnerName })
+            : t('invitation.accepted'));
         }
         return true;
       } else {
-        const errorMessage = result.error?.message || 'Der Einladungscode konnte nicht eingelöst werden.';
+        const errorMessage = t('invitation.redeemFailed');
+        if (result.error?.message) {
+          console.error('Invitation redeem response:', result.error.message);
+        }
         setInvitationError(errorMessage);
         setInvitationStatus('idle');
         if (shouldShowErrorAlert) {
-          Alert.alert('Fehler', errorMessage);
+          Alert.alert(t('common.error'), errorMessage);
         }
         return false;
       }
     } catch (err: any) {
       console.error('Invitation redeem failed:', err);
-      const message = err?.message || 'Ein unerwarteter Fehler ist aufgetreten.';
+      const message = t('invitation.unexpectedError');
       setInvitationError(message);
       setInvitationStatus('idle');
       if (shouldShowErrorAlert) {
-        Alert.alert('Fehler', message);
+        Alert.alert(t('common.error'), message);
       }
       return false;
     } finally {
@@ -346,7 +368,7 @@ export default function GetUserInfoScreen() {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Berechtigung erforderlich', 'Bitte erlaube den Zugriff auf deine Fotos.');
+        Alert.alert(t('photo.permissionTitle'), t('photo.permissionMessage'));
         return;
       }
 
@@ -379,14 +401,14 @@ export default function GetUserInfoScreen() {
       }
 
       if (!base64Data) {
-        Alert.alert('Fehler', 'Das Bild konnte nicht verarbeitet werden.');
+        Alert.alert(t('common.error'), t('photo.processFailed'));
         return;
       }
 
       setBabyPhotoUrl(base64Data);
     } catch (error) {
       console.error('Error picking baby photo in onboarding:', error);
-      Alert.alert('Fehler', 'Das Babyfoto konnte nicht ausgewählt werden.');
+      Alert.alert(t('common.error'), t('photo.selectFailed'));
     }
   };
 
@@ -403,23 +425,24 @@ export default function GetUserInfoScreen() {
       const result = await pickAndSaveBackground();
 
       if (result.error) {
-        Alert.alert('Fehler', result.error);
+        console.error('Background selection failed:', result.error);
+        Alert.alert(t('common.error'), t('background.selectFailed'));
         return;
       }
 
       if (result.success && result.needsModeSelection) {
         Alert.alert(
-          'Bildhelligkeit',
-          'Ist dein Hintergrundbild eher hell oder dunkel? Dies passt die Textfarben an.',
+          t('background.brightnessTitle'),
+          t('background.brightnessMessage'),
           [
             {
-              text: 'Hell',
+              text: t('common.light'),
               onPress: () => {
                 void setBackgroundMode(false);
               },
             },
             {
-              text: 'Dunkel',
+              text: t('common.dark'),
               onPress: () => {
                 void setBackgroundMode(true);
               },
@@ -429,7 +452,7 @@ export default function GetUserInfoScreen() {
       }
     } catch (error) {
       console.error('Error picking onboarding background:', error);
-      Alert.alert('Fehler', 'Hintergrundbild konnte nicht ausgewählt werden.');
+      Alert.alert(t('common.error'), t('background.selectFailed'));
     } finally {
       setIsPickingBackground(false);
     }
@@ -439,7 +462,7 @@ export default function GetUserInfoScreen() {
   const saveUserData = async () => {
     try {
       if (!user) {
-        Alert.alert('Hinweis', 'Bitte melde dich an, um deine Daten zu speichern.');
+        Alert.alert(t('common.notice'), t('save.signIn'));
         return;
       }
 
@@ -470,7 +493,7 @@ export default function GetUserInfoScreen() {
 
       if (profileResult.error) {
         console.error('Error saving profile data:', profileResult.error);
-        throw new Error('Profildaten konnten nicht gespeichert werden.');
+        throw new Error(t('save.profileFailed'));
       }
 
       // Speichern der Benutzereinstellungen (Geburtstermin, Baby geboren)
@@ -483,7 +506,7 @@ export default function GetUserInfoScreen() {
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Error checking existing settings:', fetchError);
-        throw new Error('Benutzereinstellungen konnten nicht überprüft werden.');
+        throw new Error(t('save.settingsCheckFailed'));
       }
 
       let settingsResult;
@@ -517,7 +540,7 @@ export default function GetUserInfoScreen() {
 
       if (settingsResult.error) {
         console.error('Error saving user settings:', settingsResult.error);
-        throw new Error('Benutzereinstellungen konnten nicht gespeichert werden.');
+        throw new Error(t('save.settingsFailed'));
       }
 
       await Promise.all([
@@ -540,7 +563,7 @@ export default function GetUserInfoScreen() {
 
         if (babyError) {
           console.error('Error saving baby info:', babyError);
-          throw new Error('Baby-Informationen konnten nicht gespeichert werden.');
+          throw new Error(t('save.babyFailed'));
         }
         await refreshBabyDetails();
       }
@@ -572,7 +595,7 @@ export default function GetUserInfoScreen() {
       router.replace(nextRoute);
     } catch (err) {
       console.error('Failed to save user data:', err);
-      Alert.alert('Fehler', err instanceof Error ? err.message : 'Deine Daten konnten nicht gespeichert werden.');
+      Alert.alert(t('common.error'), err instanceof Error ? err.message : t('save.allFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -583,39 +606,39 @@ export default function GetUserInfoScreen() {
     switch (currentStepKey) {
       case 'firstName':
         if (!firstName.trim()) {
-          Alert.alert('Hinweis', 'Bitte gib deinen Vornamen ein.');
+          Alert.alert(t('common.notice'), t('validation.firstName'));
           return;
         }
         break;
       case 'lastName':
         if (!lastName.trim()) {
-          Alert.alert('Hinweis', 'Bitte gib deinen Nachnamen ein.');
+          Alert.alert(t('common.notice'), t('validation.lastName'));
           return;
         }
         break;
       case 'role':
         if (!userRole) {
-          Alert.alert('Hinweis', 'Bitte wähle aus, ob du Mama oder Papa bist.');
+          Alert.alert(t('common.notice'), t('validation.role'));
           return;
         }
         break;
       case 'babyStatus':
         if (isBabyBorn === null) {
-          Alert.alert('Hinweis', 'Bitte gib an, ob dein Baby bereits geboren ist.');
+          Alert.alert(t('common.notice'), t('validation.babyStatus'));
           return;
         }
         break;
       case 'dates':
         if (isBabyBorn === false && !dueDate) {
-          Alert.alert('Hinweis', 'Bitte wähle den errechneten Geburtstermin aus.');
+          Alert.alert(t('common.notice'), t('validation.dueDate'));
           return;
         }
         if (isBabyBorn === true && !birthDate) {
-          Alert.alert('Hinweis', 'Bitte gib das Geburtsdatum deines Babys ein.');
+          Alert.alert(t('common.notice'), t('validation.birthDate'));
           return;
         }
         if (isBabyBorn === null) {
-          Alert.alert('Hinweis', 'Bitte gib an, ob dein Baby bereits geboren ist.');
+          Alert.alert(t('common.notice'), t('validation.babyStatus'));
           return;
         }
         break;
@@ -623,11 +646,11 @@ export default function GetUserInfoScreen() {
         break;
       case 'babyPhoto':
         if (wantsBabyPhotoUpload === null) {
-          Alert.alert('Hinweis', 'Bitte gib an, ob du ein Babyfoto hochladen möchtest.');
+          Alert.alert(t('common.notice'), t('validation.photoChoice'));
           return;
         }
         if (wantsBabyPhotoUpload === true && !babyPhotoUrl) {
-          Alert.alert('Hinweis', 'Bitte wähle ein Babyfoto aus oder antworte mit "Nein".');
+          Alert.alert(t('common.notice'), t('validation.photoRequired'));
           return;
         }
         break;
@@ -667,12 +690,12 @@ export default function GetUserInfoScreen() {
               style={styles.babyImageSmall}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Wie ist dein Vorname?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('firstName.title')}</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="Dein Vorname"
+              placeholder={t('firstName.placeholder')}
               placeholderTextColor={theme.tabIconDefault}
               autoFocus
             />
@@ -687,12 +710,12 @@ export default function GetUserInfoScreen() {
               style={styles.babyImageSmall}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Wie ist dein Nachname?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('lastName.title')}</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Dein Nachname"
+              placeholder={t('lastName.placeholder')}
               placeholderTextColor={theme.tabIconDefault}
               autoFocus
             />
@@ -707,7 +730,7 @@ export default function GetUserInfoScreen() {
               style={styles.babyImageSmall}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Bist du Mama oder Papa?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('role.title')}</ThemedText>
             <View style={styles.roleButtonsContainer}>
               <TouchableOpacity
                 style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
@@ -719,7 +742,7 @@ export default function GetUserInfoScreen() {
                   color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
-                  Mama
+                  {t('role.mama')}
                 </ThemedText>
               </TouchableOpacity>
 
@@ -733,7 +756,7 @@ export default function GetUserInfoScreen() {
                   color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
-                  Papa
+                  {t('role.papa')}
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -750,16 +773,16 @@ export default function GetUserInfoScreen() {
             />
             {invitationStatus === 'accepted' ? (
               <>
-                <ThemedText style={styles.stepTitle}>Verknüpfung erfolgreich!</ThemedText>
+                <ThemedText style={styles.stepTitle}>{t('invitation.successTitle')}</ThemedText>
                 <View style={styles.infoCard}>
                   <View style={styles.infoRow}>
                     <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
                       <IconSymbol name="checkmark.circle.fill" size={18} color="#9DBEBB" />
                     </View>
                     <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>Partner</ThemedText>
+                      <ThemedText style={styles.infoRowLabel}>{t('invitation.partner')}</ThemedText>
                       <ThemedText style={styles.infoRowValue}>
-                        {invitationInfo?.partnerName || 'Verknüpft'}
+                        {invitationInfo?.partnerName || t('invitation.linked')}
                       </ThemedText>
                     </View>
                   </View>
@@ -771,7 +794,7 @@ export default function GetUserInfoScreen() {
                           <IconSymbol name="calendar" size={18} color="#8E4EC6" />
                         </View>
                         <View style={styles.infoRowContent}>
-                          <ThemedText style={styles.infoRowLabel}>Errechneter Termin</ThemedText>
+                          <ThemedText style={styles.infoRowLabel}>{t('invitation.dueDate')}</ThemedText>
                           <ThemedText style={styles.infoRowValue}>
                             {formatDate(parseSafeDate(invitationInfo.dueDate))}
                           </ThemedText>
@@ -785,27 +808,27 @@ export default function GetUserInfoScreen() {
                       <IconSymbol name="heart.fill" size={18} color="#E8A0BF" />
                     </View>
                     <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>Baby-Daten</ThemedText>
-                      <ThemedText style={styles.infoRowValue}>Gemeinsam ausgewählt</ThemedText>
+                      <ThemedText style={styles.infoRowLabel}>{t('invitation.babyData')}</ThemedText>
+                      <ThemedText style={styles.infoRowValue}>{t('invitation.sharedSelection')}</ThemedText>
                     </View>
                   </View>
                 </View>
                 <ThemedText style={styles.invitationSkipNote}>
-                  Weiter zur Zusammenfassung!
+                  {t('invitation.continueSummary')}
                 </ThemedText>
               </>
             ) : (
               <>
-                <ThemedText style={styles.stepTitle}>Hast du einen Einladungscode?</ThemedText>
+                <ThemedText style={styles.stepTitle}>{t('invitation.title')}</ThemedText>
                 <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 16 }]}>
-                  Damit verbindest du dich mit deiner Partnerperson und nutzt gemeinsam dasselbe Baby-Profil.
+                  {t('invitation.description')}
                 </ThemedText>
 
                 <TextInput
                   style={[styles.input, { color: theme.text }]}
                   value={invitationCode}
                   onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
-                  placeholder="CODE (optional)"
+                  placeholder={t('invitation.placeholder')}
                   placeholderTextColor={theme.tabIconDefault}
                   autoCapitalize="characters"
                   autoCorrect={false}
@@ -828,7 +851,7 @@ export default function GetUserInfoScreen() {
                     disabled={isRedeemingInvitation}
                   >
                     <ThemedText style={styles.booleanButtonText}>
-                      {isRedeemingInvitation ? 'Prüfe...' : 'Code einlösen'}
+                      {isRedeemingInvitation ? t('invitation.checking') : t('invitation.redeem')}
                     </ThemedText>
                   </TouchableOpacity>
 
@@ -840,7 +863,7 @@ export default function GetUserInfoScreen() {
                     }}
                     disabled={isRedeemingInvitation}
                   >
-                    <ThemedText style={styles.booleanButtonText}>Ohne Code weiter</ThemedText>
+                    <ThemedText style={styles.booleanButtonText}>{t('invitation.skip')}</ThemedText>
                   </TouchableOpacity>
                 </View>
               </>
@@ -856,7 +879,7 @@ export default function GetUserInfoScreen() {
               style={styles.babyImage}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Ist dein Baby bereits geboren?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('babyStatus.title')}</ThemedText>
             <View style={styles.booleanButtonsContainer}>
               <TouchableOpacity
                 style={[styles.booleanButton, isBabyBorn === true && styles.booleanButtonActive]}
@@ -865,7 +888,7 @@ export default function GetUserInfoScreen() {
                   setShowDueDatePicker(false);
                 }}
               >
-                <ThemedText style={[styles.booleanButtonText, isBabyBorn === true && styles.booleanButtonTextActive]}>Ja</ThemedText>
+                <ThemedText style={[styles.booleanButtonText, isBabyBorn === true && styles.booleanButtonTextActive]}>{t('common.yes')}</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -877,7 +900,7 @@ export default function GetUserInfoScreen() {
                   setBabyPhotoUrl(null);
                 }}
               >
-                <ThemedText style={[styles.booleanButtonText, isBabyBorn === false && styles.booleanButtonTextActive]}>Nein</ThemedText>
+                <ThemedText style={[styles.booleanButtonText, isBabyBorn === false && styles.booleanButtonTextActive]}>{t('common.no')}</ThemedText>
               </TouchableOpacity>
             </View>
           </ThemedView>
@@ -893,8 +916,8 @@ export default function GetUserInfoScreen() {
         maxDueDate.setFullYear(maxDueDate.getFullYear() + 2);
         const birthDatePickerValue = getSafePickerDate(selectedDate, maxBirthDate, maxBirthDate);
         const dueDatePickerValue = getSafePickerDate(selectedDate, defaultDueDate, maxDueDate);
-        const title = isBorn ? 'Wann wurde dein Baby geboren?' : 'Wann ist der errechnete Geburtstermin?';
-        const placeholder = isBorn ? 'Geburtsdatum auswählen' : 'Geburtstermin auswählen';
+        const title = isBorn ? t('dates.birthQuestion') : t('dates.dueQuestion');
+        const placeholder = isBorn ? t('dates.chooseBirth') : t('dates.chooseDue');
 
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
@@ -940,11 +963,14 @@ export default function GetUserInfoScreen() {
             {isBorn && Platform.OS === 'ios' && (
               <IOSBottomDatePicker
                 visible={showBirthDatePicker}
-                title="Geburtsdatum auswählen"
+                title={t('dates.chooseBirth')}
                 value={birthDatePickerValue}
                 mode="date"
                 minimumDate={MIN_VALID_PROFILE_DATE}
                 maximumDate={maxBirthDate}
+                confirmLabel={t('common.done')}
+                cancelLabel={t('common.cancel')}
+                locale={ONBOARDING_LOCALE_TAG}
                 onClose={() => setShowBirthDatePicker(false)}
                 onConfirm={handleBirthDateConfirmIOS}
                 initialVariant="calendar"
@@ -953,11 +979,14 @@ export default function GetUserInfoScreen() {
             {!isBorn && Platform.OS === 'ios' && (
               <IOSBottomDatePicker
                 visible={showDueDatePicker}
-                title="Geburtstermin auswählen"
+                title={t('dates.chooseDue')}
                 value={dueDatePickerValue}
                 mode="date"
                 minimumDate={MIN_VALID_PROFILE_DATE}
                 maximumDate={maxDueDate}
+                confirmLabel={t('common.done')}
+                cancelLabel={t('common.cancel')}
+                locale={ONBOARDING_LOCALE_TAG}
                 onClose={() => setShowDueDatePicker(false)}
                 onConfirm={handleDueDateConfirmIOS}
                 initialVariant="calendar"
@@ -975,17 +1004,17 @@ export default function GetUserInfoScreen() {
               style={styles.babyImageSmall}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Wie heißt dein Baby?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('babyInfo.title')}</ThemedText>
             <TextInput
               style={[styles.input, { color: theme.text }]}
               value={babyName}
               onChangeText={setBabyName}
-              placeholder="Name deines Babys (optional)"
+              placeholder={t('babyInfo.namePlaceholder')}
               placeholderTextColor={theme.tabIconDefault}
               autoFocus
             />
 
-            <ThemedText style={styles.stepSubtitle}>Welches Geschlecht hat dein Baby?</ThemedText>
+            <ThemedText style={styles.stepSubtitle}>{t('babyInfo.genderQuestion')}</ThemedText>
             <View style={styles.genderContainer}>
               <TouchableOpacity
                 style={[styles.genderButton, babyGender === 'male' && styles.genderButtonActive]}
@@ -997,7 +1026,7 @@ export default function GetUserInfoScreen() {
                   color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.genderButtonText, babyGender === 'male' && styles.genderButtonTextActive]}>
-                  Junge
+                  {t('babyInfo.boy')}
                 </ThemedText>
               </TouchableOpacity>
 
@@ -1011,7 +1040,7 @@ export default function GetUserInfoScreen() {
                   color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.genderButtonText, babyGender === 'female' && styles.genderButtonTextActive]}>
-                  Mädchen
+                  {t('babyInfo.girl')}
                 </ThemedText>
               </TouchableOpacity>
 
@@ -1025,7 +1054,7 @@ export default function GetUserInfoScreen() {
                   color={babyGender === 'unknown' ? '#FFFFFF' : theme.tabIconDefault}
                 />
                 <ThemedText style={[styles.genderButtonText, babyGender === 'unknown' && styles.genderButtonTextActive]}>
-                  Weiß ich noch nicht
+                  {t('babyInfo.unknown')}
                 </ThemedText>
               </TouchableOpacity>
             </View>
@@ -1040,13 +1069,13 @@ export default function GetUserInfoScreen() {
               style={styles.babyTakePicImage}
               resizeMode="contain"
             />
-            <ThemedText style={styles.stepTitle}>Möchtest du ein Bild deines Babys hochladen?</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('babyPhoto.title')}</ThemedText>
             <View style={styles.booleanButtonsContainer}>
               <TouchableOpacity
                 style={[styles.booleanButton, wantsBabyPhotoUpload === true && styles.booleanButtonActive]}
                 onPress={() => setWantsBabyPhotoUpload(true)}
               >
-                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === true && styles.booleanButtonTextActive]}>Ja</ThemedText>
+                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === true && styles.booleanButtonTextActive]}>{t('common.yes')}</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1056,7 +1085,7 @@ export default function GetUserInfoScreen() {
                   setBabyPhotoUrl(null);
                 }}
               >
-                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === false && styles.booleanButtonTextActive]}>Nein</ThemedText>
+                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === false && styles.booleanButtonTextActive]}>{t('common.no')}</ThemedText>
               </TouchableOpacity>
             </View>
 
@@ -1067,19 +1096,19 @@ export default function GetUserInfoScreen() {
                 ) : (
                   <View style={styles.onboardingPhotoPlaceholder}>
                     <IconSymbol name="photo" size={28} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.onboardingPhotoPlaceholderText}>Noch kein Foto ausgewählt</ThemedText>
+                    <ThemedText style={styles.onboardingPhotoPlaceholderText}>{t('babyPhoto.noneSelected')}</ThemedText>
                   </View>
                 )}
 
                 <TouchableOpacity style={styles.photoUploadButton} onPress={pickBabyPhoto}>
                   <ThemedText style={styles.photoUploadButtonText}>
-                    {babyPhotoUrl ? 'Foto ändern' : 'Foto auswählen'}
+                    {babyPhotoUrl ? t('babyPhoto.change') : t('babyPhoto.choose')}
                   </ThemedText>
                 </TouchableOpacity>
 
                 {!!babyPhotoUrl && (
                   <TouchableOpacity style={styles.photoRemoveButton} onPress={() => setBabyPhotoUrl(null)}>
-                    <ThemedText style={styles.photoRemoveButtonText}>Foto entfernen</ThemedText>
+                    <ThemedText style={styles.photoRemoveButtonText}>{t('babyPhoto.remove')}</ThemedText>
                   </TouchableOpacity>
                 )}
               </View>
@@ -1090,9 +1119,9 @@ export default function GetUserInfoScreen() {
       case 'background': // Hintergrundauswahl
         return (
           <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <ThemedText style={styles.stepTitle}>Wähle deinen Hintergrund</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('background.title')}</ThemedText>
             <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 14 }]}>
-              Du kannst ihn jederzeit später in den Einstellungen ändern.
+              {t('background.description')}
             </ThemedText>
 
             <View style={styles.onboardingBackgroundPreviewContainer}>
@@ -1104,8 +1133,11 @@ export default function GetUserInfoScreen() {
               <View style={styles.onboardingBackgroundPreviewOverlay}>
                 <ThemedText style={styles.onboardingBackgroundPreviewLabel}>
                   {selectedBackground === 'custom'
-                    ? `Eigenes Bild (${isDarkBackground ? 'dunkel' : 'hell'})`
-                    : ONBOARDING_PRESET_OPTIONS.find((option) => option.id === selectedBackground)?.label ?? 'Standard'}
+                    ? t('background.customPreview', {
+                        mode: isDarkBackground ? t('background.modeDark') : t('background.modeLight'),
+                      })
+                    : t(ONBOARDING_PRESET_OPTIONS.find((option) => option.id === selectedBackground)?.labelKey
+                      ?? 'preset.default')}
                 </ThemedText>
               </View>
             </View>
@@ -1130,7 +1162,7 @@ export default function GetUserInfoScreen() {
                         isSelected && styles.onboardingBackgroundPresetButtonLabelActive,
                       ]}
                     >
-                      {option.label}
+                      {t(option.labelKey)}
                     </ThemedText>
                   </TouchableOpacity>
                 );
@@ -1147,7 +1179,7 @@ export default function GetUserInfoScreen() {
               ) : (
                 <>
                   <IconSymbol name="photo" size={18} color="#FFFFFF" />
-                  <ThemedText style={styles.onboardingBackgroundActionButtonText}>Eigenes Bild wählen</ThemedText>
+                  <ThemedText style={styles.onboardingBackgroundActionButtonText}>{t('background.chooseCustom')}</ThemedText>
                 </>
               )}
             </TouchableOpacity>
@@ -1161,7 +1193,7 @@ export default function GetUserInfoScreen() {
               >
                 <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={18} color="#7D5A50" />
                 <ThemedText style={styles.onboardingBackgroundModeButtonText}>
-                  {isDarkBackground ? 'Textmodus: hell' : 'Textmodus: dunkel'}
+                  {isDarkBackground ? t('background.textModeLight') : t('background.textModeDark')}
                 </ThemedText>
               </TouchableOpacity>
             )}
@@ -1185,7 +1217,7 @@ export default function GetUserInfoScreen() {
               />
             )}
 
-            <ThemedText style={styles.stepTitle}>Alles bereit!</ThemedText>
+            <ThemedText style={styles.stepTitle}>{t('summary.title')}</ThemedText>
 
             <View style={styles.infoCard}>
               {/* Name */}
@@ -1194,7 +1226,7 @@ export default function GetUserInfoScreen() {
                   <IconSymbol name="person.fill" size={18} color="#9DBEBB" />
                 </View>
                 <View style={styles.infoRowContent}>
-                  <ThemedText style={styles.infoRowLabel}>Name</ThemedText>
+                  <ThemedText style={styles.infoRowLabel}>{t('summary.name')}</ThemedText>
                   <ThemedText style={styles.infoRowValue}>{firstName} {lastName}</ThemedText>
                 </View>
               </View>
@@ -1207,9 +1239,13 @@ export default function GetUserInfoScreen() {
                   <IconSymbol name="heart.fill" size={18} color="#E8A0BF" />
                 </View>
                 <View style={styles.infoRowContent}>
-                  <ThemedText style={styles.infoRowLabel}>Rolle</ThemedText>
+                  <ThemedText style={styles.infoRowLabel}>{t('summary.role')}</ThemedText>
                   <ThemedText style={styles.infoRowValue}>
-                    {userRole === 'mama' ? 'Mama' : userRole === 'papa' ? 'Papa' : 'Nicht festgelegt'}
+                    {userRole === 'mama'
+                      ? t('role.mama')
+                      : userRole === 'papa'
+                        ? t('role.papa')
+                        : t('common.notSet')}
                   </ThemedText>
                 </View>
               </View>
@@ -1223,9 +1259,9 @@ export default function GetUserInfoScreen() {
                       <IconSymbol name="person.2.fill" size={16} color="#8E4EC6" />
                     </View>
                     <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>Partner</ThemedText>
+                      <ThemedText style={styles.infoRowLabel}>{t('invitation.partner')}</ThemedText>
                       <ThemedText style={styles.infoRowValue}>
-                        {invitationInfo?.partnerName || 'Verknüpft'}
+                        {invitationInfo?.partnerName || t('invitation.linked')}
                       </ThemedText>
                     </View>
                   </View>
@@ -1237,7 +1273,7 @@ export default function GetUserInfoScreen() {
                           <IconSymbol name="calendar" size={18} color="#8E4EC6" />
                         </View>
                         <View style={styles.infoRowContent}>
-                          <ThemedText style={styles.infoRowLabel}>Gemeinsamer Termin</ThemedText>
+                          <ThemedText style={styles.infoRowLabel}>{t('summary.sharedDueDate')}</ThemedText>
                           <ThemedText style={styles.infoRowValue}>
                             {formatDate(parseSafeDate(invitationInfo.dueDate))}
                           </ThemedText>
@@ -1258,12 +1294,12 @@ export default function GetUserInfoScreen() {
                     </View>
                     <View style={styles.infoRowContent}>
                       <ThemedText style={styles.infoRowLabel}>
-                        {isBabyBorn ? 'Geburtsdatum' : 'Errechneter Termin'}
+                        {isBabyBorn ? t('summary.birthDate') : t('summary.dueDate')}
                       </ThemedText>
                       <ThemedText style={styles.infoRowValue}>
                         {isBabyBorn
-                          ? (birthDate ? formatDate(birthDate) : 'Nicht festgelegt')
-                          : (dueDate ? formatDate(dueDate) : 'Nicht festgelegt')}
+                          ? (birthDate ? formatDate(birthDate) : t('common.notSet'))
+                          : (dueDate ? formatDate(dueDate) : t('common.notSet'))}
                       </ThemedText>
                     </View>
                   </View>
@@ -1276,7 +1312,7 @@ export default function GetUserInfoScreen() {
                           <IconSymbol name="star.fill" size={18} color="#E8A0BF" />
                         </View>
                         <View style={styles.infoRowContent}>
-                          <ThemedText style={styles.infoRowLabel}>Baby-Name</ThemedText>
+                          <ThemedText style={styles.infoRowLabel}>{t('summary.babyName')}</ThemedText>
                           <ThemedText style={styles.infoRowValue}>{babyName}</ThemedText>
                         </View>
                       </View>
@@ -1289,9 +1325,13 @@ export default function GetUserInfoScreen() {
                       <IconSymbol name={babyGender === 'unknown' ? 'questionmark.circle' : 'person.fill'} size={18} color="#9DBEBB" />
                     </View>
                     <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>Geschlecht</ThemedText>
+                      <ThemedText style={styles.infoRowLabel}>{t('summary.gender')}</ThemedText>
                       <ThemedText style={styles.infoRowValue}>
-                        {babyGender === 'male' ? 'Junge' : babyGender === 'female' ? 'Mädchen' : 'Noch nicht bekannt'}
+                        {babyGender === 'male'
+                          ? t('babyInfo.boy')
+                          : babyGender === 'female'
+                            ? t('babyInfo.girl')
+                            : t('summary.genderUnknown')}
                       </ThemedText>
                     </View>
                   </View>
@@ -1320,10 +1360,10 @@ export default function GetUserInfoScreen() {
 
           <View style={styles.header}>
             <ThemedText type="title" style={styles.title}>
-              Willkommen!
+              {t('screen.title')}
             </ThemedText>
             <ThemedText style={styles.subtitle}>
-              Lass uns dein Profil einrichten
+              {t('screen.subtitle')}
             </ThemedText>
           </View>
 
@@ -1334,14 +1374,14 @@ export default function GetUserInfoScreen() {
               />
             </View>
             <ThemedText style={styles.progressText}>
-              Schritt {boundedCurrentStep + 1} von {totalSteps}
+              {t('screen.progress', { current: boundedCurrentStep + 1, total: totalSteps })}
             </ThemedText>
           </View>
 
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={theme.accent} />
-              <ThemedText style={styles.loadingText}>Lade Daten...</ThemedText>
+              <ThemedText style={styles.loadingText}>{t('screen.loading')}</ThemedText>
             </View>
           ) : (
             <KeyboardAvoidingView
@@ -1366,7 +1406,7 @@ export default function GetUserInfoScreen() {
               <View style={styles.footerContainer}>
                 {currentStepKey === 'summary' && (
                   <ThemedText style={styles.footerSummaryNote} allowFontScaling={false}>
-                    Du kannst das später im Profil ändern.
+                    {t('screen.changeLater')}
                   </ThemedText>
                 )}
 
@@ -1377,7 +1417,7 @@ export default function GetUserInfoScreen() {
                       onPress={goToPreviousStep}
                     >
                       <IconSymbol name="chevron.left" size={20} color={theme.text} />
-                      <ThemedText style={styles.backButtonText}>Zurück</ThemedText>
+                      <ThemedText style={styles.backButtonText}>{t('common.back')}</ThemedText>
                     </TouchableOpacity>
                   )}
 
@@ -1387,7 +1427,9 @@ export default function GetUserInfoScreen() {
                     disabled={isSaving || isRedeemingInvitation}
                   >
                     <ThemedText style={styles.nextButtonText}>
-                      {boundedCurrentStep === totalSteps - 1 ? (isSaving ? 'Speichern...' : 'Fertig') : 'Weiter'}
+                      {boundedCurrentStep === totalSteps - 1
+                        ? (isSaving ? t('common.saving') : t('common.done'))
+                        : t('common.next')}
                     </ThemedText>
                     {boundedCurrentStep < totalSteps - 1 && (
                       <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
@@ -1402,7 +1444,7 @@ export default function GetUserInfoScreen() {
             <InputAccessoryView nativeID={invitationAccessoryViewID}>
               <View style={styles.keyboardAccessory}>
                 <TouchableOpacity onPress={Keyboard.dismiss} style={styles.keyboardAccessoryButton}>
-                  <ThemedText style={styles.keyboardAccessoryButtonText}>Fertig</ThemedText>
+                  <ThemedText style={styles.keyboardAccessoryButtonText}>{t('common.done')}</ThemedText>
                 </TouchableOpacity>
               </View>
             </InputAccessoryView>
@@ -1413,6 +1455,7 @@ export default function GetUserInfoScreen() {
             currentUserId={user?.id}
             linkedUserId={pendingBabySelection?.linkedUserId}
             linkedUserName={pendingBabySelection?.linkedUserName}
+            locale={ACTIVE_ONBOARDING_LOCALE}
             onApplied={async () => {
               setPendingBabySelection(null);
               await Promise.allSettled([

@@ -3,6 +3,8 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { supabase, type AppSettings } from './supabase';
+import type { AppLocale } from './localization';
+import { translateNotificationsText } from './notificationsTranslations';
 
 const VITAMIN_D_CHECKS_KEY_PREFIX = 'planner:vitamin-d:checks';
 const VITAMIN_D_NOTIFICATION_IDENTIFIER_PREFIX = 'planner:vitamin-d:daily-reminder';
@@ -289,11 +291,13 @@ export async function syncVitaminDReminderSchedule({
   enabled,
   hour = VITAMIN_D_REMINDER_HOUR,
   minute = VITAMIN_D_REMINDER_MINUTE,
+  locale = 'de',
 }: {
   userId: string;
   enabled: boolean;
   hour?: number;
   minute?: number;
+  locale?: AppLocale;
 }) {
   await cancelVitaminDReminder(userId);
 
@@ -312,8 +316,8 @@ export async function syncVitaminDReminderSchedule({
     await Notifications.scheduleNotificationAsync({
       identifier: getVitaminDReminderIdentifier(userId),
       content: {
-        title: 'Vitamin D nicht vergessen',
-        body: 'Denk an die Vitamin-D-Tablette und hake sie danach in Unser Tag ab.',
+        title: translateNotificationsText(locale, 'scheduled.vitaminTitle'),
+        body: translateNotificationsText(locale, 'scheduled.vitaminBody'),
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
         data: {
