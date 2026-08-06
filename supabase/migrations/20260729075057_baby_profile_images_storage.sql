@@ -23,6 +23,7 @@ ON CONFLICT (id) DO UPDATE SET
 DROP POLICY IF EXISTS "Public read baby profile images" ON storage.objects;
 DROP POLICY IF EXISTS "Users upload own baby profile images" ON storage.objects;
 DROP POLICY IF EXISTS "Users delete own baby profile images" ON storage.objects;
+DROP POLICY IF EXISTS "Baby members delete baby profile images" ON storage.objects;
 
 CREATE POLICY "Public read baby profile images"
   ON storage.objects
@@ -39,12 +40,22 @@ CREATE POLICY "Users upload own baby profile images"
     AND (storage.foldername(name))[1] = (SELECT auth.uid()::text)
   );
 
-CREATE POLICY "Users delete own baby profile images"
+CREATE POLICY "Baby members delete baby profile images"
   ON storage.objects
   FOR DELETE
   TO authenticated
   USING (
     bucket_id = 'baby-profile-images'
-    AND owner_id = (SELECT auth.uid()::text)
-    AND (storage.foldername(name))[1] = (SELECT auth.uid()::text)
+    AND (
+      (
+        owner_id = (SELECT auth.uid()::text)
+        AND (storage.foldername(name))[1] = (SELECT auth.uid()::text)
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.baby_members AS member
+        WHERE member.user_id = (SELECT auth.uid())
+          AND member.baby_id::text = (storage.foldername(name))[2]
+      )
+    )
   );

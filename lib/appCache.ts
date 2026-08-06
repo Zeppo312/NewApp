@@ -11,7 +11,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCachedUser } from './supabase';
 import type { PaywallAccessRole } from './paywallAccess';
-import { hasRevenueCatEntitlement } from './revenuecat';
+import { getRevenueCatEntitlementStatus } from './revenuecat';
 
 // Cache Keys
 const CACHE_KEYS = {
@@ -41,7 +41,8 @@ const CACHE_DURATIONS = {
   USER_PROFILE: 15 * 60 * 1000,     // 15 Minuten - ändert sich selten
   BABY_LIST: 5 * 60 * 1000,         // 5 Minuten - kann sich ändern
   ACTIVE_BABY: 5 * 60 * 1000,       // 5 Minuten
-  PREMIUM_STATUS: 30 * 60 * 1000,   // 30 Minuten - ändert sich sehr selten
+  PREMIUM_STATUS: 30 * 60 * 1000,   // 30 Minuten für bestätigt aktive Abos
+  PREMIUM_INACTIVE_STATUS: 5 * 60 * 1000, // negative Ergebnisse früher erneut prüfen
   PAYWALL_STATE: 5 * 60 * 1000,     // 5 Minuten
 } as const;
 
@@ -279,34 +280,97 @@ export interface PremiumStatus {
   checkedAt: number;
 }
 
-export const getCachedPremiumStatus = async (): Promise<boolean> => {
+export type PremiumStatusResult = {
+  status: 'active' | 'inactive' | 'unavailable';
+  isPro: boolean | null;
+  source: 'memory' | 'storage' | 'revenuecat' | 'stale_active';
+};
+
+const readStoredPremiumStatus = async (
+  key: string,
+): Promise<{ data: PremiumStatus; timestamp: number } | null> => {
+  try {
+    const stored = await AsyncStorage.getItem(key);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    if (
+      typeof parsed?.timestamp !== 'number' ||
+      typeof parsed?.data?.isPro !== 'boolean'
+    ) {
+      return null;
+    }
+    return parsed as { data: PremiumStatus; timestamp: number };
+  } catch {
+    return null;
+  }
+};
+
+const getPremiumStatusTtl = (isPro: boolean) =>
+  isPro
+    ? CACHE_DURATIONS.PREMIUM_STATUS
+    : CACHE_DURATIONS.PREMIUM_INACTIVE_STATUS;
+
+export const getCachedPremiumStatusResult = async (): Promise<PremiumStatusResult> => {
   const { data: userData } = await getCachedUser();
   const userId = userData.user?.id;
-  if (!userId) return false;
+  if (!userId) {
+    return { status: 'inactive', isPro: false, source: 'revenuecat' };
+  }
 
   const key = getScopedCacheKey(CACHE_KEYS.PREMIUM_STATUS, userId);
-  const ttl = CACHE_DURATIONS.PREMIUM_STATUS;
 
   void cleanupLegacyCacheKey(CACHE_KEYS.PREMIUM_STATUS);
 
-  const memory = getFromMemory<PremiumStatus>(key);
-  if (memory) return memory.isPro;
+  const memoryEntry = memoryCache.get(key) as CacheEntry<PremiumStatus> | undefined;
+  const storedEntry = await readStoredPremiumStatus(key);
+  const lastKnown = memoryEntry &&
+    (!storedEntry || memoryEntry.timestamp >= storedEntry.timestamp)
+    ? { data: memoryEntry.data, timestamp: memoryEntry.timestamp, source: 'memory' as const }
+    : storedEntry
+      ? { ...storedEntry, source: 'storage' as const }
+      : null;
 
-  const storage = await getFromStorage<PremiumStatus>(key, ttl);
-  if (storage) return storage.isPro;
+  if (lastKnown) {
+    const ttl = getPremiumStatusTtl(lastKnown.data.isPro);
+    if (Date.now() - lastKnown.timestamp <= ttl) {
+      setToMemory(key, lastKnown.data, ttl);
+      return {
+        status: lastKnown.data.isPro ? 'active' : 'inactive',
+        isPro: lastKnown.data.isPro,
+        source: lastKnown.source,
+      };
+    }
+  }
 
   try {
-    const isPro = await hasRevenueCatEntitlement(userId);
+    const entitlement = await getRevenueCatEntitlementStatus(userId);
+    if (entitlement.status === 'unavailable') {
+      if (lastKnown?.data.isPro) {
+        return { status: 'active', isPro: true, source: 'stale_active' };
+      }
+      return { status: 'unavailable', isPro: null, source: 'revenuecat' };
+    }
+
+    const isPro = entitlement.status === 'active';
     const status: PremiumStatus = { isPro, checkedAt: Date.now() };
+    const ttl = getPremiumStatusTtl(isPro);
 
     setToMemory(key, status, ttl);
     await setToStorage(key, status);
 
-    return isPro;
+    return { status: entitlement.status, isPro, source: 'revenuecat' };
   } catch (err) {
     console.error('Error checking premium status:', err);
-    return false;
+    if (lastKnown?.data.isPro) {
+      return { status: 'active', isPro: true, source: 'stale_active' };
+    }
+    return { status: 'unavailable', isPro: null, source: 'revenuecat' };
   }
+};
+
+export const getCachedPremiumStatus = async (): Promise<boolean> => {
+  const result = await getCachedPremiumStatusResult();
+  return result.status === 'active';
 };
 
 export const invalidatePremiumStatusCache = async (): Promise<void> => {

@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, BackHandler, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -204,11 +204,19 @@ export default function BabyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ babyId?: string | string[]; edit?: string | string[]; created?: string | string[] }>();
   const fallbackHomeRoute = isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
+  const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
+  const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
+  const routeBabyId = Array.isArray(params.babyId) ? params.babyId[0] : params.babyId;
+  const targetBabyId = routeBabyId ?? activeBabyId;
+  const autoOpenEdit = editParamValue === '1' || editParamValue === 'true';
+  const showCreatedHint = createdParamValue === '1' || createdParamValue === 'true';
 
   // Set fallback route for smart back navigation
   useSmartBack(fallbackHomeRoute);
 
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
+  const [loadedBabyId, setLoadedBabyId] = useState<string | null>(null);
+  const babyInfoRequestIdRef = useRef(0);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -266,12 +274,11 @@ export default function BabyScreen() {
     [setPreferredBedtimeAnchor]
   );
 
-  const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
-  const createdParamValue = Array.isArray(params.created) ? params.created[0] : params.created;
-  const routeBabyId = Array.isArray(params.babyId) ? params.babyId[0] : params.babyId;
-  const targetBabyId = routeBabyId ?? activeBabyId;
-  const autoOpenEdit = editParamValue === '1' || editParamValue === 'true';
-  const showCreatedHint = createdParamValue === '1' || createdParamValue === 'true';
+  useEffect(() => {
+    // Invalidate in-flight loads when the selected profile changes. Saving is
+    // blocked below until the matching profile has finished loading.
+    babyInfoRequestIdRef.current += 1;
+  }, [targetBabyId]);
 
   useEffect(() => {
     if (autoOpenEdit) {
@@ -325,6 +332,8 @@ export default function BabyScreen() {
       return;
     }
 
+    const requestId = ++babyInfoRequestIdRef.current;
+
     setPendingPhoto(null);
     setIsPhotoRemoved(false);
 
@@ -343,6 +352,8 @@ export default function BabyScreen() {
           .maybeSingle(),
       ]);
 
+      if (requestId !== babyInfoRequestIdRef.current) return;
+
       if (settingsResult.error && settingsResult.error.code !== 'PGRST116') {
         console.error('Failed to load baby settings:', settingsResult.error);
       }
@@ -353,11 +364,13 @@ export default function BabyScreen() {
         const safeBirthDate = parseSafeDate(data.birth_date, getCurrentBirthDateBounds());
         setBabyInfo({
           ...data,
+          id: data.id ?? targetBabyId,
           birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
           preferred_bedtime: data.preferred_bedtime
             ? normalizeBedtimeAnchor(data.preferred_bedtime)
             : null,
         });
+        setLoadedBabyId(targetBabyId);
         setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
         setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
@@ -365,14 +378,17 @@ export default function BabyScreen() {
       // Refresh in background if stale
       if (isStale) {
         const freshData = await refresh();
+        if (requestId !== babyInfoRequestIdRef.current) return;
         const safeBirthDate = parseSafeDate(freshData.birth_date, getCurrentBirthDateBounds());
         setBabyInfo({
           ...freshData,
+          id: freshData.id ?? targetBabyId,
           birth_date: safeBirthDate ? safeBirthDate.toISOString() : null,
           preferred_bedtime: freshData.preferred_bedtime
             ? normalizeBedtimeAnchor(freshData.preferred_bedtime)
             : null,
         });
+        setLoadedBabyId(targetBabyId);
         setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
         setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
@@ -483,6 +499,12 @@ export default function BabyScreen() {
   const handleSave = async () => {
     if (!targetBabyId || !user?.id || isSaving) return;
 
+    if (loadedBabyId !== targetBabyId || (babyInfo.id && babyInfo.id !== targetBabyId)) {
+      Alert.alert(t('error.title'), t('save.profileChangedMessage'));
+      void loadBabyInfo();
+      return;
+    }
+
     const normalizedBedtime = commitBedtimeInput(bedtimeInput, true);
     if (!normalizedBedtime) return;
 
@@ -501,10 +523,12 @@ export default function BabyScreen() {
     const previousPhotoUrl = babyInfo.photo_url ?? null;
     let uploadedPhotoUrl: string | null = null;
     let babyInfoWasSaved = false;
+    let saveStage = 'prepare';
 
     setIsSaving(true);
     try {
       if (pendingPhoto) {
+        saveStage = 'photo-upload';
         uploadedPhotoUrl = await uploadBabyPhoto({
           bytes: pendingPhoto.bytes,
           userId: user.id,
@@ -514,16 +538,19 @@ export default function BabyScreen() {
 
       const sanitizedBabyInfo: BabyInfo = {
         ...babyInfo,
+        id: targetBabyId,
         birth_date: birthDateForSave ? birthDateForSave.toISOString() : null,
         preferred_bedtime: normalizedBedtime,
         photo_url: uploadedPhotoUrl ?? (isPhotoRemoved ? null : previousPhotoUrl),
       };
 
+      saveStage = 'baby-profile';
       const { error } = await saveBabyInfo(sanitizedBabyInfo, targetBabyId);
       if (error) {
         throw error;
       } else {
         babyInfoWasSaved = true;
+        saveStage = 'user-settings';
         const { data: existingSettings, error: existingSettingsError } = await supabase
           .from('user_settings')
           .select('id')
@@ -556,23 +583,34 @@ export default function BabyScreen() {
         }
 
         Alert.alert(t('save.successTitle'), t('save.successMessage'));
+        setBabyInfo(sanitizedBabyInfo);
         setPendingPhoto(null);
         setIsPhotoRemoved(false);
         setIsEditing(false);
         if (targetBabyId !== activeBabyId) {
-          await setActiveBabyId(targetBabyId);
+          try {
+            await setActiveBabyId(targetBabyId);
+          } catch (activeBabyError) {
+            console.warn('Baby profile saved, but active baby could not be updated:', activeBabyError);
+          }
         }
-        await refreshBabyDetails();
-        await refreshBabies();
 
-        // Speichere relevante Baby-Infos für den Hintergrund-Task
+        // The profile write already succeeded. Follow-up refresh/cache work must
+        // not show a second, misleading error alert to the user.
+        const followUpTasks: Promise<unknown>[] = [
+          refreshBabyDetails(),
+          refreshBabies(),
+          invalidateBabyCache(targetBabyId),
+        ];
         if (sanitizedBabyInfo.birth_date) {
-          await saveBabyInfoForBackgroundTask(sanitizedBabyInfo);
-          console.log('Baby-Infos für Hintergrund-Task gespeichert.');
+          followUpTasks.push(saveBabyInfoForBackgroundTask(sanitizedBabyInfo));
         }
-
-        // Invalidate cache after save
-        await invalidateBabyCache(targetBabyId);
+        const followUpResults = await Promise.allSettled(followUpTasks);
+        followUpResults.forEach((result, index) => {
+          if (result.status === 'rejected') {
+            console.warn(`Baby profile post-save task ${index + 1} failed:`, result.reason);
+          }
+        });
 
         if (
           previousPhotoUrl
@@ -592,7 +630,7 @@ export default function BabyScreen() {
           console.warn('Failed to clean up unsaved baby photo:', photoDeleteError);
         });
       }
-      console.error('Failed to save baby info:', err);
+      console.error(`Failed to save baby info during ${saveStage}:`, err);
       Alert.alert(t('error.title'), t('save.errorMessage'));
     } finally {
       setIsSaving(false);

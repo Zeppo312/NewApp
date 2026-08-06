@@ -1,5 +1,7 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import * as Crypto from 'expo-crypto';
+import * as Sentry from '@sentry/react-native';
 
 import Purchases from '@/lib/purchasesClient';
 
@@ -45,6 +47,7 @@ export type RevenueCatPlanPricing = Partial<
 
 export type RevenueCatSubscriptionSummary = {
   isActive: boolean;
+  availability: 'available' | 'unavailable';
   productId: string | null;
   planType: RevenueCatPlanType | null;
   tier: SubscriptionTier | null;
@@ -52,7 +55,13 @@ export type RevenueCatSubscriptionSummary = {
   expiresDate: string | null;
 };
 
-let configuredForUserId: string | null = null;
+export type RevenueCatEntitlementStatus =
+  | { status: 'active'; customerInfo: any }
+  | { status: 'inactive'; customerInfo: any }
+  | { status: 'unavailable'; error: unknown };
+
+let initializationQueue: Promise<void> = Promise.resolve();
+let lastInitializedUserId: string | null = null;
 
 const isExpoGo = () => Constants.appOwnership === 'expo';
 
@@ -100,6 +109,79 @@ export const getRevenueCatConfigurationIssue = () => {
   return null;
 };
 
+const getErrorCode = (error: unknown): string | null => {
+  if (!error || typeof error !== 'object' || !('code' in error)) return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' || typeof code === 'number'
+    ? String(code)
+    : null;
+};
+
+const reportRevenueCatFailure = async (
+  operation: string,
+  userId: string,
+  error: unknown,
+) => {
+  let userHash: string | null = null;
+  try {
+    userHash = (
+      await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        userId,
+      )
+    ).slice(0, 12);
+  } catch {
+    // Diagnose darf niemals die eigentliche Abo-Prüfung beeinflussen.
+  }
+
+  const normalizedError = error instanceof Error
+    ? error
+    : new Error(`RevenueCat ${operation} failed`);
+  const errorCode = getErrorCode(error);
+
+  try {
+    Sentry.withScope((scope) => {
+      scope.setTag('component', 'revenuecat');
+      scope.setTag('operation', operation);
+      if (errorCode) scope.setTag('revenuecat.error_code', errorCode);
+      scope.setContext('revenuecat', {
+        userHash,
+        errorCode,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      Sentry.captureException(normalizedError);
+    });
+  } catch {
+    // Auch ein Telemetriefehler darf den fail-open-Pfad nicht verhindern.
+  }
+};
+
+const synchronizeRevenueCatUser = async (userId: string, apiKey: string) => {
+  if (lastInitializedUserId === userId) return;
+
+  const isConfigured = await Purchases.isConfigured();
+  if (!isConfigured) {
+    // configure() liefert im React-Native-SDK void. isConfigured() ist der
+    // belastbare, native Abschluss-Check und verhindert Mehrfachkonfiguration.
+    Purchases.configure({
+      apiKey,
+      appUserID: userId,
+    });
+
+    const didConfigure = await Purchases.isConfigured();
+    if (!didConfigure) {
+      throw new Error('RevenueCat konnte nicht initialisiert werden.');
+    }
+  } else {
+    const currentUserId = await Purchases.getAppUserID();
+    if (currentUserId !== userId) {
+      await Purchases.logIn(userId);
+    }
+  }
+
+  lastInitializedUserId = userId;
+};
+
 export async function initRevenueCat(userId: string) {
   if (Platform.OS === 'web') return;
 
@@ -108,14 +190,11 @@ export async function initRevenueCat(userId: string) {
   if (configurationIssue) throw new Error(configurationIssue);
   if (!apiKey) throw new Error('RevenueCat API Key fehlt.');
 
-  if (configuredForUserId === userId) return;
-
-  await Purchases.configure({
-    apiKey,
-    appUserID: userId,
-  });
-
-  configuredForUserId = userId;
+  const initialization = initializationQueue.then(() =>
+    synchronizeRevenueCatUser(userId, apiKey),
+  );
+  initializationQueue = initialization.catch(() => undefined);
+  return initialization;
 }
 
 const getCurrentOffering = async () => {
@@ -225,13 +304,32 @@ export async function getRevenueCatPackages(userId: string) {
 export async function hasRevenueCatEntitlement(userId: string) {
   if (Platform.OS === 'web') return false;
 
+  const result = await getRevenueCatEntitlementStatus(userId);
+  if (result.status === 'unavailable') {
+    throw result.error instanceof Error
+      ? result.error
+      : new Error('RevenueCat-Abo-Status ist derzeit nicht verfügbar.');
+  }
+  return result.status === 'active';
+}
+
+export async function getRevenueCatEntitlementStatus(
+  userId: string,
+): Promise<RevenueCatEntitlementStatus> {
+  if (Platform.OS === 'web') {
+    return { status: 'inactive', customerInfo: { entitlements: { active: {} } } };
+  }
+
   try {
     await initRevenueCat(userId);
     const customerInfo = await Purchases.getCustomerInfo();
-    return hasAnyActiveEntitlement(customerInfo);
-  } catch (err) {
-    console.warn('RevenueCat entitlement check failed', err);
-    return false;
+    return hasAnyActiveEntitlement(customerInfo)
+      ? { status: 'active', customerInfo }
+      : { status: 'inactive', customerInfo };
+  } catch (error) {
+    console.warn('RevenueCat entitlement check unavailable', error);
+    await reportRevenueCatFailure('entitlement_check', userId, error);
+    return { status: 'unavailable', error };
   }
 }
 
@@ -263,6 +361,7 @@ export async function getRevenueCatSubscriptionSummary(
   if (Platform.OS === 'web') {
     return {
       isActive: false,
+      availability: 'available',
       productId: null,
       planType: null,
       tier: null,
@@ -272,8 +371,19 @@ export async function getRevenueCatSubscriptionSummary(
   }
 
   try {
-    await initRevenueCat(userId);
-    const customerInfo = await Purchases.getCustomerInfo();
+    const status = await getRevenueCatEntitlementStatus(userId);
+    if (status.status === 'unavailable') {
+      return {
+        isActive: false,
+        availability: 'unavailable',
+        productId: null,
+        planType: null,
+        tier: null,
+        willRenew: null,
+        expiresDate: null,
+      };
+    }
+    const customerInfo = status.customerInfo;
     const entitlement = getActiveEntitlement(customerInfo);
     const productId =
       entitlement?.productIdentifier ??
@@ -282,6 +392,7 @@ export async function getRevenueCatSubscriptionSummary(
 
     return {
       isActive: Boolean(entitlement),
+      availability: 'available',
       productId,
       planType: getPlanTypeFromProductId(productId),
       tier: getTierFromProductId(productId),
@@ -296,8 +407,10 @@ export async function getRevenueCatSubscriptionSummary(
     };
   } catch (err) {
     console.warn('RevenueCat subscription summary failed', err);
+    await reportRevenueCatFailure('subscription_summary', userId, err);
     return {
       isActive: false,
+      availability: 'unavailable',
       productId: null,
       planType: null,
       tier: null,
@@ -406,6 +519,39 @@ export async function restoreRevenueCatPurchases(userId: string) {
     return hasAnyActiveEntitlement(customerInfo);
   } catch (err) {
     console.warn('RevenueCat restorePurchases failed', err);
-    return false;
+    await reportRevenueCatFailure('restore_purchases', userId, err);
+    throw err;
   }
 }
+
+export const subscribeToRevenueCatCustomerInfoUpdates = (
+  userId: string,
+  listener: (customerInfo: any) => void,
+) => {
+  if (Platform.OS === 'web') return () => undefined;
+
+  let disposed = false;
+  let registered = false;
+
+  const customerInfoListener = (customerInfo: any) => {
+    if (!disposed) listener(customerInfo);
+  };
+
+  void initRevenueCat(userId)
+    .then(() => {
+      if (disposed) return;
+      Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+      registered = true;
+    })
+    .catch(async (error) => {
+      console.warn('RevenueCat customer info listener setup failed', error);
+      await reportRevenueCatFailure('listener_setup', userId, error);
+    });
+
+  return () => {
+    disposed = true;
+    if (registered) {
+      Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
+    }
+  };
+};

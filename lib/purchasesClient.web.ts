@@ -10,14 +10,18 @@ const notSupportedError: NotSupportedError = {
 };
 
 const Purchases = {
-  configure: async () => {},
+  configure: () => {},
+  isConfigured: async () => true,
+  getAppUserID: async () => 'web-user',
+  logIn: async () => ({ customerInfo: { entitlements: { active: {} } }, created: false }),
   getOfferings: async () => ({ current: null, all: {} }),
   purchasePackage: async () => {
     throw notSupportedError;
   },
   getCustomerInfo: async () => ({ entitlements: { active: {} } }),
   restorePurchases: async () => ({ entitlements: { active: {} } }),
+  addCustomerInfoUpdateListener: () => {},
+  removeCustomerInfoUpdateListener: () => true,
 };
 
 export default Purchases;
-

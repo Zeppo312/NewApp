@@ -47,6 +47,7 @@ import {
 } from '@/lib/appCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { subscribeToRevenueCatCustomerInfoUpdates } from '@/lib/revenuecat';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { sleepActivityService } from '@/lib/sleepActivityService';
@@ -171,26 +172,38 @@ function RootLayoutNav() {
   const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
 
-  const refreshPaywallCaches = useCallback(async () => {
+  const refreshPaywallState = useCallback(async () => {
+    await invalidateUserProfileCache();
+    setAppStateRevision((prev) => prev + 1);
+  }, []);
+
+  const handleRevenueCatCustomerInfoUpdate = useCallback(async () => {
     invalidateSubscriptionTierCache();
-    await Promise.allSettled([
-      invalidateUserProfileCache(),
-      invalidatePremiumStatusCache(),
-    ]);
+    await invalidatePremiumStatusCache();
     setAppStateRevision((prev) => prev + 1);
   }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        void refreshPaywallCaches();
+        // RevenueCat aktualisiert CustomerInfo beim Aktivieren selbst. Den
+        // last-known-active Cache behalten wir bis zu diesem Update bei.
+        void refreshPaywallState();
       }
     });
 
     return () => {
       sub.remove();
     };
-  }, [refreshPaywallCaches]);
+  }, [refreshPaywallState]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    return subscribeToRevenueCatCustomerInfoUpdates(userId, () => {
+      void handleRevenueCatCustomerInfoUpdate();
+    });
+  }, [handleRevenueCatCustomerInfoUpdate, userId]);
 
   useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {

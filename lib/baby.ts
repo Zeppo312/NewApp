@@ -17,6 +17,25 @@ export interface BabyInfo {
   baby_gender?: 'male' | 'female' | 'unknown' | string;
 }
 
+type BabyInfoWritePayload = Omit<BabyInfo, 'id'>;
+
+/**
+ * Keep database-managed/identity fields out of profile writes.
+ *
+ * The profile screen can briefly hold cached data from another baby while the
+ * active baby changes. Spreading that object into an update used to send the
+ * stale `id` as a primary-key update and made otherwise valid saves fail.
+ */
+export const toBabyInfoWritePayload = (info: BabyInfo): BabyInfoWritePayload => ({
+  name: info.name,
+  birth_date: info.birth_date,
+  preferred_bedtime: info.preferred_bedtime,
+  weight: info.weight,
+  height: info.height,
+  photo_url: info.photo_url,
+  baby_gender: info.baby_gender,
+});
+
 export type LinkedBabySelectionOption = {
   id: string;
   name?: string;
@@ -537,41 +556,43 @@ export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
     await invalidateBabyListCache();
 
     const targetId = babyId ?? info.id;
+    const writePayload = toBabyInfoWritePayload(info);
 
     if (targetId) {
-      const { data: existingData, error: fetchError } = await supabase
+      const result = await supabase
         .from('baby_info')
-        .select('id')
+        .update({
+          ...writePayload,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', targetId)
+        .select('*')
         .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('Error checking existing baby info:', fetchError);
-        return { data: null, error: fetchError };
+      if (result.error) {
+        return { data: null, error: result.error };
       }
 
-      if (existingData?.id) {
-        const result = await supabase
-          .from('baby_info')
-          .update({
-            ...info,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingData.id);
-
-        return { data: result.data, error: result.error };
+      if (!result.data) {
+        return {
+          data: null,
+          error: new Error('Babyprofil wurde nicht gefunden oder darf nicht bearbeitet werden.'),
+        };
       }
+
+      return { data: result.data, error: null };
     }
 
     const result = await supabase
       .from('baby_info')
       .insert({
         user_id: userData.user.id,
-        ...info,
+        ...writePayload,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
-      .select('*');
+      .select('*')
+      .single();
 
     return { data: result.data, error: result.error };
   } catch (err) {

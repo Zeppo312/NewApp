@@ -1,9 +1,17 @@
 import { getCachedUser, supabase } from './supabase';
-import { getCachedPremiumStatus, getCachedUserProfile, getCachedUserSettings } from './appCache';
+import {
+  getCachedPremiumStatusResult,
+  getCachedUserProfile,
+  getCachedUserSettings,
+  type PremiumStatusResult,
+} from './appCache';
 import type { PaywallAccessReason, PaywallAccessRole } from './paywallAccess';
 import { isPaywallAccessRole } from './paywallAccess';
 import { DEFAULT_PAYWALL_TRIAL_DAYS } from './paywallDefaults';
 import { getCachedPaywallContent, getPaywallTrialDays } from './paywallContent';
+import { shouldShowPaywallForState } from './paywallDecision';
+
+export { shouldShowPaywallForState } from './paywallDecision';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
 export const PAYWALL_TRIAL_DAYS = DEFAULT_PAYWALL_TRIAL_DAYS;
@@ -13,6 +21,7 @@ export const PAYWALL_HARD_GATE_NEW_USERS_SINCE = new Date(
 
 export type PaywallState = {
   isPro: boolean;
+  subscriptionStatus: PremiumStatusResult['status'];
   isAdmin: boolean;
   paywallAccessRole: PaywallAccessRole | null;
   accessReason: PaywallAccessReason;
@@ -42,12 +51,13 @@ const shouldRequireImmediateSubscription = (
 
 const mapRowToState = (
   settings: any,
-  isPro: boolean,
+  premiumStatus: PremiumStatusResult,
   isAdmin: boolean,
   paywallAccessRole: PaywallAccessRole | null,
   accountCreatedAt: Date | null,
   trialDays: number,
 ): PaywallState => {
+  const isPro = premiumStatus.status === 'active';
   const accessReason: PaywallAccessReason = isPro
     ? 'subscription'
     : isAdmin
@@ -67,6 +77,7 @@ const mapRowToState = (
 
   return {
     isPro,
+    subscriptionStatus: premiumStatus.status,
     isAdmin,
     paywallAccessRole,
     accessReason,
@@ -82,6 +93,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
   if (!userData.user) {
     return {
       isPro: false,
+      subscriptionStatus: 'inactive',
       isAdmin: false,
       paywallAccessRole: null,
       accessReason: 'none',
@@ -94,8 +106,8 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
 
   try {
     // Nutze gecachte Daten für bessere Performance
-    const [isPro, settings, profile, paywallContent] = await Promise.all([
-      getCachedPremiumStatus(),
+    const [premiumStatus, settings, profile, paywallContent] = await Promise.all([
+      getCachedPremiumStatusResult(),
       getCachedUserSettings(),
       getCachedUserProfile(),
       getCachedPaywallContent(),
@@ -109,7 +121,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
     const trialDays = getPaywallTrialDays(paywallContent.content);
     return mapRowToState(
       settings,
-      isPro,
+      premiumStatus,
       isAdmin,
       paywallAccessRole,
       accountCreatedAt,
@@ -119,6 +131,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
     console.error('Exception while fetching paywall state:', err);
     return {
       isPro: false,
+      subscriptionStatus: 'unavailable',
       isAdmin: false,
       paywallAccessRole: null,
       accessReason: 'none',
@@ -134,28 +147,10 @@ export const shouldShowPaywall = async (
   intervalMs: number = PAYWALL_INTERVAL_MS,
 ): Promise<{ shouldShow: boolean; state: PaywallState }> => {
   const state = await fetchPaywallState();
-  if (state.accessReason !== 'none') {
-    return { shouldShow: false, state };
-  }
-
-  if (state.isTrialExpired) {
-    return { shouldShow: true, state };
-  }
-
-  const now = Date.now();
-  if (state.accountCreatedAt) {
-    const accountAge = now - state.accountCreatedAt.getTime();
-    const paywallAccountCreationGraceMs =
-      state.trialDays * 24 * 60 * 60 * 1000;
-    if (accountAge < paywallAccountCreationGraceMs) {
-      return { shouldShow: false, state };
-    }
-  }
-  const last = state.lastShownAt?.getTime() ?? 0;
-  const delta = now - last;
-  const shouldShow = !state.lastShownAt || delta >= intervalMs;
-
-  return { shouldShow, state };
+  return {
+    shouldShow: shouldShowPaywallForState(state, intervalMs),
+    state,
+  };
 };
 
 export const markPaywallShown = async (source?: string) => {

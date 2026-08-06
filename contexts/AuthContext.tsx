@@ -42,18 +42,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastSessionUserIdRef = useRef<string | null>(null);
+  const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
 
   const applySession = useCallback((nextSession: Session | null) => {
     const nextUserId = nextSession?.user?.id ?? null;
     const previousUserId = lastSessionUserIdRef.current;
 
-    if (previousUserId !== nextUserId) {
-      lastSessionUserIdRef.current = nextUserId;
+    // Beim ersten Wiederherstellen derselben persistierten Sitzung bleiben die
+    // nutzerspezifischen Offline-Caches erhalten. Nur ein echter Wechsel nach
+    // initialer Auflösung darf sie verwerfen.
+    if (previousUserId !== undefined && previousUserId !== nextUserId) {
       void invalidateAllCaches().catch((cacheError) => {
         console.error('Error invalidating caches after auth user change:', cacheError);
       });
     }
+    lastSessionUserIdRef.current = nextUserId;
 
     setSession(nextSession);
     setUser(nextSession?.user ?? null);

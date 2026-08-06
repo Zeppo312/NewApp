@@ -107,6 +107,7 @@ const de = {
   'error.missingBirthTitle': 'Fehlendes Geburtsdatum',
   'error.missingBirthMessage': 'Bitte trage das Geburtsdatum ein oder markiere, dass dein Baby noch nicht geboren ist.',
   'save.errorMessage': 'Die Informationen konnten nicht gespeichert werden.',
+  'save.profileChangedMessage': 'Das Babyprofil wurde gewechselt. Bitte prüfe die Daten und versuche es erneut.',
   'save.successTitle': 'Gespeichert',
   'save.successMessage': 'Das Babyprofil wurde erfolgreich aktualisiert.',
 } as const;
@@ -212,6 +213,7 @@ const en: Catalog = {
   'error.missingBirthTitle': 'Missing date of birth',
   'error.missingBirthMessage': "Please enter the date of birth or indicate that your baby hasn't been born yet.",
   'save.errorMessage': 'The information could not be saved.',
+  'save.profileChangedMessage': 'The baby profile changed. Please review the information and try again.',
   'save.successTitle': 'Saved',
   'save.successMessage': 'The baby profile was updated successfully.',
 };
@@ -314,6 +316,7 @@ const es: Catalog = {
   'error.missingBirthTitle': 'Falta la fecha de nacimiento',
   'error.missingBirthMessage': 'Introduce la fecha de nacimiento o indica que tu bebé aún no ha nacido.',
   'save.errorMessage': 'No se pudo guardar la información.',
+  'save.profileChangedMessage': 'El perfil del bebé ha cambiado. Revisa los datos e inténtalo de nuevo.',
   'save.successTitle': 'Guardado',
   'save.successMessage': 'El perfil del bebé se ha actualizado correctamente.',
 };
