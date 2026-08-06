@@ -474,8 +474,8 @@ export default function NotificationsScreen() {
         return all.filter((item) => {
           if (item._kind === 'dm') {
             const partnerName = item.sender_id === user?.id
-              ? item.receiver_name || 'Benutzer'
-              : item.sender_name || 'Benutzer';
+              ? item.receiver_name || t('common.user')
+              : item.sender_name || t('common.user');
             const previewText = getMessagePreviewText(item);
             const searchableText = [partnerName, previewText, item.content || ''].join(' ');
             return normalizeSearchValue(searchableText).includes(query);
@@ -491,8 +491,8 @@ export default function NotificationsScreen() {
           }
 
           const searchableText = [
-            item.sender_name || 'Benutzer',
-            'folgt dir jetzt',
+            item.sender_name || t('common.user'),
+            t('activity.follow'),
           ].join(' ');
           return normalizeSearchValue(searchableText).includes(query);
         });

@@ -48,12 +48,14 @@ export function LockedFeatureScreen({
       planner: { title: 'Planner & appointments', subtitle: 'Keep medical appointments, check-ups, and family life in view.', bullets: ['Shared family calendar', 'Reminders for important appointments', 'Synced with your partner'] },
       shoppingList: { title: 'Shopping lists', subtitle: 'Running low on diapers? Add it once and both of you can see it.', bullets: ['Shared lists for both of you', 'Low-stock reminders', 'Templates for baby essentials'] },
       wochenmomente: { title: 'Weekly moments', subtitle: "Save one special moment from your baby's week.", bullets: ['A weekly memory collection', 'Your story to look back on', 'Share moments with your partner'] },
+      fragLotti: { title: 'Ask Lotti', subtitle: 'Ask about your routine and get evidence-backed answers from your own records.', bullets: ['Summaries of sleep, feeding, and your day', 'Every answer shows its data basis', 'No diagnoses or invented causes'] },
     },
     es: {
       partnerLink: { title: 'Juntos en familia', subtitle: 'Vincula tu cuenta con la de tu pareja para ver y registrar al mismo bebé.', bullets: ['Los registros aparecen al instante para ambos', 'Los dos veis la situación actual', 'Notificaciones para tu pareja'] },
       planner: { title: 'Planificador y citas', subtitle: 'Ten a la vista las citas médicas, revisiones y la vida familiar.', bullets: ['Calendario familiar compartido', 'Recordatorios de citas importantes', 'Sincronizado con tu pareja'] },
       shoppingList: { title: 'Listas de la compra', subtitle: '¿Quedan pocos pañales? Añádelo una vez y ambos lo veréis.', bullets: ['Listas compartidas', 'Recordatorios cuando queden pocas unidades', 'Plantillas de productos esenciales'] },
       wochenmomente: { title: 'Momentos semanales', subtitle: 'Guarda cada semana un momento especial de tu bebé.', bullets: ['Colección semanal de recuerdos', 'Vuestra historia para volver a verla', 'Comparte momentos con tu pareja'] },
+      fragLotti: { title: 'Pregunta a Lotti', subtitle: 'Pregunta por vuestra rutina y recibe respuestas verificables basadas en vuestros registros.', bullets: ['Resúmenes de sueño, tomas y del día', 'Cada respuesta muestra la base de datos', 'Sin diagnósticos ni causas inventadas'] },
     },
   } as const;
   const localizedCopy = locale === 'de' ? null : translated[locale][feature as keyof typeof translated.en];

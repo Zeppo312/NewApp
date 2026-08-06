@@ -86,6 +86,13 @@ import { DEFAULT_SLEEP_TRACKER_LOCALE, getSleepTrackerLocaleTag, SleepTrackerTra
 let ACTIVE_SLEEP_TRACKER_LOCALE = DEFAULT_SLEEP_TRACKER_LOCALE;
 let SLEEP_TRACKER_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_SLEEP_TRACKER_LOCALE);
 const t = (key: SleepTrackerTranslationKey, params?: Record<string, string | number>) => translateSleepTrackerText(ACTIVE_SLEEP_TRACKER_LOCALE, key, params);
+
+const getLocalizedWeekdayLabels = (localeTag: string) =>
+  Array.from({ length: 7 }, (_, index) =>
+    new Intl.DateTimeFormat(localeTag, { weekday: 'short' })
+      .format(new Date(2024, 0, 1 + index))
+      .replace(/\.$/, ''),
+  );
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const QUALITY_VISUALS = {
@@ -1267,6 +1274,7 @@ const convertSleepToDailyEntry = (
 export default function SleepTrackerScreen() {
   ACTIVE_SLEEP_TRACKER_LOCALE = useLocale().locale;
   SLEEP_TRACKER_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_SLEEP_TRACKER_LOCALE);
+  const weekdayLabels = getLocalizedWeekdayLabels(SLEEP_TRACKER_LOCALE_TAG);
   // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -4144,7 +4152,7 @@ export default function SleepTrackerScreen() {
                   </View>
 
                   <View style={[styles.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={[styles.chartLabel, { color: textSecondary }]}>{['Mo','Di','Mi','Do','Fr','Sa','So'][i]}</Text>
+                    <Text allowFontScaling={false} style={[styles.chartLabel, { color: textSecondary }]}>{weekdayLabels[i]}</Text>
                     <Text allowFontScaling={false} style={[styles.chartValue, { color: textSecondary }]}>
                       {hours > 24 ? '24h+' : `${hours}h`}
                     </Text>
@@ -4173,7 +4181,7 @@ export default function SleepTrackerScreen() {
                 <View style={styles.statItem}>
                   <Text style={styles.statEmoji}>⭐</Text>
                   <Text style={[styles.statValue, { color: textSecondary }]}>{Math.round(totalWeekMins / 7 / 60)}h</Text>
-                  <Text style={[styles.statLabel, { color: textSecondary }]}>Ø pro Tag</Text>
+                  <Text style={[styles.statLabel, { color: textSecondary }]}>{t('month.average')}</Text>
                 </View>
             </View>
           </View>
@@ -4419,7 +4427,7 @@ export default function SleepTrackerScreen() {
           <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={styles.weekdayHeader}>
-              {['Mo','Di','Mi','Do','Fr','Sa','So'].map((label, i) => {
+              {weekdayLabels.map((label, i) => {
                 const extra = i < WEEK_LEFTOVER ? 1 : 0;
                 return (
                   <View
@@ -5267,7 +5275,7 @@ export default function SleepTrackerScreen() {
                                 color: sleepModalData.quality === q ? '#FFFFFF' : textPrimary
                               }
                             ]}>
-                              {q === 'good' ? 'Gut' : q === 'medium' ? 'Mittel' : 'Schlecht'}
+                              {t(q === 'good' ? 'quality.good' : q === 'medium' ? 'quality.medium' : 'quality.bad')}
                             </Text>
                           </TouchableOpacity>
                         ))}

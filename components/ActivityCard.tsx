@@ -409,18 +409,18 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 <View style={styles.timeRowTop}>
                   {entry.start_time && (
                     <View style={styles.timePill}>
-                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Start {formatTime(entry.start_time)}</ThemedText>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>{t('input.start')} {formatTime(entry.start_time)}</ThemedText>
                     </View>
                   )}
                   {entry.entry_type !== 'diaper' && entry.end_time && (
                     <View style={[styles.timePill, { marginLeft: 6 }]}>
-                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>Ende {formatTime(entry.end_time)}</ThemedText>
+                      <ThemedText style={[styles.timePillText, { color: secondaryTextColor }]}>{t('input.end')} {formatTime(entry.end_time)}</ThemedText>
                     </View>
                   )}
 
                  {entry.entry_type !== 'diaper' && duration > 0 && (
                     <View style={[styles.timePill, { marginLeft: 6, backgroundColor: 'rgba(94,61,179,0.18)', borderColor: 'rgba(94,61,179,0.35)' }]}>
-                      <ThemedText style={[styles.timePillText, { fontWeight: '700', color: secondaryTextColor }]}>{duration} Min</ThemedText>
+                      <ThemedText style={[styles.timePillText, { fontWeight: '700', color: secondaryTextColor }]}>{duration} {t('card.minutesShort')}</ThemedText>
                     </View>
                   )}
                 </View>

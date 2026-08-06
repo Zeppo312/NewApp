@@ -2,6 +2,7 @@
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getPersistedAppLocale } from '@/lib/localization';
 
 const BACKGROUND_FETCH_TASK = 'milestone-background-fetch';
 const BABY_INFO_KEY = '@baby_info_for_background_task'; // Eigener Key für Infos für den Task
@@ -17,7 +18,13 @@ async function checkMilestonesInBackground() {
     }
     const babyInfo = JSON.parse(babyInfoString);
     const birthDate = babyInfo.birth_date ? new Date(babyInfo.birth_date) : null;
-    const babyName = babyInfo.name || 'Dein Baby';
+    const locale = await getPersistedAppLocale();
+    const copy = {
+      de: { baby: 'Dein Baby', title: (age: string) => `${age} Meilenstein! 🎉`, body: (name: string, age: string) => `${name} ist heute ${age} alt! Schau dir die Statistiken an.` },
+      en: { baby: 'Your baby', title: (age: string) => `${age} milestone! 🎉`, body: (name: string, age: string) => `${name} is ${age} old today! Take a look at the statistics.` },
+      es: { baby: 'Tu bebé', title: (age: string) => `¡Hito de ${age}! 🎉`, body: (name: string, age: string) => `¡Hoy ${name} cumple ${age}! Consulta las estadísticas.` },
+    }[locale];
+    const babyName = babyInfo.name || copy.baby;
 
     if (!birthDate) {
       console.log('[BackgroundFetch] Kein Geburtsdatum für Task gefunden.');
@@ -25,18 +32,23 @@ async function checkMilestonesInBackground() {
     }
 
     // Meilenstein-Definitionen
+    const milestoneAges = {
+      de: ['1 Woche', '1 Monat', '2 Monate', '3 Monate', '100 Tage', '6 Monate', '1 Jahr', '500 Tage', '1000 Tage', '1111 Tage'],
+      en: ['1 week', '1 month', '2 months', '3 months', '100 days', '6 months', '1 year', '500 days', '1,000 days', '1,111 days'],
+      es: ['1 semana', '1 mes', '2 meses', '3 meses', '100 días', '6 meses', '1 año', '500 días', '1000 días', '1111 días'],
+    }[locale];
     const milestones = [
-      { id: '1_week', name: '1 Woche', days: 7 },
-      { id: '1_month', name: '1 Monat', days: 30 },
-      { id: '2_months', name: '2 Monate', days: 60 },
-      { id: '3_months', name: '3 Monate', days: 90 },
-      { id: '100_days', name: '100 Tage', days: 100 },
-      { id: '6_months', name: '6 Monate', days: 182 },
-      { id: '1_year', name: '1 Jahr', days: 365 },
-      { id: '500_days', name: '500 Tage', days: 500 },
-      { id: '1000_days', name: '1000 Tage', days: 1000 },
-      { id: '1111_days', name: '1111 Tage', days: 1111 }
-    ];
+      { id: '1_week', days: 7 },
+      { id: '1_month', days: 30 },
+      { id: '2_months', days: 60 },
+      { id: '3_months', days: 90 },
+      { id: '100_days', days: 100 },
+      { id: '6_months', days: 182 },
+      { id: '1_year', days: 365 },
+      { id: '500_days', days: 500 },
+      { id: '1000_days', days: 1000 },
+      { id: '1111_days', days: 1111 },
+    ].map((milestone, index) => ({ ...milestone, name: milestoneAges[index] }));
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -54,8 +66,8 @@ async function checkMilestonesInBackground() {
       if (daysOld === milestone.days && !sentMilestones.includes(milestone.id)) {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: `${milestone.name} Meilenstein! 🎉`,
-            body: `${babyName} ist heute ${milestone.name} alt! Schau dir die Statistiken an.`,
+            title: copy.title(milestone.name),
+            body: copy.body(babyName, milestone.name),
             data: { screen: 'baby-stats' },
           },
           trigger: null, // Sofort senden

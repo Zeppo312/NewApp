@@ -1,0 +1,10 @@
+project_id = "LottiBaby"
+
+# Authenticated app endpoint: keep the Supabase gateway JWT check enabled.
+[functions.ask-lotti]
+verify_jwt = true
+
+# External RevenueCat endpoint: no Supabase JWT exists. The function itself
+# requires both the configured Authorization value and RevenueCat's HMAC.
+[functions.revenuecat-webhook]
+verify_jwt = false

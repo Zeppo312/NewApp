@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 
 import type { ChatMessageCore, ChatScope } from '@/lib/chatMessages';
 import { getChatAudioPlayableSource } from '@/lib/chatAudio';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type PlaybackStatusSubscription = {
   remove: () => void;
@@ -31,7 +32,15 @@ type VoiceMessageLike = Pick<
 const CACHE_EARLY_REFRESH_MS = 10_000;
 const FINISH_EPSILON_SECONDS = 0.15;
 
+const STORAGE_WARNING_COPY = {
+  de: { title: 'Speicher fast voll', body: 'Auf deinem iPhone ist nicht genug freier Speicher, um Sprachnachrichten lokal zu speichern. Die Nachricht wird deshalb direkt gestreamt.' },
+  en: { title: 'Storage almost full', body: 'Your iPhone does not have enough free storage to save voice messages locally. This message will be streamed instead.' },
+  es: { title: 'Almacenamiento casi lleno', body: 'Tu iPhone no tiene suficiente espacio libre para guardar mensajes de voz. Este mensaje se reproducirá directamente por internet.' },
+} as const;
+
 export function useChatAudioPlayback(scope: ChatScope) {
+  const { locale } = useLocale();
+  const storageWarning = STORAGE_WARNING_COPY[locale];
   const [player] = useState(() => createAudioPlayer(undefined, { updateInterval: 200 }));
   const cacheRef = useRef(new Map<string, AudioCacheEntry>());
   const activeMessageIdRef = useRef<string | null>(null);
@@ -103,10 +112,7 @@ export function useChatAudioPlayback(scope: ChatScope) {
       const data = await getChatAudioPlayableSource(scope, messageId);
       if (data.warning === 'storage-full' && !storageAlertShownRef.current) {
         storageAlertShownRef.current = true;
-        Alert.alert(
-          'Speicher fast voll',
-          'Auf deinem iPhone ist nicht genug freier Speicher, um Sprachnachrichten lokal zu speichern. Die Nachricht wird deshalb direkt gestreamt.',
-        );
+        Alert.alert(storageWarning.title, storageWarning.body);
       }
       cacheRef.current.set(messageId, {
         uri: data.uri,
@@ -115,7 +121,7 @@ export function useChatAudioPlayback(scope: ChatScope) {
 
       return data.uri;
     },
-    [scope],
+    [scope, storageWarning],
   );
 
   const applyPlaybackRate = useCallback((nextRate: number) => {

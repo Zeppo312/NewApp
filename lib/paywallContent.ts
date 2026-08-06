@@ -231,8 +231,10 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
     { label: 'Wochenmomente & Erinnerungs-Sammlung', lite: false, standard: true, premium: true },
     { label: 'Rezepte & Beikost-Begleitung', lite: false, standard: true, premium: true },
     { label: 'Auswertungen & PDF-Exporte', lite: false, standard: true, premium: true },
+    { label: '✨ Persönliches Schwangerschafts-Briefing', lite: false, standard: false, premium: true },
     { label: '✨ KI: Sprach-Logging – Einträge einsprechen', lite: false, standard: false, premium: true },
     { label: '✨ KI: Lottis Fürsorge – tägliche Hinweise', lite: false, standard: false, premium: true },
+    { label: '✨ KI: Frag Lotti – belegte Antworten aus euren Daten', lite: false, standard: false, premium: true },
   ],
   quoteText:
     '„Nachts um 3 mit einer Hand den Still-Timer starten – und mein Partner sieht morgens direkt, wie die Nacht war. Genau das haben wir gebraucht.“',
@@ -249,7 +251,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       tagline: 'Alles aus Standard plus Lottis KI-Features',
       ctaLabel: 'Premium starten',
       bullets: [
-        '✨ KI-Features: Sprach-Logging & Lottis Fürsorge',
+        '✨ Schwangerschafts-Briefing & Lottis KI-Features',
         'Partner-Verknüpfung für euch beide',
         'Planer, Listen, Wochenmomente & Rezepte',
         'Auswertungen, Erinnerungen & PDF-Exporte',

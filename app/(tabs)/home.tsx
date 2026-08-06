@@ -19,6 +19,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import { useVoiceLogAccess } from '@/lib/voiceLog/access';
+import { useAskLottiAccess } from '@/lib/askLotti/access';
 import VoiceLogModal from '@/components/VoiceLogModal';
 import PremiumHighlights, {
   type PremiumHighlightItem,
@@ -657,6 +658,7 @@ export default function HomeScreen() {
   const advisorAccess = useAdvisorAccess();
   // Sprach-Logging: gleiches Premium-Gating.
   const voiceLogAccess = useVoiceLogAccess();
+  const askLottiAccess = useAskLottiAccess();
   const [showVoiceLogModal, setShowVoiceLogModal] = useState(false);
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
@@ -1905,6 +1907,15 @@ export default function HomeScreen() {
         title: t('premium.voice'),
         subtitle: t('premium.voiceDescription'),
         onPress: () => setShowVoiceLogModal(true),
+      });
+    }
+    if (askLottiAccess === true) {
+      items.push({
+        key: 'ask-lotti',
+        emoji: '✨',
+        title: t('premium.askLotti'),
+        subtitle: t('premium.askLottiDescription'),
+        onPress: () => handleNavigate('/frag-lotti'),
       });
     }
     return <PremiumHighlights items={items} />;

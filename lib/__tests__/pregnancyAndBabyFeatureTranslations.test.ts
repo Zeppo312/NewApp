@@ -18,6 +18,10 @@ import {
   WEEKLY_MOMENT_DAY_NAMES,
   WEEKLY_MOMENT_TRANSLATIONS,
 } from '../weeklyMomentTranslations';
+import {
+  formatContentForHTMLLeftColumn,
+  formatContentForHTMLRightColumn,
+} from '@/components/geburtsplan/formatHelpers';
 
 const expectCatalogsInSync = (catalogs: Record<'de' | 'en' | 'es', Record<string, string>>) => {
   const germanKeys = Object.keys(catalogs.de).sort();
@@ -65,6 +69,23 @@ describe('prepared pregnancy and baby feature translations', () => {
     expect(getBirthPlanOptions('es', 'yesNoDiscuss').map((option) => option.id)).toEqual([
       'common.yes', 'common.no', 'option.discuss',
     ]);
+  });
+
+  it('recognizes legacy birth-plan headings in every supported language', () => {
+    const englishLegacyPlan = [
+      'BIRTH PLAN',
+      '1. General information\nName: Maya',
+      '2. Wishes for birth\nPosition: Standing',
+      '3. Medical interventions & procedures\nMonitoring: Yes',
+      '4. After birth\nBonding: Yes',
+      '5. Emergency / C-section\nSupport person: Yes',
+      '6. Other wishes / notes\nPlease keep the room quiet.',
+    ].join('\n\n');
+
+    expect(formatContentForHTMLLeftColumn(englishLegacyPlan, 'es')).toContain('1. Datos generales');
+    expect(formatContentForHTMLLeftColumn(englishLegacyPlan, 'es')).toContain('3. Intervenciones y medidas médicas');
+    expect(formatContentForHTMLRightColumn(englishLegacyPlan, 'es')).toContain('4. Después del parto');
+    expect(formatContentForHTMLRightColumn(englishLegacyPlan, 'es')).toContain('6. Otros deseos / indicaciones');
   });
 
   it('localizes all 42 baby-size comparisons and weekly development texts', () => {

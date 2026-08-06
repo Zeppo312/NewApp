@@ -5,6 +5,7 @@ import { useBackend } from '@/contexts/BackendContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { loadNightWindowSettings } from '@/lib/nightWindowSettings';
 import { invalidateCacheAfterAction } from '@/lib/screenCache';
+import { useLocale } from '@/contexts/LocaleContext';
 import {
   findNightWakeCandidateForFeeding,
   splitNightSleepSegment,
@@ -17,6 +18,12 @@ type PromptState = {
   candidate: EligibleCandidate;
   feedingStart: Date;
 };
+
+const NIGHT_WAKE_COPY = {
+  de: { title: 'Wachphase nicht eintragbar', saveFailed: 'Die Wachphase konnte nicht gespeichert werden.', partnerActive: 'Der laufende Schlaf wird auf dem Gerät deines Partners getrackt.', invalidTime: 'Der Teilungszeitpunkt muss innerhalb des Schlafsegments liegen.', wakeTooLong: 'Die Wachpause ist für dieses Schlafsegment zu lang.', error: 'Fehler', generic: 'Die Wachphase konnte nicht eingetragen werden.' },
+  en: { title: 'Could not log awake period', saveFailed: 'The awake period could not be saved.', partnerActive: "The current sleep is being tracked on your partner's device.", invalidTime: 'The split time must be within the sleep segment.', wakeTooLong: 'The awake period is too long for this sleep segment.', error: 'Error', generic: 'The awake period could not be logged.' },
+  es: { title: 'No se pudo registrar el periodo despierto', saveFailed: 'No se pudo guardar el periodo despierto.', partnerActive: 'El sueño actual se está registrando en el dispositivo de tu pareja.', invalidTime: 'La hora de división debe estar dentro del segmento de sueño.', wakeTooLong: 'El periodo despierto es demasiado largo para este segmento de sueño.', error: 'Error', generic: 'No se pudo registrar el periodo despierto.' },
+} as const;
 
 export type NightWakeFeeding = {
   startTime: string | Date;
@@ -36,6 +43,8 @@ export function useNightWakePrompt(params: {
   onAfterSplit?: () => void | Promise<void>;
 }) {
   const { userId, babyId, babyName, onAfterSplit } = params;
+  const { locale } = useLocale();
+  const copy = NIGHT_WAKE_COPY[locale];
   const { activeBackend } = useBackend();
   const service = useSleepEntriesService(userId);
 
@@ -90,12 +99,14 @@ export function useNightWakePrompt(params: {
         });
 
         if (!result.ok) {
-          Alert.alert(
-            'Wachphase nicht eintragbar',
-            result.reason === 'update-failed' || result.reason === 'create-failed'
-              ? `Speichern fehlgeschlagen: ${result.message}`
-              : result.message
-          );
+          const message = result.reason === 'update-failed' || result.reason === 'create-failed'
+            ? copy.saveFailed
+            : result.reason === 'partner-active'
+              ? copy.partnerActive
+              : result.reason === 'invalid-split-time'
+                ? copy.invalidTime
+                : copy.wakeTooLong;
+          Alert.alert(copy.title, message);
           return;
         }
 
@@ -104,12 +115,12 @@ export function useNightWakePrompt(params: {
         await onAfterSplit?.();
       } catch (error) {
         console.error('[useNightWakePrompt] split failed:', error);
-        Alert.alert('Fehler', 'Die Wachphase konnte nicht eingetragen werden.');
+        Alert.alert(copy.error, copy.generic);
       } finally {
         setBusy(false);
       }
     },
-    [prompt, service, userId, busy, babyId, babyName, activeBackend, onAfterSplit]
+    [prompt, service, userId, busy, babyId, babyName, activeBackend, onAfterSplit, copy]
   );
 
   const pickWake = useCallback(

@@ -58,11 +58,13 @@ Die App unterstützt zwei Backends parallel. Das aktive Backend wird über `Back
 
 ## 💳 Abonnement (RevenueCat)
 
-Diese App verwendet RevenueCat (`react-native-purchases`) für zwei Abos: Monatsabo und Jahresabo.
+Diese App verwendet RevenueCat (`react-native-purchases`) für Lite-, Standard-
+und Premium-Abos, jeweils monatlich oder jährlich.
 
-- **Entitlement:** `LottiBabyAbo` (RevenueCat-ID `ent7a7b4e9838`)
+- **Entitlements:** `LottiBabyLite`, `LottiBabyAbo` (Standard), `LottiBabyPremium`
 - **Offering:** `default`
-- **Produkte:** `lottibaby_monthly`, `lottibaby_yearly`
+- **Produkte:** `lottibaby_{lite|standard|premium}_{monthly|yearly}`
+- **Legacy-Standardprodukte:** `lottibaby_monthly`, `lottibaby_yearly`
 - **Umgebungsvariablen (Public SDK Keys):**
   - `EXPO_PUBLIC_RC_IOS_KEY` (iOS, beginnt i. d. R. mit `appl_…`)
   - `EXPO_PUBLIC_RC_ANDROID_KEY` (Android, beginnt i. d. R. mit `goog_…`, optional sobald Android hinzugefügt wird)

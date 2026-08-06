@@ -10,7 +10,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
-import { usePathname, useRouter } from 'expo-router';
+import { useFocusEffect, usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { loadPregnancyHomeDataWithCache, invalidatePregnancyCache } from '@/lib/pregnancyCache';
@@ -26,6 +26,15 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
+import PregnancyBriefingCard from '@/components/pregnancy-briefing-card';
+import {
+  buildPregnancyBriefing,
+  EMPTY_PREGNANCY_BRIEFING_SIGNALS,
+  type PregnancyBriefingItem,
+  type PregnancyBriefingSignals,
+} from '@/lib/pregnancy-briefing';
+import { loadPregnancyBriefingSignals } from '@/lib/pregnancy-briefing-data';
+import { useFeatureAccess } from '@/lib/entitlements';
 import {
   DEFAULT_PREGNANCY_HOME_LOCALE,
   getPregnancyHomeLocaleTag,
@@ -463,7 +472,9 @@ export default function PregnancyHomeScreen() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
+  const userId = user?.id;
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const pregnancyBriefingAccess = useFeatureAccess('pregnancyBriefing');
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_SLIDE_COUNT = 2;
@@ -482,6 +493,11 @@ export default function PregnancyHomeScreen() {
   const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<PregnancyQuickAccessCardId[]>([]);
   const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
   const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
+  const [briefingSignals, setBriefingSignals] = useState<PregnancyBriefingSignals>(() => ({
+    ...EMPTY_PREGNANCY_BRIEFING_SIGNALS,
+    checklist: { ...EMPTY_PREGNANCY_BRIEFING_SIGNALS.checklist },
+  }));
+  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   const mainScrollRef = useRef<ScrollView | null>(null);
   const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
     offsetY: 0,
@@ -490,6 +506,16 @@ export default function PregnancyHomeScreen() {
   });
   const overviewScrollRef = useRef<ScrollView | null>(null);
   const [isBabySwitcherOpen, setIsBabySwitcherOpen] = useState(false);
+
+  const pregnancyBriefing = useMemo(
+    () => buildPregnancyBriefing({
+      locale,
+      currentWeek,
+      currentDay,
+      signals: briefingSignals,
+    }),
+    [briefingSignals, currentDay, currentWeek, locale],
+  );
 
   // Animation für Erfolgsmeldung
   const fadeAnim = React.useState(() => new Animated.Value(0))[0];
@@ -846,6 +872,23 @@ export default function PregnancyHomeScreen() {
     }
   };
 
+  const loadBriefingData = useCallback(async () => {
+    if (!userId || pregnancyBriefingAccess.hasAccess !== true) {
+      setIsBriefingLoading(false);
+      return;
+    }
+
+    setIsBriefingLoading(true);
+    try {
+      const signals = await loadPregnancyBriefingSignals(userId);
+      setBriefingSignals(signals);
+    } catch (error) {
+      console.error('Pregnancy Home: failed to prepare pregnancy briefing', error);
+    } finally {
+      setIsBriefingLoading(false);
+    }
+  }, [pregnancyBriefingAccess.hasAccess, userId]);
+
   // Lädt Benutzerinformationen und aktualisiert die Anzeige
   const loadUserData = async () => {
     if (!user?.id) {
@@ -885,6 +928,16 @@ export default function PregnancyHomeScreen() {
     return () => clearTimeout(timeoutId);
   }, [user]);
 
+  useFocusEffect(
+    useCallback(() => {
+      if (pregnancyBriefingAccess.hasAccess !== true) return undefined;
+      const timeoutId = setTimeout(() => {
+        void loadBriefingData();
+      }, 0);
+      return () => clearTimeout(timeoutId);
+    }, [loadBriefingData, pregnancyBriefingAccess.hasAccess]),
+  );
+
   // Zeigt eine Erfolgsmeldung an, die nach einigen Sekunden ausblendet
   const showUpdateSuccess = () => {
     setUpdateSuccess(true);
@@ -920,7 +973,12 @@ export default function PregnancyHomeScreen() {
         await invalidatePregnancyCache(user.id);
       }
 
-      await loadUserData();
+      await Promise.all([
+        loadUserData(),
+        pregnancyBriefingAccess.hasAccess === true
+          ? loadBriefingData()
+          : Promise.resolve(),
+      ]);
 
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
@@ -971,6 +1029,27 @@ export default function PregnancyHomeScreen() {
   const handleFocusRecommendation = () => {
     router.push('/prints-shop' as any);
   };
+
+  const handleBriefingItemPress = useCallback((item: PregnancyBriefingItem) => {
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    router.push(item.destination as any);
+  }, [router]);
+
+  const handleUnlockPregnancyBriefing = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    }
+    router.push('/paywall?origin=pregnancy_briefing' as any);
+  }, [router]);
+
+  const handleOpenPregnancyBriefing = useCallback(() => {
+    if (Platform.OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    router.push('/pregnancy-briefing' as any);
+  }, [router]);
 
   const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
     <TouchableOpacity
@@ -1601,6 +1680,18 @@ export default function PregnancyHomeScreen() {
             </BlurView>
             <GlassBorderGlint radius={30} />
           </View>
+
+          <PregnancyBriefingCard
+            locale={locale}
+            briefing={pregnancyBriefing}
+            hasAccess={pregnancyBriefingAccess.hasAccess}
+            isLoading={isBriefingLoading}
+            isDark={isDark}
+            variant="compact"
+            onItemPress={handleBriefingItemPress}
+            onOpenBriefing={handleOpenPregnancyBriefing}
+            onUnlock={handleUnlockPregnancyBriefing}
+          />
 
           {renderOverviewSection()}
 

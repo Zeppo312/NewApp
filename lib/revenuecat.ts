@@ -5,6 +5,7 @@ import Purchases from '@/lib/purchasesClient';
 
 export const REVENUECAT_ENTITLEMENT_KEY = 'LottiBabyAbo';
 export const REVENUECAT_LITE_ENTITLEMENT_KEY = 'LottiBabyLite';
+export const REVENUECAT_PREMIUM_ENTITLEMENT_KEY = 'LottiBabyPremium';
 export const REVENUECAT_OFFERING_ID = 'default';
 export const REVENUECAT_MONTHLY_PRODUCT_ID = 'lottibaby_monthly';
 export const REVENUECAT_YEARLY_PRODUCT_ID = 'lottibaby_yearly';
@@ -199,7 +200,10 @@ const getProductIdCandidates = (
 
 const getActiveEntitlement = (customerInfo: any) => {
   const active = customerInfo?.entitlements?.active ?? {};
-  return active[REVENUECAT_ENTITLEMENT_KEY] ?? active[REVENUECAT_LITE_ENTITLEMENT_KEY] ?? null;
+  return active[REVENUECAT_PREMIUM_ENTITLEMENT_KEY]
+    ?? active[REVENUECAT_ENTITLEMENT_KEY]
+    ?? active[REVENUECAT_LITE_ENTITLEMENT_KEY]
+    ?? null;
 };
 
 const hasAnyActiveEntitlement = (customerInfo: any) =>
@@ -240,6 +244,7 @@ export async function getActiveSubscriptionTier(
     await initRevenueCat(userId);
     const customerInfo = await Purchases.getCustomerInfo();
     const active = customerInfo?.entitlements?.active ?? {};
+    if (active[REVENUECAT_PREMIUM_ENTITLEMENT_KEY]) return 'premium';
     if (active[REVENUECAT_ENTITLEMENT_KEY]) {
       const entitlement = active[REVENUECAT_ENTITLEMENT_KEY];
       return getTierFromProductId(entitlement?.productIdentifier) ?? 'standard';

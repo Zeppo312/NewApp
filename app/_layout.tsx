@@ -67,12 +67,22 @@ Sentry.init({
 
   // Adds more context data to events (IP address, cookies, user, etc.)
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
+  // Baby- und Familienkontext ist besonders sensibel: keine Standard-PII an
+  // Sentry senden und Replays explizit vollständig maskieren.
+  sendDefaultPii: false,
 
   // Configure Session Replay
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+  integrations: [
+    Sentry.mobileReplayIntegration({
+      maskAllText: true,
+      maskAllImages: true,
+      maskAllVectors: true,
+      screenshotStrategy: 'canvas',
+    }),
+    Sentry.feedbackIntegration(),
+  ],
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)
   // spotlight: __DEV__,
@@ -694,10 +704,12 @@ function RootLayoutNav() {
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
         <Stack.Screen name="lottis-fuersorge" />
+        <Stack.Screen name="frag-lotti" />
         <Stack.Screen name="paywall-access-admin" />
         <Stack.Screen name="paywall-content-admin" />
         <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
+        <Stack.Screen name="pregnancy-briefing" />
         <Stack.Screen name="shopping-list" />
         <Stack.Screen name="loyalty-cards" />
         <Stack.Screen name="prints-shop" />

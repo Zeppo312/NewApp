@@ -581,7 +581,7 @@ const TimePickerRow = ({
                       minimumDate={PICKER_MIN_DATE}
                       mode="datetime"
                       display="spinner"
-                      locale="de-DE"
+                      locale={NIGHT_EDITOR_LOCALE_TAG}
                       onChange={(event, d) => {
                         if (event.type === 'dismissed') return;
                         setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));
@@ -683,7 +683,7 @@ const TimePickerRow = ({
                       minimumDate={PICKER_MIN_DATE}
                       mode="datetime"
                       display="spinner"
-                      locale="de-DE"
+                      locale={NIGHT_EDITOR_LOCALE_TAG}
                       onChange={(event, d) => {
                         if (event.type === 'dismissed') return;
                         setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));
@@ -814,7 +814,7 @@ const TimePickerRow = ({
                       minimumDate={PICKER_MIN_DATE}
                       mode="datetime"
                       display="spinner"
-                      locale="de-DE"
+                      locale={NIGHT_EDITOR_LOCALE_TAG}
                       onChange={(event, d) => {
                         if (event.type === 'dismissed') return;
                         setIosDraftTime(getSafeDateTimeFromPickerEvent(event, d));

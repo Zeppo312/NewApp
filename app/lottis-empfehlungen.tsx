@@ -121,7 +121,7 @@ export default function LottisEmpfehlungenScreen() {
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formImageUri, setFormImageUri] = useState<string | null>(null);
   const [formProductLink, setFormProductLink] = useState('');
-  const [formButtonText, setFormButtonText] = useState('Zum Produkt');
+  const [formButtonText, setFormButtonText] = useState(() => t('product'));
   const [formIsFavorite, setFormIsFavorite] = useState(false);
   const [formDiscountCode, setFormDiscountCode] = useState('');
   const [isSaving, setIsSaving] = useState(false);

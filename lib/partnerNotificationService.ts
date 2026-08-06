@@ -1,7 +1,6 @@
 import * as Notifications from 'expo-notifications';
-import { supabase } from './supabase';
-import { getCachedUser } from './supabase';
-import { getAppSettings } from './supabase';
+import { getAppSettings, getCachedUser, supabase } from './supabase';
+import { getAppLocaleTag, getPersistedAppLocale, type AppLocale } from './localization';
 
 interface PartnerActivityNotification {
   id: string;
@@ -85,6 +84,7 @@ export async function pollPartnerActivities(): Promise<number> {
     if (appSettings?.notifications_enabled === false) {
       return 0;
     }
+    const locale = await getPersistedAppLocale();
 
     // Query unread notifications for this user
     const { data: notifications, error: notifError } = await supabase
@@ -131,14 +131,19 @@ export async function pollPartnerActivities(): Promise<number> {
           .eq('id', notification.partner_id)
           .single();
 
-        const partnerName = profile?.first_name || 'Dein Partner';
+        const partnerName = profile?.first_name || {
+          de: 'Dein Partner',
+          en: 'Your partner',
+          es: 'Tu pareja',
+        }[locale];
 
         // Format notification content based on activity type
         const { title, body, emoji } = formatNotificationContent(
           notification.activity_type,
           notification.activity_subtype,
           partnerName,
-          notification.created_at
+          notification.created_at,
+          locale,
         );
 
         // Schedule local notification
@@ -178,19 +183,55 @@ function formatNotificationContent(
   activityType: string,
   activitySubtype: string | null,
   partnerName: string,
-  createdAt: string
+  createdAt: string,
+  locale: AppLocale,
 ): { title: string; body: string; emoji: string } {
-  const time = new Date(createdAt).toLocaleTimeString('de-DE', {
+  const time = new Date(createdAt).toLocaleTimeString(getAppLocaleTag(locale), {
     hour: '2-digit',
     minute: '2-digit'
   });
+  const c = {
+    de: {
+      sleep: 'Schlaf-Eintrag', sleepBody: (name: string) => `${name} hat um ${time} einen Schlaf-Eintrag erstellt`,
+      breast: 'Stillen', breastBody: (name: string) => `${name} hat um ${time} gestillt`,
+      bottle: 'Fläschchen', bottleBody: (name: string) => `${name} hat um ${time} gefüttert`,
+      solids: 'Beikost', solidsBody: (name: string) => `${name} hat um ${time} Beikost gegeben`,
+      pump: 'Abpumpen', pumpBody: (name: string) => `${name} hat um ${time} Milch abgepumpt`,
+      water: 'Wasser', waterBody: (name: string) => `${name} hat um ${time} Wasser gegeben`,
+      feeding: 'Fütterung', feedingBody: (name: string) => `${name} hat um ${time} gefüttert`,
+      diaper: 'Windel gewechselt', wetBody: (name: string) => `${name} hat um ${time} eine nasse Windel gewechselt`, dirtyBody: (name: string) => `${name} hat um ${time} eine schmutzige Windel gewechselt`, bothBody: (name: string) => `${name} hat um ${time} eine volle Windel gewechselt`, diaperBody: (name: string) => `${name} hat um ${time} eine Windel gewechselt`,
+      activity: 'Neue Aktivität', activityBody: (name: string) => `${name} hat um ${time} etwas eingetragen`,
+    },
+    en: {
+      sleep: 'Sleep entry', sleepBody: (name: string) => `${name} logged a sleep entry at ${time}`,
+      breast: 'Breastfeeding', breastBody: (name: string) => `${name} breastfed at ${time}`,
+      bottle: 'Bottle', bottleBody: (name: string) => `${name} gave a bottle at ${time}`,
+      solids: 'Solid food', solidsBody: (name: string) => `${name} served solid food at ${time}`,
+      pump: 'Pumping', pumpBody: (name: string) => `${name} pumped milk at ${time}`,
+      water: 'Water', waterBody: (name: string) => `${name} gave water at ${time}`,
+      feeding: 'Feeding', feedingBody: (name: string) => `${name} logged a feed at ${time}`,
+      diaper: 'Diaper changed', wetBody: (name: string) => `${name} changed a wet diaper at ${time}`, dirtyBody: (name: string) => `${name} changed a dirty diaper at ${time}`, bothBody: (name: string) => `${name} changed a wet and dirty diaper at ${time}`, diaperBody: (name: string) => `${name} changed a diaper at ${time}`,
+      activity: 'New activity', activityBody: (name: string) => `${name} logged something at ${time}`,
+    },
+    es: {
+      sleep: 'Registro de sueño', sleepBody: (name: string) => `${name} registró una entrada de sueño a las ${time}`,
+      breast: 'Lactancia', breastBody: (name: string) => `${name} dio el pecho a las ${time}`,
+      bottle: 'Biberón', bottleBody: (name: string) => `${name} dio el biberón a las ${time}`,
+      solids: 'Alimentación sólida', solidsBody: (name: string) => `${name} dio comida sólida a las ${time}`,
+      pump: 'Extracción', pumpBody: (name: string) => `${name} extrajo leche a las ${time}`,
+      water: 'Agua', waterBody: (name: string) => `${name} dio agua a las ${time}`,
+      feeding: 'Toma', feedingBody: (name: string) => `${name} registró una toma a las ${time}`,
+      diaper: 'Pañal cambiado', wetBody: (name: string) => `${name} cambió un pañal mojado a las ${time}`, dirtyBody: (name: string) => `${name} cambió un pañal sucio a las ${time}`, bothBody: (name: string) => `${name} cambió un pañal mojado y sucio a las ${time}`, diaperBody: (name: string) => `${name} cambió un pañal a las ${time}`,
+      activity: 'Nueva actividad', activityBody: (name: string) => `${name} registró una actividad a las ${time}`,
+    },
+  }[locale];
 
   // Sleep activities
   if (activityType === 'sleep') {
     return {
       emoji: '💤',
-      title: 'Schlaf-Eintrag',
-      body: `${partnerName} hat einen Schlaf-Eintrag erstellt um ${time}`
+      title: c.sleep,
+      body: c.sleepBody(partnerName),
     };
   }
 
@@ -200,38 +241,38 @@ function formatNotificationContent(
       case 'BREAST':
         return {
           emoji: '🤱',
-          title: 'Stillen',
-          body: `${partnerName} hat gestillt um ${time}`
+          title: c.breast,
+          body: c.breastBody(partnerName),
         };
       case 'BOTTLE':
         return {
           emoji: '🍼',
-          title: 'Fläschchen',
-          body: `${partnerName} hat gefüttert um ${time}`
+          title: c.bottle,
+          body: c.bottleBody(partnerName),
         };
       case 'SOLIDS':
         return {
           emoji: '🥄',
-          title: 'Beikost',
-          body: `${partnerName} hat Beikost gegeben um ${time}`
+          title: c.solids,
+          body: c.solidsBody(partnerName),
         };
       case 'PUMP':
         return {
           emoji: '🥛',
-          title: 'Abpumpen',
-          body: `${partnerName} hat Milch abgepumpt um ${time}`
+          title: c.pump,
+          body: c.pumpBody(partnerName),
         };
       case 'WATER':
         return {
           emoji: '🚰',
-          title: 'Wasser',
-          body: `${partnerName} hat Wasser gegeben um ${time}`
+          title: c.water,
+          body: c.waterBody(partnerName),
         };
       default:
         return {
           emoji: '🍼',
-          title: 'Fütterung',
-          body: `${partnerName} hat gefüttert um ${time}`
+          title: c.feeding,
+          body: c.feedingBody(partnerName),
         };
     }
   }
@@ -242,26 +283,26 @@ function formatNotificationContent(
       case 'WET':
         return {
           emoji: '💧',
-          title: 'Windel gewechselt',
-          body: `${partnerName} hat eine nasse Windel gewechselt um ${time}`
+          title: c.diaper,
+          body: c.wetBody(partnerName),
         };
       case 'DIRTY':
         return {
           emoji: '💩',
-          title: 'Windel gewechselt',
-          body: `${partnerName} hat eine schmutzige Windel gewechselt um ${time}`
+          title: c.diaper,
+          body: c.dirtyBody(partnerName),
         };
       case 'BOTH':
         return {
           emoji: '💧💩',
-          title: 'Windel gewechselt',
-          body: `${partnerName} hat eine volle Windel gewechselt um ${time}`
+          title: c.diaper,
+          body: c.bothBody(partnerName),
         };
       default:
         return {
           emoji: '🧷',
-          title: 'Windel gewechselt',
-          body: `${partnerName} hat eine Windel gewechselt um ${time}`
+          title: c.diaper,
+          body: c.diaperBody(partnerName),
         };
     }
   }
@@ -269,8 +310,8 @@ function formatNotificationContent(
   // Default fallback
   return {
     emoji: '📱',
-    title: 'Neue Aktivität',
-    body: `${partnerName} hat etwas eingetragen um ${time}`
+    title: c.activity,
+    body: c.activityBody(partnerName),
   };
 }
 

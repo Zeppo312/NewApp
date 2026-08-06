@@ -32,6 +32,7 @@ const localizedDefaults: Record<Exclude<AppLocale, 'de'>, PaywallPlansContent> =
       { label: 'Weekly moments & memory collection', lite: false, standard: true, premium: true },
       { label: 'Recipes & complementary feeding support', lite: false, standard: true, premium: true },
       { label: 'Insights & PDF exports', lite: false, standard: true, premium: true },
+      { label: '✨ Personal pregnancy morning briefing', lite: false, standard: false, premium: true },
       { label: '✨ AI: voice logging – speak your entries', lite: false, standard: false, premium: true },
       { label: "✨ AI: Lotti's Care – daily insights", lite: false, standard: false, premium: true },
     ],
@@ -40,7 +41,7 @@ const localizedDefaults: Record<Exclude<AppLocale, 'de'>, PaywallPlansContent> =
     restoreLabel: 'Restore purchases / refresh status', cancelLabel: 'Maybe later',
     legalText: 'An active subscription is required to use Lotti Baby. If {{storeProvider}} offers a free trial for your selected product, it will be shown in the store before purchase. Your store account is charged when the purchase is confirmed. Subscriptions renew automatically unless canceled in the store settings in time.',
     tiers: {
-      premium: { visible: true, name: 'Lotti Premium', tagline: "Everything in Standard plus Lotti's AI features", ctaLabel: 'Start Premium', bullets: ["✨ AI features: voice logging & Lotti's Care", 'Partner connection for both of you', 'Planner, lists, weekly moments & recipes', 'Insights, memories & PDF exports'] },
+      premium: { visible: true, name: 'Lotti Premium', tagline: "Everything in Standard plus Lotti's AI features", ctaLabel: 'Start Premium', bullets: ["✨ Pregnancy briefing & Lotti's AI features", 'Partner connection for both of you', 'Planner, lists, weekly moments & recipes', 'Insights, memories & PDF exports'] },
       standard: { visible: true, name: 'Lotti Standard', tagline: 'Complete support for your family', ctaLabel: 'Start Standard', bullets: ['All trackers with complete history', 'Partner connection for both of you', 'Planner, lists, weekly moments & recipes', 'Insights, memories & PDF exports'] },
       lite: { visible: true, name: 'Lotti Lite', tagline: 'The simple way to start tracking', ctaLabel: 'Start Lite', bullets: ['All essential everyday trackers', 'Pregnancy support', 'Growth & milestones', 'History for the last 7 days'] },
     },
@@ -62,6 +63,7 @@ const localizedDefaults: Record<Exclude<AppLocale, 'de'>, PaywallPlansContent> =
       { label: 'Momentos semanales y colección de recuerdos', lite: false, standard: true, premium: true },
       { label: 'Recetas y acompañamiento en alimentación', lite: false, standard: true, premium: true },
       { label: 'Análisis y exportaciones PDF', lite: false, standard: true, premium: true },
+      { label: '✨ Resumen personal diario del embarazo', lite: false, standard: false, premium: true },
       { label: '✨ IA: registro por voz', lite: false, standard: false, premium: true },
       { label: '✨ IA: Cuidados de Lotti – consejos diarios', lite: false, standard: false, premium: true },
     ],
@@ -70,7 +72,7 @@ const localizedDefaults: Record<Exclude<AppLocale, 'de'>, PaywallPlansContent> =
     restoreLabel: 'Restaurar compras / actualizar estado', cancelLabel: 'Quizá más tarde',
     legalText: 'Se necesita una suscripción activa para usar Lotti Baby. Si {{storeProvider}} ofrece una prueba gratuita para el producto elegido, aparecerá en la tienda antes de comprar. El cargo se realiza en tu cuenta de la tienda al confirmar la compra. Las suscripciones se renuevan automáticamente si no se cancelan a tiempo en los ajustes de la tienda.',
     tiers: {
-      premium: { visible: true, name: 'Lotti Premium', tagline: 'Todo lo de Standard más las funciones de IA de Lotti', ctaLabel: 'Empezar Premium', bullets: ['✨ Funciones de IA: registro por voz y Cuidados de Lotti', 'Conexión de pareja para ambos', 'Agenda, listas, momentos semanales y recetas', 'Análisis, recuerdos y exportaciones PDF'] },
+      premium: { visible: true, name: 'Lotti Premium', tagline: 'Todo lo de Standard más las funciones de IA de Lotti', ctaLabel: 'Empezar Premium', bullets: ['✨ Resumen del embarazo y funciones de IA de Lotti', 'Conexión de pareja para ambos', 'Agenda, listas, momentos semanales y recetas', 'Análisis, recuerdos y exportaciones PDF'] },
       standard: { visible: true, name: 'Lotti Standard', tagline: 'Acompañamiento completo para vuestra familia', ctaLabel: 'Empezar Standard', bullets: ['Todos los seguimientos con historial completo', 'Conexión de pareja para ambos', 'Agenda, listas, momentos semanales y recetas', 'Análisis, recuerdos y exportaciones PDF'] },
       lite: { visible: true, name: 'Lotti Lite', tagline: 'La forma más sencilla de empezar', ctaLabel: 'Empezar Lite', bullets: ['Seguimientos básicos para el día a día', 'Acompañamiento durante el embarazo', 'Crecimiento e hitos', 'Historial de los últimos 7 días'] },
     },

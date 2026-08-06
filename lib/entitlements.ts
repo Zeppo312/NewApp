@@ -49,7 +49,9 @@ export type AppFeature =
   | 'recipes'
   | 'fullHistory'
   | 'voiceLog'
-  | 'fuersorge';
+  | 'fuersorge'
+  | 'fragLotti'
+  | 'pregnancyBriefing';
 
 const FEATURE_MATRIX: Record<AppFeature, AppSubscriptionTier[]> = {
   basisTracker: ['lite', 'standard', 'premium'],
@@ -63,6 +65,8 @@ const FEATURE_MATRIX: Record<AppFeature, AppSubscriptionTier[]> = {
   // KI-Features – nur Premium
   voiceLog: ['premium'],
   fuersorge: ['premium'],
+  fragLotti: ['premium'],
+  pregnancyBriefing: ['premium'],
 };
 
 /** Lite sieht nur die letzten N Tage Verlauf (heute eingeschlossen). */
@@ -207,6 +211,27 @@ export const LOCKED_FEATURE_COPY: Record<AppFeature, LockedFeatureCopy> = {
       'UV-, Regen- und Temperatur-Hinweise für euer Baby',
       'Persönliche Impulse statt generischer Tipps',
       'Ein KI-Feature aus Lotti Premium',
+    ],
+    requiredTier: 'premium',
+  },
+  fragLotti: {
+    title: 'Frag Lotti',
+    subtitle: 'Stelle Fragen rund um euren Babyalltag und erhalte allgemeine Orientierung, ergänzt durch passende Lotti-Daten.',
+    bullets: [
+      'Alltagsfragen zu Schlaf, Fütterung, Größen und Routinen stellen',
+      'Passende Einträge werden automatisch und sichtbar einbezogen',
+      'Keine Diagnosen und keine erfundenen Ursachen',
+    ],
+    requiredTier: 'premium',
+  },
+  pregnancyBriefing: {
+    title: 'Persönliches Schwangerschafts-Briefing',
+    subtitle:
+      'Dein täglicher Überblick passend zu deiner SSW, deinen Einträgen und euren nächsten Schritten.',
+    bullets: [
+      'Selfcare passend zu deinem letzten Check-in',
+      'Termine und offene Arztfragen auf einen Blick',
+      'Eine Partner-Aufgabe und die nächste Vorbereitung',
     ],
     requiredTier: 'premium',
   },
