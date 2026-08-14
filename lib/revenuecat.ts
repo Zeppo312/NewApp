@@ -13,8 +13,6 @@ export const REVENUECAT_MONTHLY_PRODUCT_ID = 'lottibaby_monthly';
 export const REVENUECAT_YEARLY_PRODUCT_ID = 'lottibaby_yearly';
 export const REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID = 'lottibaby_premium_monthly';
 export const REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID = 'lottibaby_premium_yearly';
-export const REVENUECAT_STANDARD_MONTHLY_PRODUCT_ID = 'lottibaby_standard_monthly';
-export const REVENUECAT_STANDARD_YEARLY_PRODUCT_ID = 'lottibaby_standard_yearly';
 export const REVENUECAT_LITE_MONTHLY_PRODUCT_ID = 'lottibaby_lite_monthly';
 export const REVENUECAT_LITE_YEARLY_PRODUCT_ID = 'lottibaby_lite_yearly';
 
@@ -23,8 +21,6 @@ export type RevenueCatProductId =
   | typeof REVENUECAT_YEARLY_PRODUCT_ID
   | typeof REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID
   | typeof REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID
-  | typeof REVENUECAT_STANDARD_MONTHLY_PRODUCT_ID
-  | typeof REVENUECAT_STANDARD_YEARLY_PRODUCT_ID
   | typeof REVENUECAT_LITE_MONTHLY_PRODUCT_ID
   | typeof REVENUECAT_LITE_YEARLY_PRODUCT_ID;
 
@@ -44,6 +40,15 @@ export type RevenueCatPlanKey =
 export type RevenueCatPlanPricing = Partial<
   Record<RevenueCatPlanKey, { price: number; priceString: string }>
 >;
+
+const REVENUECAT_PRODUCT_IDS: RevenueCatProductId[] = [
+  REVENUECAT_MONTHLY_PRODUCT_ID,
+  REVENUECAT_YEARLY_PRODUCT_ID,
+  REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID,
+  REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID,
+  REVENUECAT_LITE_MONTHLY_PRODUCT_ID,
+  REVENUECAT_LITE_YEARLY_PRODUCT_ID,
+];
 
 export type RevenueCatSubscriptionSummary = {
   isActive: boolean;
@@ -209,14 +214,12 @@ const getPackageProductId = (pkg: any): string | null => {
 const MONTHLY_PRODUCT_IDS: string[] = [
   REVENUECAT_MONTHLY_PRODUCT_ID,
   REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID,
-  REVENUECAT_STANDARD_MONTHLY_PRODUCT_ID,
   REVENUECAT_LITE_MONTHLY_PRODUCT_ID,
 ];
 
 const YEARLY_PRODUCT_IDS: string[] = [
   REVENUECAT_YEARLY_PRODUCT_ID,
   REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID,
-  REVENUECAT_STANDARD_YEARLY_PRODUCT_ID,
   REVENUECAT_LITE_YEARLY_PRODUCT_ID,
 ];
 
@@ -233,8 +236,6 @@ const PREMIUM_PRODUCT_IDS: string[] = [
 const STANDARD_PRODUCT_IDS: string[] = [
   REVENUECAT_MONTHLY_PRODUCT_ID,
   REVENUECAT_YEARLY_PRODUCT_ID,
-  REVENUECAT_STANDARD_MONTHLY_PRODUCT_ID,
-  REVENUECAT_STANDARD_YEARLY_PRODUCT_ID,
 ];
 
 const getPlanTypeFromProductId = (productId: string | null): RevenueCatPlanType | null => {
@@ -254,8 +255,6 @@ export const getTierFromProductId = (
   return null;
 };
 
-// Vorläufige Produkt-IDs. Sobald die finalen RevenueCat-Keys vorliegen, werden
-// nur diese Konstanten angepasst. Legacy-Produkte bleiben Standard-Fallbacks.
 const getProductIdCandidates = (
   tier: SubscriptionTier,
   interval: SubscriptionInterval,
@@ -268,8 +267,8 @@ const getProductIdCandidates = (
 
   if (tier === 'standard') {
     return interval === 'yearly'
-      ? [REVENUECAT_STANDARD_YEARLY_PRODUCT_ID, REVENUECAT_YEARLY_PRODUCT_ID]
-      : [REVENUECAT_STANDARD_MONTHLY_PRODUCT_ID, REVENUECAT_MONTHLY_PRODUCT_ID];
+      ? [REVENUECAT_YEARLY_PRODUCT_ID]
+      : [REVENUECAT_MONTHLY_PRODUCT_ID];
   }
 
   return interval === 'yearly'
@@ -469,7 +468,12 @@ export async function getRevenueCatPlanPricing(
   if (Platform.OS === 'web') return {};
 
   try {
-    const packages = await getRevenueCatPackages(userId);
+    await initRevenueCat(userId);
+
+    // Preise direkt über die exakten Store-Produkt-IDs laden. Dadurch kann eine
+    // veraltete oder falsch zugeordnete Offering-Preisanzeige nicht vom späteren
+    // nativen Kaufdialog abweichen.
+    const products = await Purchases.getProducts(REVENUECAT_PRODUCT_IDS);
     const pricing: RevenueCatPlanPricing = {};
 
     const assign = (
@@ -478,9 +482,11 @@ export async function getRevenueCatPlanPricing(
       interval: SubscriptionInterval,
     ) => {
       for (const productId of getProductIdCandidates(tier, interval)) {
-        const pkg = findRevenueCatPackageByProductId(packages, productId);
-        const price = pkg?.product?.price;
-        const priceString = pkg?.product?.priceString;
+        const product = products.find((candidate: any) =>
+          (candidate?.identifier ?? candidate?.productIdentifier) === productId,
+        );
+        const price = product?.price;
+        const priceString = product?.priceString;
         if (typeof price === 'number' && typeof priceString === 'string') {
           pricing[key] = { price, priceString };
           return;

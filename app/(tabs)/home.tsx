@@ -14,7 +14,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
 import { useAdvisorAccess } from '@/lib/advisor/access';
@@ -498,137 +497,183 @@ function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
   );
 }
 
-function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const width = layout.width;
-  const height = layout.height;
-  const minDim = Math.min(width, height);
-  const maxDim = Math.max(width, height);
-  const lensRadius = Math.min(radius, minDim / 2);
-  const strokeRadius = Math.max(0, lensRadius - 1);
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace('#', '');
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((char) => char + char)
+          .join('')
+      : normalized;
+  const value = Number.parseInt(full, 16);
 
-  return (
-    <View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}
-      onLayout={(event) => {
-        const { width, height } = event.nativeEvent.layout;
-        if (width !== layout.width || height !== layout.height) {
-          setLayout({ width, height });
-        }
-      }}
-    >
-      {width > 0 && height > 0 ? (
-        <Canvas style={{ width, height }}>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <SkiaLinearGradient
-              start={vec(0, 0)}
-              end={vec(width, height)}
-              colors={[
-                'rgba(255, 255, 255, 0.45)',
-                'rgba(94, 61, 179, 0.08)',
-                'rgba(255, 255, 255, 0.18)',
-              ]}
-              positions={[0, 0.6, 1]}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.2, height * 0.15)}
-              r={maxDim * 0.9}
-              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.85, height * 0.85)}
-              r={maxDim * 0.8}
-              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
-            />
-          </RoundedRect>
-          <RoundedRect
-            x={0.5}
-            y={0.5}
-            width={width - 1}
-            height={height - 1}
-            r={strokeRadius}
-            style="stroke"
-            strokeWidth={1}
-            color="rgba(255, 255, 255, 0.6)"
-          />
-          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
-            <RadialGradient
-              c={vec(width * 0.22, height * 0.28)}
-              r={minDim * 0.18}
-              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
-            <RadialGradient
-              c={vec(width * 0.72, height * 0.18)}
-              r={minDim * 0.1}
-              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-        </Canvas>
-      ) : null}
-    </View>
-  );
+  if (!Number.isFinite(value)) {
+    return `rgba(255, 255, 255, ${alpha})`;
+  }
+
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function TipHighlightDots() {
-  const dotOne = React.useState(() => new Animated.Value(0))[0];
-  const dotTwo = React.useState(() => new Animated.Value(0))[0];
-  const dotThree = React.useState(() => new Animated.Value(0))[0];
+type ActiveTimerCardProps = {
+  timer: HomeActiveTimer;
+  elapsedSeconds: number;
+  sinceLabel: string;
+  isDark: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  onPress: () => void;
+};
+
+function ActiveTimerCard({
+  timer,
+  elapsedSeconds,
+  sinceLabel,
+  isDark,
+  textPrimary,
+  textSecondary,
+  onPress,
+}: ActiveTimerCardProps) {
+  const pulse = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
-    const createPulse = (value: Animated.Value, delayMs: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delayMs),
-          Animated.timing(value, {
-            toValue: 1,
-            duration: 900,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(value, {
-            toValue: 0,
-            duration: 900,
-            easing: Easing.in(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ])
-      );
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1600,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1600,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
 
-    const pulseOne = createPulse(dotOne, 0);
-    const pulseTwo = createPulse(dotTwo, 500);
-    const pulseThree = createPulse(dotThree, 1000);
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
 
-    pulseOne.start();
-    pulseTwo.start();
-    pulseThree.start();
+  const accent = timer.accentColor;
+  const formatted = formatDurationSeconds(elapsedSeconds);
+  const lastColon = formatted.lastIndexOf(':');
+  const mainTime = lastColon >= 0 ? formatted.slice(0, lastColon) : formatted;
+  const secondsPart = lastColon >= 0 ? formatted.slice(lastColon + 1) : null;
 
-    return () => {
-      pulseOne.stop();
-      pulseTwo.stop();
-      pulseThree.stop();
-    };
-  }, [dotOne, dotTwo, dotThree]);
-
-  const makeDotStyle = (value: Animated.Value) => ({
-    opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.2, 0.95] }),
-    transform: [
-      { scale: value.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.25] }) },
-    ],
-  });
+  const haloStyle = {
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }],
+  };
+  const liveDotStyle = {
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.15] }) }],
+  };
 
   return (
-    <View pointerEvents="none" style={styles.tipHighlightContainer}>
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotOne, makeDotStyle(dotOne)]} />
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotTwo, makeDotStyle(dotTwo)]} />
-      <Animated.View style={[styles.tipHighlightDot, styles.tipHighlightDotThree, makeDotStyle(dotThree)]} />
-    </View>
+    <TouchableOpacity
+      style={[
+        styles.activeTimerCard,
+        {
+          backgroundColor: isDark ? 'rgba(10, 8, 26, 0.55)' : 'rgba(255, 255, 255, 0.55)',
+          borderColor: hexToRgba(accent, isDark ? 0.35 : 0.28),
+          shadowColor: accent,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={[hexToRgba(accent, isDark ? 0.28 : 0.2), hexToRgba(accent, 0.06), 'rgba(0, 0, 0, 0)']}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.activeTimerGradient}
+      />
+
+      <View style={styles.activeTimerHeader}>
+        <View style={styles.activeTimerIconStack}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.activeTimerIconHalo, { backgroundColor: hexToRgba(accent, 0.22) }, haloStyle]}
+          />
+          <View
+            style={[
+              styles.activeTimerIconWrap,
+              { backgroundColor: hexToRgba(accent, isDark ? 0.22 : 0.16), borderColor: hexToRgba(accent, 0.45) },
+            ]}
+          >
+            <IconSymbol name={timer.iconName as any} size={18} color={accent} />
+          </View>
+        </View>
+
+        <View style={styles.activeTimerContent}>
+          <View style={styles.activeTimerLabelRow}>
+            <Animated.View style={[styles.activeTimerLiveDot, { backgroundColor: accent }, liveDotStyle]} />
+            <ThemedText adaptive={false} style={[styles.activeTimerLabel, { color: accent }]}>
+              {timer.label.toUpperCase()}
+            </ThemedText>
+          </View>
+          <ThemedText adaptive={false} style={[styles.activeTimerTitle, { color: textPrimary }]}>
+            {timer.title}
+          </ThemedText>
+        </View>
+
+        <View style={[styles.activeTimerChevron, { backgroundColor: hexToRgba(accent, isDark ? 0.16 : 0.12) }]}>
+          <IconSymbol name="chevron.right" size={14} color={accent} />
+        </View>
+      </View>
+
+      <View style={styles.activeTimerStatsRow}>
+        <View style={styles.activeTimerElapsedRow}>
+          <ThemedText adaptive={false} style={[styles.activeTimerElapsed, { color: textPrimary }]}>
+            {mainTime}
+          </ThemedText>
+          {secondsPart ? (
+            <ThemedText adaptive={false} style={[styles.activeTimerElapsedSeconds, { color: hexToRgba(accent, 0.95) }]}>
+              {`:${secondsPart}`}
+            </ThemedText>
+          ) : null}
+        </View>
+
+        <View
+          style={[
+            styles.activeTimerSincePill,
+            {
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+              borderColor: hexToRgba(accent, 0.22),
+            },
+          ]}
+        >
+          <ThemedText adaptive={false} style={[styles.activeTimerSince, { color: textSecondary }]}>
+            {sinceLabel}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={[styles.activeTimerTrack, { backgroundColor: hexToRgba(accent, 0.14) }]}>
+        <Animated.View
+          style={[
+            styles.activeTimerTrackFill,
+            {
+              backgroundColor: accent,
+              opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.9] }),
+              transform: [
+                { scaleX: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
+              ],
+            },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -1489,41 +1534,20 @@ export default function HomeScreen() {
             </View>
 
             {activeHomeTimer ? (
-              <TouchableOpacity
-                style={styles.tipCard}
+              <ActiveTimerCard
+                timer={activeHomeTimer}
+                elapsedSeconds={activeTimerElapsedSeconds}
+                sinceLabel={t('timer.since', {
+                  time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                })}
+                isDark={isDark}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
                 onPress={() => handleNavigate(activeHomeTimer.route)}
-                activeOpacity={0.9}
-              >
-                <GlassLensOverlay radius={20} />
-                <TipHighlightDots />
-                <View style={styles.activeTimerHeader}>
-                  <View style={[styles.activeTimerIconWrap, { backgroundColor: activeHomeTimer.accentBackground }]}>
-                    <IconSymbol name={activeHomeTimer.iconName as any} size={18} color={activeHomeTimer.accentColor} />
-                  </View>
-                  <View style={styles.activeTimerContent}>
-                    <ThemedText adaptive={false} style={[styles.tipLabel, { color: activeHomeTimer.accentColor }]}>
-                      {activeHomeTimer.label}
-                    </ThemedText>
-                    <ThemedText adaptive={false} style={[styles.activeTimerTitle, { color: textPrimary }]}>
-                      {activeHomeTimer.title}
-                    </ThemedText>
-                  </View>
-                  <IconSymbol name="chevron.right" size={16} color={textSecondary} />
-                </View>
-
-                <View style={styles.activeTimerStatsRow}>
-                  <ThemedText adaptive={false} style={[styles.activeTimerElapsed, { color: textPrimary }]}>
-                    {formatDurationSeconds(activeTimerElapsedSeconds)}
-                  </ThemedText>
-                  <ThemedText adaptive={false} style={[styles.activeTimerSince, { color: textSecondary }]}>
-                    {t('timer.since', { time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' }) })}
-                  </ThemedText>
-                </View>
-
-                <ThemedText adaptive={false} style={[styles.activeTimerHint, { color: textSecondary }]}>
-                  {activeHomeTimer.hint}
-                </ThemedText>
-              </TouchableOpacity>
+              />
             ) : (
               <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
             )}
@@ -2373,66 +2397,44 @@ const styles = StyleSheet.create({
     borderRadius: 30,
   },
 
-  // Tip Container
-  tipCard: {
+  activeTimerCard: {
     marginTop: 14,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.55)',
-    padding: 14,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
     overflow: 'hidden',
-    shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 5,
   },
-  tipHighlightContainer: {
+  activeTimerGradient: {
+    // Kein absoluteFillObject — in RN 0.86 entfernt (zur Laufzeit undefined).
     ...StyleSheet.absoluteFill,
-  },
-  tipHighlightDot: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#FFFFFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  tipHighlightDotOne: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    top: 10,
-    right: 16,
-  },
-  tipHighlightDotTwo: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    top: 28,
-    right: 44,
-  },
-  tipHighlightDotThree: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    bottom: 10,
-    right: 28,
-  },
-  tipCardRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
   },
   activeTimerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
+  activeTimerIconStack: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTimerIconHalo: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
   activeTimerIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2441,67 +2443,84 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     marginRight: 12,
   },
+  activeTimerLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  activeTimerLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activeTimerLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
   activeTimerTitle: {
     fontSize: 16,
     lineHeight: 20,
     fontWeight: '700',
     letterSpacing: -0.2,
   },
+  activeTimerChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   activeTimerStatsRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 14,
+    marginTop: 12,
     gap: 12,
   },
+  activeTimerElapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   activeTimerElapsed: {
-    fontSize: 28,
-    lineHeight: 32,
+    fontSize: 34,
+    lineHeight: 38,
     fontWeight: '800',
-    letterSpacing: -0.6,
+    letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
+  activeTimerElapsedSeconds: {
+    marginLeft: 1,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    fontVariant: ['tabular-nums'],
+  },
+  activeTimerSincePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
   activeTimerSince: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '600',
     textAlign: 'right',
   },
-  activeTimerHint: {
-    marginTop: 8,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
+  activeTimerTrack: {
+    marginTop: 12,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
   },
-  tipIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  tipContent: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  tipLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#5E3DB3',
-    marginBottom: 4,
-  },
-  tipText: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '500',
-    color: '#6B4C3B',
+  activeTimerTrackFill: {
+    height: 3,
+    borderRadius: 2,
+    width: '100%',
   },
 
   // Overview Carousel

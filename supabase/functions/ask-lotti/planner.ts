@@ -64,7 +64,6 @@ export const ASK_LOTTI_PLAN_SCHEMA: Record<string, unknown> = {
     mode: { type: "string", enum: PLAN_MODES },
     domains: {
       type: "array",
-      uniqueItems: true,
       maxItems: PLAN_DOMAINS.length,
       items: { type: "string", enum: PLAN_DOMAINS },
     },
@@ -73,7 +72,6 @@ export const ASK_LOTTI_PLAN_SCHEMA: Record<string, unknown> = {
     compare_previous: { type: "boolean" },
     clarify_topics: {
       type: "array",
-      uniqueItems: true,
       maxItems: CLARIFY_TOPICS.length,
       items: { type: "string", enum: CLARIFY_TOPICS },
     },
@@ -125,6 +123,33 @@ export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null => {
     compare_previous: plan.compare_previous,
     clarify_topics: clarifyTopics,
     answer_language: plan.answer_language,
+  };
+};
+
+// Asking the parent to pick between a single option only burns a turn and one
+// question from their daily quota. With exactly one topic left, that topic is
+// the answer, so resolve it into a real plan instead of asking.
+const SINGLE_CLARIFY_PLANS: Record<
+  AskLottiClarifyTopic,
+  Pick<AskLottiPlan, "domains" | "metric" | "timeframe_days">
+> = {
+  sleep: { domains: ["sleep"], metric: "average_per_day", timeframe_days: 14 },
+  feeding: { domains: ["feeding"], metric: "total", timeframe_days: 7 },
+  today: {
+    domains: ["sleep", "feeding", "diaper"],
+    metric: "total",
+    timeframe_days: 1,
+  },
+  growth: { domains: ["growth"], metric: "latest", timeframe_days: 30 },
+};
+
+export const resolveSingleTopicClarify = (plan: AskLottiPlan): AskLottiPlan => {
+  if (plan.mode !== "clarify" || plan.clarify_topics.length !== 1) return plan;
+  return {
+    ...plan,
+    ...SINGLE_CLARIFY_PLANS[plan.clarify_topics[0]],
+    mode: "mixed",
+    clarify_topics: [],
   };
 };
 

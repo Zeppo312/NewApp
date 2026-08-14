@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Code128Barcode } from '@/components/code-128-barcode';
@@ -61,6 +61,7 @@ const readableBarcodeType = (type: string) => {
 };
 
 export default function LoyaltyCardsScreen() {
+  const router = useRouter();
   const { locale } = useLocale();
   const t = useCallback((key: LoyaltyCardsTranslationKey, params?: Record<string, string | number>) =>
     translateLoyaltyCards(locale, key, params), [locale]);
@@ -223,6 +224,13 @@ export default function LoyaltyCardsScreen() {
           subtitle={t('subtitle')}
           showBackButton
           showBabySwitcher={false}
+          onBackPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+              return;
+            }
+            router.replace('/shopping-list');
+          }}
         />
 
         <ScrollView

@@ -320,8 +320,8 @@ export default function LottisFuersorgeScreen() {
             borderColor: 'rgba(255,255,255,0.17)',
             innerBorderColor: 'rgba(255,255,255,0.07)',
             highlightStrength: 'subtle' as const,
-            highlightOpacity: 0.55,
-            glossOpacity: 0.12,
+            highlightOpacity: 0.34,
+            glossOpacity: 0.09,
             grainOpacity: 0.025,
             shadeOpacity: 0.75,
           }
@@ -900,6 +900,7 @@ export default function LottisFuersorgeScreen() {
           warningSurface: isDark
             ? 'rgba(244,180,136,0.14)'
             : 'rgba(216,138,60,0.12)',
+          isDark,
         }}
         onOpenPlanner={() => router.push('/planner')}
       />
@@ -1425,8 +1426,12 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     borderRadius: 999,
     backgroundColor: theme.accentSoft,
   },
-  horizonBadgeNight: { backgroundColor: 'rgba(83,73,145,0.13)' },
-  horizonBadgeLimit: { backgroundColor: 'rgba(161,77,116,0.13)' },
+  horizonBadgeNight: {
+    backgroundColor: theme.isDark ? 'rgba(151,141,224,0.22)' : 'rgba(83,73,145,0.13)',
+  },
+  horizonBadgeLimit: {
+    backgroundColor: theme.isDark ? 'rgba(226,140,180,0.20)' : 'rgba(161,77,116,0.13)',
+  },
   horizonBadgeText: {
     fontSize: 11.5,
     fontWeight: '800',

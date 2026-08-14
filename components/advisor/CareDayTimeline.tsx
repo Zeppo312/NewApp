@@ -17,6 +17,7 @@ type TimelineColors = {
   skeleton: string;
   warning: string;
   warningSurface: string;
+  isDark?: boolean;
 };
 
 type Props = {
@@ -28,12 +29,12 @@ type Props = {
 
 const KIND_META: Record<
   CareDayTimelineItem['kind'],
-  { emoji: string; color: string }
+  { emoji: string; color: string; colorDark: string }
 > = {
-  sleep: { emoji: '💤', color: '#6C5CE0' },
-  feeding: { emoji: '🍼', color: '#DB6F9C' },
-  planner: { emoji: '📅', color: '#3FA294' },
-  task: { emoji: '✓', color: '#D88A3C' },
+  sleep: { emoji: '💤', color: '#6C5CE0', colorDark: '#B8ADFF' },
+  feeding: { emoji: '🍼', color: '#DB6F9C', colorDark: '#F2A7C5' },
+  planner: { emoji: '📅', color: '#3FA294', colorDark: '#83D4C8' },
+  task: { emoji: '✓', color: '#D88A3C', colorDark: '#F1B778' },
 };
 
 function TimelineSkeleton({ color }: { color: string }) {
@@ -120,6 +121,7 @@ export function CareDayTimeline({ items, loading, colors, onOpenPlanner }: Props
         <View style={styles.list}>
           {items.map((item, index) => {
             const meta = KIND_META[item.kind];
+            const kindColor = colors.isDark ? meta.colorDark : meta.color;
             const isLast = index === items.length - 1;
             return (
               <View key={item.id} style={styles.row}>
@@ -141,8 +143,8 @@ export function CareDayTimeline({ items, loading, colors, onOpenPlanner }: Props
                   <View
                     style={[
                       styles.dot,
-                      { borderColor: meta.color, backgroundColor: colors.accentSurface },
-                      item.status === 'now' && { backgroundColor: meta.color },
+                      { borderColor: kindColor, backgroundColor: colors.accentSurface },
+                      item.status === 'now' && { backgroundColor: kindColor },
                     ]}
                   >
                     <Text style={styles.dotEmoji}>{meta.emoji}</Text>

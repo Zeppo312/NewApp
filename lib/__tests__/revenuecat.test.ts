@@ -1,5 +1,7 @@
 import {
+  getRevenueCatPlanPricing,
   getRevenueCatEntitlementStatus,
+  getTierFromProductId,
   initRevenueCat,
 } from '../revenuecat';
 
@@ -10,6 +12,7 @@ jest.mock('@/lib/purchasesClient', () => ({
   logIn: jest.fn(),
   getCustomerInfo: jest.fn(),
   getOfferings: jest.fn(),
+  getProducts: jest.fn(),
   purchasePackage: jest.fn(),
   restorePurchases: jest.fn(),
   addCustomerInfoUpdateListener: jest.fn(),
@@ -93,5 +96,43 @@ describe('RevenueCat initialization and status', () => {
     });
     expect(mockCaptureException).toHaveBeenCalledWith(error);
     warning.mockRestore();
+  });
+
+  it('treats the existing monthly and yearly products as Standard', () => {
+    expect(getTierFromProductId('lottibaby_monthly')).toBe('standard');
+    expect(getTierFromProductId('lottibaby_yearly')).toBe('standard');
+  });
+
+  it('loads Standard pricing from the existing product IDs', async () => {
+    mockPurchases.getProducts.mockResolvedValue([
+      {
+        identifier: 'lottibaby_monthly',
+        price: 3.79,
+        priceString: '3,79 €',
+      },
+      {
+        identifier: 'lottibaby_yearly',
+        price: 39.99,
+        priceString: '39,99 €',
+      },
+      {
+        identifier: 'lottibaby_standard_monthly',
+        price: 2.99,
+        priceString: '$2.99',
+      },
+    ]);
+
+    await expect(getRevenueCatPlanPricing('user-b')).resolves.toMatchObject({
+      standardMonthly: { price: 3.79, priceString: '3,79 €' },
+      standardYearly: { price: 39.99, priceString: '39,99 €' },
+    });
+    expect(mockPurchases.getProducts).toHaveBeenCalledWith([
+      'lottibaby_monthly',
+      'lottibaby_yearly',
+      'lottibaby_premium_monthly',
+      'lottibaby_premium_yearly',
+      'lottibaby_lite_monthly',
+      'lottibaby_lite_yearly',
+    ]);
   });
 });

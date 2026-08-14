@@ -40,6 +40,7 @@ import {
   clonePaywallContent,
   fetchPaywallContent,
   formatEuroAmount,
+  PAYWALL_LITE_TIER_ENABLED,
   sanitizePaywallContent,
   savePaywallContent,
   type PaywallContent,
@@ -84,7 +85,10 @@ const setValueAtPath = (
   return sanitizePaywallContent(next);
 };
 
-const TIER_IDS: PaywallPlansTierId[] = ['premium', 'standard', 'lite'];
+// Lite ist derzeit global deaktiviert und taucht deshalb auch im Editor nicht auf.
+const TIER_IDS: PaywallPlansTierId[] = PAYWALL_LITE_TIER_ENABLED
+  ? ['premium', 'standard', 'lite']
+  : ['premium', 'standard'];
 
 export default function PaywallContentAdminScreen() {
   const colorScheme = useColorScheme() ?? 'light';

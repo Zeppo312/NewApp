@@ -1,0 +1,176 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0.20",
+    "copyright": "2025 Laura-Michelle Zeppenfeld",
+    "release": {
+      "automaticRelease": false
+    },
+    "info": {
+      "es-ES": {
+        "description": "Lotti Baby – Embarazo, sueño y seguimiento del bebé\n\nTe acompaña desde el embarazo hasta el día a día con tu bebé.\n\nRegistra contracciones, la cuenta atrás para la fecha de parto, sueño, lactancia, biberones, pañales y momentos importantes, todo en una aplicación cuidada y fácil de usar para familias.\n\nLotti Baby te ayuda a vivir el embarazo y los primeros años de tu bebé de forma más organizada, tranquila y consciente. La aplicación reúne acompañamiento durante el embarazo, seguimiento del bebé y herramientas prácticas para la vida familiar en un solo lugar.\n\nDurante el embarazo, Lotti Baby te ayuda a prepararte para el nacimiento. Consulta la cuenta atrás hasta la fecha prevista de parto, registra posibles contracciones, crea tu plan de parto y organiza los preparativos importantes para la llegada de tu bebé.\n\nDespués del nacimiento, Lotti Baby te acompaña en las rutinas diarias. Registra fácilmente el sueño, la lactancia, los biberones, los pañales y otros momentos del día para reconocer patrones y comprender mejor el ritmo de tu bebé.\n\nTambién puedes guardar hitos y etapas importantes del desarrollo. Así se crea poco a poco un diario personal con recuerdos valiosos de los primeros meses y años.\n\nAdemás, Lotti Baby ofrece funciones útiles para la vida familiar. La información sobre el tiempo te ayuda a elegir la ropa adecuada para tu bebé según las condiciones actuales. También encontrarás contenidos, consejos y recomendaciones seleccionadas para acompañarte en el día a día.\n\nLa aplicación está diseñada para ser sencilla, clara y agradable. Lotti Baby reúne embarazo, seguimiento, organización y recuerdos para que puedas centrarte en lo que realmente importa: disfrutar del tiempo con tu bebé.\n\nTérminos de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "keywords": [
+          "biberón",
+          "pañal",
+          "contracciones",
+          "hitos",
+          "seguimiento",
+          "reciénnacido",
+          "destete",
+          "crecimiento",
+          "alimentación"
+        ],
+        "releaseNotes": "Novedades de la versión 1.0.20:\n• Lotti Baby ya está disponible en alemán, inglés y español.\n• Nueva selección de suscripciones Lite, Standard y Premium.\n• Mejoras en el paywall, los precios y la estabilidad.",
+        "supportUrl": "https://lottibaby.de/support",
+        "title": "Lotti Baby: Sueño y Lactancia",
+        "subtitle": "Embarazo y diario del bebé",
+        "promoText": "Tu acompañante para el embarazo y los primeros años del bebé. Registra sueño, lactancia, biberones, pañales, contracciones e hitos en un solo lugar.",
+        "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
+        "screenshots": {
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-1.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-2.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-3.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-4.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-5.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-6.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-7.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-8.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-9.png",
+            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-10.png"
+          ]
+        }
+      },
+      "en-US": {
+        "description": "Lotti Baby – Pregnancy & Baby Tracker\n\nFrom pregnancy through everyday life with your baby, Lotti Baby keeps everything in one calm, lovingly designed place.\n\nDuring pregnancy, follow the countdown to your due date, log contractions, create a birth plan and organize important preparations.\n\nAfter birth, record sleep, breastfeeding, bottles, diapers, complementary feeding and other daily routines. Clear histories help you recognize patterns and understand your baby’s rhythm. Save milestones and development steps to create a personal baby diary.\n\nLotti Baby also supports family organization with shared planning, lists, reminders, evaluations and helpful content. Depending on your plan, additional AI features such as voice logging, a personal pregnancy briefing and “Ask Lotti” are available.\n\nChoose between Lite, Standard and Premium subscriptions. Prices and billing periods are shown in the app before purchase. Subscriptions can be managed or cancelled through your Apple Account.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "keywords": [
+          "breastfeeding",
+          "bottle",
+          "diaper",
+          "contractions",
+          "milestones",
+          "babydiary",
+          "weaning",
+          "babyweather",
+          "newborn",
+          "routine"
+        ],
+        "releaseNotes": "New in version 1.0.20:\n• Lotti Baby is now available in German, English and Spanish.\n• Refreshed subscription selection with Lite, Standard and Premium.\n• Paywall, pricing and stability improvements.",
+        "supportUrl": "https://lottibaby.de/support",
+        "title": "Lotti Baby: Sleep & Feeding",
+        "subtitle": "Pregnancy & Baby Tracker",
+        "promoText": "Your caring companion from pregnancy through baby's first years. Track sleep, breastfeeding, bottles, diapers, contractions and milestones in one place.",
+        "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
+        "screenshots": {
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-1.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-2.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-3.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-4.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-5.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-6.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-7.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-8.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-9.png",
+            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-10.png"
+          ]
+        }
+      },
+      "de-DE": {
+        "description": "LottiBaby – Schwangerschaft & Baby Tracker\nBegleitet dich von der Schwangerschaft bis in den Babyalltag.\nTracke Wehen, den Countdown bis zum Geburtstermin, Schlaf, Stillen, Fläschchen, Windeln und wichtige Meilensteine – alles in einer liebevoll gestalteten App für Eltern.\nLottiBaby unterstützt dich dabei, die besondere Zeit rund um Schwangerschaft und Baby strukturiert, entspannt und bewusst zu erleben. Die App vereint Schwangerschaftsbegleitung, Babytracker und hilfreiche Inhalte für Familien in einer übersichtlichen und intuitiven Anwendung.\nWährend der Schwangerschaft hilft dir LottiBaby, dich optimal auf die Geburt vorzubereiten. Verfolge den Countdown bis zu deinem Geburtstermin, dokumentiere mögliche Wehen, erstelle deinen persönlichen Geburtsplan und organisiere wichtige Vorbereitungen für die Ankunft deines Babys. Praktische Übersichten unterstützen dich dabei, diese aufregende Zeit gut organisiert und entspannt zu erleben.\nNach der Geburt begleitet dich LottiBaby im Alltag mit deinem Baby. Mit dem integrierten Babytracker kannst du wichtige Routinen ganz einfach festhalten und besser verstehen. Dokumentiere Schlafzeiten, Stillen, Fläschchen, Windeln und andere Tagesabläufe, um Muster im Rhythmus deines Babys zu erkennen und entspannte Routinen zu entwickeln.\nZusätzlich kannst du wichtige Meilensteine und Entwicklungsschritte deines Babys festhalten. So entsteht nach und nach ein persönliches Baby-Tagebuch mit wertvollen Erinnerungen an die ersten Monate und Jahre.\nLottiBaby bietet darüber hinaus hilfreiche Funktionen für den Familienalltag. Das integrierte Babywetter zeigt dir, wie du dein Baby passend zum aktuellen Wetter kleidest. Ergänzend findest du hilfreiche Inhalte, Tipps und ausgewählte Empfehlungen für Familien, die dich im Alltag unterstützen.\nDie App wurde bewusst einfach, übersichtlich und liebevoll gestaltet, damit du dich nicht mit komplizierten Funktionen beschäftigen musst. Stattdessen hilft dir LottiBaby dabei, Struktur in den Alltag zu bringen und gleichzeitig die besonderen Momente mit deinem Baby bewusst zu genießen.\nLottiBaby vereint Schwangerschaftsbegleitung, Babytracking, Organisation und hilfreiche Inhalte für Eltern – alles an einem Ort. Damit du dich auf das konzentrieren kannst, was wirklich zählt: die Zeit mit deinem Baby.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "keywords": [
+          "schwangerschaft",
+          "fläschchen",
+          "beikost",
+          "wehen",
+          "meilensteine",
+          "tagebuch",
+          "geburt",
+          "blw",
+          "wochenbett",
+          "kalender"
+        ],
+        "releaseNotes": "Neu in Version 1.0.20:\n• Lotti Baby ist jetzt auf Deutsch, Englisch und Spanisch verfügbar.\n• Überarbeitete Abo-Auswahl mit Lite, Standard und Premium.\n• Verbesserungen an Paywall, Preisen und Stabilität.",
+        "supportUrl": "https://lottibaby.de/support",
+        "title": "Lotti Baby: Schlaf & Stillen",
+        "subtitle": "Babytracker, Windeln & Wetter",
+        "promoText": "Dein liebevoller Begleiter für Schwangerschaft und Babyzeit: Schlaf, Stillen, Fläschchen, Windeln, Wehen und Meilensteine einfach festhalten.",
+        "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
+        "screenshots": {
+          "APP_IPAD_PRO_3GEN_129": [
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.12.35.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.10.38.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.08.19.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.11.57.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.12.16.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.08.50.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.09.08.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.09.59.png",
+            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.11.16.png"
+          ],
+          "APP_IPHONE_65": [
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/14.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/20.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/19.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/23.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/15.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/22.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/17.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/18.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/21.png",
+            "store/apple/screenshot/de-DE/APP_IPHONE_65/16.png"
+          ]
+        },
+        "previews": {
+          "IPHONE_65": {
+            "path": "store/apple/preview/de-DE/IPHONE_65/Teste_886_x_1920_px_5_restored.mp4",
+            "previewFrameTimeCode": "00:00:05:01"
+          }
+        }
+      }
+    },
+    "categories": [
+      "HEALTH_AND_FITNESS",
+      "MEDICAL"
+    ],
+    "advisory": {
+      "ageRatingOverride": "NONE",
+      "alcoholTobaccoOrDrugUseOrReferences": "NONE",
+      "contests": "NONE",
+      "gambling": false,
+      "gamblingSimulated": "NONE",
+      "horrorOrFearThemes": "NONE",
+      "kidsAgeBand": null,
+      "koreaAgeRatingOverride": "NONE",
+      "lootBox": false,
+      "matureOrSuggestiveThemes": "NONE",
+      "medicalOrTreatmentInformation": "NONE",
+      "profanityOrCrudeHumor": "NONE",
+      "sexualContentGraphicAndNudity": "NONE",
+      "sexualContentOrNudity": "NONE",
+      "unrestrictedWebAccess": false,
+      "violenceCartoonOrFantasy": "NONE",
+      "violenceRealistic": "NONE",
+      "violenceRealisticProlongedGraphicOrSadistic": "NONE",
+      "advertising": false,
+      "ageAssurance": false,
+      "ageRatingOverrideV2": "NONE",
+      "developerAgeRatingInfoUrl": null,
+      "gunsOrOtherWeapons": "NONE",
+      "healthOrWellnessTopics": true,
+      "messagingAndChat": false,
+      "parentalControls": false,
+      "userGeneratedContent": false
+    },
+    "review": {
+      "firstName": "Laura-Michelle",
+      "lastName": "Zeppenfeld",
+      "email": "business@zeppi.eu",
+      "phone": "+49 176 42039030",
+      "demoUsername": "test@lottibaby.de",
+      "demoPassword": "123TestLotti+-",
+      "demoRequired": true,
+      "notes": "Lotti Baby ist eine deutschsprachige App für Schwangerschaft und Babyalltag. Die eingereichte Version enthält Tracking-, Organisations- und Informationsfunktionen rund um Schwangerschaft, Geburt und die Zeit mit Baby. Der Bereich „Community“ enthält in dieser Version redaktionelle Inhalte/Blog-Beiträge und keinen offenen Nutzer-Chat. Für die Prüfung bitte den Testaccount verwenden. "
+    }
+  }
+}

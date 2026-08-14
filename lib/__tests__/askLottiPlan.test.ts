@@ -1,8 +1,11 @@
 import { fallbackPlanFromQuestion } from "../../supabase/functions/ask-lotti/intent";
 import {
+  ASK_LOTTI_PLAN_SCHEMA,
   normalizePlannerHistory,
+  resolveSingleTopicClarify,
   validateAskLottiPlan,
 } from "../../supabase/functions/ask-lotti/planner";
+import { ASK_LOTTI_ANSWER_SCHEMA } from "../../supabase/functions/ask-lotti/schemas";
 
 describe("Frag Lotti request planning", () => {
   it.each([
@@ -70,5 +73,60 @@ describe("Frag Lotti request planning", () => {
         answer_language: "de",
       }),
     ).toBeNull();
+  });
+
+  it("uses only OpenAI-supported array constraints in strict schemas", () => {
+    expect(
+      JSON.stringify([ASK_LOTTI_PLAN_SCHEMA, ASK_LOTTI_ANSWER_SCHEMA]),
+    ).not.toContain('"uniqueItems"');
+  });
+
+  it("deduplicates planner arrays after structured output validation", () => {
+    expect(
+      validateAskLottiPlan({
+        mode: "data",
+        domains: ["sleep", "sleep"],
+        metric: "average_per_day",
+        timeframe_days: 14,
+        compare_previous: false,
+        clarify_topics: ["sleep", "sleep"],
+        answer_language: "de",
+      }),
+    ).toMatchObject({ domains: ["sleep"], clarify_topics: ["sleep"] });
+  });
+
+  it("answers a single-option clarify instead of asking the parent to pick", () => {
+    const clarify = {
+      mode: "clarify",
+      domains: [],
+      metric: "total",
+      timeframe_days: 14,
+      compare_previous: false,
+      clarify_topics: ["growth"],
+      answer_language: "de",
+    } as const;
+    expect(resolveSingleTopicClarify({ ...clarify })).toMatchObject({
+      mode: "mixed",
+      domains: ["growth"],
+      metric: "latest",
+      clarify_topics: [],
+      answer_language: "de",
+    });
+  });
+
+  it("keeps a clarify with a real choice between topics", () => {
+    const clarify = {
+      mode: "clarify",
+      domains: [],
+      metric: "total",
+      timeframe_days: 14,
+      compare_previous: false,
+      clarify_topics: ["sleep", "feeding"],
+      answer_language: "de",
+    } as const;
+    expect(resolveSingleTopicClarify({ ...clarify })).toMatchObject({
+      mode: "clarify",
+      clarify_topics: ["sleep", "feeding"],
+    });
   });
 });

@@ -41,6 +41,20 @@ const de = {
   q4: "Fasse die letzten drei Tage für den Kinderarzt zusammen.",
   q5: "Was sollte mein Partner über den heutigen Tag wissen?",
   q6: "Plane morgen rund um den Arzttermin.",
+  chats: "Chats",
+  newChat: "Neuer Chat",
+  chatsTitle: "Deine Chats",
+  chatsEmpty:
+    "Noch keine gespeicherten Chats. Stell Lotti eine Frage – der Verlauf bleibt auf diesem Gerät.",
+  chatsHint: "Gespeichert nur auf diesem Gerät",
+  deleteChat: "Chat löschen",
+  deleteChatConfirm:
+    "Diesen Chat wirklich löschen? Das lässt sich nicht rückgängig machen.",
+  cancel: "Abbrechen",
+  delete: "Löschen",
+  close: "Schließen",
+  today: "Heute",
+  yesterday: "Gestern",
 };
 type Key = keyof typeof de;
 const en: Record<Key, string> = {
@@ -85,6 +99,19 @@ const en: Record<Key, string> = {
   q4: "Summarize the last three days for the pediatrician.",
   q5: "What should my partner know about today?",
   q6: "Plan tomorrow around the doctor appointment.",
+  chats: "Chats",
+  newChat: "New chat",
+  chatsTitle: "Your chats",
+  chatsEmpty:
+    "No saved chats yet. Ask Lotti a question — the history stays on this device.",
+  chatsHint: "Stored on this device only",
+  deleteChat: "Delete chat",
+  deleteChatConfirm: "Delete this chat? This cannot be undone.",
+  cancel: "Cancel",
+  delete: "Delete",
+  close: "Close",
+  today: "Today",
+  yesterday: "Yesterday",
 };
 const es: Record<Key, string> = {
   title: "Pregunta a Lotti",
@@ -126,6 +153,19 @@ const es: Record<Key, string> = {
   q4: "Resume los últimos tres días para pediatría.",
   q5: "¿Qué debería saber mi pareja sobre hoy?",
   q6: "Planifica mañana alrededor de la cita médica.",
+  chats: "Chats",
+  newChat: "Nuevo chat",
+  chatsTitle: "Tus chats",
+  chatsEmpty:
+    "Aún no hay chats guardados. Pregunta a Lotti: el historial se queda en este dispositivo.",
+  chatsHint: "Guardado solo en este dispositivo",
+  deleteChat: "Eliminar chat",
+  deleteChatConfirm: "¿Eliminar este chat? No se puede deshacer.",
+  cancel: "Cancelar",
+  delete: "Eliminar",
+  close: "Cerrar",
+  today: "Hoy",
+  yesterday: "Ayer",
 };
 
 const catalogs: Record<AppLocale, Record<Key, string>> = { de, en, es };

@@ -8,7 +8,6 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -20,7 +19,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useRouter } from 'expo-router';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -28,6 +27,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   DEFAULT_SHOPPING_LOCALE,
@@ -264,6 +264,7 @@ function ShoppingListScreenContent() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [torchEnabled, setTorchEnabled] = useState(false);
   const insets = useSafeAreaInsets();
+  const isDark = (useColorScheme() ?? 'light') === 'dark';
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
   const [zoomSelection, setZoomSelection] = useState('1x');
   const [purchaseScanVisible, setPurchaseScanVisible] = useState(false);
@@ -1145,7 +1146,13 @@ function ShoppingListScreenContent() {
       behavior={Platform.OS === 'ios' ? 'position' : undefined}
       style={styles.shoppingBottomDock}
     >
-      <View style={styles.shoppingBottomDockSurface}>
+      <View
+        style={[
+          styles.shoppingBottomDockSurface,
+          isDark && styles.shoppingBottomDockSurfaceDark,
+          { paddingBottom: 4 + insets.bottom },
+        ]}
+      >
         {isShoppingSearchVisible && !isAddShoppingExpanded ? renderListControls() : null}
 
         {isAddShoppingExpanded ? (
@@ -1908,15 +1915,30 @@ function ShoppingListScreenContent() {
 
   return (
     <ThemedBackground style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title={t('screen.title')} subtitle={t('screen.subtitle')} showBackButton />
+        <Header
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
+          showBackButton
+          onBackPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+              return;
+            }
+            router.replace('/(tabs)/home');
+          }}
+        />
 
         <View style={styles.segmentRow}>
           {SECTIONS.map((entry) => (
             <TouchableOpacity
               key={entry.key}
-              style={[styles.segment, section === entry.key && styles.segmentActive]}
+              style={[
+                styles.segment,
+                isDark && styles.segmentDark,
+                section === entry.key && styles.segmentActive,
+              ]}
               onPress={() => {
                 if (entry.key === 'cards') {
                   router.push('/loyalty-cards' as any);
@@ -1928,10 +1950,14 @@ function ShoppingListScreenContent() {
               <IconSymbol
                 name={entry.icon as any}
                 size={16}
-                color={section === entry.key ? '#FFFFFF' : PRIMARY}
+                color={section === entry.key ? '#FFFFFF' : isDark ? '#E9DDFA' : PRIMARY}
               />
               <ThemedText
-                style={[styles.segmentText, section === entry.key && styles.segmentTextActive]}
+                style={[
+                  styles.segmentText,
+                  isDark && styles.segmentTextDark,
+                  section === entry.key && styles.segmentTextActive,
+                ]}
               >
                 {t(entry.labelKey)}
               </ThemedText>
@@ -2710,6 +2736,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(125,90,80,0.08)',
   },
+  shoppingBottomDockSurfaceDark: {
+    backgroundColor: 'rgba(20,16,34,0.94)',
+    borderTopColor: 'rgba(255,255,255,0.12)',
+  },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   segmentRow: {
     flexDirection: 'row',
@@ -2727,8 +2757,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     backgroundColor: 'rgba(255,255,255,0.35)',
   },
-  segmentActive: { backgroundColor: PRIMARY },
+  segmentDark: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  segmentActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
   segmentText: { fontSize: 13, fontWeight: '600', color: PRIMARY },
+  segmentTextDark: { color: '#E9DDFA' },
   segmentTextActive: { color: '#FFFFFF' },
   card: { borderRadius: RADIUS },
   cardInner: { padding: 16, gap: 10 },

@@ -85,7 +85,7 @@ catalog → Products** importieren:
 | Tarif | Monat | Jahr |
 | --- | --- | --- |
 | Lite | `lottibaby_lite_monthly` | `lottibaby_lite_yearly` |
-| Standard | `lottibaby_standard_monthly` | `lottibaby_standard_yearly` |
+| Standard | `lottibaby_monthly` | `lottibaby_yearly` |
 | Premium | `lottibaby_premium_monthly` | `lottibaby_premium_yearly` |
 
 Die IDs müssen exakt stimmen und lassen sich bei Apple nach dem Anlegen nicht
@@ -94,8 +94,8 @@ mehr ändern. Preise, Testphasen und Lokalisierungen werden im Store gepflegt.
 Unter **Product catalog → Entitlements** drei Entitlements verwenden:
 
 - `LottiBabyLite`: beide Lite-Produkte anhängen.
-- `LottiBabyAbo`: beide Standard-Produkte und gegebenenfalls die vorhandenen
-  Legacy-Produkte `lottibaby_monthly`/`lottibaby_yearly` anhängen.
+- `LottiBabyAbo`: die beiden Standard-Produkte `lottibaby_monthly` und
+  `lottibaby_yearly` anhängen.
 - `LottiBabyPremium`: beide Premium-Produkte anhängen.
 
 Unter **Product catalog → Offerings** das Offering `default` anlegen bzw. öffnen,

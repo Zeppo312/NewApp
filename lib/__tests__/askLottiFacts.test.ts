@@ -186,6 +186,24 @@ describe("Frag Lotti metric computation", () => {
     expect(
       evidence.find((item) => item.id === "growth_size")?.detail,
     ).toContain("+1,5 cm");
+    // A delta is only readable together with the date it is measured against.
+    expect(evidence.find((item) => item.id === "growth_size")?.detail).toMatch(
+      /\+1,5 cm seit .*7\./,
+    );
+  });
+
+  it("omits the delta when only one growth entry exists", () => {
+    const rows = baseRows();
+    rows.weights = [{ date: "2026-08-01", value: 10.2 }];
+    const evidence = computeMetrics(
+      plan({ domains: ["growth"], metric: "latest" }),
+      rows,
+      now,
+      0,
+    );
+    const detail = evidence.find((item) => item.id === "growth_weight")?.detail;
+    expect(detail).toContain("10,2 kg");
+    expect(detail).not.toContain("seit");
   });
 
   it("shows the latest completed and first open milestone", () => {

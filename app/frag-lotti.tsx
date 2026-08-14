@@ -1,8 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -33,26 +41,26 @@ import {
   normalizeAskLottiQuestion,
 } from "@/lib/askLotti/input";
 import {
+  createConversationId,
+  createMessageId,
+  deriveConversationTitle,
+  loadConversations,
+  removeConversation,
+  saveConversations,
+  upsertConversation,
+  type AskLottiConversation,
+  type StoredChatMessage,
+} from "@/lib/askLotti/chatStore";
+import {
   askLottiSuggestions,
   translateAskLotti,
 } from "@/lib/askLotti/translations";
 import type {
-  AskLottiEvidence,
   AskLottiFollowUp,
   AskLottiHistoryItem,
 } from "@/lib/askLotti/types";
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "lotti";
-  text: string;
-  evidence?: AskLottiEvidence[];
-  disclaimer?: string;
-  isGeneral?: boolean;
-  isError?: boolean;
-  retryQuestion?: string;
-  quickReplies?: AskLottiFollowUp[];
-};
+type ChatMessage = StoredChatMessage;
 
 export default function AskLottiScreen() {
   const { locale } = useLocale();
@@ -69,9 +77,108 @@ export default function AskLottiScreen() {
   const [question, setQuestion] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [remainingToday, setRemainingToday] = useState<number | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: "intro", role: "lotti", text: t("intro") },
-  ]);
+  // The intro is rendered, never stored: it is locale-dependent and would
+  // otherwise freeze the language a chat was started in.
+  const introMessage = useMemo<ChatMessage>(
+    () => ({ id: "intro", role: "lotti", text: t("intro") }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale],
+  );
+  const [messages, setMessages] = useState<ChatMessage[]>([introMessage]);
+  const [conversations, setConversations] = useState<AskLottiConversation[]>(
+    [],
+  );
+  const [activeConversationId, setActiveConversationId] =
+    useState(createConversationId);
+  const [isChatListVisible, setChatListVisible] = useState(false);
+  const conversationsRef = useRef<AskLottiConversation[]>([]);
+  const isHydratedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadConversations().then((stored) => {
+      if (cancelled) return;
+      conversationsRef.current = stored;
+      setConversations(stored);
+      // Reopening the most recent chat matches how parents use this: a question
+      // during the night is usually continued the next morning.
+      const latest = stored[0];
+      if (latest) {
+        setActiveConversationId(latest.id);
+        setMessages([introMessage, ...latest.messages]);
+      }
+      isHydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!isHydratedRef.current) return;
+    const stored = messages.filter((message) => message.id !== "intro");
+    if (stored.length === 0) return;
+    const now = new Date().toISOString();
+    const existing = conversationsRef.current.find(
+      (conversation) => conversation.id === activeConversationId,
+    );
+    const firstQuestion = stored.find((message) => message.role === "user");
+    const next = upsertConversation(conversationsRef.current, {
+      id: activeConversationId,
+      title:
+        existing?.title ??
+        deriveConversationTitle(firstQuestion?.text ?? "", t("chats")),
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      messages: stored,
+    });
+    conversationsRef.current = next;
+    setConversations(next);
+    void saveConversations(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, activeConversationId]);
+
+  const startNewChat = useCallback(() => {
+    setActiveConversationId(createConversationId());
+    setMessages([introMessage]);
+    setQuestion("");
+    setChatListVisible(false);
+  }, [introMessage]);
+
+  const openConversation = useCallback(
+    (conversation: AskLottiConversation) => {
+      setActiveConversationId(conversation.id);
+      setMessages([introMessage, ...conversation.messages]);
+      setQuestion("");
+      setChatListVisible(false);
+    },
+    [introMessage],
+  );
+
+  const deleteConversation = useCallback(
+    (conversation: AskLottiConversation) => {
+      const apply = () => {
+        const next = removeConversation(
+          conversationsRef.current,
+          conversation.id,
+        );
+        conversationsRef.current = next;
+        setConversations(next);
+        void saveConversations(next);
+        if (conversation.id === activeConversationId) {
+          setActiveConversationId(createConversationId());
+          setMessages([introMessage]);
+        }
+      };
+      Alert.alert(t("deleteChat"), t("deleteChatConfirm"), [
+        { text: t("cancel"), style: "cancel" },
+        { text: t("delete"), style: "destructive", onPress: apply },
+      ]);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeConversationId, introMessage, locale],
+  );
   const normalizedQuestion = normalizeAskLottiQuestion(question);
   const canSend =
     access === true &&
@@ -105,7 +212,7 @@ export default function AskLottiScreen() {
       setMessages((current) => [
         ...current,
         {
-          id: `error-${current.length}`,
+          id: createMessageId("error"),
           role: "lotti",
           text: t("tooLong"),
           isError: true,
@@ -115,7 +222,7 @@ export default function AskLottiScreen() {
     }
 
     const userMessage: ChatMessage = {
-      id: `user-${messages.length}`,
+      id: createMessageId("user"),
       role: "user",
       text: value,
     };
@@ -130,7 +237,7 @@ export default function AskLottiScreen() {
       setMessages((current) => [
         ...current,
         userMessage,
-        { id: `local-${current.length}`, role: "lotti", text: localReply },
+        { id: createMessageId("lotti"), role: "lotti", text: localReply },
       ]);
       setQuestion("");
       return;
@@ -140,7 +247,7 @@ export default function AskLottiScreen() {
         ...current,
         userMessage,
         {
-          id: `error-${current.length}`,
+          id: createMessageId("error"),
           role: "lotti",
           text: t("noBaby"),
           isError: true,
@@ -172,7 +279,7 @@ export default function AskLottiScreen() {
       setMessages((current) => [
         ...current,
         {
-          id: `lotti-${current.length}`,
+          id: createMessageId("lotti"),
           role: "lotti",
           text: response.answer,
           evidence: response.evidence,
@@ -211,7 +318,7 @@ export default function AskLottiScreen() {
       setMessages((current) => [
         ...current,
         {
-          id: `error-${current.length}`,
+          id: createMessageId("error"),
           role: "lotti",
           text: errorText,
           isError: true,
@@ -233,6 +340,28 @@ export default function AskLottiScreen() {
           subtitle={t("subtitle")}
           showBackButton
           showBabySwitcher
+          rightContent={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("chatsTitle")}
+              onPress={() => setChatListVisible(true)}
+              hitSlop={8}
+              style={styles.headerButton}
+            >
+              <IconSymbol
+                name="bubble.left.and.bubble.right.fill"
+                size={19}
+                color="#6544B8"
+              />
+              {conversations.length > 1 ? (
+                <View style={styles.headerBadge}>
+                  <Text style={styles.headerBadgeText}>
+                    {conversations.length}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          }
         />
         <KeyboardAvoidingView
           style={styles.flex}
@@ -249,44 +378,46 @@ export default function AskLottiScreen() {
             }
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.securityCard}>
-              <View style={styles.securityIconWrap}>
-                <IconSymbol
-                  name="lock.shield"
-                  size={19}
-                  color="#6544B8"
-                  weight="semibold"
-                />
-              </View>
-              <View style={styles.securityCopy}>
-                <Text style={styles.securityTitle}>{t("safetyTitle")}</Text>
-                <Text style={styles.securityText}>{t("safety")}</Text>
-                <View style={styles.capabilityRow}>
-                  <View style={styles.capabilityChip}>
-                    <IconSymbol
-                      name="lightbulb"
-                      size={11}
-                      color="#6544B8"
-                      weight="semibold"
-                    />
-                    <Text style={styles.capabilityText}>
-                      {t("generalHelp")}
-                    </Text>
-                  </View>
-                  <View style={styles.capabilityChip}>
-                    <IconSymbol
-                      name="chart.bar"
-                      size={11}
-                      color="#6544B8"
-                      weight="semibold"
-                    />
-                    <Text style={styles.capabilityText}>
-                      {t("personalHelp")}
-                    </Text>
+            {messages.length === 1 ? (
+              <View style={styles.securityCard}>
+                <View style={styles.securityIconWrap}>
+                  <IconSymbol
+                    name="lock.shield"
+                    size={19}
+                    color="#6544B8"
+                    weight="semibold"
+                  />
+                </View>
+                <View style={styles.securityCopy}>
+                  <Text style={styles.securityTitle}>{t("safetyTitle")}</Text>
+                  <Text style={styles.securityText}>{t("safety")}</Text>
+                  <View style={styles.capabilityRow}>
+                    <View style={styles.capabilityChip}>
+                      <IconSymbol
+                        name="lightbulb"
+                        size={11}
+                        color="#6544B8"
+                        weight="semibold"
+                      />
+                      <Text style={styles.capabilityText}>
+                        {t("generalHelp")}
+                      </Text>
+                    </View>
+                    <View style={styles.capabilityChip}>
+                      <IconSymbol
+                        name="chart.bar"
+                        size={11}
+                        color="#6544B8"
+                        weight="semibold"
+                      />
+                      <Text style={styles.capabilityText}>
+                        {t("personalHelp")}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
-            </View>
+            ) : null}
 
             {messages.map((message) => (
               <View
@@ -519,20 +650,221 @@ export default function AskLottiScreen() {
             ) : null}
           </View>
         </KeyboardAvoidingView>
+        <Modal
+          visible={isChatListVisible}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setChatListVisible(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setChatListVisible(false)}
+          />
+          <View
+            style={[styles.modalSheet, { paddingBottom: insets.bottom + 16 }]}
+          >
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleWrap}>
+                <Text style={styles.modalTitle}>{t("chatsTitle")}</Text>
+                <Text style={styles.modalHint}>{t("chatsHint")}</Text>
+              </View>
+              <Pressable
+                onPress={startNewChat}
+                hitSlop={6}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.newChatButton,
+                  pressed && styles.newChatPressed,
+                ]}
+              >
+                <IconSymbol
+                  name="plus"
+                  size={15}
+                  color="#FFFFFF"
+                  weight="semibold"
+                />
+                <Text style={styles.newChatText}>{t("newChat")}</Text>
+              </Pressable>
+            </View>
+            {conversations.length === 0 ? (
+              <Text style={styles.modalEmpty}>{t("chatsEmpty")}</Text>
+            ) : (
+              <ScrollView
+                style={styles.modalList}
+                contentContainerStyle={styles.modalListContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {conversations.map((conversation) => {
+                  const isActive = conversation.id === activeConversationId;
+                  return (
+                    <Pressable
+                      key={conversation.id}
+                      onPress={() => openConversation(conversation)}
+                      style={({ pressed }) => [
+                        styles.chatRow,
+                        isActive && styles.chatRowActive,
+                        pressed && styles.chatRowPressed,
+                      ]}
+                    >
+                      <View style={styles.chatRowCopy}>
+                        <Text style={styles.chatRowTitle} numberOfLines={1}>
+                          {conversation.title}
+                        </Text>
+                        <Text style={styles.chatRowMeta} numberOfLines={1}>
+                          {formatChatDate(conversation.updatedAt, locale, t)} ·{" "}
+                          {conversation.messages.length}
+                        </Text>
+                      </View>
+                      <Pressable
+                        onPress={() => deleteConversation(conversation)}
+                        hitSlop={10}
+                        accessibilityRole="button"
+                        accessibilityLabel={t("deleteChat")}
+                        style={styles.chatDelete}
+                      >
+                        <IconSymbol name="trash" size={16} color="#B0879A" />
+                      </Pressable>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </Modal>
       </SafeAreaView>
     </ThemedBackground>
   );
 }
 
+const formatChatDate = (
+  value: string,
+  locale: string,
+  t: (key: "today" | "yesterday") => string,
+) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const startOfDay = (input: Date) =>
+    new Date(input.getFullYear(), input.getMonth(), input.getDate()).getTime();
+  const dayDiff = Math.round(
+    (startOfDay(new Date()) - startOfDay(date)) / 86_400_000,
+  );
+  if (dayDiff <= 0) return t("today");
+  if (dayDiff === 1) return t("yesterday");
+  return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
+};
+
 const styles = StyleSheet.create({
   background: { flex: 1 },
   safeArea: { flex: 1 },
   flex: { flex: 1 },
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+  },
+  headerBadge: {
+    position: "absolute",
+    top: 1,
+    right: 1,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#6544B8",
+  },
+  headerBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(24,18,40,0.45)",
+  },
+  modalSheet: {
+    marginTop: "auto",
+    maxHeight: "76%",
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+  },
+  modalHandle: {
+    alignSelf: "center",
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E3DDF1",
+    marginBottom: 14,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  },
+  modalTitleWrap: { flex: 1 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: "#2E2645" },
+  modalHint: { fontSize: 12, color: "#9A93AD", marginTop: 2 },
+  newChatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "#6544B8",
+  },
+  newChatPressed: { opacity: 0.85 },
+  newChatText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
+  modalEmpty: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#7C7590",
+    paddingVertical: 22,
+    paddingHorizontal: 4,
+  },
+  modalList: { flexGrow: 0 },
+  modalListContent: { paddingBottom: 6, gap: 8 },
+  chatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#F6F3FD",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  chatRowActive: { borderColor: "#6544B8", backgroundColor: "#EFE9FC" },
+  chatRowPressed: { opacity: 0.8 },
+  chatRowCopy: { flex: 1 },
+  chatRowTitle: { fontSize: 14.5, fontWeight: "600", color: "#2E2645" },
+  chatRowMeta: { fontSize: 12, color: "#9A93AD", marginTop: 3 },
+  chatDelete: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 28,
-    gap: 14,
+    paddingTop: 16,
+    paddingBottom: 32,
+    gap: 18,
   },
   securityCard: {
     flexDirection: "row",
@@ -559,11 +891,11 @@ const styles = StyleSheet.create({
   securityCopy: { flex: 1, gap: 2 },
   securityTitle: {
     color: "#584746",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "700",
   },
-  securityText: { color: "#75645D", fontSize: 11, lineHeight: 16 },
+  securityText: { color: "#75645D", fontSize: 12, lineHeight: 17 },
   capabilityRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -581,18 +913,18 @@ const styles = StyleSheet.create({
   },
   capabilityText: {
     color: "#69557D",
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: "600",
   },
   messageRow: { flexDirection: "row", justifyContent: "flex-start" },
   userRow: { justifyContent: "flex-end" },
   bubble: {
-    maxWidth: "92%",
+    maxWidth: "96%",
     borderRadius: 24,
     borderCurve: "continuous",
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    paddingHorizontal: 18,
+    paddingVertical: 17,
   },
   lottiBubble: {
     backgroundColor: "rgba(255,255,255,0.92)",
@@ -602,7 +934,7 @@ const styles = StyleSheet.create({
     boxShadow: "0 8px 24px rgba(75,48,124,0.08)",
   },
   userBubble: {
-    maxWidth: "86%",
+    maxWidth: "88%",
     backgroundColor: "#6542BD",
     borderTopRightRadius: 9,
     boxShadow: "0 8px 20px rgba(80,48,157,0.18)",
@@ -628,13 +960,13 @@ const styles = StyleSheet.create({
   },
   lottiLabel: {
     color: "#5F3FAE",
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 1,
   },
-  lottiMeta: { color: "#9A8981", fontSize: 9, lineHeight: 12 },
-  messageText: { color: "#493A35", fontSize: 15, lineHeight: 22 },
+  lottiMeta: { color: "#9A8981", fontSize: 10, lineHeight: 13 },
+  messageText: { color: "#493A35", fontSize: 17, lineHeight: 26 },
   userText: { color: "#FFFFFF" },
   evidenceWrap: {
     marginTop: 14,
@@ -651,8 +983,8 @@ const styles = StyleSheet.create({
   },
   evidenceHeading: {
     color: "#6848B8",
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.7,
@@ -673,12 +1005,12 @@ const styles = StyleSheet.create({
   evidenceCopy: { flex: 1, gap: 3 },
   evidenceTitle: {
     color: "#564641",
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "700",
   },
-  evidenceDetail: { color: "#7A665E", fontSize: 12, lineHeight: 17 },
-  disclaimer: { color: "#927D74", fontSize: 10, lineHeight: 15, marginTop: 11 },
+  evidenceDetail: { color: "#7A665E", fontSize: 13, lineHeight: 19 },
+  disclaimer: { color: "#927D74", fontSize: 11, lineHeight: 16, marginTop: 12 },
   retryButton: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -692,14 +1024,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(101,66,189,0.09)",
   },
   retryPressed: { opacity: 0.65 },
-  retryText: { color: "#6542BD", fontSize: 11, fontWeight: "700" },
-  quickReplies: { gap: 7, marginTop: 13 },
+  retryText: { color: "#6542BD", fontSize: 13, fontWeight: "700" },
+  quickReplies: { gap: 8, marginTop: 15 },
   quickReply: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
     borderRadius: 14,
     borderCurve: "continuous",
     backgroundColor: "rgba(101,66,189,0.07)",
@@ -707,11 +1039,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(101,66,189,0.10)",
   },
   quickReplyPressed: { opacity: 0.62 },
-  quickReplyText: { flex: 1, color: "#604B57", fontSize: 10, lineHeight: 14 },
+  quickReplyText: { flex: 1, color: "#604B57", fontSize: 14, lineHeight: 19 },
   suggestions: { gap: 8, paddingTop: 2 },
   suggestionsTitle: {
     color: "#6A5850",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     paddingHorizontal: 4,
     paddingBottom: 2,
@@ -720,7 +1052,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    minHeight: 52,
+    minHeight: 58,
     borderRadius: 18,
     borderCurve: "continuous",
     paddingHorizontal: 13,
@@ -738,7 +1070,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(104,72,184,0.08)",
   },
-  suggestionText: { flex: 1, color: "#584841", fontSize: 12, lineHeight: 17 },
+  suggestionText: { flex: 1, color: "#584841", fontSize: 14, lineHeight: 20 },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -750,7 +1082,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "rgba(255,255,255,0.78)",
   },
-  loadingText: { color: "#7D6A61", fontSize: 11 },
+  loadingText: { color: "#7D6A61", fontSize: 13 },
   composerWrap: {
     paddingHorizontal: 14,
     paddingTop: 9,
@@ -775,8 +1107,8 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: "#66A77A",
   },
-  readyText: { color: "#7C6A62", fontSize: 10 },
-  remaining: { color: "#75618F", fontSize: 10, fontVariant: ["tabular-nums"] },
+  readyText: { color: "#7C6A62", fontSize: 11 },
+  remaining: { color: "#75618F", fontSize: 11, fontVariant: ["tabular-nums"] },
   composer: {
     minHeight: 54,
     maxHeight: 132,
@@ -803,8 +1135,8 @@ const styles = StyleSheet.create({
     maxHeight: 112,
     paddingVertical: 9,
     color: "#493A35",
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 16,
+    lineHeight: 22,
   },
   sendButton: {
     width: 42,
@@ -819,7 +1151,7 @@ const styles = StyleSheet.create({
   sendPressed: { transform: [{ scale: 0.95 }] },
   characterCount: {
     color: "#9E8D85",
-    fontSize: 9,
+    fontSize: 10,
     textAlign: "right",
     paddingTop: 3,
     paddingRight: 5,

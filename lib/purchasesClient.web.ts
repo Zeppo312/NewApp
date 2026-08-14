@@ -15,6 +15,7 @@ const Purchases = {
   getAppUserID: async () => 'web-user',
   logIn: async () => ({ customerInfo: { entitlements: { active: {} } }, created: false }),
   getOfferings: async () => ({ current: null, all: {} }),
+  getProducts: async () => [],
   purchasePackage: async () => {
     throw notSupportedError;
   },

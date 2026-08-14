@@ -22,14 +22,14 @@ function AvatarHighlights({ opacity = 1 }: { opacity?: number }) {
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={gradientId} cx="22%" cy="22%" r="40%">
-            <Stop offset="0%" stopColor={rgba(0.8 * opacity)} />
-            <Stop offset="48%" stopColor={rgba(0.24 * opacity)} />
-            <Stop offset="100%" stopColor={rgba(0)} />
+            <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={clamp01(0.8 * opacity)} />
+            <Stop offset="48%" stopColor="#FFFFFF" stopOpacity={clamp01(0.24 * opacity)} />
+            <Stop offset="100%" stopColor="#FFFFFF" stopOpacity={0} />
           </RadialGradient>
           <RadialGradient id={shadeId} cx="76%" cy="82%" r="55%">
-            <Stop offset="0%" stopColor={`rgba(0,0,0,${clamp01(0.12 * opacity)})`} />
-            <Stop offset="60%" stopColor={`rgba(0,0,0,${clamp01(0.06 * opacity)})`} />
-            <Stop offset="100%" stopColor="rgba(0,0,0,0)" />
+            <Stop offset="0%" stopColor="#000000" stopOpacity={clamp01(0.12 * opacity)} />
+            <Stop offset="60%" stopColor="#000000" stopOpacity={clamp01(0.06 * opacity)} />
+            <Stop offset="100%" stopColor="#000000" stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${shadeId})`} />

@@ -128,6 +128,7 @@ const copy = (locale: AskLottiLocale) => ({
         : "By diaper type",
   coverage:
     locale === "de" ? "Abdeckung" : locale === "es" ? "Cobertura" : "Coverage",
+  since: locale === "de" ? "seit" : locale === "es" ? "desde" : "since",
   comparison:
     locale === "de"
       ? "Vorheriger Zeitraum"
@@ -505,20 +506,36 @@ const diaperEvidence = (
   return result;
 };
 
-const profileEvidence = (
+// Age is the single piece of profile context that makes general guidance
+// specific ("which diaper size fits next"), so the answer model receives it for
+// every request — not only when the planner asked for the profile domain.
+export const babyAge = (
   birthDate: string | null,
   now: Date,
-  locale: AskLottiLocale,
-): Evidence[] => {
-  if (!birthDate) return [];
+): { months: number; weeks: number } | null => {
+  if (!birthDate) return null;
   const birth = new Date(birthDate);
-  if (Number.isNaN(birth.getTime()) || birth > now) return [];
+  if (Number.isNaN(birth.getTime()) || birth > now) return null;
   let months =
     (now.getUTCFullYear() - birth.getUTCFullYear()) * 12 +
     now.getUTCMonth() -
     birth.getUTCMonth();
   if (now.getUTCDate() < birth.getUTCDate()) months -= 1;
-  const weeks = Math.floor((now.getTime() - birth.getTime()) / (7 * DAY_MS));
+  return {
+    months,
+    weeks: Math.floor((now.getTime() - birth.getTime()) / (7 * DAY_MS)),
+  };
+};
+
+const profileEvidence = (
+  birthDate: string | null,
+  now: Date,
+  locale: AskLottiLocale,
+): Evidence[] => {
+  const age = babyAge(birthDate, now);
+  if (!birthDate || !age) return [];
+  const birth = new Date(birthDate);
+  const { months, weeks } = age;
   const targetMonth = months + 1;
   const year =
     birth.getUTCFullYear() +
@@ -563,27 +580,28 @@ const growthEvidence = (
     [...rows]
       .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
       .slice(0, 2);
+  // A delta without its reference date is unreadable: "+13.0 cm" means
+  // something very different over one month than over six.
+  const change = (rows: GrowthRow[], unit: string) => {
+    if (!rows[1]) return "";
+    const delta = Number(rows[0].value) - Number(rows[1].value);
+    return ` · ${delta >= 0 ? "+" : ""}${decimal(delta, locale)} ${unit} ${text.since} ${date(rows[1].date, locale)}`;
+  };
   const result: Evidence[] = [];
   const weight = latest(weights);
   if (weight[0]) {
-    const delta = weight[1]
-      ? Number(weight[0].value) - Number(weight[1].value)
-      : null;
     result.push({
       id: "growth_weight",
       title: text.latestWeight,
-      detail: `${decimal(Number(weight[0].value), locale)} kg · ${date(weight[0].date, locale)}${delta === null ? "" : ` · ${delta >= 0 ? "+" : ""}${decimal(delta, locale)} kg`}`,
+      detail: `${decimal(Number(weight[0].value), locale)} kg · ${date(weight[0].date, locale)}${change(weight, "kg")}`,
     });
   }
   const size = latest(sizes);
   if (size[0]) {
-    const delta = size[1]
-      ? Number(size[0].value) - Number(size[1].value)
-      : null;
     result.push({
       id: "growth_size",
       title: text.latestSize,
-      detail: `${decimal(Number(size[0].value), locale)} cm · ${date(size[0].date, locale)}${delta === null ? "" : ` · ${delta >= 0 ? "+" : ""}${decimal(delta, locale)} cm`}`,
+      detail: `${decimal(Number(size[0].value), locale)} cm · ${date(size[0].date, locale)}${change(size, "cm")}`,
     });
   }
   return result;

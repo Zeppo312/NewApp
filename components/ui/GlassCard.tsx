@@ -17,6 +17,8 @@ const TOKENS = {
   },
 } as const;
 
+const WHITE = '#FFFFFF';
+
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 function rgba(alpha: number) {
@@ -61,21 +63,21 @@ function GlassHighlights({
       <Svg width="100%" height="100%">
         <Defs>
           <RadialGradient id={h1} cx="25%" cy="18%" r="42%">
-            <Stop offset="0%" stopColor={rgba(alpha.h1 * opacity)} />
-            <Stop offset="38%" stopColor={rgba(alpha.mid1 * opacity)} />
-            <Stop offset="100%" stopColor={rgba(0)} />
+            <Stop offset="0%" stopColor={WHITE} stopOpacity={clamp01(alpha.h1 * opacity)} />
+            <Stop offset="38%" stopColor={WHITE} stopOpacity={clamp01(alpha.mid1 * opacity)} />
+            <Stop offset="100%" stopColor={WHITE} stopOpacity={0} />
           </RadialGradient>
 
           <RadialGradient id={h2} cx="92%" cy="16%" r="52%">
-            <Stop offset="0%" stopColor={rgba(alpha.h2 * opacity)} />
-            <Stop offset="42%" stopColor={rgba(alpha.mid2 * opacity)} />
-            <Stop offset="100%" stopColor={rgba(0)} />
+            <Stop offset="0%" stopColor={WHITE} stopOpacity={clamp01(alpha.h2 * opacity)} />
+            <Stop offset="42%" stopColor={WHITE} stopOpacity={clamp01(alpha.mid2 * opacity)} />
+            <Stop offset="100%" stopColor={WHITE} stopOpacity={0} />
           </RadialGradient>
 
           <RadialGradient id={h3} cx="62%" cy="112%" r="65%">
-            <Stop offset="0%" stopColor={rgba(alpha.h3 * opacity)} />
-            <Stop offset="46%" stopColor={rgba(alpha.mid3 * opacity)} />
-            <Stop offset="100%" stopColor={rgba(0)} />
+            <Stop offset="0%" stopColor={WHITE} stopOpacity={clamp01(alpha.h3 * opacity)} />
+            <Stop offset="46%" stopColor={WHITE} stopOpacity={clamp01(alpha.mid3 * opacity)} />
+            <Stop offset="100%" stopColor={WHITE} stopOpacity={0} />
           </RadialGradient>
         </Defs>
 
@@ -112,7 +114,8 @@ function GlassGrain({
             cx={`${dot.x}%`}
             cy={`${dot.y}%`}
             r={dot.r}
-            fill={rgba(dot.a * opacity)}
+            fill={WHITE}
+            fillOpacity={clamp01(dot.a * opacity)}
           />
         ))}
       </Svg>

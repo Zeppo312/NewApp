@@ -105,9 +105,9 @@ function CenterGlow({ glow }: { glow: Animated.Value }) {
       <Svg width={GLOW_SIZE} height={GLOW_SIZE}>
         <Defs>
           <RadialGradient id="mbio-glow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor="rgba(94,61,179,0.55)" />
-            <Stop offset="55%" stopColor="rgba(142,78,198,0.26)" />
-            <Stop offset="100%" stopColor="rgba(142,78,198,0)" />
+            <Stop offset="0%" stopColor="#5E3DB3" stopOpacity={0.55} />
+            <Stop offset="55%" stopColor="#8E4EC6" stopOpacity={0.26} />
+            <Stop offset="100%" stopColor="#8E4EC6" stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Circle cx={GLOW_SIZE / 2} cy={GLOW_SIZE / 2} r={GLOW_SIZE / 2} fill="url(#mbio-glow)" />

@@ -19,6 +19,7 @@ import {
   applyPaywallPlansTemplate,
   clonePaywallPlansContent,
   formatEuroAmount,
+  PAYWALL_LITE_TIER_ENABLED,
   type PaywallPlansContent,
   type PaywallPlansTierId,
 } from '@/lib/paywallContent';
@@ -68,7 +69,10 @@ type PaywallPlansExperienceProps = {
   onOpenDataManagement?: () => void;
 };
 
-const TIER_ORDER: PaywallPlansTierId[] = ['premium', 'standard', 'lite'];
+// Lite ist derzeit global deaktiviert – weder Karte noch Vergleichsspalte.
+const TIER_ORDER: PaywallPlansTierId[] = PAYWALL_LITE_TIER_ENABLED
+  ? ['premium', 'standard', 'lite']
+  : ['premium', 'standard'];
 const DEFAULT_SELECTED_TIER: PaywallPlansTierId = 'standard';
 
 type InlineEditableTextProps = {

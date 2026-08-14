@@ -5,6 +5,7 @@ import {
   isSafeAnswerText,
   isSafeGeneralAnswerText,
   normalizeQuestion,
+  ungroundedNumbers,
 } from "../../supabase/functions/ask-lotti/guardrails";
 
 describe("Frag Lotti guardrails", () => {
@@ -102,5 +103,56 @@ describe("Frag Lotti guardrails", () => {
         "de",
       ),
     ).toBe(false);
+  });
+
+  it.each([
+    ["de", "Das Einschlafen klappt inzwischen ruhiger."],
+    ["de", "Achte auf die Müdigkeitssignale am Abend."],
+    ["de", "Die Einträge zeigen ein gleichmäßiges Muster."],
+    ["en", "The tendency over the documented period is stable."],
+    ["en", "Bedtime settling looks calmer than before."],
+    ["es", "La tendencia del sueño se mantiene estable."],
+  ])(
+    "does not mistake everyday wording for a number word (%s): %s",
+    (locale, answer) => {
+      expect(isSafeDataAnswerText(answer, locale as "de" | "en" | "es")).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each([
+    ["de", "Es waren dreiundzwanzig Schlafphasen."],
+    ["de", "Insgesamt einhunderteins Stunden."],
+    ["de", "Der Schnitt lag bei vierzehn Stunden."],
+    ["en", "There were twenty-three sleep sessions."],
+    ["es", "Hubo veintitrés fases de sueño."],
+  ])("still blocks spelled-out numbers (%s): %s", (locale, answer) => {
+    expect(isSafeDataAnswerText(answer, locale as "de" | "en" | "es")).toBe(
+      false,
+    );
+  });
+
+  it("allows hedging but still blocks causal claims", () => {
+    expect(
+      isSafeDataAnswerText(
+        "Der Nachtschlaf wirkt wahrscheinlich etwas ruhiger.",
+        "de",
+      ),
+    ).toBe(true);
+    expect(
+      isSafeDataAnswerText("Der Schlaf war kurz, deshalb die Unruhe.", "de"),
+    ).toBe(false);
+  });
+
+  it("only accepts figures that appear verbatim in the evidence", () => {
+    const evidence = "Ø Schlaf pro dokumentiertem Tag 13,5 Std. Gewicht 7,2 kg";
+    expect(
+      ungroundedNumbers("Im Schnitt sind es 13,5 Stunden Schlaf.", evidence),
+    ).toEqual([]);
+    expect(
+      ungroundedNumbers("Im Schnitt sind es 14,5 Stunden Schlaf.", evidence),
+    ).toEqual(["14.5"]);
+    expect(ungroundedNumbers("Der Schlaf wirkt stabil.", evidence)).toEqual([]);
   });
 });

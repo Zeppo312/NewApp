@@ -72,6 +72,13 @@ export type PaywallLegalLinks = {
 
 export type PaywallPlansTierId = 'premium' | 'standard' | 'lite';
 
+/**
+ * Lite ist auf der Paywall vorerst deaktiviert. Der Schalter überschreibt auch
+ * gespeicherten Paywall-Content aus dem Editor, damit Lite nirgends mehr als
+ * kaufbarer Plan auftaucht. Bestehende Lite-Abos bleiben davon unberührt.
+ */
+export const PAYWALL_LITE_TIER_ENABLED = false;
+
 export type PaywallPlansTierContent = {
   visible: boolean;
   name: string;
@@ -235,7 +242,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
     { label: 'Community, Gruppen & private Chats', lite: true, standard: true, premium: true },
     { label: 'Ratgeber & Blog', lite: true, standard: true, premium: true },
     { label: 'Produktempfehlungen & Prints-Shop', lite: true, standard: true, premium: true },
-    { label: 'Kompletter Schlaf- & Tagesverlauf (Lite: 7 Tage)', lite: false, standard: true, premium: true },
+    { label: 'Kompletter Schlaf- & Tagesverlauf', lite: false, standard: true, premium: true },
     { label: 'Partner-Verknüpfung: gemeinsam tracken', lite: false, standard: true, premium: true },
     { label: 'Planer, Termine & gemeinsamer Kalender', lite: false, standard: true, premium: true },
     { label: 'Einkaufslisten, Vorräte, Warnungen & Kundenkarten', lite: false, standard: true, premium: true },
@@ -274,14 +281,14 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       tagline: 'Die volle Begleitung für eure Familie',
       ctaLabel: 'Standard starten',
       bullets: [
-        'Alles aus Lite mit vollständigem Schlaf- & Tagesverlauf',
+        'Alle Basis-Tracker mit vollständigem Schlaf- & Tagesverlauf',
         'Partner-Verknüpfung, Planer & gemeinsamer Kalender',
         'Einkaufslisten, Vorräte, Warnungen & Kundenkarten',
         'Wochenmomente, Rezepte, Auswertungen & Datenexport',
       ],
     },
     lite: {
-      visible: true,
+      visible: PAYWALL_LITE_TIER_ENABLED,
       name: 'Lotti Lite',
       tagline: 'Der einfache Start ins Tracking',
       ctaLabel: 'Lite starten',
@@ -709,7 +716,11 @@ export const sanitizePaywallPlansContent = (
     tiers: {
       premium: sanitizePlansTier(tiers.premium, fallback.tiers.premium),
       standard: sanitizePlansTier(tiers.standard, fallback.tiers.standard),
-      lite: sanitizePlansTier(tiers.lite, fallback.tiers.lite),
+      lite: {
+        ...sanitizePlansTier(tiers.lite, fallback.tiers.lite),
+        // Gespeicherter Content darf Lite nicht wieder einblenden.
+        visible: PAYWALL_LITE_TIER_ENABLED,
+      },
     },
   };
 };

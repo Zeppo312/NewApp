@@ -55,6 +55,14 @@ import {
   translateSubscriptionText,
   type SubscriptionTranslationKey,
 } from '@/lib/subscriptionTranslations';
+import { PAYWALL_LITE_TIER_ENABLED } from '@/lib/paywallContent';
+
+// Lite ist auf der Paywall deaktiviert und wird hier deshalb nicht beworben.
+const PLAN_TIER_PILLS = (
+  PAYWALL_LITE_TIER_ENABLED
+    ? (['lite', 'standard', 'premium'] as const)
+    : (['standard', 'premium'] as const)
+) satisfies readonly SubscriptionTier[];
 
 type SubscriptionViewState = {
   isAdmin: boolean;
@@ -526,7 +534,7 @@ export default function SubscriptionScreen() {
                   </ThemedText>
 
                   <View style={styles.tierRow}>
-                    {(['lite', 'standard', 'premium'] as const).map((tier) => (
+                    {PLAN_TIER_PILLS.map((tier) => (
                       <View key={tier} style={styles.tierPill}>
                         <View style={styles.tierDot} />
                         <ThemedText style={styles.tierText}>

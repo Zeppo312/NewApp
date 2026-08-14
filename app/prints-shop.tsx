@@ -1,5 +1,5 @@
 import 'react-native-url-polyfill/auto';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter } from 'expo-router';
@@ -10,8 +10,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useLocale } from '@/contexts/LocaleContext';
-
-const PRINTS_URL = 'https://lottibaby.de';
+import { buildPrintsShopUrl } from '@/lib/printsShop';
 
 const SHOP_WEBVIEW_CUSTOMIZATION = `
   (function () {
@@ -37,6 +36,7 @@ const SHOP_WEBVIEW_CUSTOMIZATION = `
 
 export default function PrintsShopScreen() {
   const { locale } = useLocale();
+  const shopSource = useMemo(() => ({ uri: buildPrintsShopUrl(locale) }), [locale]);
   const copy = {
     de: { subtitle: 'Shop & Kasse', errorTitle: 'Shop konnte nicht geladen werden', errorText: 'Bitte prüfe deine Verbindung und versuche es erneut.', retry: 'Neu laden' },
     en: { subtitle: 'Shop & checkout', errorTitle: 'The shop could not be loaded', errorText: 'Check your connection and try again.', retry: 'Reload' },
@@ -46,9 +46,12 @@ export default function PrintsShopScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const webViewRef = useRef<WebView>(null);
-  const [canGoBack, setCanGoBack] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [navigationState, setNavigationState] = useState({ shopUrl: '', canGoBack: false });
+  const [loadedShopUrl, setLoadedShopUrl] = useState<string | null>(null);
+  const [loadErrorShopUrl, setLoadErrorShopUrl] = useState<string | null>(null);
+  const canGoBack = navigationState.shopUrl === shopSource.uri && navigationState.canGoBack;
+  const isLoading = loadedShopUrl !== shopSource.uri;
+  const loadError = loadErrorShopUrl === shopSource.uri;
 
   const handleBackPress = useCallback(() => {
     if (canGoBack) {
@@ -71,7 +74,8 @@ export default function PrintsShopScreen() {
             <TouchableOpacity
               style={styles.headerButton}
               onPress={() => {
-                setLoadError(false);
+                setLoadedShopUrl(null);
+                setLoadErrorShopUrl(null);
                 webViewRef.current?.reload();
               }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -83,22 +87,23 @@ export default function PrintsShopScreen() {
 
         <View style={styles.webViewShell}>
           <WebView
+            key={shopSource.uri}
             ref={webViewRef}
-            source={{ uri: PRINTS_URL }}
+            source={shopSource}
             originWhitelist={['https://*']}
             injectedJavaScriptBeforeContentLoaded={SHOP_WEBVIEW_CUSTOMIZATION}
             injectedJavaScript={SHOP_WEBVIEW_CUSTOMIZATION}
             onNavigationStateChange={(state) => {
-              setCanGoBack(state.canGoBack);
+              setNavigationState({ shopUrl: shopSource.uri, canGoBack: state.canGoBack });
             }}
             onLoadStart={() => {
-              setIsLoading(true);
-              setLoadError(false);
+              setLoadedShopUrl(null);
+              setLoadErrorShopUrl(null);
             }}
-            onLoadEnd={() => setIsLoading(false)}
+            onLoadEnd={() => setLoadedShopUrl(shopSource.uri)}
             onError={() => {
-              setLoadError(true);
-              setIsLoading(false);
+              setLoadErrorShopUrl(shopSource.uri);
+              setLoadedShopUrl(shopSource.uri);
             }}
             javaScriptEnabled
             domStorageEnabled
@@ -126,7 +131,8 @@ export default function PrintsShopScreen() {
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: theme.accent }]}
                 onPress={() => {
-                  setLoadError(false);
+                  setLoadedShopUrl(null);
+                  setLoadErrorShopUrl(null);
                   webViewRef.current?.reload();
                 }}
               >
