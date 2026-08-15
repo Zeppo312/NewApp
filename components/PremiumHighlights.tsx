@@ -17,6 +17,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { useFontScale } from '@/lib/fontScaling';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export interface PremiumHighlightItem {
@@ -153,12 +154,12 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
               },
             ]}
           />
-          <Text style={styles.featureEmoji}>{item.emoji}</Text>
+          <Text style={styles.featureEmoji} allowFontScaling={false}>
+            {item.emoji}
+          </Text>
         </View>
         <Text style={styles.featureTitle}>{item.title}</Text>
-        <Text style={styles.featureSubtitle} numberOfLines={2}>
-          {item.subtitle}
-        </Text>
+        <Text style={styles.featureSubtitle}>{item.subtitle}</Text>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -167,6 +168,9 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
 const PremiumHighlights: React.FC<Props> = ({ items }) => {
   const { locale } = useLocale();
   const { width } = useWindowDimensions();
+  // Drei schmale Spalten brechen bei großer Schrift mitten im Wort um —
+  // ab ~130 % stapeln wir die Features stattdessen untereinander.
+  const isStacked = useFontScale() >= 1.3;
   const shimmer = React.useState(() => new Animated.Value(0))[0];
 
   // Glanz-Sweep: schmaler Lichtstreifen wandert alle paar Sekunden übers Panel.
@@ -239,7 +243,7 @@ const PremiumHighlights: React.FC<Props> = ({ items }) => {
           </Text>
         </View>
 
-        <View style={styles.featureRow}>
+        <View style={[styles.featureRow, isStacked ? styles.featureRowStacked : null]}>
           {items.map((item, index) => (
             <FeatureButton key={item.key} item={item} pulseDelay={index * 700} />
           ))}
@@ -299,6 +303,9 @@ const styles = StyleSheet.create({
   featureRow: {
     flexDirection: 'row',
     gap: 12,
+  },
+  featureRowStacked: {
+    flexDirection: 'column',
   },
   featureTouchable: {
     flex: 1,

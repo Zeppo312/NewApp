@@ -1,0 +1,327 @@
+import SwiftUI
+import WidgetKit
+#if canImport(AppIntents)
+import AppIntents
+#endif
+
+// MARK: - Einkaufslisten-Widget im App-Design
+
+private enum ShoppingWidgetTheme {
+    static let primary = Color(red: 0.557, green: 0.306, blue: 0.776)      // #8E4EC6
+    static let primarySoft = Color(red: 0.557, green: 0.306, blue: 0.776).opacity(0.12)
+    static let done = Color(red: 0.373, green: 0.663, blue: 0.478)         // #5FA97A
+    static let textPrimary = Color(red: 0.227, green: 0.180, blue: 0.125)  // #3A2E20
+    static let textSecondary = Color(red: 0.373, green: 0.275, blue: 0.227) // #5F463A
+    static let quantityText = Color(red: 0.478, green: 0.290, blue: 0.651) // #7A4AA6
+
+    static let backgroundLight = LinearGradient(
+        colors: [Color(red: 1.0, green: 0.973, blue: 0.945), Color(red: 0.965, green: 0.925, blue: 0.984)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let backgroundDark = LinearGradient(
+        colors: [Color(red: 0.114, green: 0.086, blue: 0.145), Color(red: 0.157, green: 0.106, blue: 0.204)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+}
+
+// MARK: - AppIntent zum direkten Abhaken (iOS 17+)
+
+#if canImport(AppIntents)
+@available(iOS 17.0, *)
+struct ToggleShoppingItemIntent: AppIntent {
+    static var title: LocalizedStringResource = "Einkauf abhaken"
+    static var description = IntentDescription("Hakt einen Posten der Einkaufsliste ab.")
+    static var isDiscoverable: Bool = false
+
+    @Parameter(title: "Item")
+    var itemId: String
+
+    @Parameter(title: "Purchased")
+    var purchased: Bool
+
+    init() {}
+
+    init(itemId: String, purchased: Bool) {
+        self.itemId = itemId
+        self.purchased = purchased
+    }
+
+    func perform() async throws -> some IntentResult {
+        // Sofort im Snapshot spiegeln, damit das Widget ohne Verzögerung umschaltet,
+        // und in die Warteschlange legen — die App schreibt es beim nächsten
+        // Aktivieren nach Supabase.
+        ShoppingWidgetStore.applyOptimisticToggle(itemId: itemId, purchased: purchased)
+        ShoppingWidgetStore.queueToggle(itemId: itemId, purchased: purchased)
+        return .result()
+    }
+}
+#endif
+
+// MARK: - Timeline
+
+struct ShoppingListEntry: TimelineEntry {
+    let date: Date
+    let snapshot: ShoppingWidgetSnapshot?
+}
+
+struct ShoppingListProvider: TimelineProvider {
+    func placeholder(in context: Context) -> ShoppingListEntry {
+        ShoppingListEntry(date: Date(), snapshot: .placeholder)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (ShoppingListEntry) -> Void) {
+        let snapshot = ShoppingWidgetStore.readSnapshot() ?? (context.isPreview ? .placeholder : nil)
+        completion(ShoppingListEntry(date: Date(), snapshot: snapshot))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<ShoppingListEntry>) -> Void) {
+        let entry = ShoppingListEntry(date: Date(), snapshot: ShoppingWidgetStore.readSnapshot())
+        // Die App lädt das Widget bei jeder Änderung selbst neu; der stündliche
+        // Refresh ist nur ein Sicherheitsnetz.
+        let next = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+}
+
+// MARK: - Bausteine
+
+private struct ShoppingHeader: View {
+    let snapshot: ShoppingWidgetSnapshot
+    let compact: Bool
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "cart.fill")
+                .font(.system(size: compact ? 11 : 12, weight: .bold))
+                .foregroundStyle(ShoppingWidgetTheme.primary)
+                .frame(width: compact ? 20 : 22, height: compact ? 20 : 22)
+                .background(Circle().fill(ShoppingWidgetTheme.primarySoft))
+
+            Text(snapshot.strings.title)
+                .font(.system(size: compact ? 12 : 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(ShoppingWidgetTheme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer(minLength: 4)
+
+            Text(compact ? "\(snapshot.openCount)" : "\(snapshot.openCount) \(snapshot.strings.openLabel)")
+                .font(.system(size: compact ? 11 : 12, weight: .heavy, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(ShoppingWidgetTheme.primary))
+        }
+    }
+}
+
+private struct ShoppingRow: View {
+    let item: ShoppingWidgetItem
+    let compact: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            checkControl
+
+            Text(item.title)
+                .font(.system(size: compact ? 12 : 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(item.purchased ? ShoppingWidgetTheme.textSecondary.opacity(0.55) : ShoppingWidgetTheme.textPrimary)
+                .strikethrough(item.purchased, color: ShoppingWidgetTheme.textSecondary.opacity(0.55))
+                .lineLimit(1)
+
+            Spacer(minLength: 2)
+
+            if let quantity = item.quantity, !quantity.isEmpty {
+                Text(quantity)
+                    .font(.system(size: compact ? 10 : 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(ShoppingWidgetTheme.quantityText)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(ShoppingWidgetTheme.primarySoft))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, compact ? 5 : 6)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.5))
+        )
+    }
+
+    private var checkIcon: some View {
+        Image(systemName: item.purchased ? "checkmark.circle.fill" : "circle")
+            .font(.system(size: compact ? 16 : 18, weight: .medium))
+            .foregroundStyle(item.purchased ? ShoppingWidgetTheme.done : ShoppingWidgetTheme.primary)
+    }
+
+    @ViewBuilder
+    private var checkControl: some View {
+        #if canImport(AppIntents)
+        if #available(iOS 17.0, *) {
+            Button(intent: ToggleShoppingItemIntent(itemId: item.id, purchased: !item.purchased)) {
+                checkIcon
+            }
+            .buttonStyle(.plain)
+        } else {
+            checkIcon
+        }
+        #else
+        checkIcon
+        #endif
+    }
+}
+
+private struct ShoppingEmptyState: View {
+    let snapshot: ShoppingWidgetSnapshot
+    let compact: Bool
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Text("🎉")
+                .font(.system(size: compact ? 26 : 32))
+            Text(snapshot.strings.emptyTitle)
+                .font(.system(size: compact ? 12 : 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(ShoppingWidgetTheme.textPrimary)
+                .multilineTextAlignment(.center)
+            if !compact {
+                Text(snapshot.strings.emptyHint)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(ShoppingWidgetTheme.textSecondary.opacity(0.8))
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct ShoppingSignedOutState: View {
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "cart.fill")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(ShoppingWidgetTheme.primary)
+            Text(ShoppingWidgetStrings.fallback.signedOut)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(ShoppingWidgetTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(10)
+    }
+}
+
+// MARK: - Familien-Layouts
+
+private struct ShoppingListContent: View {
+    let snapshot: ShoppingWidgetSnapshot
+    let maxRows: Int
+    let compact: Bool
+
+    private var visibleItems: [ShoppingWidgetItem] {
+        // Die App liefert bereits offene Posten zuerst. Bewusst nicht neu
+        // sortieren: ein gerade abgehakter Posten bleibt an Ort und Stelle,
+        // sodass sich ein Fehlgriff direkt im Widget rückgängig machen lässt.
+        Array(snapshot.items.prefix(maxRows))
+    }
+
+    private var hiddenCount: Int {
+        // Der Snapshot ist gekappt — für die Zählung zählt die ganze Liste.
+        max(0, snapshot.openCount + snapshot.purchasedCount - visibleItems.count)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 4 : 5) {
+            ShoppingHeader(snapshot: snapshot, compact: compact)
+
+            if snapshot.items.isEmpty {
+                ShoppingEmptyState(snapshot: snapshot, compact: compact)
+            } else {
+                ForEach(visibleItems) { item in
+                    ShoppingRow(item: item, compact: compact)
+                }
+
+                if hiddenCount > 0 {
+                    Text(String(format: snapshot.strings.moreItems, hiddenCount))
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(ShoppingWidgetTheme.textSecondary.opacity(0.75))
+                        .padding(.leading, 8)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+struct ShoppingListWidgetEntryView: View {
+    var entry: ShoppingListEntry
+    @Environment(\.widgetFamily) var family
+    @Environment(\.colorScheme) var colorScheme
+
+    private var maxRows: Int {
+        switch family {
+        case .systemSmall: return 3
+        case .systemLarge: return 9
+        default: return 4
+        }
+    }
+
+    var body: some View {
+        Group {
+            if let snapshot = entry.snapshot {
+                ShoppingListContent(
+                    snapshot: snapshot,
+                    maxRows: maxRows,
+                    compact: family == .systemSmall
+                )
+            } else {
+                ShoppingSignedOutState()
+            }
+        }
+        .padding(family == .systemSmall ? 10 : 12)
+        .widgetURL(URL(string: "com.lottibaby.app://shopping-list"))
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func shoppingContainerBackground(_ colorScheme: ColorScheme) -> some View {
+        if #available(iOS 17.0, *) {
+            self.containerBackground(for: .widget) {
+                colorScheme == .dark ? ShoppingWidgetTheme.backgroundDark : ShoppingWidgetTheme.backgroundLight
+            }
+        } else {
+            ZStack {
+                (colorScheme == .dark ? ShoppingWidgetTheme.backgroundDark : ShoppingWidgetTheme.backgroundLight)
+                self
+            }
+        }
+    }
+}
+
+private struct ShoppingListWidgetContainer: View {
+    var entry: ShoppingListEntry
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        ShoppingListWidgetEntryView(entry: entry)
+            .shoppingContainerBackground(colorScheme)
+    }
+}
+
+struct ShoppingListWidget: Widget {
+    let kind = ShoppingWidgetStore.widgetKind
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: ShoppingListProvider()) { entry in
+            ShoppingListWidgetContainer(entry: entry)
+        }
+        .configurationDisplayName("Einkaufsliste")
+        .description("Deine Einkaufsliste direkt abhaken.")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+    }
+}

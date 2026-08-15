@@ -5,7 +5,7 @@
  * konvertiert).
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -26,6 +26,7 @@ import {
   type AppFeature,
 } from '@/lib/entitlements';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 type LockedFeatureScreenProps = {
   feature: AppFeature;
@@ -41,6 +42,29 @@ export function LockedFeatureScreen({
 }: LockedFeatureScreenProps) {
   const router = useRouter();
   const { locale } = useLocale();
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
+  const tileProps = useMemo(
+    () =>
+      isDark
+        ? {
+            tint: 'dark' as const,
+            intensity: 38,
+            frostColor: 'rgba(18,15,24,0.78)',
+            toneColor: 'rgba(72,51,101,0.16)',
+            borderColor: 'rgba(255,255,255,0.17)',
+            innerBorderColor: 'rgba(255,255,255,0.07)',
+            highlightStrength: 'subtle' as const,
+            highlightOpacity: 0.34,
+            glossOpacity: 0.09,
+            grainOpacity: 0.025,
+            shadeOpacity: 0.75,
+          }
+        : {},
+    [isDark],
+  );
   const defaultCopy = LOCKED_FEATURE_COPY[feature];
   const translated = {
     en: {
@@ -74,7 +98,7 @@ export function LockedFeatureScreen({
   return (
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
           title={headerTitle ?? copy.title}
           subtitle={headerSubtitle}
@@ -82,7 +106,7 @@ export function LockedFeatureScreen({
           showBabySwitcher={false}
         />
         <View style={styles.wrap}>
-          <GlassCard radius={22} contentStyle={styles.content}>
+          <GlassCard {...tileProps} radius={22} contentStyle={styles.content}>
             <Text style={styles.emoji}>{isPremiumFeature ? '✨' : '🔒'}</Text>
             <View
               style={[
@@ -147,7 +171,7 @@ export function LockedFeatureScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
   background: {
     flex: 1,
   },
@@ -172,33 +196,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: 'rgba(94,61,179,0.12)',
+    backgroundColor: isDark ? 'rgba(200,179,255,0.18)' : 'rgba(94,61,179,0.12)',
   },
   tierBadgePremium: {
-    backgroundColor: 'rgba(240,164,96,0.18)',
+    backgroundColor: isDark ? 'rgba(240,164,96,0.24)' : 'rgba(240,164,96,0.18)',
   },
   tierBadgeText: {
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    color: '#5E3DB3',
+    color: isDark ? '#C8B3FF' : '#5E3DB3',
   },
   tierBadgeTextPremium: {
-    color: '#B06B1E',
+    color: isDark ? '#F5C68C' : '#B06B1E',
   },
   title: {
     marginTop: 4,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '800',
-    color: '#4A3A33',
+    color: isDark ? '#F6F2FF' : '#4A3A33',
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#7D5A50',
+    color: isDark ? 'rgba(233,226,247,0.78)' : '#7D5A50',
     textAlign: 'center',
   },
   bullets: {
@@ -215,16 +239,16 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#8E4EC6',
+    backgroundColor: isDark ? '#C8B3FF' : '#8E4EC6',
   },
   bulletDotPremium: {
-    backgroundColor: '#F0A460',
+    backgroundColor: isDark ? '#F5C68C' : '#F0A460',
   },
   bulletText: {
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
-    color: '#5F4346',
+    color: isDark ? 'rgba(233,226,247,0.86)' : '#5F4346',
   },
   ctaButton: {
     marginTop: 14,
@@ -244,7 +268,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 14,
     fontWeight: '700',
-    color: '#8C6459',
+    color: isDark ? 'rgba(233,226,247,0.62)' : '#8C6459',
   },
 });
 

@@ -5,5 +5,8 @@ module.exports = config => ({
   type: "widget",
   deploymentTarget: "16.1",
   icon: "../../assets/images/icon.png",
-  entitlements: { /* Add entitlements */ },
+  entitlements: {
+    // Geteilter Speicher für das Einkaufslisten-Widget (siehe ShoppingWidgetStore.swift)
+    "com.apple.security.application-groups": ["group.com.LottiBaby.app"],
+  },
 });

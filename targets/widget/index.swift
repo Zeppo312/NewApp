@@ -6,5 +6,6 @@ struct exportWidgets: WidgetBundle {
     var body: some Widget {
         WidgetLiveActivity()
         QuickLaunchWidget()
+        ShoppingListWidget()
     }
 }

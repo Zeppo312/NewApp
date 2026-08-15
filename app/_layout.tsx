@@ -54,6 +54,11 @@ import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
 import {
+  clearShoppingWidget,
+  drainShoppingWidgetToggles,
+  isShoppingWidgetSupported,
+} from '@/lib/shoppingWidget';
+import {
   acknowledgeStartupMessage,
   getPendingStartupMessage,
   type StartupMessage,
@@ -204,6 +209,39 @@ function RootLayoutNav() {
       void handleRevenueCatCustomerInfoUpdate();
     });
   }, [handleRevenueCatCustomerInfoUpdate, userId]);
+
+  // Im Home-Screen-Widget abgehakte Einkäufe nach Supabase nachziehen — auch
+  // dann, wenn die Einkaufsliste selbst gar nicht geöffnet wird.
+  useEffect(() => {
+    if (!isShoppingWidgetSupported()) return undefined;
+
+    if (!userId || !activeBabyId) {
+      void clearShoppingWidget();
+      return undefined;
+    }
+
+    let inFlight = false;
+    const drain = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        await drainShoppingWidgetToggles(activeBabyId, { locale });
+      } catch (error) {
+        console.warn('Failed to sync shopping widget toggles:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void drain();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void drain();
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [activeBabyId, locale, userId]);
 
   useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {

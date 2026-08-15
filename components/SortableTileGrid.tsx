@@ -10,6 +10,8 @@ import {
   ViewStyle,
 } from 'react-native';
 
+import { useTileGridMetrics } from '@/lib/fontScaling';
+
 export type SortableTileGridScrollMetrics = {
   offsetY: number;
   viewportHeight: number;
@@ -53,9 +55,7 @@ type SortableTileGridItemProps<T extends { id: string }> = {
   renderTile: SortableTileGridProps<T>['renderTile'];
 };
 
-const DEFAULT_COLUMNS = 2;
 const DEFAULT_GAP = 14;
-const DEFAULT_ITEM_HEIGHT = 140;
 const DEFAULT_SLOW_EDGE_THRESHOLD = 160;
 const DEFAULT_FAST_EDGE_THRESHOLD = 72;
 const DEFAULT_SLOW_SCROLL_SPEED = 2;
@@ -163,13 +163,20 @@ export default function SortableTileGrid<T extends { id: string }>({
   onRequestEditMode,
   onOrderChange,
   renderTile,
-  columns = DEFAULT_COLUMNS,
+  columns: columnsProp,
   gap = DEFAULT_GAP,
-  itemHeight = DEFAULT_ITEM_HEIGHT,
+  itemHeight: itemHeightProp,
   scrollConfig,
   onDragStateChange,
   style,
 }: SortableTileGridProps<T>) {
+  // Spaltenzahl und Kachelhöhe folgen der Systemschriftgröße, sonst werden
+  // Titel und Beschreibung bei großer Schrift abgeschnitten.
+  const tileMetrics = useTileGridMetrics();
+  const columns = columnsProp ?? tileMetrics.columns;
+  const itemHeight = itemHeightProp
+    ? Math.round(itemHeightProp * tileMetrics.scale)
+    : tileMetrics.itemHeight;
   const [layoutWidth, setLayoutWidth] = useState(0);
   const [orderedItems, setOrderedItems] = useState(items);
   const [activeId, setActiveId] = useState<string | null>(null);

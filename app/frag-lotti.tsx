@@ -31,6 +31,7 @@ import { ThemedBackground } from "@/components/ThemedBackground";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
 import { useLocale } from "@/contexts/LocaleContext";
+import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { useAskLottiAccess } from "@/lib/askLotti/access";
 import { askLotti, AskLottiError } from "@/lib/askLotti/api";
 import {
@@ -66,6 +67,21 @@ export default function AskLottiScreen() {
   const { locale } = useLocale();
   const { activeBabyId } = useActiveBaby();
   const access = useAskLottiAccess();
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === "dark" || adaptiveColors.isDarkBackground;
+  const styles = useMemo(() => createStyles(isDark), [isDark]);
+  const palette = useMemo(
+    () => ({
+      accent: isDark ? "#C8B3FF" : "#6544B8",
+      accentSoft: isDark ? "#B8A4F5" : "#7658BD",
+      accentMuted: isDark ? "#9E8CD8" : "#8C75C4",
+      spinner: isDark ? "#C8B3FF" : "#5E3DB3",
+      placeholder: isDark ? "rgba(233,226,247,0.42)" : "#A08B82",
+      destructive: isDark ? "#E29AB6" : "#B0879A",
+    }),
+    [isDark],
+  );
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const requestInFlightRef = useRef(false);
@@ -334,7 +350,7 @@ export default function AskLottiScreen() {
   return (
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <Header
           title={t("title")}
           subtitle={t("subtitle")}
@@ -351,7 +367,7 @@ export default function AskLottiScreen() {
               <IconSymbol
                 name="bubble.left.and.bubble.right.fill"
                 size={19}
-                color="#6544B8"
+                color={palette.accent}
               />
               {conversations.length > 1 ? (
                 <View style={styles.headerBadge}>
@@ -384,7 +400,7 @@ export default function AskLottiScreen() {
                   <IconSymbol
                     name="lock.shield"
                     size={19}
-                    color="#6544B8"
+                    color={palette.accent}
                     weight="semibold"
                   />
                 </View>
@@ -396,7 +412,7 @@ export default function AskLottiScreen() {
                       <IconSymbol
                         name="lightbulb"
                         size={11}
-                        color="#6544B8"
+                        color={palette.accent}
                         weight="semibold"
                       />
                       <Text style={styles.capabilityText}>
@@ -407,7 +423,7 @@ export default function AskLottiScreen() {
                       <IconSymbol
                         name="chart.bar"
                         size={11}
-                        color="#6544B8"
+                        color={palette.accent}
                         weight="semibold"
                       />
                       <Text style={styles.capabilityText}>
@@ -479,7 +495,7 @@ export default function AskLottiScreen() {
                       <IconSymbol
                         name="arrow.clockwise"
                         size={14}
-                        color="#6542BD"
+                        color={palette.accent}
                         weight="semibold"
                       />
                       <Text style={styles.retryText}>{t("retry")}</Text>
@@ -503,7 +519,7 @@ export default function AskLottiScreen() {
                           <IconSymbol
                             name="chevron.right"
                             size={14}
-                            color="#7658BD"
+                            color={palette.accentSoft}
                             weight="semibold"
                           />
                         </Pressable>
@@ -516,7 +532,7 @@ export default function AskLottiScreen() {
                         <IconSymbol
                           name="doc.text.magnifyingglass"
                           size={15}
-                          color="#6848B8"
+                          color={palette.accent}
                           weight="semibold"
                         />
                         <Text style={styles.evidenceHeading}>
@@ -563,7 +579,7 @@ export default function AskLottiScreen() {
                       <IconSymbol
                         name="sparkles"
                         size={13}
-                        color="#6848B8"
+                        color={palette.accent}
                         weight="semibold"
                       />
                     </View>
@@ -571,7 +587,7 @@ export default function AskLottiScreen() {
                     <IconSymbol
                       name="chevron.right"
                       size={18}
-                      color="#8C75C4"
+                      color={palette.accentMuted}
                       weight="semibold"
                     />
                   </Pressable>
@@ -581,7 +597,7 @@ export default function AskLottiScreen() {
 
             {isSending ? (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#5E3DB3" />
+                <ActivityIndicator color={palette.spinner} />
                 <Text style={styles.loadingText}>{t("loading")}</Text>
               </View>
             ) : null}
@@ -609,7 +625,7 @@ export default function AskLottiScreen() {
                 value={question}
                 onChangeText={setQuestion}
                 placeholder={t("placeholder")}
-                placeholderTextColor="#A08B82"
+                placeholderTextColor={palette.placeholder}
                 style={styles.input}
                 multiline
                 maxLength={MAX_ASK_LOTTI_QUESTION_LENGTH}
@@ -723,7 +739,7 @@ export default function AskLottiScreen() {
                         accessibilityLabel={t("deleteChat")}
                         style={styles.chatDelete}
                       >
-                        <IconSymbol name="trash" size={16} color="#B0879A" />
+                        <IconSymbol name="trash" size={16} color={palette.destructive} />
                       </Pressable>
                     </Pressable>
                   );
@@ -754,7 +770,7 @@ const formatChatDate = (
   return date.toLocaleDateString(locale, { day: "numeric", month: "short" });
 };
 
-const styles = StyleSheet.create({
+const createStyles = (isDark: boolean) => StyleSheet.create({
   background: { flex: 1 },
   safeArea: { flex: 1 },
   flex: { flex: 1 },
@@ -764,7 +780,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.72)",
+    backgroundColor: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.72)",
   },
   headerBadge: {
     position: "absolute",
@@ -776,7 +792,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#6544B8",
+    backgroundColor: isDark ? "#8B6BE0" : "#6544B8",
   },
   headerBadgeText: {
     color: "#FFFFFF",
@@ -789,12 +805,12 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: "rgba(24,18,40,0.45)",
+    backgroundColor: isDark ? "rgba(8,6,14,0.62)" : "rgba(24,18,40,0.45)",
   },
   modalSheet: {
     marginTop: "auto",
     maxHeight: "76%",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: isDark ? "#191426" : "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 18,
@@ -805,7 +821,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#E3DDF1",
+    backgroundColor: isDark ? "rgba(255,255,255,0.20)" : "#E3DDF1",
     marginBottom: 14,
   },
   modalHeader: {
@@ -816,8 +832,8 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   modalTitleWrap: { flex: 1 },
-  modalTitle: { fontSize: 17, fontWeight: "700", color: "#2E2645" },
-  modalHint: { fontSize: 12, color: "#9A93AD", marginTop: 2 },
+  modalTitle: { fontSize: 17, fontWeight: "700", color: isDark ? "#F6F2FF" : "#2E2645" },
+  modalHint: { fontSize: 12, color: isDark ? "rgba(233,226,247,0.55)" : "#9A93AD", marginTop: 2 },
   newChatButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -825,14 +841,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 999,
-    backgroundColor: "#6544B8",
+    backgroundColor: isDark ? "#7B57D4" : "#6544B8",
   },
   newChatPressed: { opacity: 0.85 },
   newChatText: { color: "#FFFFFF", fontSize: 13, fontWeight: "600" },
   modalEmpty: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#7C7590",
+    color: isDark ? "rgba(233,226,247,0.62)" : "#7C7590",
     paddingVertical: 22,
     paddingHorizontal: 4,
   },
@@ -845,15 +861,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "#F6F3FD",
+    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#F6F3FD",
     borderWidth: 1,
     borderColor: "transparent",
   },
-  chatRowActive: { borderColor: "#6544B8", backgroundColor: "#EFE9FC" },
+  chatRowActive: {
+    borderColor: isDark ? "#C8B3FF" : "#6544B8",
+    backgroundColor: isDark ? "rgba(200,179,255,0.14)" : "#EFE9FC",
+  },
   chatRowPressed: { opacity: 0.8 },
   chatRowCopy: { flex: 1 },
-  chatRowTitle: { fontSize: 14.5, fontWeight: "600", color: "#2E2645" },
-  chatRowMeta: { fontSize: 12, color: "#9A93AD", marginTop: 3 },
+  chatRowTitle: {
+    fontSize: 14.5,
+    fontWeight: "600",
+    color: isDark ? "#F6F2FF" : "#2E2645",
+  },
+  chatRowMeta: {
+    fontSize: 12,
+    color: isDark ? "rgba(233,226,247,0.55)" : "#9A93AD",
+    marginTop: 3,
+  },
   chatDelete: {
     width: 32,
     height: 32,
@@ -874,10 +901,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 20,
     borderCurve: "continuous",
-    backgroundColor: "rgba(246,241,255,0.88)",
+    backgroundColor: isDark ? "rgba(28,22,44,0.82)" : "rgba(246,241,255,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(104,72,184,0.14)",
-    boxShadow: "0 5px 18px rgba(75,48,124,0.07)",
+    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(104,72,184,0.14)",
+    boxShadow: isDark
+      ? "0 5px 18px rgba(0,0,0,0.35)"
+      : "0 5px 18px rgba(75,48,124,0.07)",
   },
   securityIconWrap: {
     width: 36,
@@ -886,16 +915,20 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(104,72,184,0.11)",
+    backgroundColor: isDark ? "rgba(200,179,255,0.16)" : "rgba(104,72,184,0.11)",
   },
   securityCopy: { flex: 1, gap: 2 },
   securityTitle: {
-    color: "#584746",
+    color: isDark ? "#F1ECFB" : "#584746",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
   },
-  securityText: { color: "#75645D", fontSize: 12, lineHeight: 17 },
+  securityText: {
+    color: isDark ? "rgba(233,226,247,0.68)" : "#75645D",
+    fontSize: 12,
+    lineHeight: 17,
+  },
   capabilityRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -909,10 +942,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: "rgba(104,72,184,0.08)",
+    backgroundColor: isDark ? "rgba(200,179,255,0.13)" : "rgba(104,72,184,0.08)",
   },
   capabilityText: {
-    color: "#69557D",
+    color: isDark ? "rgba(214,203,245,0.85)" : "#69557D",
     fontSize: 10,
     lineHeight: 13,
     fontWeight: "600",
@@ -927,21 +960,25 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
   },
   lottiBubble: {
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: isDark ? "rgba(28,22,44,0.90)" : "rgba(255,255,255,0.92)",
     borderWidth: 1,
-    borderColor: "rgba(104,72,184,0.12)",
+    borderColor: isDark ? "rgba(255,255,255,0.13)" : "rgba(104,72,184,0.12)",
     borderTopLeftRadius: 9,
-    boxShadow: "0 8px 24px rgba(75,48,124,0.08)",
+    boxShadow: isDark
+      ? "0 8px 24px rgba(0,0,0,0.38)"
+      : "0 8px 24px rgba(75,48,124,0.08)",
   },
   userBubble: {
     maxWidth: "88%",
-    backgroundColor: "#6542BD",
+    backgroundColor: isDark ? "#7B57D4" : "#6542BD",
     borderTopRightRadius: 9,
-    boxShadow: "0 8px 20px rgba(80,48,157,0.18)",
+    boxShadow: isDark
+      ? "0 8px 20px rgba(0,0,0,0.40)"
+      : "0 8px 20px rgba(80,48,157,0.18)",
   },
   errorBubble: {
-    borderColor: "rgba(190,75,75,0.28)",
-    backgroundColor: "rgba(255,244,244,0.95)",
+    borderColor: isDark ? "rgba(242,150,150,0.34)" : "rgba(190,75,75,0.28)",
+    backgroundColor: isDark ? "rgba(58,26,30,0.88)" : "rgba(255,244,244,0.95)",
   },
   lottiIdentity: {
     flexDirection: "row",
@@ -956,23 +993,31 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#6D4CC4",
+    backgroundColor: isDark ? "#7B57D4" : "#6D4CC4",
   },
   lottiLabel: {
-    color: "#5F3FAE",
+    color: isDark ? "#C8B3FF" : "#5F3FAE",
     fontSize: 11,
     lineHeight: 14,
     fontWeight: "800",
     letterSpacing: 1,
   },
-  lottiMeta: { color: "#9A8981", fontSize: 10, lineHeight: 13 },
-  messageText: { color: "#493A35", fontSize: 17, lineHeight: 26 },
+  lottiMeta: {
+    color: isDark ? "rgba(233,226,247,0.50)" : "#9A8981",
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  messageText: {
+    color: isDark ? "#F1ECFB" : "#493A35",
+    fontSize: 17,
+    lineHeight: 26,
+  },
   userText: { color: "#FFFFFF" },
   evidenceWrap: {
     marginTop: 14,
     paddingTop: 13,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(104,72,184,0.18)",
+    borderTopColor: isDark ? "rgba(255,255,255,0.14)" : "rgba(104,72,184,0.18)",
     gap: 8,
   },
   evidenceHeadingRow: {
@@ -982,7 +1027,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   evidenceHeading: {
-    color: "#6848B8",
+    color: isDark ? "#C8B3FF" : "#6848B8",
     fontSize: 11,
     lineHeight: 15,
     fontWeight: "800",
@@ -993,24 +1038,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 10,
-    backgroundColor: "rgba(104,72,184,0.055)",
+    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(104,72,184,0.055)",
     borderRadius: 15,
     borderCurve: "continuous",
     paddingHorizontal: 12,
     paddingVertical: 11,
     borderWidth: 1,
-    borderColor: "rgba(104,72,184,0.06)",
+    borderColor: isDark ? "rgba(255,255,255,0.09)" : "rgba(104,72,184,0.06)",
   },
-  evidenceMarker: { width: 3, borderRadius: 2, backgroundColor: "#B9A5E9" },
+  evidenceMarker: {
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: isDark ? "#A98BFA" : "#B9A5E9",
+  },
   evidenceCopy: { flex: 1, gap: 3 },
   evidenceTitle: {
-    color: "#564641",
+    color: isDark ? "#F1ECFB" : "#564641",
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "700",
   },
-  evidenceDetail: { color: "#7A665E", fontSize: 13, lineHeight: 19 },
-  disclaimer: { color: "#927D74", fontSize: 11, lineHeight: 16, marginTop: 12 },
+  evidenceDetail: {
+    color: isDark ? "rgba(233,226,247,0.70)" : "#7A665E",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  disclaimer: {
+    color: isDark ? "rgba(233,226,247,0.50)" : "#927D74",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 12,
+  },
   retryButton: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -1021,10 +1079,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 14,
     borderCurve: "continuous",
-    backgroundColor: "rgba(101,66,189,0.09)",
+    backgroundColor: isDark ? "rgba(200,179,255,0.14)" : "rgba(101,66,189,0.09)",
   },
   retryPressed: { opacity: 0.65 },
-  retryText: { color: "#6542BD", fontSize: 13, fontWeight: "700" },
+  retryText: {
+    color: isDark ? "#C8B3FF" : "#6542BD",
+    fontSize: 13,
+    fontWeight: "700",
+  },
   quickReplies: { gap: 8, marginTop: 15 },
   quickReply: {
     flexDirection: "row",
@@ -1034,15 +1096,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     borderCurve: "continuous",
-    backgroundColor: "rgba(101,66,189,0.07)",
+    backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(101,66,189,0.07)",
     borderWidth: 1,
-    borderColor: "rgba(101,66,189,0.10)",
+    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(101,66,189,0.10)",
   },
   quickReplyPressed: { opacity: 0.62 },
-  quickReplyText: { flex: 1, color: "#604B57", fontSize: 14, lineHeight: 19 },
+  quickReplyText: {
+    flex: 1,
+    color: isDark ? "rgba(233,226,247,0.86)" : "#604B57",
+    fontSize: 14,
+    lineHeight: 19,
+  },
   suggestions: { gap: 8, paddingTop: 2 },
   suggestionsTitle: {
-    color: "#6A5850",
+    color: isDark ? "rgba(233,226,247,0.72)" : "#6A5850",
     fontSize: 13,
     fontWeight: "700",
     paddingHorizontal: 4,
@@ -1057,9 +1124,9 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     paddingHorizontal: 13,
     paddingVertical: 11,
-    backgroundColor: "rgba(255,255,255,0.78)",
+    backgroundColor: isDark ? "rgba(28,22,44,0.82)" : "rgba(255,255,255,0.78)",
     borderWidth: 1,
-    borderColor: "rgba(104,72,184,0.11)",
+    borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(104,72,184,0.11)",
   },
   suggestionIcon: {
     width: 28,
@@ -1068,9 +1135,14 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(104,72,184,0.08)",
+    backgroundColor: isDark ? "rgba(200,179,255,0.15)" : "rgba(104,72,184,0.08)",
   },
-  suggestionText: { flex: 1, color: "#584841", fontSize: 14, lineHeight: 20 },
+  suggestionText: {
+    flex: 1,
+    color: isDark ? "#F1ECFB" : "#584841",
+    fontSize: 14,
+    lineHeight: 20,
+  },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1080,16 +1152,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.78)",
+    backgroundColor: isDark ? "rgba(28,22,44,0.82)" : "rgba(255,255,255,0.78)",
   },
-  loadingText: { color: "#7D6A61", fontSize: 13 },
+  loadingText: {
+    color: isDark ? "rgba(233,226,247,0.70)" : "#7D6A61",
+    fontSize: 13,
+  },
   composerWrap: {
     paddingHorizontal: 14,
     paddingTop: 9,
-    backgroundColor: "rgba(255,252,250,0.97)",
+    backgroundColor: isDark ? "rgba(14,11,22,0.96)" : "rgba(255,252,250,0.97)",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(104,72,184,0.10)",
-    boxShadow: "0 -10px 28px rgba(78,52,117,0.08)",
+    borderTopColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(104,72,184,0.10)",
+    boxShadow: isDark
+      ? "0 -10px 28px rgba(0,0,0,0.45)"
+      : "0 -10px 28px rgba(78,52,117,0.08)",
   },
   composerMeta: {
     minHeight: 20,
@@ -1105,10 +1182,17 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#66A77A",
+    backgroundColor: isDark ? "#8ED6A4" : "#66A77A",
   },
-  readyText: { color: "#7C6A62", fontSize: 11 },
-  remaining: { color: "#75618F", fontSize: 11, fontVariant: ["tabular-nums"] },
+  readyText: {
+    color: isDark ? "rgba(233,226,247,0.62)" : "#7C6A62",
+    fontSize: 11,
+  },
+  remaining: {
+    color: isDark ? "rgba(214,203,245,0.72)" : "#75618F",
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+  },
   composer: {
     minHeight: 54,
     maxHeight: 132,
@@ -1120,21 +1204,25 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 6,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#FFFFFF",
     borderWidth: 1,
-    borderColor: "rgba(104,72,184,0.17)",
-    boxShadow: "0 5px 18px rgba(77,51,112,0.07)",
+    borderColor: isDark ? "rgba(255,255,255,0.16)" : "rgba(104,72,184,0.17)",
+    boxShadow: isDark
+      ? "0 5px 18px rgba(0,0,0,0.32)"
+      : "0 5px 18px rgba(77,51,112,0.07)",
   },
   composerActive: {
-    borderColor: "rgba(104,72,184,0.38)",
-    boxShadow: "0 7px 22px rgba(91,61,159,0.12)",
+    borderColor: isDark ? "rgba(200,179,255,0.55)" : "rgba(104,72,184,0.38)",
+    boxShadow: isDark
+      ? "0 7px 22px rgba(0,0,0,0.38)"
+      : "0 7px 22px rgba(91,61,159,0.12)",
   },
   input: {
     flex: 1,
     minHeight: 40,
     maxHeight: 112,
     paddingVertical: 9,
-    color: "#493A35",
+    color: isDark ? "#F5F1FF" : "#493A35",
     fontSize: 16,
     lineHeight: 22,
   },
@@ -1144,13 +1232,18 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#6542BD",
-    boxShadow: "0 5px 14px rgba(78,43,157,0.23)",
+    backgroundColor: isDark ? "#7B57D4" : "#6542BD",
+    boxShadow: isDark
+      ? "0 5px 14px rgba(0,0,0,0.38)"
+      : "0 5px 14px rgba(78,43,157,0.23)",
   },
-  sendDisabled: { backgroundColor: "#CFC3E9", boxShadow: "none" },
+  sendDisabled: {
+    backgroundColor: isDark ? "rgba(255,255,255,0.14)" : "#CFC3E9",
+    boxShadow: "none",
+  },
   sendPressed: { transform: [{ scale: 0.95 }] },
   characterCount: {
-    color: "#9E8D85",
+    color: isDark ? "rgba(233,226,247,0.45)" : "#9E8D85",
     fontSize: 10,
     textAlign: "right",
     paddingTop: 3,

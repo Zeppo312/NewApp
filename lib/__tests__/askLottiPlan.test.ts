@@ -2,8 +2,9 @@ import { fallbackPlanFromQuestion } from "../../supabase/functions/ask-lotti/int
 import {
   ASK_LOTTI_PLAN_SCHEMA,
   normalizePlannerHistory,
-  resolveSingleTopicClarify,
+  resolveClarifyPlan,
   validateAskLottiPlan,
+  type AskLottiPlan,
 } from "../../supabase/functions/ask-lotti/planner";
 import { ASK_LOTTI_ANSWER_SCHEMA } from "../../supabase/functions/ask-lotti/schemas";
 
@@ -95,38 +96,65 @@ describe("Frag Lotti request planning", () => {
     ).toMatchObject({ domains: ["sleep"], clarify_topics: ["sleep"] });
   });
 
+  const clarifyPlan = (
+    topics: AskLottiPlan["clarify_topics"],
+  ): AskLottiPlan => ({
+    mode: "clarify",
+    domains: [],
+    metric: "total",
+    timeframe_days: 14,
+    compare_previous: false,
+    clarify_topics: topics,
+    answer_language: "de",
+  });
+
   it("answers a single-option clarify instead of asking the parent to pick", () => {
-    const clarify = {
-      mode: "clarify",
-      domains: [],
-      metric: "total",
-      timeframe_days: 14,
-      compare_previous: false,
-      clarify_topics: ["growth"],
-      answer_language: "de",
-    } as const;
-    expect(resolveSingleTopicClarify({ ...clarify })).toMatchObject({
+    const resolved = resolveClarifyPlan(clarifyPlan(["growth"]));
+    expect(resolved.plan).toMatchObject({
       mode: "mixed",
       domains: ["growth"],
       metric: "latest",
       clarify_topics: [],
       answer_language: "de",
     });
+    expect(resolved.followUpTopics).toEqual([]);
   });
 
-  it("keeps a clarify with a real choice between topics", () => {
-    const clarify = {
-      mode: "clarify",
-      domains: [],
-      metric: "total",
+  it("leads with the first topic and keeps the rest as follow-ups", () => {
+    const resolved = resolveClarifyPlan(clarifyPlan(["sleep", "today"]));
+    // "Is my child sleeping normally?" must be answered on sleep, not turned
+    // back into a menu; "today" stays available underneath the answer.
+    expect(resolved.plan).toMatchObject({
+      mode: "mixed",
+      metric: "average_per_day",
       timeframe_days: 14,
-      compare_previous: false,
-      clarify_topics: ["sleep", "feeding"],
-      answer_language: "de",
-    } as const;
-    expect(resolveSingleTopicClarify({ ...clarify })).toMatchObject({
-      mode: "clarify",
-      clarify_topics: ["sleep", "feeding"],
+      clarify_topics: [],
     });
+    expect(resolved.plan.domains).toEqual(
+      expect.arrayContaining(["sleep", "feeding", "diaper"]),
+    );
+    expect(resolved.followUpTopics).toEqual(["today"]);
+  });
+
+  it("still asks when the request stayed genuinely wide open", () => {
+    const resolved = resolveClarifyPlan(
+      clarifyPlan(["sleep", "feeding", "today"]),
+    );
+    expect(resolved.plan.mode).toBe("clarify");
+    expect(resolved.plan.clarify_topics).toEqual(["sleep", "feeding", "today"]);
+    expect(resolved.followUpTopics).toEqual([]);
+  });
+
+  it("leaves a non-clarify plan untouched", () => {
+    const plan: AskLottiPlan = {
+      mode: "data",
+      domains: ["sleep"],
+      metric: "total",
+      timeframe_days: 7,
+      compare_previous: false,
+      clarify_topics: [],
+      answer_language: "en",
+    };
+    expect(resolveClarifyPlan(plan)).toEqual({ plan, followUpTopics: [] });
   });
 });

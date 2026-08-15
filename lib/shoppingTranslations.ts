@@ -221,6 +221,15 @@ const de: Catalog = {
 
   'unit.piece': 'Stück',
   'unit.package': 'Packung',
+
+  // Home-Screen-Widget (%d wird in Swift via String(format:) ersetzt)
+  'widget.title': 'Einkaufsliste',
+  'widget.open': 'offen',
+  'widget.done': 'erledigt',
+  'widget.emptyTitle': 'Alles erledigt',
+  'widget.emptyHint': 'Nichts mehr auf der Liste',
+  'widget.signedOut': 'In Lotti Baby öffnen',
+  'widget.moreItems': '+%d weitere',
 };
 
 const en: Catalog = {
@@ -435,6 +444,15 @@ const en: Catalog = {
 
   'unit.piece': 'pcs',
   'unit.package': 'package',
+
+  // Home screen widget (%d is substituted in Swift via String(format:))
+  'widget.title': 'Shopping list',
+  'widget.open': 'open',
+  'widget.done': 'done',
+  'widget.emptyTitle': 'All done',
+  'widget.emptyHint': 'Nothing left on the list',
+  'widget.signedOut': 'Open in Lotti Baby',
+  'widget.moreItems': '+%d more',
 };
 
 const es: Catalog = {
@@ -649,6 +667,15 @@ const es: Catalog = {
 
   'unit.piece': 'uds.',
   'unit.package': 'paquete',
+
+  // Widget de la pantalla de inicio (%d se sustituye en Swift con String(format:))
+  'widget.title': 'Lista de la compra',
+  'widget.open': 'pendientes',
+  'widget.done': 'hechos',
+  'widget.emptyTitle': 'Todo hecho',
+  'widget.emptyHint': 'No queda nada en la lista',
+  'widget.signedOut': 'Abrir en Lotti Baby',
+  'widget.moreItems': '+%d más',
 };
 
 export const SHOPPING_TRANSLATIONS: Record<ShoppingLocale, Catalog> = { de, en, es };

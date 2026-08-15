@@ -166,12 +166,14 @@ export const fallbackPlanFromQuestion = (
       )
     )
       return plan(question, "mixed", ["sleep"], "distribution");
+    // "Is this normal?" is not a general-knowledge question: it only becomes an
+    // answer when the family's own average is put next to the reference range.
     if (
       /(?:sollt|normal|empfohl|bedarf|should|typical|recommend|deber[ií]a|habitual)/i.test(
         question,
       )
     )
-      return plan(question, "general", ["profile"], "total");
+      return plan(question, "mixed", ["sleep"], "average_per_day");
     return plan(question, "data", ["sleep"], "total");
   }
   if (FEEDING.test(question)) {

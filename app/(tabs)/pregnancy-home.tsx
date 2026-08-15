@@ -41,6 +41,7 @@ import {
   PregnancyHomeTranslationKey,
   translatePregnancyHomeText,
 } from '@/lib/pregnancyHomeTranslations';
+import { useTileGridMetrics } from '@/lib/fontScaling';
 
 let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
 let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
@@ -498,6 +499,29 @@ export default function PregnancyHomeScreen() {
     checklist: { ...EMPTY_PREGNANCY_BRIEFING_SIGNALS.checklist },
   }));
   const [isBriefingLoading, setIsBriefingLoading] = useState(false);
+  // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
+  // Beschreibung bei großer Schrift nicht abgeschnitten werden.
+  const tileMetrics = useTileGridMetrics();
+  const scaledCardSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  const scaledHiddenTileSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  // Versteckte Kacheln liegen in einem einfachen Wrap-Grid — bei einer Spalte
+  // muss der Wrapper auf volle Breite gehen.
+  const hiddenTileWrapperSizing = useMemo(
+    () => (tileMetrics.isSingleColumn ? { width: '100%' as const } : null),
+    [tileMetrics.isSingleColumn],
+  );
   const mainScrollRef = useRef<ScrollView | null>(null);
   const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
     offsetY: 0,
@@ -1325,6 +1349,7 @@ export default function PregnancyHomeScreen() {
             style={[
               styles.card,
               styles.liquidGlassCard,
+              scaledCardSizing,
               {
                 backgroundColor: item.cardBackgroundColor,
                 borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -1421,7 +1446,7 @@ export default function PregnancyHomeScreen() {
           {hiddenQuickAccessCards.map((card) => (
             <TouchableOpacity
               key={card.id}
-              style={styles.quickAccessHiddenTileWrapper}
+              style={[styles.quickAccessHiddenTileWrapper, hiddenTileWrapperSizing]}
               activeOpacity={0.86}
               onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
@@ -1435,6 +1460,7 @@ export default function PregnancyHomeScreen() {
                   style={[
                     styles.card,
                     styles.quickAccessHiddenTileCard,
+                    scaledHiddenTileSizing,
                     {
                       backgroundColor: card.cardBackgroundColor,
                       borderColor: 'rgba(255, 255, 255, 0.28)',

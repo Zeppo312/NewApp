@@ -126,10 +126,7 @@ export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null => {
   };
 };
 
-// Asking the parent to pick between a single option only burns a turn and one
-// question from their daily quota. With exactly one topic left, that topic is
-// the answer, so resolve it into a real plan instead of asking.
-const SINGLE_CLARIFY_PLANS: Record<
+const CLARIFY_TOPIC_PLANS: Record<
   AskLottiClarifyTopic,
   Pick<AskLottiPlan, "domains" | "metric" | "timeframe_days">
 > = {
@@ -143,13 +140,41 @@ const SINGLE_CLARIFY_PLANS: Record<
   growth: { domains: ["growth"], metric: "latest", timeframe_days: 30 },
 };
 
-export const resolveSingleTopicClarify = (plan: AskLottiPlan): AskLottiPlan => {
-  if (plan.mode !== "clarify" || plan.clarify_topics.length !== 1) return plan;
+// Asking a parent to pick a topic costs them a turn and one question from the
+// daily quota, and it is what makes the assistant feel like a router. Whenever
+// the planner narrowed the request down to a couple of topics it has already
+// understood enough to answer: lead with the first topic, and hand the rest
+// back as follow-up chips that sit under the answer instead of replacing it.
+// Only a request that stayed genuinely wide open still asks.
+export const MAX_RESOLVABLE_CLARIFY_TOPICS = 2;
+
+export const resolveClarifyPlan = (
+  plan: AskLottiPlan,
+): { plan: AskLottiPlan; followUpTopics: AskLottiClarifyTopic[] } => {
+  if (
+    plan.mode !== "clarify" ||
+    plan.clarify_topics.length === 0 ||
+    plan.clarify_topics.length > MAX_RESOLVABLE_CLARIFY_TOPICS
+  ) {
+    return { plan, followUpTopics: [] };
+  }
+  const [primary, ...rest] = plan.clarify_topics;
+  const domains = Array.from(
+    new Set(
+      plan.clarify_topics.flatMap(
+        (topic) => CLARIFY_TOPIC_PLANS[topic].domains,
+      ),
+    ),
+  );
   return {
-    ...plan,
-    ...SINGLE_CLARIFY_PLANS[plan.clarify_topics[0]],
-    mode: "mixed",
-    clarify_topics: [],
+    plan: {
+      ...plan,
+      ...CLARIFY_TOPIC_PLANS[primary],
+      domains,
+      mode: "mixed",
+      clarify_topics: [],
+    },
+    followUpTopics: rest,
   };
 };
 

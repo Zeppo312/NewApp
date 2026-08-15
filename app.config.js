@@ -40,6 +40,8 @@ module.exports = function({ config }) {
     },
   ]);
   addPlugin(plugins, './plugins/withLiveActivityModule');
+  // Muss nach withLiveActivityModule laufen: patcht dessen Release-Entitlements.
+  addPlugin(plugins, './plugins/withShoppingWidgetModule');
 
   // Konfiguration für Updates
   const updatedConfig = {

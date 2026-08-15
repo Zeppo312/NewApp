@@ -53,6 +53,7 @@ import {
   HomeTranslationKey,
   translateHomeText,
 } from '@/lib/homeTranslations';
+import { useFontScale, useLineLimit, useTileGridMetrics } from '@/lib/fontScaling';
 
 let ACTIVE_HOME_LOCALE = DEFAULT_HOME_LOCALE;
 let HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
@@ -729,6 +730,34 @@ export default function HomeScreen() {
   const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<HomeQuickAccessCardId[]>([]);
   const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
   const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
+  // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
+  // Beschreibung bei großer Schrift nicht abgeschnitten werden.
+  const layoutFontScale = useFontScale();
+  // Enge Zeilen-Layouts (Text + Button nebeneinander) brechen bei großer
+  // Schrift auseinander — ab ~130 % stapeln wir sie stattdessen.
+  const isStackedLayout = layoutFontScale >= 1.3;
+  const twoLineLimit = useLineLimit(2);
+  const tileMetrics = useTileGridMetrics();
+  const scaledCardSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  const scaledHiddenTileSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  // Versteckte Kacheln liegen in einem einfachen Wrap-Grid — bei einer Spalte
+  // muss der Wrapper auf volle Breite gehen.
+  const hiddenTileWrapperSizing = useMemo(
+    () => (tileMetrics.isSingleColumn ? { width: '100%' as const } : null),
+    [tileMetrics.isSingleColumn],
+  );
   const mainScrollRef = useRef<ScrollView>(null);
   const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
     offsetY: 0,
@@ -1808,12 +1837,17 @@ export default function HomeScreen() {
                     <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
                       {t('shop.eyebrow')}
                     </ThemedText>
-                    <View style={styles.recommendationFooter}>
+                    <View
+                      style={[
+                        styles.recommendationFooter,
+                        isStackedLayout ? styles.recommendationFooterStacked : null,
+                      ]}
+                    >
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={styles.recommendationTitle}>
                           {t('shop.title')}
                         </ThemedText>
-                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={2}>
+                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={twoLineLimit}>
                           {t('shop.description')}
                         </ThemedText>
                       </View>
@@ -1970,6 +2004,7 @@ export default function HomeScreen() {
             style={[
               styles.card,
               styles.liquidGlassCard,
+              scaledCardSizing,
               {
                 backgroundColor: item.cardBackgroundColor,
                 borderColor: 'rgba(255, 255, 255, 0.35)',
@@ -2073,7 +2108,7 @@ export default function HomeScreen() {
           {hiddenQuickAccessCards.map((card) => (
             <TouchableOpacity
               key={card.id}
-              style={styles.quickAccessHiddenTileWrapper}
+              style={[styles.quickAccessHiddenTileWrapper, hiddenTileWrapperSizing]}
               activeOpacity={0.86}
               onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
@@ -2087,6 +2122,7 @@ export default function HomeScreen() {
                   style={[
                     styles.card,
                     styles.quickAccessHiddenTileCard,
+                    scaledHiddenTileSizing,
                     {
                       backgroundColor: card.cardBackgroundColor,
                       borderColor: 'rgba(255, 255, 255, 0.28)',
@@ -2605,6 +2641,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 12,
+  },
+  recommendationFooterStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   recommendationTextWrap: {
     flex: 1,

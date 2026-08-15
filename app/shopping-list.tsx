@@ -17,7 +17,7 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,12 +37,12 @@ import {
   getShoppingLevelLabel,
   getShoppingLocaleTag,
   getShoppingUnitLabel,
-  isShoppingPackageUnit,
   translateShoppingText,
 } from '@/lib/shoppingTranslations';
 import {
   adjustInventoryQuantity,
   adjustSealedPackages,
+  applyPurchaseToInventory,
   computeDaysLeft,
   computeTotalQuantity,
   deleteInventoryItem,
@@ -67,6 +67,7 @@ import {
   upsertInventoryItem,
   upsertShoppingItem,
 } from '@/lib/shopping';
+import { drainShoppingWidgetToggles, syncShoppingWidget } from '@/lib/shoppingWidget';
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
 
@@ -234,7 +235,7 @@ export default function ShoppingListScreen() {
 
 function ShoppingListScreenContent() {
   const router = useRouter();
-  const { activeBabyId, isReady } = useActiveBaby();
+  const { activeBaby, activeBabyId, isReady } = useActiveBaby();
   const { hasPermission, scheduleNotification } = useNotifications();
 
   const [section, setSection] = useState<SectionKey>('shopping');
@@ -336,6 +337,32 @@ function ShoppingListScreenContent() {
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [isReady, loadState]);
+
+  // Im Widget abgehakte Posten übernehmen, sobald der Screen wieder sichtbar ist.
+  useFocusEffect(
+    useCallback(() => {
+      if (!activeBabyId) return;
+      let cancelled = false;
+      void drainShoppingWidgetToggles(activeBabyId, {
+        locale: ACTIVE_SHOPPING_LOCALE,
+        babyName: activeBaby?.name ?? null,
+      }).then(({ items }) => {
+        if (!cancelled && items) setShoppingItems(items);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, [activeBaby?.name, activeBabyId])
+  );
+
+  // Home-Screen-Widget bei jeder Änderung der Liste nachziehen.
+  useEffect(() => {
+    if (isLoading || !activeBabyId) return;
+    void syncShoppingWidget(shoppingItems, {
+      locale: ACTIVE_SHOPPING_LOCALE,
+      babyName: activeBaby?.name ?? null,
+    });
+  }, [activeBaby?.name, activeBabyId, isLoading, shoppingItems]);
 
   const lowStockItems = useMemo(
     () => inventoryItems.filter((item) => isLowStock(item)),
@@ -511,23 +538,12 @@ function ShoppingListScreenContent() {
         const note = nowPurchased
           ? t('shopping.transactionPurchase', { name: item.title })
           : t('shopping.transactionReverted', { name: item.title });
-        const hasPackage = (linkedInventory.package_quantity ?? 0) > 0;
-        const { data } = isLevelTracked(linkedInventory)
-          ? await setInventoryStockLevel(linkedInventory.id, nowPurchased ? 100 : 0)
-          : hasPackage
-            ? await adjustSealedPackages(
-                linkedInventory,
-                (isShoppingPackageUnit(item.quantity_unit) ? item.quantity_value ?? 1 : 1) *
-                  (nowPurchased ? 1 : -1),
-                nowPurchased ? 'refill' : 'correction',
-                note
-              )
-            : await adjustInventoryQuantity(
-                linkedInventory,
-                (item.quantity_value ?? 1) * (nowPurchased ? 1 : -1),
-                nowPurchased ? 'refill' : 'correction',
-                note
-              );
+        const { data } = await applyPurchaseToInventory(
+          item,
+          linkedInventory,
+          nowPurchased,
+          note
+        );
         if (data) {
           applyInventoryUpdate(data);
         }

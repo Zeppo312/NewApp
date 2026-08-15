@@ -1,5 +1,6 @@
 import { PostgrestError } from '@supabase/supabase-js';
 import { getCachedUser, supabase } from './supabase';
+import { isShoppingPackageUnit } from './shoppingTranslations';
 import type { RecipeRecord } from './recipes';
 
 export type ShoppingItemSource = 'manual' | 'recipe' | 'inventory';
@@ -487,6 +488,36 @@ export const toggleShoppingItemPurchased = async (
 export const deleteShoppingItem = async (itemId: string): Promise<{ error: PostgrestError | null }> => {
   const { error } = await supabase.from('shopping_list_items').delete().eq('id', itemId);
   return { error };
+};
+
+/**
+ * Stammt ein Einkaufsposten aus dem Vorrat, wird der Bestand beim Abhaken
+ * erhöht — bei Packungsartikeln als ganze (versiegelte) Packung, sonst als
+ * Menge. Beim Zurücknehmen wird wieder korrigiert.
+ *
+ * Wird sowohl vom Einkaufslisten-Screen als auch beim Nachziehen der im
+ * Home-Widget abgehakten Posten verwendet.
+ */
+export const applyPurchaseToInventory = async (
+  item: Pick<ShoppingListItem, 'title' | 'quantity_value' | 'quantity_unit'>,
+  inventory: InventoryItem,
+  isPurchased: boolean,
+  note: string
+): Promise<DataResult<InventoryItem>> => {
+  if (inventory.tracking_mode === 'level') {
+    return setInventoryStockLevel(inventory.id, isPurchased ? 100 : 0);
+  }
+
+  const direction = isPurchased ? 1 : -1;
+  const transactionType: InventoryTransactionType = isPurchased ? 'refill' : 'correction';
+  const hasPackage = (inventory.package_quantity ?? 0) > 0;
+
+  if (hasPackage) {
+    const packages = (isShoppingPackageUnit(item.quantity_unit) ? item.quantity_value ?? 1 : 1) * direction;
+    return adjustSealedPackages(inventory, packages, transactionType, note);
+  }
+
+  return adjustInventoryQuantity(inventory, (item.quantity_value ?? 1) * direction, transactionType, note);
 };
 
 // --- Vorräte --------------------------------------------------------------------

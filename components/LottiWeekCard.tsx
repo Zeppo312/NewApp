@@ -36,6 +36,7 @@ import { useLottiAvatarChoice } from '@/hooks/useLottiAvatarChoice';
 import { LEVEL_BABY_IMAGES, babyImageForLevel } from '@/lib/lottiBabyImages';
 import { getWochenkarteMood, WochenkarteStory } from '@/components/WochenkarteStory';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useFontScale, useLineLimit, useScaledSize } from '@/lib/fontScaling';
 
 const ACCENT_PURPLE = '#5E3DB3';
 const PLACEHOLDER_SIZE = 64;
@@ -91,6 +92,14 @@ type Props = {
 
 export function LottiWeekCard({ style }: Props) {
   const { locale } = useLocale();
+  // Bei größerer Systemschrift lieber umbrechen als abschneiden.
+  const oneLineLimit = useLineLimit(1);
+  // Enge Zeilen-Layouts (Emoji + Text + Button nebeneinander) lassen bei großer
+  // Schrift keine sinnvolle Textbreite mehr übrig — dann untereinander stapeln.
+  const isStacked = useFontScale() >= 1.3;
+  const twoLineLimit = useLineLimit(2);
+  const reviewCtaHeight = useScaledSize(32);
+  const reviewEmojiBubbleSize = useScaledSize(38);
   const c = {
     de: { completeTitle: 'Euer Wochen-Review ist bereit 🤍', title: 'Lottis Wochenmoment 🤍', details: 'Details', collect: 'einsammeln', hearts: 'Herzen', moments: 'Momente', waiting: 'Wochen-Review wartet', days: 'Tage', startHint: 'Sobald ihr trackt, entsteht hier euer Rückblick.', level: 'Stufe', until: 'Noch {{points}} Herzen bis Stufe {{level}}', max: 'Höchste Stufe erreicht 🤍', avatar: 'Lotti-Avatar', storyA11y: 'Wochen-Review als Story ansehen', story: 'Story', dayLabels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] },
     en: { completeTitle: 'Your weekly review is ready 🤍', title: "Lotti's weekly moment 🤍", details: 'Details', collect: 'collect', hearts: 'hearts', moments: 'moments', waiting: 'Weekly review waiting', days: 'days', startHint: 'Your review will appear as soon as you start tracking.', level: 'Level', until: '{{points}} hearts until level {{level}}', max: 'Highest level reached 🤍', avatar: 'Lotti avatar', storyA11y: 'View weekly review as a story', story: 'Story', dayLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] },
@@ -358,14 +367,14 @@ export function LottiWeekCard({ style }: Props) {
                 <ThemedText
                   adaptive={false}
                   style={[styles.title, { color: textPrimary }]}
-                  numberOfLines={2}
+                  numberOfLines={twoLineLimit}
                 >
                   {copy.title}
                 </ThemedText>
                 <ThemedText
                   adaptive={false}
                   style={[styles.subtitle, { color: textSecondary }]}
-                  numberOfLines={2}
+                  numberOfLines={twoLineLimit}
                 >
                   {subtitle}
                 </ThemedText>
@@ -393,7 +402,7 @@ export function LottiWeekCard({ style }: Props) {
                   <ThemedText
                     adaptive={false}
                     style={[styles.progressHint, { color: textTertiary }]}
-                    numberOfLines={1}
+                    numberOfLines={oneLineLimit}
                   >
                     {c.until.replace('{{points}}', String(level.pointsToNext)).replace('{{level}}', String(level.level + 1))}
                   </ThemedText>
@@ -401,7 +410,7 @@ export function LottiWeekCard({ style }: Props) {
                   <ThemedText
                     adaptive={false}
                     style={[styles.progressHint, { color: textTertiary }]}
-                    numberOfLines={1}
+                    numberOfLines={oneLineLimit}
                   >
                     {c.max}
                   </ThemedText>
@@ -413,6 +422,7 @@ export function LottiWeekCard({ style }: Props) {
               onPress={handleStoryPress}
               style={({ pressed }) => [
                 styles.reviewRow,
+                isStacked ? styles.reviewRowStacked : null,
                 {
                   backgroundColor: isDark
                     ? 'rgba(255,255,255,0.06)'
@@ -424,28 +434,37 @@ export function LottiWeekCard({ style }: Props) {
               accessibilityRole="button"
               accessibilityLabel={c.storyA11y}
             >
-              <View style={styles.reviewEmojiBubble}>
+              <View
+                style={[
+                  styles.reviewEmojiBubble,
+                  {
+                    width: reviewEmojiBubbleSize,
+                    height: reviewEmojiBubbleSize,
+                    borderRadius: reviewEmojiBubbleSize / 2,
+                  },
+                ]}
+              >
                 <ThemedText adaptive={false} allowFontScaling={false} style={styles.reviewEmoji}>
                   {mood.emoji}
                 </ThemedText>
               </View>
-              <View style={styles.reviewTextBlock}>
+              <View style={[styles.reviewTextBlock, isStacked ? styles.reviewTextBlockStacked : null]}>
                 <ThemedText
                   adaptive={false}
                   style={[styles.reviewTitle, { color: textPrimary }]}
-                  numberOfLines={1}
+                  numberOfLines={oneLineLimit}
                 >
                   {reviewTitle}
                 </ThemedText>
                 <ThemedText
                   adaptive={false}
                   style={[styles.reviewSubtitle, { color: textSecondary }]}
-                  numberOfLines={1}
+                  numberOfLines={oneLineLimit}
                 >
                   {reviewSubtitle}
                 </ThemedText>
               </View>
-              <View style={styles.reviewCta}>
+              <View style={[styles.reviewCta, { height: reviewCtaHeight, borderRadius: reviewCtaHeight / 2 }]}>
                 <ThemedText adaptive={false} style={styles.reviewCtaText}>
                   {c.story}
                 </ThemedText>
@@ -455,8 +474,8 @@ export function LottiWeekCard({ style }: Props) {
 
             <View style={[styles.divider, { backgroundColor: dividerColor }]} />
 
-            <View style={styles.bottomRow}>
-              <View style={styles.daysRow}>
+            <View style={[styles.bottomRow, isStacked ? styles.bottomRowStacked : null]}>
+              <View style={[styles.daysRow, isStacked ? styles.daysRowStacked : null]}>
                 {c.dayLabels.map((label, idx) => {
                   const isToday = idx === todayIndex;
                   const isOn = days[idx];
@@ -492,7 +511,7 @@ export function LottiWeekCard({ style }: Props) {
                 <ThemedText
                   adaptive={false}
                   style={[styles.cta, { color: ACCENT_PURPLE }]}
-                  numberOfLines={1}
+                  numberOfLines={oneLineLimit}
                 >
                   {ctaLabel}
                 </ThemedText>
@@ -669,6 +688,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  reviewRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  reviewTextBlockStacked: {
+    flex: 0,
+    alignSelf: 'stretch',
+  },
   reviewTitle: {
     fontSize: 13.5,
     lineHeight: 18,
@@ -710,6 +737,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  bottomRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  daysRowStacked: {
+    alignSelf: 'stretch',
+    justifyContent: 'space-between',
   },
   daysRow: {
     flexDirection: 'row',
