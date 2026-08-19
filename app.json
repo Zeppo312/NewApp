@@ -158,9 +158,7 @@
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
+    "runtimeVersion": "1.0.20",
     "updates": {
       "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
       "enabled": true,
