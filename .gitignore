@@ -18,6 +18,12 @@ node_local/
 *.p12
 *.key
 *.mobileprovision
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+android/.gradle/
+android/app/build/
+android/build/
 
 # Metro
 .metro-health-check*

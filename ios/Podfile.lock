@@ -3278,7 +3278,7 @@ SPEC CHECKSUMS:
   ExpoLocalization: 659243b03b3a3e9589793cee2f728a899e181329
   ExpoLocation: f0127974a6e1edfb1ea255f55604addb51d020b5
   ExpoLogBox: 2c4225a62f1cfb943e6b2df4fa4fe2d136e06fb6
-  ExpoModulesCore: d01e013dfd002954f3e49933a3a40db218bfe2c4
+  ExpoModulesCore: 743c1dcf9aa3e4b080ce83180e0c87a2ac0721d5
   ExpoModulesJSI: b20fefa4cdd9097e7e6b715466d1900b8c5d4711
   ExpoModulesWorklets: 53d4ca8d32225cb3ec4660b9f03496192b4f3cac
   ExpoModulesWorkletsAdapter: dfe18b33612eb83868fe9a0dee4bc2a50b8f870c
@@ -3298,7 +3298,7 @@ SPEC CHECKSUMS:
   EXUpdates: 57ecf2ff1ba1c574301bbb0f907d591277b595bc
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: b3e7ad108f0d882e30445c5527d774e3fd432f3d
-  hermes-engine: 6b10f6297d03de4b3c2c8556654e07e79fc4c1f5
+  hermes-engine: 06e2116f70d6b28590e025b804e89475e790b21e
   PurchasesHybridCommon: 8eb130ab98f8dab600dea932a2599dee79304bb5
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
   RCTRequired: 30451112e6fef4e6f31b4e7eee0845156e35e4b0
