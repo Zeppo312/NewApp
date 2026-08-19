@@ -11,6 +11,7 @@ web-build/
 # Native generated files
 ios/Pods/
 ios/build/
+ios/.xcode.env.local
 android/app/build/
 android/.gradle/
 android/build/
