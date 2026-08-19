@@ -74,6 +74,14 @@ import {
   formatCommunityRelativeDate,
   translateCommunityText,
 } from '@/lib/communityTranslations';
+import { ModerationSheet, type ModerationTarget } from '@/components/moderation/ModerationSheet';
+import { isContentBlockedError } from '@/lib/contentFilter';
+import {
+  isUserBlocked,
+  loadBlockedUserIds,
+  subscribeToBlockList,
+} from '@/lib/moderation';
+import { translateModerationText } from '@/lib/moderationTranslations';
 
 type CommunityQaFeedProps = {
   onSwitchToBlog?: () => void;
@@ -273,6 +281,62 @@ export default function CommunityQaFeed({
   const [feedCursor, setFeedCursor] = useState<CommunityFeedCursor | null>(null);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [moderationTarget, setModerationTarget] = useState<ModerationTarget | null>(null);
+  const [blockedVersion, setBlockedVersion] = useState(0);
+
+  const tm = useCallback(
+    (key: Parameters<typeof translateModerationText>[1], params?: Record<string, string | number>) =>
+      translateModerationText(locale, key, params),
+    [locale],
+  );
+
+  // Blockliste laden und auf Änderungen reagieren, damit geblockte Inhalte
+  // sofort aus bereits geladenen Listen verschwinden.
+  useEffect(() => {
+    void loadBlockedUserIds();
+    return subscribeToBlockList(() => setBlockedVersion((current) => current + 1));
+  }, []);
+
+  const dropBlockedAuthor = useCallback((userId: string) => {
+    setPosts((cur) => cur.filter((post) => post.user_id !== userId));
+    setComments((cur) =>
+      cur
+        .filter((comment) => comment.user_id !== userId)
+        .map((comment) => ({
+          ...comment,
+          replies: (comment.replies || []).filter((reply) => reply.user_id !== userId),
+        })),
+    );
+    setSelectedPost((cur) => (cur && cur.user_id === userId ? null : cur));
+  }, []);
+
+  const hideReportedContent = useCallback((target: ModerationTarget) => {
+    if (target.targetType === 'post' || target.targetType === 'group_post') {
+      setPosts((cur) => cur.filter((post) => post.id !== target.targetId));
+      setSelectedPost((cur) => (cur && cur.id === target.targetId ? null : cur));
+      return;
+    }
+
+    if (target.targetType === 'comment' || target.targetType === 'group_comment') {
+      setComments((cur) => cur.filter((comment) => comment.id !== target.targetId));
+      return;
+    }
+
+    setComments((cur) =>
+      cur.map((comment) => ({
+        ...comment,
+        replies: (comment.replies || []).filter((reply) => reply.id !== target.targetId),
+      })),
+    );
+  }, []);
+
+  const openModeration = useCallback(
+    (target: ModerationTarget) => {
+      if (!target.authorId || target.authorId === user?.id) return;
+      setModerationTarget(target);
+    },
+    [user?.id],
+  );
 
   const renderBadge = useCallback((count: number, inline = false) => {
     if (count <= 0) return null;
@@ -522,6 +586,10 @@ export default function CommunityQaFeed({
       : await createPost(newQuestion.trim(), isAnonymousPost);
     setIsSavingPost(false);
     if (error) {
+      if (isContentBlockedError(error)) {
+        Alert.alert(tm('filter.blockedTitle'), tm('filter.blockedMessage'));
+        return;
+      }
       Alert.alert(t('common.community'), t('feed.postCreateFailed'));
       return;
     }
@@ -530,7 +598,7 @@ export default function CommunityQaFeed({
     setShowCreateModal(false);
     setIsLoading(true);
     loadPosts();
-  }, [groupId, isAnonymousPost, loadPosts, newQuestion, t, user?.id]);
+  }, [groupId, isAnonymousPost, loadPosts, newQuestion, t, tm, user?.id]);
 
   const handleCreateComment = useCallback(async () => {
     if (!selectedPost) return;
@@ -544,6 +612,10 @@ export default function CommunityQaFeed({
       : await createComment(selectedPost.id, newAnswer.trim(), isAnonymousAnswer);
     setIsSavingAnswer(false);
     if (error) {
+      if (isContentBlockedError(error)) {
+        Alert.alert(tm('filter.blockedTitle'), tm('filter.blockedMessage'));
+        return;
+      }
       Alert.alert(t('common.replies'), t('feed.replySaveFailed'));
       return;
     }
@@ -553,7 +625,7 @@ export default function CommunityQaFeed({
     setSelectedPost(updatedPost);
     setPosts((cur) => cur.map((post) => (post.id === selectedPost.id ? updatedPost : post)));
     await loadCommentsForPost(updatedPost);
-  }, [groupId, isAnonymousAnswer, loadCommentsForPost, newAnswer, selectedPost, t]);
+  }, [groupId, isAnonymousAnswer, loadCommentsForPost, newAnswer, selectedPost, t, tm]);
 
   const handleCreateReply = useCallback(async (comment: Comment) => {
     if (!replyText.trim()) {
@@ -568,6 +640,10 @@ export default function CommunityQaFeed({
     setIsSavingReply(false);
 
     if (error) {
+      if (isContentBlockedError(error)) {
+        Alert.alert(tm('filter.blockedTitle'), tm('filter.blockedMessage'));
+        return;
+      }
       Alert.alert(t('common.replies'), t('feed.nestedReplySaveFailed'));
       return;
     }
@@ -577,7 +653,7 @@ export default function CommunityQaFeed({
       cur.map((item) => (item.id === comment.id ? { ...item, replies } : item)),
     );
     closeInlineReplyComposer();
-  }, [closeInlineReplyComposer, groupId, isAnonymousReply, loadRepliesForComment, replyText, t]);
+  }, [closeInlineReplyComposer, groupId, isAnonymousReply, loadRepliesForComment, replyText, t, tm]);
 
   const closeThreadModal = useCallback(() => {
     setShowThreadModal(false);
@@ -713,18 +789,23 @@ export default function CommunityQaFeed({
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
+    // blockedVersion hält die Liste synchron, wenn während der Sitzung
+    // jemand blockiert wird.
+    void blockedVersion;
+    const visiblePosts = posts.filter((post) => !isUserBlocked(post.user_id));
+
     switch (selectedFilter) {
       case 'hot':
-        return posts.filter(isHotPost);
+        return visiblePosts.filter(isHotPost);
       case 'today':
-        return posts.filter(isTodayPost);
+        return visiblePosts.filter(isTodayPost);
       case 'questions':
-        return posts.filter(isQuestionPost);
+        return visiblePosts.filter(isQuestionPost);
       case 'all':
       default:
-        return posts;
+        return visiblePosts;
     }
-  }, [posts, selectedFilter]);
+  }, [blockedVersion, posts, selectedFilter]);
 
   const trendingTopics = useMemo(() => {
     const orderedFilters: CommunityFeedFilter[] = ['hot', 'today', 'questions', 'all'];
@@ -938,8 +1019,20 @@ export default function CommunityQaFeed({
               <TouchableOpacity style={styles.moreBtn} activeOpacity={0.7} onPress={() => handleDeletePost(item)}>
                 <IconSymbol name="trash" size={18} color={tertiaryText} />
               </TouchableOpacity>
-            ) : !item.is_anonymous ? null : (
-              <TouchableOpacity style={styles.moreBtn} activeOpacity={0.6} disabled>
+            ) : (
+              <TouchableOpacity
+                style={styles.moreBtn}
+                activeOpacity={0.7}
+                accessibilityLabel={tm('sheet.title')}
+                onPress={() =>
+                  openModeration({
+                    targetType: groupId ? 'group_post' : 'post',
+                    targetId: item.id,
+                    authorId: item.user_id,
+                    authorName: displayName,
+                  })
+                }
+              >
                 <IconSymbol name="ellipsis" size={18} color={tertiaryText} />
               </TouchableOpacity>
             )}
@@ -1021,10 +1114,28 @@ export default function CommunityQaFeed({
                 <ThemedText style={[styles.replyLikeCount, { color: tertiaryText }]}>{reply.likes_count}</ThemedText>
               )}
             </TouchableOpacity>
-            {isOwnReply && (
+            {isOwnReply ? (
               <TouchableOpacity onPress={() => handleDeleteReply(parentCommentId, reply)} activeOpacity={0.7} style={styles.replyDeleteBtn}>
                 <IconSymbol name="trash" size={12} color={tertiaryText} />
                 <ThemedText style={[styles.replyDeleteText, { color: tertiaryText }]}>{t('common.delete')}</ThemedText>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() =>
+                  openModeration({
+                    targetType: groupId ? 'group_nested_comment' : 'nested_comment',
+                    targetId: reply.id,
+                    authorId: reply.user_id,
+                    authorName: displayName,
+                  })
+                }
+                activeOpacity={0.7}
+                style={styles.replyDeleteBtn}
+              >
+                <IconSymbol name="flag" size={12} color={tertiaryText} />
+                <ThemedText style={[styles.replyDeleteText, { color: tertiaryText }]}>
+                  {tm('sheet.report')}
+                </ThemedText>
               </TouchableOpacity>
             )}
           </View>
@@ -1086,10 +1197,28 @@ export default function CommunityQaFeed({
                 {t(replyCount === 1 ? 'feed.reply.one' : 'feed.reply.other', { count: replyCount })}
               </ThemedText>
             )}
-            {isOwnComment && (
+            {isOwnComment ? (
               <TouchableOpacity onPress={() => handleDeleteComment(item)} activeOpacity={0.7} style={styles.commentDeleteBtn}>
                 <IconSymbol name="trash" size={13} color={tertiaryText} />
                 <ThemedText style={[styles.commentDeleteText, { color: tertiaryText }]}>{t('common.delete')}</ThemedText>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() =>
+                  openModeration({
+                    targetType: groupId ? 'group_comment' : 'comment',
+                    targetId: item.id,
+                    authorId: item.user_id,
+                    authorName: displayName,
+                  })
+                }
+                activeOpacity={0.7}
+                style={styles.commentDeleteBtn}
+              >
+                <IconSymbol name="flag" size={13} color={tertiaryText} />
+                <ThemedText style={[styles.commentDeleteText, { color: tertiaryText }]}>
+                  {tm('sheet.report')}
+                </ThemedText>
               </TouchableOpacity>
             )}
           </View>
@@ -1468,6 +1597,15 @@ export default function CommunityQaFeed({
               </KeyboardAvoidingView>
             </View>
           </Modal>
+
+          <ModerationSheet
+            visible={!!moderationTarget}
+            target={moderationTarget}
+            locale={locale}
+            onClose={() => setModerationTarget(null)}
+            onContentHidden={hideReportedContent}
+            onUserBlocked={dropBlockedAuthor}
+          />
         </SafeAreaView>
       </ThemedView>
     </ThemedBackground>

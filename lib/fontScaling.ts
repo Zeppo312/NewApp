@@ -46,7 +46,7 @@ export function useTileGridMetrics() {
   const scale = useFontScale();
   const columns = scale >= 1.3 ? 1 : 2;
   const itemHeight =
-    columns === 1 ? Math.round(78 * scale + 52) : Math.round(140 * scale);
+    columns === 1 ? Math.round(92 * scale + 56) : Math.round(140 * scale);
   return { columns, itemHeight, scale, isSingleColumn: columns === 1 };
 }
 

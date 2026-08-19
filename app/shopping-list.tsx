@@ -27,7 +27,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   DEFAULT_SHOPPING_LOCALE,
@@ -265,7 +265,9 @@ function ShoppingListScreenContent() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [torchEnabled, setTorchEnabled] = useState(false);
   const insets = useSafeAreaInsets();
-  const isDark = (useColorScheme() ?? 'light') === 'dark';
+  const adaptiveColors = useAdaptiveColors();
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
   const [zoomSelection, setZoomSelection] = useState('1x');
   const [purchaseScanVisible, setPurchaseScanVisible] = useState(false);
@@ -1005,14 +1007,14 @@ function ShoppingListScreenContent() {
           return (
             <TouchableOpacity
               key={categoryId}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              style={[styles.filterChip, isDark && styles.filterChipDark, isActive && styles.filterChipActive, isActive && isDark && styles.filterChipActiveDark]}
               onPress={() => setSelectedCategory(categoryId)}
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={t('category.accessibility', { category: label })}
             >
               <ThemedText
-                style={[styles.filterChipText, isActive && styles.filterChipTextActive]}
+                style={[styles.filterChipText, isDark && styles.filterChipTextDark, isActive && styles.filterChipTextActive, isActive && isDark && styles.filterChipTextActiveDark]}
               >
                 {label} {categoryCounts[categoryId] ?? 0}
               </ThemedText>
@@ -1040,7 +1042,7 @@ function ShoppingListScreenContent() {
             return (
               <TouchableOpacity
                 key={option.id}
-                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                style={[styles.filterChip, isDark && styles.filterChipDark, isActive && styles.filterChipActive, isActive && isDark && styles.filterChipActiveDark]}
                 onPress={() => {
                   if (section === 'inventory') {
                     setInventorySort(option.id as InventorySortKey);
@@ -1053,7 +1055,7 @@ function ShoppingListScreenContent() {
                 accessibilityLabel={t('sort.accessibility', { sort: label })}
               >
                 <ThemedText
-                  style={[styles.filterChipText, isActive && styles.filterChipTextActive]}
+                  style={[styles.filterChipText, isDark && styles.filterChipTextDark, isActive && styles.filterChipTextActive, isActive && isDark && styles.filterChipTextActiveDark]}
                 >
                   {label}
                 </ThemedText>
@@ -1133,7 +1135,7 @@ function ShoppingListScreenContent() {
               {renderCategoryFilter()}
 
               {section === 'inventory' ? (
-                <View style={styles.switchRow}>
+                <View style={[styles.switchRow, isDark && styles.switchRowDark]}>
                   <View style={styles.switchTextBlock}>
                     <ThemedText style={styles.switchTitle}>{t('filter.lowStockOnly')}</ThemedText>
                     <ThemedText style={styles.switchSubtitle}>
@@ -1304,7 +1306,15 @@ function ShoppingListScreenContent() {
   const renderShoppingRow = (item: ShoppingListItem) => {
     const quantityLabel = shoppingQuantityLabel(item);
     return (
-      <View key={item.id} style={[styles.shoppingRow, item.is_purchased && styles.shoppingRowPurchased]}>
+      <View
+        key={item.id}
+        style={[
+          styles.shoppingRow,
+          isDark && styles.shoppingRowDark,
+          item.is_purchased && styles.shoppingRowPurchased,
+          item.is_purchased && isDark && styles.shoppingRowPurchasedDark,
+        ]}
+      >
         <TouchableOpacity
           style={styles.shoppingRowMain}
           onPress={() => handleTogglePurchased(item)}
@@ -1320,17 +1330,26 @@ function ShoppingListScreenContent() {
           </View>
           <View style={styles.shoppingRowText}>
             <ThemedText
-              style={[styles.shoppingTitle, item.is_purchased && styles.shoppingTitlePurchased]}
+              style={[
+                styles.shoppingTitle,
+                isDark && styles.shoppingTitleDark,
+                item.is_purchased && styles.shoppingTitlePurchased,
+              ]}
               numberOfLines={2}
             >
               {item.title}
             </ThemedText>
             <View style={styles.shoppingMetaRow}>
               <View style={styles.shoppingSourcePill}>
-                <ThemedText style={styles.shoppingSourceText}>{shoppingSourceLabel(item)}</ThemedText>
+                <ThemedText style={[styles.shoppingSourceText, isDark && styles.shoppingSourceTextDark]}>
+                  {shoppingSourceLabel(item)}
+                </ThemedText>
               </View>
               {item.notes ? (
-                <ThemedText style={styles.shoppingNoteText} numberOfLines={1}>
+                <ThemedText
+                  style={[styles.shoppingNoteText, isDark && styles.shoppingNoteTextDark]}
+                  numberOfLines={1}
+                >
                   {item.notes}
                 </ThemedText>
               ) : null}
@@ -1339,7 +1358,9 @@ function ShoppingListScreenContent() {
         </TouchableOpacity>
         {quantityLabel ? (
           <View style={styles.shoppingQuantityPill}>
-            <ThemedText style={styles.shoppingQuantityText}>{quantityLabel}</ThemedText>
+            <ThemedText style={[styles.shoppingQuantityText, isDark && styles.shoppingQuantityTextDark]}>
+              {quantityLabel}
+            </ThemedText>
           </View>
         ) : null}
         <TouchableOpacity
@@ -1358,7 +1379,12 @@ function ShoppingListScreenContent() {
     return (
       <View
         key={item.id}
-        style={[styles.shoppingTile, item.is_purchased && styles.shoppingTilePurchased]}
+        style={[
+          styles.shoppingTile,
+          isDark && styles.shoppingTileDark,
+          item.is_purchased && styles.shoppingTilePurchased,
+          item.is_purchased && isDark && styles.shoppingTilePurchasedDark,
+        ]}
       >
         <TouchableOpacity
           style={styles.shoppingTileMain}
@@ -1378,22 +1404,35 @@ function ShoppingListScreenContent() {
               color={item.is_purchased ? '#5FA97A' : PRIMARY}
             />
             {quantityLabel ? (
-              <ThemedText style={styles.shoppingTileQuantity} numberOfLines={1}>
+              <ThemedText
+                style={[styles.shoppingTileQuantity, isDark && styles.shoppingQuantityTextDark]}
+                numberOfLines={1}
+              >
                 {quantityLabel}
               </ThemedText>
             ) : null}
           </View>
           <ThemedText
-            style={[styles.shoppingTileTitle, item.is_purchased && styles.shoppingTitlePurchased]}
+            style={[
+              styles.shoppingTileTitle,
+              isDark && styles.shoppingTileTitleDark,
+              item.is_purchased && styles.shoppingTitlePurchased,
+            ]}
             numberOfLines={3}
           >
             {item.title}
           </ThemedText>
-          <ThemedText style={styles.shoppingSourceText} numberOfLines={1}>
+          <ThemedText
+            style={[styles.shoppingSourceText, isDark && styles.shoppingSourceTextDark]}
+            numberOfLines={1}
+          >
             {shoppingSourceLabel(item)}
           </ThemedText>
           {item.notes ? (
-            <ThemedText style={styles.shoppingTileNote} numberOfLines={2}>
+            <ThemedText
+              style={[styles.shoppingTileNote, isDark && styles.shoppingTileNoteDark]}
+              numberOfLines={2}
+            >
               {item.notes}
             </ThemedText>
           ) : null}
@@ -1436,16 +1475,31 @@ function ShoppingListScreenContent() {
       .map(([category, categoryItems]) => (
         <LiquidGlassCard
           key={category}
-          style={[styles.shoppingGroupCard, variant === 'purchased' && styles.shoppingGroupCardPurchased]}
+          style={[
+            styles.shoppingGroupCard,
+            isDark && styles.shoppingGroupCardDark,
+            variant === 'purchased' && styles.shoppingGroupCardPurchased,
+            variant === 'purchased' && isDark && styles.shoppingGroupCardPurchasedDark,
+          ]}
           radius={SHOPPING_CARD_RADIUS}
           intensity={18}
-          overlayColor={variant === 'purchased' ? 'rgba(255,255,255,0.34)' : 'rgba(255,255,255,0.42)'}
-          borderColor="rgba(125,90,80,0.10)"
+          overlayColor={
+            isDark
+              ? variant === 'purchased'
+                ? 'rgba(18,15,22,0.38)'
+                : 'rgba(18,15,22,0.48)'
+              : variant === 'purchased'
+              ? 'rgba(255,255,255,0.34)'
+              : 'rgba(255,255,255,0.42)'
+          }
+          borderColor={isDark ? 'rgba(255,255,255,0.12)' : 'rgba(125,90,80,0.10)'}
         >
           <View style={styles.shoppingGroup}>
             <View style={styles.shoppingGroupHeader}>
-              <ThemedText style={styles.shoppingGroupTitle}>{categoryLabel(category)}</ThemedText>
-              <ThemedText style={styles.shoppingGroupCount}>
+              <ThemedText style={[styles.shoppingGroupTitle, isDark && styles.shoppingGroupTitleDark]}>
+                {categoryLabel(category)}
+              </ThemedText>
+              <ThemedText style={[styles.shoppingGroupCount, isDark && styles.shoppingGroupCountDark]}>
                 {t(`shopping.itemCount.${categoryItems.length === 1 ? 'one' : 'other'}`, {
                   count: categoryItems.length,
                 })}
@@ -1475,15 +1529,19 @@ function ShoppingListScreenContent() {
       .map((group) => (
         <LiquidGlassCard
           key={getLocalDateKey(group.purchasedAt)}
-          style={[styles.shoppingGroupCard, styles.shoppingGroupCardPurchased]}
+          style={[
+            styles.shoppingGroupCard,
+            styles.shoppingGroupCardPurchased,
+            isDark && styles.shoppingGroupCardPurchasedDark,
+          ]}
           radius={SHOPPING_CARD_RADIUS}
           intensity={18}
-          overlayColor="rgba(255,255,255,0.34)"
-          borderColor="rgba(125,90,80,0.10)"
+          overlayColor={isDark ? 'rgba(18,15,22,0.38)' : 'rgba(255,255,255,0.34)'}
+          borderColor={isDark ? 'rgba(255,255,255,0.12)' : 'rgba(125,90,80,0.10)'}
         >
           <View style={styles.shoppingGroup}>
             <View style={styles.shoppingGroupHeader}>
-              <ThemedText style={styles.shoppingGroupTitle}>
+              <ThemedText style={[styles.shoppingGroupTitle, isDark && styles.shoppingGroupTitleDark]}>
                 {t('shopping.purchaseDate', { date: formatPurchaseDate(group.purchasedAt) })}
               </ThemedText>
             </View>
@@ -1516,13 +1574,24 @@ function ShoppingListScreenContent() {
         key={item.id}
         style={[
           styles.inventoryCard,
+          isDark && styles.inventoryCardDark,
           low && styles.inventoryCardLow,
+          low && isDark && styles.inventoryCardLowDark,
           isExpanded && styles.inventoryCardExpanded,
+          isExpanded && isDark && styles.inventoryCardExpandedDark,
         ]}
         radius={INVENTORY_CARD_RADIUS}
         intensity={18}
-        overlayColor="rgba(255,255,255,0.66)"
-        borderColor={low ? 'rgba(196,69,58,0.42)' : 'rgba(125,90,80,0.14)'}
+        overlayColor={isDark ? 'rgba(18,15,22,0.52)' : 'rgba(255,255,255,0.66)'}
+        borderColor={
+          low
+            ? isDark
+              ? 'rgba(255,138,138,0.42)'
+              : 'rgba(196,69,58,0.42)'
+            : isDark
+            ? 'rgba(255,255,255,0.12)'
+            : 'rgba(125,90,80,0.14)'
+        }
       >
         <TouchableOpacity
           style={styles.inventoryCompactRow}
@@ -1537,7 +1606,10 @@ function ShoppingListScreenContent() {
           <View style={[styles.inventoryStatusDot, low && styles.inventoryStatusDotLow]} />
           <View style={styles.inventoryCompactText}>
             <View style={styles.inventoryNameRow}>
-              <ThemedText style={styles.inventoryName} numberOfLines={1}>
+              <ThemedText
+                style={[styles.inventoryName, isDark && styles.inventoryNameDark]}
+                numberOfLines={1}
+              >
                 {item.name}
               </ThemedText>
               {low ? (
@@ -1571,7 +1643,10 @@ function ShoppingListScreenContent() {
                 ? getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, levelOption.percent)
                 : formatQuantity(totalQuantity, item.unit)}
             </ThemedText>
-            <ThemedText style={styles.inventoryCompactMeta} numberOfLines={1}>
+            <ThemedText
+              style={[styles.inventoryCompactMeta, isDark && styles.inventoryCompactMetaDark]}
+              numberOfLines={1}
+            >
               {levelTracked
                 ? t('inventory.levelPercent', { percent: levelOption.percent })
                 : daysLeft !== null
@@ -1587,9 +1662,9 @@ function ShoppingListScreenContent() {
         </TouchableOpacity>
 
         {isExpanded ? (
-          <View style={styles.inventoryDetails}>
+          <View style={[styles.inventoryDetails, isDark && styles.inventoryDetailsDark]}>
             <View style={styles.inventoryHero}>
-              <View style={styles.inventoryHeroTile}>
+              <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
                 <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
                   {levelTracked
                     ? `${levelOption.percent} %`
@@ -1600,14 +1675,14 @@ function ShoppingListScreenContent() {
                 </ThemedText>
               </View>
               {levelTracked ? (
-                <View style={styles.inventoryHeroTile}>
+                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
                   <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
                     {getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, levelOption.percent)}
                   </ThemedText>
                   <ThemedText style={styles.inventoryHeroLabel}>{t('common.status')}</ThemedText>
                 </View>
               ) : hasPackages ? (
-                <View style={styles.inventoryHeroTile}>
+                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
                   <ThemedText style={styles.inventoryHeroValue}>{sealedPackages}</ThemedText>
                   <ThemedText style={styles.inventoryHeroLabel}>
                     {t(`inventory.fullPackage.${sealedPackages === 1 ? 'one' : 'other'}`)}
@@ -1615,7 +1690,7 @@ function ShoppingListScreenContent() {
                 </View>
               ) : null}
               {!levelTracked && daysLeft !== null ? (
-                <View style={styles.inventoryHeroTile}>
+                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
                   <ThemedText style={styles.inventoryHeroValue}>~{daysLeft}</ThemedText>
                   <ThemedText style={styles.inventoryHeroLabel}>{t('inventory.daysReach')}</ThemedText>
                 </View>
@@ -1624,7 +1699,7 @@ function ShoppingListScreenContent() {
 
             {levelTracked ? (
               <View style={styles.packageProgressBlock}>
-                <View style={styles.packageProgressTrack}>
+                <View style={[styles.packageProgressTrack, isDark && styles.packageProgressTrackDark]}>
                   <View
                     style={[
                       styles.packageProgressFill,
@@ -1639,7 +1714,7 @@ function ShoppingListScreenContent() {
               </View>
             ) : hasPackages ? (
               <View style={styles.packageProgressBlock}>
-                <View style={styles.packageProgressTrack}>
+                <View style={[styles.packageProgressTrack, isDark && styles.packageProgressTrackDark]}>
                   <View
                     style={[
                       styles.packageProgressFill,
@@ -1668,6 +1743,7 @@ function ShoppingListScreenContent() {
                         key={option.percent}
                         style={[
                           styles.levelOptionButton,
+                          isDark && styles.levelOptionButtonDark,
                           active && styles.levelOptionButtonActive,
                           option.percent === 0 && active && styles.levelOptionButtonEmpty,
                         ]}
@@ -1682,6 +1758,7 @@ function ShoppingListScreenContent() {
                         <ThemedText
                           style={[
                             styles.levelOptionValue,
+                            isDark && styles.levelOptionValueDark,
                             active && styles.levelOptionValueActive,
                           ]}
                         >
@@ -1690,6 +1767,7 @@ function ShoppingListScreenContent() {
                         <ThemedText
                           style={[
                             styles.levelOptionLabel,
+                            isDark && styles.levelOptionLabelDark,
                             active && styles.levelOptionValueActive,
                           ]}
                         >
@@ -1728,7 +1806,7 @@ function ShoppingListScreenContent() {
 
                 <View style={styles.inventoryDetailControls}>
                   <ThemedText style={styles.inventoryControlLabel}>{t('inventory.adjust')}</ThemedText>
-                  <View style={styles.quantityStepper}>
+                  <View style={[styles.quantityStepper, isDark && styles.quantityStepperDark]}>
                     <TouchableOpacity
                       style={[styles.stepperButton, totalQuantity <= 0 && styles.stepperButtonDisabled]}
                       onPress={() => handleAdjustQuantity(item, -1, 'usage')}
@@ -1741,7 +1819,7 @@ function ShoppingListScreenContent() {
                         color={totalQuantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
                       />
                     </TouchableOpacity>
-                    <View style={styles.stepperValue}>
+                    <View style={[styles.stepperValue, isDark && styles.stepperValueDark]}>
                       <ThemedText style={styles.stepperValueText}>
                         {formatQuantity(totalQuantity, item.unit)}
                       </ThemedText>
@@ -1761,35 +1839,36 @@ function ShoppingListScreenContent() {
             <View style={styles.inventoryActions}>
               {!levelTracked && hasPackages ? (
                 <TouchableOpacity
-                  style={styles.inventoryActionButton}
+                  style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
                   onPress={() => handleAddPackage(item)}
                 >
-                  <IconSymbol name="plus" size={15} color={PRIMARY} />
-                  <ThemedText style={styles.inventoryActionText}>{t('inventory.package')}</ThemedText>
+                  <IconSymbol name="plus" size={15} color={isDark ? '#C496F0' : PRIMARY} />
+                  <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.package')}</ThemedText>
                 </TouchableOpacity>
               ) : null}
               {!levelTracked ? (
                 <TouchableOpacity
-                  style={styles.inventoryActionButton}
+                  style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
                   onPress={() =>
                     handleAdjustQuantity(item, -(item.daily_usage_estimate || 1), 'usage')
                   }
                 >
-                  <IconSymbol name="minus" size={15} color={PRIMARY} />
-                  <ThemedText style={styles.inventoryActionText}>{t('inventory.usage')}</ThemedText>
+                  <IconSymbol name="minus" size={15} color={isDark ? '#C496F0' : PRIMARY} />
+                  <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.usage')}</ThemedText>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity
-                style={styles.inventoryActionButton}
+                style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
                 onPress={() => setEditingInventory(item)}
                 accessibilityLabel={t('inventory.editAccessibility', { name: item.name })}
               >
-                <IconSymbol name="pencil" size={15} color={PRIMARY} />
-                <ThemedText style={styles.inventoryActionText}>{t('inventory.edit')}</ThemedText>
+                <IconSymbol name="pencil" size={15} color={isDark ? '#C496F0' : PRIMARY} />
+                <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.edit')}</ThemedText>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   styles.inventoryActionButton,
+                  isDark && styles.inventoryActionButtonDark,
                   !isOnShoppingList && styles.inventoryActionPrimary,
                   isOnShoppingList && styles.inventoryActionOnList,
                 ]}
@@ -1798,11 +1877,12 @@ function ShoppingListScreenContent() {
                 <IconSymbol
                   name={isOnShoppingList ? 'checkmark' : 'cart'}
                   size={15}
-                  color={isOnShoppingList ? PRIMARY : '#FFFFFF'}
+                  color={isOnShoppingList ? (isDark ? '#C496F0' : PRIMARY) : '#FFFFFF'}
                 />
                 <ThemedText
                   style={[
                     styles.inventoryActionText,
+                    isDark && styles.inventoryActionTextDark,
                     !isOnShoppingList && styles.inventoryActionPrimaryText,
                   ]}
                 >
@@ -1848,7 +1928,7 @@ function ShoppingListScreenContent() {
             >
               <View style={styles.inventoryGroupTitleRow}>
                 <IconSymbol name="shippingbox" size={16} color={PRIMARY} />
-                <ThemedText style={styles.inventoryGroupTitle}>{categoryLabel(category)}</ThemedText>
+                <ThemedText style={[styles.inventoryGroupTitle, isDark && styles.inventoryGroupTitleDark]}>{categoryLabel(category)}</ThemedText>
               </View>
               <View style={styles.inventoryGroupHeaderRight}>
                 <ThemedText style={styles.inventoryGroupCount}>
@@ -2007,7 +2087,10 @@ function ShoppingListScreenContent() {
                   {lowStockShoppingSuggestions.length > 0 ? (
                     <View style={styles.suggestionList}>
                       {lowStockShoppingSuggestions.slice(0, 3).map((item) => (
-                        <View key={item.id} style={styles.suggestionRow}>
+                        <View
+                          key={item.id}
+                          style={[styles.suggestionRow, isDark && styles.suggestionRowDark]}
+                        >
                           <View style={styles.suggestionTextBlock}>
                             <ThemedText style={styles.suggestionTitle}>{item.name}</ThemedText>
                             <ThemedText style={styles.suggestionMeta}>
@@ -2038,7 +2121,12 @@ function ShoppingListScreenContent() {
                 <View style={styles.shoppingSectionHeader}>
                   <View style={styles.shoppingSectionTextBlock}>
                     <ThemedText style={styles.sectionTitle}>{t('shopping.toBuy')}</ThemedText>
-                    <ThemedText style={styles.shoppingSectionSubtitle}>
+                    <ThemedText
+                      style={[
+                        styles.shoppingSectionSubtitle,
+                        isDark && styles.shoppingSectionSubtitleDark,
+                      ]}
+                    >
                       {t(`shopping.openCount.${openItems.length === 1 ? 'one' : 'other'}`, {
                         count: openItems.length,
                       })}
@@ -2063,7 +2151,11 @@ function ShoppingListScreenContent() {
                 {purchasedItems.length > 0 ? (
                   <View style={styles.shoppingPurchasedBlock}>
                     <TouchableOpacity
-                      style={[styles.collapsibleSectionHeader, styles.shoppingPurchasedHeader]}
+                      style={[
+                        styles.collapsibleSectionHeader,
+                        styles.shoppingPurchasedHeader,
+                        isDark && styles.shoppingPurchasedHeaderDark,
+                      ]}
                       onPress={togglePurchasedExpanded}
                       activeOpacity={0.82}
                       accessibilityRole="button"
@@ -2075,7 +2167,7 @@ function ShoppingListScreenContent() {
                       <IconSymbol
                         name={isPurchasedExpanded ? 'chevron.up' : 'chevron.down'}
                         size={20}
-                        color="rgba(125,90,80,0.65)"
+                        color={isDark ? 'rgba(240,230,220,0.7)' : 'rgba(125,90,80,0.65)'}
                       />
                     </TouchableOpacity>
                     {isPurchasedExpanded ? renderPurchasedDateGroups(purchasedItems) : null}
@@ -2435,6 +2527,7 @@ function ShoppingListScreenContent() {
                               key={option.percent}
                               style={[
                                 styles.levelOptionButton,
+                                isDark && styles.levelOptionButtonDark,
                                 active && styles.levelOptionButtonActive,
                                 option.percent === 0 && active && styles.levelOptionButtonEmpty,
                               ]}
@@ -2450,6 +2543,7 @@ function ShoppingListScreenContent() {
                               <ThemedText
                                 style={[
                                   styles.levelOptionValue,
+                                  isDark && styles.levelOptionValueDark,
                                   active && styles.levelOptionValueActive,
                                 ]}
                               >
@@ -2458,6 +2552,7 @@ function ShoppingListScreenContent() {
                               <ThemedText
                                 style={[
                                   styles.levelOptionLabel,
+                                  isDark && styles.levelOptionLabelDark,
                                   active && styles.levelOptionValueActive,
                                 ]}
                               >
@@ -2867,12 +2962,19 @@ const styles = StyleSheet.create({
   },
   shoppingSectionTextBlock: { flex: 1, gap: 2 },
   shoppingSectionSubtitle: { fontSize: 12, fontWeight: '700', color: 'rgba(125,90,80,0.62)' },
+  shoppingSectionSubtitleDark: { color: 'rgba(240,230,220,0.68)' },
   shoppingGroupCard: {
     borderRadius: SHOPPING_CARD_RADIUS,
     backgroundColor: 'rgba(255,255,255,0.46)',
   },
+  shoppingGroupCardDark: {
+    backgroundColor: 'rgba(18,15,22,0.52)',
+  },
   shoppingGroupCardPurchased: {
     backgroundColor: 'rgba(255,255,255,0.34)',
+  },
+  shoppingGroupCardPurchasedDark: {
+    backgroundColor: 'rgba(18,15,22,0.38)',
   },
   shoppingRow: {
     minHeight: 58,
@@ -2884,8 +2986,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(125,90,80,0.07)',
   },
+  shoppingRowDark: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   shoppingRowPurchased: {
     backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  shoppingRowPurchasedDark: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   shoppingRowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 8 },
   shoppingCheckSlot: {
@@ -2896,6 +3005,7 @@ const styles = StyleSheet.create({
   },
   shoppingRowText: { flex: 1, minWidth: 0, gap: 5 },
   shoppingTitle: { fontSize: 15, fontWeight: '600', color: '#3A2E20' },
+  shoppingTitleDark: { color: '#F5EFEA' },
   shoppingTitlePurchased: { textDecorationLine: 'line-through', opacity: 0.5 },
   shoppingMeta: { fontSize: 12, opacity: 0.6 },
   shoppingMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -2905,7 +3015,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   shoppingSourceText: { fontSize: 12, fontWeight: '700', color: 'rgba(125,90,80,0.62)' },
+  shoppingSourceTextDark: { color: 'rgba(240,230,220,0.62)' },
   shoppingNoteText: { flex: 1, fontSize: 12, color: 'rgba(125,90,80,0.62)' },
+  shoppingNoteTextDark: { color: 'rgba(240,230,220,0.62)' },
   shoppingQuantityPill: {
     maxWidth: 72,
     minHeight: 34,
@@ -2920,6 +3032,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     textAlign: 'right',
   },
+  shoppingQuantityTextDark: { color: 'rgba(245,239,234,0.86)' },
   shoppingGroup: { gap: 9, padding: 12 },
   shoppingGroupHeader: {
     minHeight: 32,
@@ -2929,6 +3042,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   shoppingGroupTitle: { flex: 1, fontSize: 15, fontWeight: '800', color: '#5F463A' },
+  shoppingGroupTitleDark: { color: '#F0E6DC' },
   shoppingGroupCount: {
     textAlign: 'center',
     fontSize: 12,
@@ -2936,6 +3050,7 @@ const styles = StyleSheet.create({
     color: 'rgba(125,90,80,0.56)',
     fontVariant: ['tabular-nums'],
   },
+  shoppingGroupCountDark: { color: 'rgba(240,230,220,0.6)' },
   shoppingGroupList: { gap: 7 },
   shoppingTileGrid: {
     flexDirection: 'row',
@@ -2952,8 +3067,15 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(125,90,80,0.09)',
     overflow: 'hidden',
   },
+  shoppingTileDark: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   shoppingTilePurchased: {
     backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  shoppingTilePurchasedDark: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   shoppingTileMain: {
     flex: 1,
@@ -2982,11 +3104,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#3A2E20',
   },
+  shoppingTileTitleDark: { color: '#F5EFEA' },
   shoppingTileNote: {
     fontSize: 12,
     lineHeight: 16,
     color: 'rgba(125,90,80,0.62)',
   },
+  shoppingTileNoteDark: { color: 'rgba(240,230,220,0.62)' },
   shoppingTileDeleteButton: {
     position: 'absolute',
     right: 7,
@@ -3008,6 +3132,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(125,90,80,0.08)',
   },
+  shoppingPurchasedHeaderDark: {
+    backgroundColor: 'rgba(18,15,22,0.44)',
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
   rowIconButton: { padding: 8 },
   collapsibleSectionHeader: {
     minHeight: 34,
@@ -3028,6 +3156,7 @@ const styles = StyleSheet.create({
   inventoryGroupTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
   inventoryGroupHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   inventoryGroupTitle: { fontSize: 15, fontWeight: '800', color: '#5F463A' },
+  inventoryGroupTitleDark: { color: '#F0E6DC' },
   inventoryGroupCount: {
     fontSize: 12,
     fontWeight: '800',
@@ -3039,11 +3168,20 @@ const styles = StyleSheet.create({
     borderRadius: INVENTORY_CARD_RADIUS,
     backgroundColor: 'rgba(255,255,255,0.56)',
   },
+  inventoryCardDark: {
+    backgroundColor: 'rgba(18,15,22,0.52)',
+  },
   inventoryCardLow: {
     backgroundColor: 'rgba(255,247,242,0.78)',
   },
+  inventoryCardLowDark: {
+    backgroundColor: 'rgba(58,26,24,0.60)',
+  },
   inventoryCardExpanded: {
     backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  inventoryCardExpandedDark: {
+    backgroundColor: 'rgba(24,20,28,0.66)',
   },
   inventoryCompactRow: {
     minHeight: 70,
@@ -3063,6 +3201,7 @@ const styles = StyleSheet.create({
   inventoryCompactText: { flex: 1, minWidth: 0, gap: 3 },
   inventoryNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   inventoryName: { flex: 1, fontSize: 16, fontWeight: '800', color: '#3A2E20' },
+  inventoryNameDark: { color: '#F5EFEA' },
   inventoryCategory: { fontSize: 12, opacity: 0.6 },
   inventoryCompactMetric: { width: 84, alignItems: 'flex-end', gap: 2 },
   inventoryCompactQuantity: {
@@ -3080,6 +3219,7 @@ const styles = StyleSheet.create({
     color: 'rgba(125,90,80,0.62)',
     fontVariant: ['tabular-nums'],
   },
+  inventoryCompactMetaDark: { color: 'rgba(240,230,220,0.62)' },
   inventoryDetails: {
     gap: 10,
     paddingHorizontal: 12,
@@ -3088,6 +3228,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(125,90,80,0.10)',
   },
+  inventoryDetailsDark: { borderTopColor: 'rgba(255,255,255,0.12)' },
   lowStockBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3109,6 +3250,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(125,90,80,0.075)',
     gap: 2,
   },
+  inventoryHeroTileDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
   inventoryHeroValue: {
     fontSize: 20,
     lineHeight: 24,
@@ -3129,6 +3271,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(125,90,80,0.12)',
     overflow: 'hidden',
   },
+  packageProgressTrackDark: { backgroundColor: 'rgba(255,255,255,0.14)' },
   packageProgressFill: {
     height: '100%',
     borderRadius: 4,
@@ -3163,6 +3306,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.45)',
     overflow: 'hidden',
   },
+  quantityStepperDark: { backgroundColor: 'rgba(255,255,255,0.10)' },
   stepperButton: {
     width: 42,
     height: 42,
@@ -3180,6 +3324,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderColor: 'rgba(142,78,198,0.12)',
   },
+  stepperValueDark: { borderColor: 'rgba(255,255,255,0.16)' },
   stepperValueText: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
   inventoryActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   inventoryActionButton: {
@@ -3192,6 +3337,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.5)',
   },
+  inventoryActionButtonDark: { backgroundColor: 'rgba(255,255,255,0.10)' },
   inventoryActionPrimary: { backgroundColor: PRIMARY },
   inventoryActionOnList: {
     backgroundColor: 'rgba(142,78,198,0.10)',
@@ -3199,6 +3345,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(142,78,198,0.20)',
   },
   inventoryActionText: { fontSize: 13, fontWeight: '600', color: PRIMARY },
+  inventoryActionTextDark: { color: '#C496F0' },
   inventoryActionPrimaryText: { color: '#FFFFFF' },
   levelControlBlock: { gap: 8 },
   levelOptionsRow: { flexDirection: 'row', gap: 6 },
@@ -3216,6 +3363,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(142,78,198,0.12)',
   },
+  levelOptionButtonDark: {
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
   levelOptionButtonActive: {
     backgroundColor: PRIMARY,
     borderColor: PRIMARY,
@@ -3230,7 +3381,9 @@ const styles = StyleSheet.create({
     color: PRIMARY,
     fontVariant: ['tabular-nums'],
   },
+  levelOptionValueDark: { color: '#C496F0' },
   levelOptionLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(125,90,80,0.72)' },
+  levelOptionLabelDark: { color: 'rgba(240,230,220,0.72)' },
   levelOptionValueActive: { color: '#FFFFFF' },
   levelEmptyHint: {
     minHeight: 34,
@@ -3257,6 +3410,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.45)',
   },
+  suggestionRowDark: { backgroundColor: 'rgba(255,255,255,0.09)' },
   suggestionTextBlock: { flex: 1 },
   suggestionTitle: { fontSize: 14, fontWeight: '700' },
   suggestionMeta: { fontSize: 12, opacity: 0.65, fontVariant: ['tabular-nums'] },
@@ -3282,12 +3436,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(142,78,198,0.12)',
   },
+  filterChipDark: {
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderColor: 'rgba(255,255,255,0.16)',
+  },
   filterChipActive: {
     backgroundColor: 'rgba(142,78,198,0.12)',
     borderColor: 'rgba(142,78,198,0.24)',
   },
+  filterChipActiveDark: {
+    backgroundColor: 'rgba(142,78,198,0.32)',
+    borderColor: 'rgba(196,150,240,0.48)',
+  },
   filterChipText: { fontSize: 13, fontWeight: '700', color: '#7A4AA6', fontVariant: ['tabular-nums'] },
+  filterChipTextDark: { color: '#D9C2F5' },
   filterChipTextActive: { color: PRIMARY },
+  filterChipTextActiveDark: { color: '#FFFFFF' },
   switchRow: {
     minHeight: 52,
     flexDirection: 'row',
@@ -3299,6 +3463,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.45)',
   },
+  switchRowDark: { backgroundColor: 'rgba(255,255,255,0.09)' },
   switchTextBlock: { flex: 1, gap: 2 },
   switchTitle: { fontSize: 14, fontWeight: '700' },
   switchSubtitle: { fontSize: 12, opacity: 0.65, fontVariant: ['tabular-nums'] },

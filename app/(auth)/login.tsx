@@ -11,9 +11,11 @@ import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { acceptTerms } from '@/lib/termsConsent';
 import {
   AuthTranslationKey,
   DEFAULT_AUTH_LOCALE,
@@ -37,6 +39,9 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
   const [showInvitationField, setShowInvitationField] = useState(prefilledInvitationCode.length > 0);
+  // EULA-Gate: ohne Zustimmung ist keine Anmeldung und keine Registrierung möglich
+  // (App Store Guideline 1.2).
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const accentColor = Colors.light.accent;
   const primaryTextColor = Colors.light.textPrimary;
   const secondaryTextColor = Colors.light.textSecondary;
@@ -133,9 +138,22 @@ export default function LoginScreen() {
     return null;
   };
 
+  // Die Zustimmung wird nur bei der Registrierung aktiv abgefragt. Beim
+  // Anmelden entscheidet der zentrale Consent-Gate, ob ein Bestandskonto die
+  // aktuellen Bedingungen noch bestätigen muss.
+  const ensureTermsAccepted = () => {
+    if (!isRegistering || termsAccepted) return true;
+    Alert.alert(t('login.termsRequiredTitle'), t('login.termsRequiredMessage'), [
+      { text: t('common.ok') },
+    ]);
+    return false;
+  };
+
   const handleAuth = async () => {
     // Reset error state
     setError('');
+
+    if (!ensureTermsAccepted()) return;
 
     // Basic validation
     if (!email || !password) {
@@ -193,7 +211,9 @@ export default function LoginScreen() {
           return;
         }
 
-        // Bei erfolgreicher Anmeldung über zentralen Root-Guard navigieren
+        // Beim Anmelden wird keine Zustimmung gespeichert – das würde eine
+        // Einwilligung dokumentieren, die hier niemand gegeben hat, und den
+        // Consent-Gate für Bestandskonten aushebeln.
         await navigateAfterAuth();
       }
     } catch (err: any) {
@@ -224,6 +244,7 @@ export default function LoginScreen() {
 
   const handleAppleSignIn = async () => {
     setError('');
+    if (!ensureTermsAccepted()) return;
     setIsLoading(true);
     
     try {
@@ -236,6 +257,11 @@ export default function LoginScreen() {
       
       // Check if this is a new user or existing user
       if (data && data.user) {
+        // Nur dokumentieren, wenn im Registrierungsmodus aktiv zugestimmt wurde.
+        if (isRegistering && termsAccepted) {
+          await acceptTerms();
+        }
+
         // Check if user profile exists and is complete
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
@@ -361,10 +387,93 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
+                {isRegistering ? (
+                  <View style={styles.termsContainer}>
+                    <TouchableOpacity
+                      style={styles.termsCheckboxRow}
+                      onPress={() => setTermsAccepted((current) => !current)}
+                      disabled={isLoading}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: termsAccepted }}
+                      activeOpacity={0.8}
+                    >
+                      <IconSymbol
+                        name={termsAccepted ? 'checkmark.circle.fill' : 'circle'}
+                        size={24}
+                        color={termsAccepted ? accentColor : secondaryTextColor}
+                      />
+                      <View style={styles.termsTextWrap}>
+                        <ThemedText
+                          style={styles.termsText}
+                          lightColor={primaryTextColor}
+                          darkColor={primaryTextColor}
+                        >
+                          {t('login.termsIntro')}{' '}
+                          <ThemedText
+                            style={styles.termsLink}
+                            lightColor={accentColor}
+                            darkColor={accentColor}
+                            onPress={() => router.push('/nutzungsbedingungen')}
+                          >
+                            {t('login.termsLink')}
+                          </ThemedText>{' '}
+                          {t('login.termsAnd')}{' '}
+                          <ThemedText
+                            style={styles.termsLink}
+                            lightColor={accentColor}
+                            darkColor={accentColor}
+                            onPress={() => router.push('/datenschutz')}
+                          >
+                            {t('login.privacyLink')}
+                          </ThemedText>
+                          .
+                        </ThemedText>
+                      </View>
+                    </TouchableOpacity>
+                    <ThemedText
+                      style={styles.termsHint}
+                      lightColor={secondaryTextColor}
+                      darkColor={secondaryTextColor}
+                    >
+                      {t('login.termsRulesHint')}
+                    </ThemedText>
+                  </View>
+                ) : (
+                  <ThemedText
+                    style={styles.termsPassive}
+                    lightColor={secondaryTextColor}
+                    darkColor={secondaryTextColor}
+                  >
+                    {t('login.termsPassiveIntro')}{' '}
+                    <ThemedText
+                      style={styles.termsPassiveLink}
+                      lightColor={accentColor}
+                      darkColor={accentColor}
+                      onPress={() => router.push('/nutzungsbedingungen')}
+                    >
+                      {t('login.termsLink')}
+                    </ThemedText>{' '}
+                    {t('login.termsAnd')}{' '}
+                    <ThemedText
+                      style={styles.termsPassiveLink}
+                      lightColor={accentColor}
+                      darkColor={accentColor}
+                      onPress={() => router.push('/datenschutz')}
+                    >
+                      {t('login.privacyLink')}
+                    </ThemedText>
+                    .
+                  </ThemedText>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
+                  style={[
+                    styles.button,
+                    styles.loginButton,
+                    (isLoading || (isRegistering && !termsAccepted)) && styles.buttonDisabled,
+                  ]}
                   onPress={handleAuth}
-                  disabled={isLoading}
+                  disabled={isLoading || (isRegistering && !termsAccepted)}
                   activeOpacity={0.9}
                 >
                   <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
@@ -381,9 +490,13 @@ export default function LoginScreen() {
 
                 {Platform.OS === 'ios' && (
                   <TouchableOpacity
-                    style={[styles.button, styles.appleButton]}
+                    style={[
+                      styles.button,
+                      styles.appleButton,
+                      (isLoading || (isRegistering && !termsAccepted)) && styles.buttonDisabled,
+                    ]}
                     onPress={handleAppleSignIn}
-                    disabled={isLoading}
+                    disabled={isLoading || (isRegistering && !termsAccepted)}
                     activeOpacity={0.9}
                   >
                     <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
@@ -631,6 +744,45 @@ const styles = StyleSheet.create({
   },
   invitationToggleText: {
     fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  termsContainer: {
+    marginTop: 20,
+  },
+  termsCheckboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  termsTextWrap: {
+    flex: 1,
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  termsLink: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  termsHint: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  termsPassive: {
+    marginTop: 20,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  termsPassiveLink: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
     textDecorationLine: 'underline',
   },
   forgotPasswordButton: {

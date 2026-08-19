@@ -661,6 +661,45 @@ export default function DatenschutzScreen() {
                 />
               </Section>
 
+              <Section title="Moderation von Community-Inhalten">
+                <ThemedText style={styles.paragraph}>
+                  Damit wir anstößige Inhalte und missbräuchliches Verhalten unterbinden können, verarbeiten wir
+                  Meldungen und Blockierungen, die Nutzerinnen und Nutzer in der App auslösen. Gespeichert werden dabei
+                  die gemeldete Inhaltsart und -kennung, eine Kopie des gemeldeten Inhalts zum Zeitpunkt der Meldung,
+                  der Meldegrund, eine optionale Beschreibung sowie die Kennungen der meldenden und der gemeldeten
+                  Person. Blockierungen speichern wir als Beziehung zwischen zwei Nutzerkennungen.
+                </ThemedText>
+                <ThemedText style={styles.paragraph}>
+                  Ein automatischer Wortfilter prüft Beiträge und Nachrichten beim Absenden; Treffer können abgewiesen
+                  oder zur manuellen Prüfung vorgemerkt werden. Meldungen prüfen wir innerhalb von 24 Stunden.
+                </ThemedText>
+
+                <BulletList
+                  items={[
+                    {
+                      label: 'Verarbeitete Datenarten: ',
+                      text: 'Inhaltsdaten (Kopie des gemeldeten Beitrags, Kommentars oder der gemeldeten Nachricht); Meta-, Kommunikations- und Verfahrensdaten (Nutzerkennungen der meldenden und gemeldeten Person, Zeitangaben, Meldegrund, Bearbeitungsstatus).',
+                    },
+                    {
+                      label: 'Betroffene Personen: ',
+                      text: 'Nutzer (meldende Personen sowie Personen, deren Inhalte gemeldet oder blockiert werden).',
+                    },
+                    {
+                      label: 'Zwecke der Verarbeitung: ',
+                      text: 'Sicherheitsmaßnahmen, Verhinderung von Missbrauch und Belästigung, Erfüllung der Plattformpflichten für nutzergenerierte Inhalte.',
+                    },
+                    {
+                      label: 'Aufbewahrung und Löschung: ',
+                      text: 'Meldungen werden nach Abschluss der Prüfung so lange aufbewahrt, wie es zur Nachvollziehbarkeit wiederholter Verstöße und zur Abwehr von Ansprüchen erforderlich ist. Blockierungen bestehen, bis sie aufgehoben werden.',
+                    },
+                    {
+                      label: 'Rechtsgrundlagen: ',
+                      text: 'Erfüllung eines Vertrags und vorvertragliche Anfragen (Art. 6 Abs. 1 S. 1 lit. b) DSGVO); Berechtigte Interessen an einem sicheren, belästigungsfreien Betrieb (Art. 6 Abs. 1 S. 1 lit. f) DSGVO).',
+                    },
+                  ]}
+                />
+              </Section>
+
               <Section title="Kontakt- und Anfrageverwaltung">
                 <ThemedText style={styles.paragraph}>
                   Bei der Kontaktaufnahme mit uns (z. B. per Post, Kontaktformular, E-Mail, Telefon oder via soziale

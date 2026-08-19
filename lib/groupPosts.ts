@@ -1,4 +1,5 @@
 import type { Comment, NestedComment, Post } from './community';
+import { buildContentBlockedError, isContentBlocked } from './contentFilter';
 import { getCachedUser, supabase } from './supabase';
 
 type ProfileLike = {
@@ -125,6 +126,8 @@ export const createGroupPost = async (groupId: string, content: string, isAnonym
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
 
     const now = new Date().toISOString();
     const { data, error } = await supabase
@@ -253,6 +256,8 @@ export const createGroupComment = async (postId: string, content: string, isAnon
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
+
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from('community_group_comments')
@@ -378,6 +383,8 @@ export const createGroupReply = async (commentId: string, content: string, isAno
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
 
     const now = new Date().toISOString();
     const { data, error } = await supabase

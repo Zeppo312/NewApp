@@ -64,6 +64,10 @@ import {
   updateGroupChatEvent,
 } from '@/lib/groupChatEvents';
 import { supabase } from '@/lib/supabase';
+import { ModerationSheet, type ModerationTarget } from '@/components/moderation/ModerationSheet';
+import { isContentBlockedError } from '@/lib/contentFilter';
+import { loadBlockedUserIds, subscribeToBlockList } from '@/lib/moderation';
+import { translateModerationText } from '@/lib/moderationTranslations';
 import {
   type CommunityGroup,
   type GroupMemberProfile,
@@ -211,6 +215,13 @@ export default function GroupChatScreen() {
   const [deletingGroup, setDeletingGroup] = useState(false);
   const [members, setMembers] = useState<GroupMemberProfile[]>([]);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [moderationTarget, setModerationTarget] = useState<ModerationTarget | null>(null);
+
+  const tm = useCallback(
+    (key: Parameters<typeof translateModerationText>[1], params?: Record<string, string | number>) =>
+      translateModerationText(ACTIVE_COMMUNITY_LOCALE, key, params),
+    [],
+  );
   const [memberMap, setMemberMap] = useState<Map<string, GroupChatMemberInfo>>(new Map());
   const [events, setEvents] = useState<GroupChatEvent[]>([]);
   const [eventRsvps, setEventRsvps] = useState<GroupChatEventRsvp[]>([]);
@@ -469,6 +480,15 @@ export default function GroupChatScreen() {
     void loadMessages();
   }, [loadEvents, loadGroup, loadMembers, loadMessages]);
 
+  // Blockliste laden; nach einer Blockierung die Nachrichten neu holen, damit
+  // die Inhalte der blockierten Person sofort verschwinden.
+  useEffect(() => {
+    void loadBlockedUserIds();
+    return subscribeToBlockList(() => {
+      void loadMessages({ showSpinner: false });
+    });
+  }, [loadMessages]);
+
   // ---- Realtime subscription ----
   useEffect(() => {
     if (!user?.id || !resolvedGroupId) return;
@@ -689,10 +709,13 @@ export default function GroupChatScreen() {
       setTimeout(() => scrollToBottom(true), 300);
     } catch (error) {
       console.error('Fehler beim Senden der Nachricht:', error);
+      if (isContentBlockedError(error)) {
+        Alert.alert(tm('filter.blockedTitle'), tm('filter.blockedMessage'));
+      }
     } finally {
       setSending(false);
     }
-  }, [draft, replyTo, resolvedGroupId, scrollToBottom, sending, user?.id]);
+  }, [draft, replyTo, resolvedGroupId, scrollToBottom, sending, tm, user?.id]);
 
   const handleSendVoice = useCallback(
     async ({
@@ -1106,17 +1129,37 @@ export default function GroupChatScreen() {
       const isOwnMessage = message.sender_id === user?.id;
       const canDelete = isOwnMessage || canManage;
 
+      const options: Parameters<typeof Alert.alert>[2] = [
+        { text: t('feed.replyAction'), onPress: () => handleReply(message) },
+      ];
+
       if (canDelete) {
-        Alert.alert(t('common.message'), undefined, [
-          { text: t('feed.replyAction'), onPress: () => handleReply(message) },
-          { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteMessage(message) },
-          { text: t('common.cancel'), style: 'cancel' },
-        ]);
-      } else {
-        handleReply(message);
+        options.push({
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: () => handleDeleteMessage(message),
+        });
       }
+
+      // Fremde Nachrichten lassen sich melden bzw. der Absender blockieren.
+      if (!isOwnMessage) {
+        options.push({
+          text: tm('sheet.title'),
+          onPress: () =>
+            setModerationTarget({
+              targetType: 'group_message',
+              targetId: message.id,
+              authorId: message.sender_id,
+              authorName: memberMap.get(message.sender_id)?.display_name ?? null,
+            }),
+        });
+      }
+
+      options.push({ text: t('common.cancel'), style: 'cancel' });
+
+      Alert.alert(t('common.message'), undefined, options);
     },
-    [canManage, handleDeleteMessage, handleReply, user?.id],
+    [canManage, handleDeleteMessage, handleReply, memberMap, tm, user?.id],
   );
 
   const handleVoiceSliderStart = useCallback(
@@ -2708,6 +2751,15 @@ export default function GroupChatScreen() {
           </Pressable>
         </View>
       </Modal>
+
+      <ModerationSheet
+        visible={!!moderationTarget}
+        target={moderationTarget}
+        locale={ACTIVE_COMMUNITY_LOCALE}
+        onClose={() => setModerationTarget(null)}
+        onContentHidden={() => void loadMessages({ showSpinner: false })}
+        onUserBlocked={() => void loadMessages({ showSpinner: false })}
+      />
     </ThemedBackground>
   );
 }

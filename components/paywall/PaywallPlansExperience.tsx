@@ -19,7 +19,7 @@ import {
   applyPaywallPlansTemplate,
   clonePaywallPlansContent,
   formatEuroAmount,
-  PAYWALL_LITE_TIER_ENABLED,
+  PAYWALL_VISIBLE_TIER_IDS,
   type PaywallPlansContent,
   type PaywallPlansTierId,
 } from '@/lib/paywallContent';
@@ -69,11 +69,9 @@ type PaywallPlansExperienceProps = {
   onOpenDataManagement?: () => void;
 };
 
-// Lite ist derzeit global deaktiviert – weder Karte noch Vergleichsspalte.
-const TIER_ORDER: PaywallPlansTierId[] = PAYWALL_LITE_TIER_ENABLED
-  ? ['premium', 'standard', 'lite']
-  : ['premium', 'standard'];
-const DEFAULT_SELECTED_TIER: PaywallPlansTierId = 'standard';
+// Standard bleibt ein Bestandstier und wird auf der Paywall nicht beworben.
+const TIER_ORDER: PaywallPlansTierId[] = [...PAYWALL_VISIBLE_TIER_IDS];
+const DEFAULT_SELECTED_TIER: PaywallPlansTierId = 'lite';
 
 type InlineEditableTextProps = {
   editable: boolean;
@@ -300,7 +298,7 @@ export function PaywallPlansExperience({
   const renderTierCard = (cardTier: PaywallPlansTierId) => {
     const tierContent = plans.tiers[cardTier];
     const isPremium = cardTier === 'premium';
-    const isPopular = cardTier === 'standard';
+    const isPopular = cardTier === 'premium';
     const isSelected = tier === cardTier;
     const isHiddenInLive = !tierContent.visible;
     const { monthly, yearly } = tierPrices(cardTier);

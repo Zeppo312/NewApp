@@ -41,7 +41,7 @@ import {
   PregnancyHomeTranslationKey,
   translatePregnancyHomeText,
 } from '@/lib/pregnancyHomeTranslations';
-import { useTileGridMetrics } from '@/lib/fontScaling';
+import { useFontScale, useLineLimit, useTileGridMetrics } from '@/lib/fontScaling';
 
 let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
 let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
@@ -502,6 +502,10 @@ export default function PregnancyHomeScreen() {
   // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
   // Beschreibung bei großer Schrift nicht abgeschnitten werden.
   const tileMetrics = useTileGridMetrics();
+  // Enge Zeilen-Layouts (Text + Button nebeneinander) brechen bei großer
+  // Schrift auseinander — ab ~130 % stapeln wir sie stattdessen.
+  const isStackedLayout = useFontScale() >= 1.3;
+  const twoLineLimit = useLineLimit(2);
   const scaledCardSizing = useMemo(
     () => ({
       minHeight: tileMetrics.itemHeight,
@@ -1215,12 +1219,17 @@ export default function PregnancyHomeScreen() {
                     <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
                       {t('shop.eyebrow')}
                     </ThemedText>
-                    <View style={styles.recommendationFooter}>
+                    <View
+                      style={[
+                        styles.recommendationFooter,
+                        isStackedLayout ? styles.recommendationFooterStacked : null,
+                      ]}
+                    >
                       <View style={styles.recommendationTextWrap}>
                         <ThemedText adaptive={false} style={styles.recommendationTitle}>
                           {t('shop.title')}
                         </ThemedText>
-                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={2}>
+                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={twoLineLimit}>
                           {t('shop.description')}
                         </ThemedText>
                       </View>
@@ -1827,6 +1836,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 12,
+  },
+  recommendationFooterStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
   },
   recommendationTextWrap: {
     flex: 1,

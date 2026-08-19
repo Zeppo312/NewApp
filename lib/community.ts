@@ -1,4 +1,5 @@
 import { getCachedUser, supabase } from './supabase';
+import { buildContentBlockedError, isContentBlocked } from './contentFilter';
 import { compressImage } from './imageCompression';
 
 // Typdefinitionen
@@ -786,6 +787,8 @@ export const createPost = async (
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
+
     console.log('=== CREATE POST WITH IMAGE ===');
     console.log('User ID:', userData.user.id);
     console.log('Has image:', !!imageBase64);
@@ -903,6 +906,8 @@ export const createComment = async (postId: string, content: string, isAnonymous
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
 
     // Debug-Ausgabe
     console.log('Creating comment with is_anonymous:', isAnonymous);
@@ -1228,6 +1233,8 @@ export const createReply = async (commentId: string, content: string, isAnonymou
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+
+    if (isContentBlocked(content)) return { data: null, error: buildContentBlockedError() };
 
     // Kommentar erstellen
     const { data, error } = await supabase

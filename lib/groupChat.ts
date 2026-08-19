@@ -1,6 +1,7 @@
 import { deleteChatMessage as deleteChatMessageViaEdge } from '@/lib/chatAudio';
 import { getGroupMembers } from '@/lib/groups';
 import { type ChatMessageType } from '@/lib/chatMessages';
+import { buildContentBlockedError, isContentBlocked } from '@/lib/contentFilter';
 import { type GroupChatEvent } from '@/lib/groupChatEvents';
 import { supabase } from '@/lib/supabase';
 
@@ -222,6 +223,7 @@ export async function sendGroupChatMessage(
     sender_id: (await supabase.auth.getUser()).data.user?.id,
   };
   if (payload.type === 'text') {
+    if (isContentBlocked(payload.content)) throw buildContentBlockedError();
     insertPayload.content = payload.content;
     insertPayload.message_type = 'text';
   } else {

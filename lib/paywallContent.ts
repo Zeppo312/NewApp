@@ -73,11 +73,13 @@ export type PaywallLegalLinks = {
 export type PaywallPlansTierId = 'premium' | 'standard' | 'lite';
 
 /**
- * Lite ist auf der Paywall vorerst deaktiviert. Der Schalter überschreibt auch
- * gespeicherten Paywall-Content aus dem Editor, damit Lite nirgends mehr als
- * kaufbarer Plan auftaucht. Bestehende Lite-Abos bleiben davon unberührt.
+ * Nur diese Tarife werden auf der Paywall und in Tarifübersichten beworben.
+ * Standard bleibt als technisches Bestandstier vollständig erhalten.
  */
-export const PAYWALL_LITE_TIER_ENABLED = false;
+export const PAYWALL_VISIBLE_TIER_IDS = [
+  'lite',
+  'premium',
+] as const satisfies readonly PaywallPlansTierId[];
 
 export type PaywallPlansTierContent = {
   visible: boolean;
@@ -266,17 +268,17 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
     premium: {
       visible: true,
       name: 'Lotti Premium',
-      tagline: 'Alles aus Standard plus Briefing & Lottis KI-Features',
+      tagline: 'Volle Familienbegleitung plus Briefing & Lottis KI-Features',
       ctaLabel: 'Premium starten',
       bullets: [
-        'Alles aus Lotti Standard',
+        'Kompletter Verlauf, Partner, Planer, Listen, Rezepte & Auswertungen',
         '✨ Persönliches Schwangerschafts-Briefing',
         '✨ Sprach-Logging & Lottis Fürsorge',
         '✨ Frag Lotti mit passenden Daten aus eurem Alltag',
       ],
     },
     standard: {
-      visible: true,
+      visible: false,
       name: 'Lotti Standard',
       tagline: 'Die volle Begleitung für eure Familie',
       ctaLabel: 'Standard starten',
@@ -288,7 +290,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       ],
     },
     lite: {
-      visible: PAYWALL_LITE_TIER_ENABLED,
+      visible: true,
       name: 'Lotti Lite',
       tagline: 'Der einfache Start ins Tracking',
       ctaLabel: 'Lite starten',
@@ -715,11 +717,15 @@ export const sanitizePaywallPlansContent = (
     legalText: pickString(source.legalText, fallback.legalText),
     tiers: {
       premium: sanitizePlansTier(tiers.premium, fallback.tiers.premium),
-      standard: sanitizePlansTier(tiers.standard, fallback.tiers.standard),
+      standard: {
+        ...sanitizePlansTier(tiers.standard, fallback.tiers.standard),
+        // Standard bleibt ein Bestandstier, wird aber nicht mehr beworben.
+        visible: false,
+      },
       lite: {
         ...sanitizePlansTier(tiers.lite, fallback.tiers.lite),
-        // Gespeicherter Content darf Lite nicht wieder einblenden.
-        visible: PAYWALL_LITE_TIER_ENABLED,
+        // Gespeicherter Alt-Content darf Lite nicht weiter ausblenden.
+        visible: true,
       },
     },
   };

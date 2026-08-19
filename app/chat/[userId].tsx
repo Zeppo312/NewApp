@@ -43,6 +43,9 @@ import {
   getMessagePreviewText,
 } from '@/lib/chatMessages';
 import { supabase } from '@/lib/supabase';
+import { ModerationSheet, type ModerationTarget } from '@/components/moderation/ModerationSheet';
+import { isContentBlockedError } from '@/lib/contentFilter';
+import { translateModerationText } from '@/lib/moderationTranslations';
 import {
   CommunityTranslationKey,
   DEFAULT_COMMUNITY_LOCALE,
@@ -278,6 +281,13 @@ export default function ChatThreadScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
+  const [moderationTarget, setModerationTarget] = useState<ModerationTarget | null>(null);
+
+  const tm = useCallback(
+    (key: Parameters<typeof translateModerationText>[1], params?: Record<string, string | number>) =>
+      translateModerationText(ACTIVE_COMMUNITY_LOCALE, key, params),
+    [],
+  );
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [firstUnreadId, setFirstUnreadId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -522,10 +532,13 @@ export default function ChatThreadScreen() {
       }, 600);
     } catch (error) {
       console.error('Fehler beim Senden der Nachricht:', error);
+      if (isContentBlockedError(error)) {
+        Alert.alert(tm('filter.blockedTitle'), tm('filter.blockedMessage'));
+      }
     } finally {
       setSending(false);
     }
-  }, [draft, loadMessages, partnerId, replyTo, scrollToBottom, sending, user?.id]);
+  }, [draft, loadMessages, partnerId, replyTo, scrollToBottom, sending, tm, user?.id]);
 
   const handleSendVoice = useCallback(
     async ({
@@ -609,11 +622,24 @@ export default function ChatThreadScreen() {
           { text: t('common.cancel'), style: 'cancel' },
         ]);
       } else {
-        // Partner message → reply
-        handleReply(message);
+        // Partner message → reply, report or block
+        Alert.alert(t('common.message'), undefined, [
+          { text: t('feed.replyAction'), onPress: () => handleReply(message) },
+          {
+            text: tm('sheet.title'),
+            onPress: () =>
+              setModerationTarget({
+                targetType: 'direct_message',
+                targetId: message.id,
+                authorId: message.sender_id,
+                authorName: partnerName,
+              }),
+          },
+          { text: t('common.cancel'), style: 'cancel' },
+        ]);
       }
     },
-    [handleDeleteMessage, handleReply, user?.id],
+    [handleDeleteMessage, handleReply, partnerName, tm, user?.id],
   );
 
   const handleVoiceSliderStart = useCallback(
@@ -977,6 +1003,25 @@ export default function ChatThreadScreen() {
               </View>
             )
           }
+          rightContent={
+            partnerId ? (
+              <TouchableOpacity
+                style={[styles.headerActionButton, { backgroundColor: isDark ? '#3D3330' : '#E8DDD6' }]}
+                onPress={() =>
+                  setModerationTarget({
+                    targetType: 'profile',
+                    targetId: partnerId,
+                    authorId: partnerId,
+                    authorName: partnerName,
+                  })
+                }
+                activeOpacity={0.8}
+                accessibilityLabel={tm('sheet.titleProfile')}
+              >
+                <IconSymbol name="ellipsis" size={17} color={theme.accent} />
+              </TouchableOpacity>
+            ) : null
+          }
         />
 
         <KeyboardAvoidingView
@@ -1044,6 +1089,15 @@ export default function ChatThreadScreen() {
             locale={ACTIVE_COMMUNITY_LOCALE}
           />
         </KeyboardAvoidingView>
+
+        <ModerationSheet
+          visible={!!moderationTarget}
+          target={moderationTarget}
+          locale={ACTIVE_COMMUNITY_LOCALE}
+          onClose={() => setModerationTarget(null)}
+          onContentHidden={() => void loadMessages()}
+          onUserBlocked={() => router.push('/(tabs)/notifications')}
+        />
       </View>
     </ThemedBackground>
   );
@@ -1235,6 +1289,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
     gap: 10,
+  },
+  headerActionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
   emptyText: { fontSize: 14, lineHeight: 20, textAlign: 'center' },

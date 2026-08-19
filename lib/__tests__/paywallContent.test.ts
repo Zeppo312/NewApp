@@ -1,4 +1,8 @@
-import { DEFAULT_PAYWALL_CONTENT, sanitizePaywallContent } from '../paywallContent';
+import {
+  DEFAULT_PAYWALL_CONTENT,
+  PAYWALL_VISIBLE_TIER_IDS,
+  sanitizePaywallContent,
+} from '../paywallContent';
 import { localizePaywallPlansContent } from '../paywallTranslations';
 
 const allTiers = { lite: true, standard: true, premium: true };
@@ -62,5 +66,30 @@ describe('paywall feature comparison', () => {
 
   it('uses the complete defaults for older saved content without plan rows', () => {
     expect(sanitizePaywallContent({}).plans.comparisonRows).toEqual(germanRows);
+  });
+});
+
+describe('paywall tier visibility', () => {
+  it('advertises only Lite and Premium while keeping Standard in the data model', () => {
+    expect(PAYWALL_VISIBLE_TIER_IDS).toEqual(['lite', 'premium']);
+    expect(DEFAULT_PAYWALL_CONTENT.plans.tiers.lite.visible).toBe(true);
+    expect(DEFAULT_PAYWALL_CONTENT.plans.tiers.standard.visible).toBe(false);
+    expect(DEFAULT_PAYWALL_CONTENT.plans.tiers.premium.visible).toBe(true);
+  });
+
+  it('does not let saved legacy content re-enable Standard or hide Lite', () => {
+    const sanitized = sanitizePaywallContent({
+      plans: {
+        tiers: {
+          lite: { visible: false },
+          standard: { visible: true },
+          premium: { visible: true },
+        },
+      },
+    });
+
+    expect(sanitized.plans.tiers.lite.visible).toBe(true);
+    expect(sanitized.plans.tiers.standard.visible).toBe(false);
+    expect(sanitized.plans.tiers.premium.visible).toBe(true);
   });
 });

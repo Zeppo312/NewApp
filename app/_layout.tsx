@@ -18,6 +18,7 @@ import * as Notifications from 'expo-notifications';
 
 import { StartupMessageModal } from '@/components/StartupMessageModal';
 import { LottiMomentToast } from '@/components/LottiMomentToast';
+import { TermsConsentGate } from '@/components/moderation/TermsConsentGate';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -63,6 +64,7 @@ import {
   getPendingStartupMessage,
   type StartupMessage,
 } from '@/lib/startupMessages';
+import { getTermsConsentState } from '@/lib/termsConsent';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -127,7 +129,7 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const segments = useSegments();
   const colorScheme = useColorScheme();
-  const { loading, user } = useAuth();
+  const { loading, user, signOut } = useAuth();
   const { isLocaleReady, locale } = useLocale();
   const layoutCopy = locale === 'en'
     ? { error: 'Error', startupFailed: 'The message could not be confirmed. Please try again.', loading: 'Loading …' }
@@ -176,6 +178,7 @@ function RootLayoutNav() {
   }, [activeBackend, convexClient, userId]);
   const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
+  const [needsTermsConsent, setNeedsTermsConsent] = useState(false);
 
   const refreshPaywallState = useCallback(async () => {
     await invalidateUserProfileCache();
@@ -323,6 +326,26 @@ function RootLayoutNav() {
     shouldSkipStartupMessageCheck,
     userId,
   ]);
+
+  // EULA-Gate: Bestandsnutzer ohne aktuelle Zustimmung müssen bestätigen,
+  // bevor sie Community und Chat weiter nutzen können (App Store Guideline 1.2).
+  useEffect(() => {
+    if (loading || !userId || primarySegment === '(auth)' || primarySegment === 'auth') {
+      if (!userId) setNeedsTermsConsent(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void getTermsConsentState().then((state) => {
+      if (cancelled) return;
+      setNeedsTermsConsent(!state.accepted);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appStateRevision, loading, primarySegment, userId]);
 
   const handleStartupMessageConfirm = useCallback(async () => {
     if (!startupMessage || isAcknowledgingStartupMessage) {
@@ -767,6 +790,9 @@ function RootLayoutNav() {
         <Stack.Screen name="pregnancy-setup" />
         <Stack.Screen name="milestones" />
         <Stack.Screen name="wochenmoment" />
+        <Stack.Screen name="admin-dashboard" />
+        <Stack.Screen name="blocked-users" />
+        <Stack.Screen name="moderation-admin" />
         <Stack.Screen name="account-linking" />
         <Stack.Screen name="invite" />
         <Stack.Screen name="+not-found" />
@@ -779,6 +805,14 @@ function RootLayoutNav() {
         isSubmitting={isAcknowledgingStartupMessage}
         onConfirm={() => {
           void handleStartupMessageConfirm();
+        }}
+      />
+      <TermsConsentGate
+        visible={needsTermsConsent}
+        locale={locale}
+        onAccepted={() => setNeedsTermsConsent(false)}
+        onSignOut={() => {
+          void signOut();
         }}
       />
       <LottiMomentToast />

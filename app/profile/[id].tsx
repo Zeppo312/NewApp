@@ -19,6 +19,8 @@ import { getPosts } from '@/lib/community';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { TagDisplay } from '@/components/TagDisplay';
+import { ModerationSheet, type ModerationTarget } from '@/components/moderation/ModerationSheet';
+import { translateModerationText } from '@/lib/moderationTranslations';
 import {
   CommunityTranslationKey,
   DEFAULT_COMMUNITY_LOCALE,
@@ -64,10 +66,12 @@ export default function ProfileScreen() {
   const { id } = useLocalSearchParams();
   const userId = Array.isArray(id) ? id[0] : id as string;
   const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
   const theme = Colors[colorScheme];
   const { user } = useAuth();
   const router = useRouter();
-  
+
+  const [moderationTarget, setModerationTarget] = useState<ModerationTarget | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
@@ -618,6 +622,24 @@ export default function ProfileScreen() {
                         <IconSymbol name="paperplane.fill" size={16} color="#FFFFFF" />
                         <ThemedText style={styles.dmButtonText}>{t('publicProfile.message')}</ThemedText>
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.moderationButton,
+                          { borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(125,90,80,0.18)' },
+                        ]}
+                        onPress={() =>
+                          setModerationTarget({
+                            targetType: 'profile',
+                            targetId: profile.id,
+                            authorId: profile.id,
+                            authorName: getProfileDisplayName(profile),
+                          })
+                        }
+                        activeOpacity={0.85}
+                        accessibilityLabel={translateModerationText(ACTIVE_COMMUNITY_LOCALE, 'sheet.titleProfile')}
+                      >
+                        <IconSymbol name="ellipsis" size={16} color={theme.textSecondary} />
+                      </TouchableOpacity>
                     </>
                   )}
                 </View>
@@ -748,6 +770,14 @@ export default function ProfileScreen() {
           </ScrollView>
         )}
       </SafeAreaView>
+
+      <ModerationSheet
+        visible={!!moderationTarget}
+        target={moderationTarget}
+        locale={ACTIVE_COMMUNITY_LOCALE}
+        onClose={() => setModerationTarget(null)}
+        onUserBlocked={() => router.back()}
+      />
     </ThemedBackground>
   );
 }
@@ -900,6 +930,15 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 24,
+    marginBottom: 8,
+  },
+  moderationButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
     marginBottom: 8,
   },
   dmButtonText: {

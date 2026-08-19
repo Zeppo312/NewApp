@@ -30,6 +30,34 @@ type GroupMessageRow = {
   audio_mime_type: string | null;
 };
 
+/**
+ * Moderatoren dürfen eine Sprachnachricht nur dann anhören, wenn dazu eine
+ * offene Meldung vorliegt. Kein generelles Mithören fremder Chats.
+ */
+const isModeratorWithOpenReport = async (
+  serviceClient: ReturnType<typeof createClient>,
+  userId: string,
+  targetType: 'direct_message' | 'group_message',
+  messageId: string,
+) => {
+  const { data: profile } = await serviceClient
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', userId)
+    .maybeSingle<{ is_admin: boolean | null }>();
+
+  if (profile?.is_admin !== true) return false;
+
+  const { count } = await serviceClient
+    .from('content_reports')
+    .select('id', { count: 'exact', head: true })
+    .eq('target_type', targetType)
+    .eq('target_id', messageId)
+    .eq('status', 'open');
+
+  return (count ?? 0) > 0;
+};
+
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CORS_HEADERS = {
   ...JSON_HEADERS,
@@ -98,7 +126,13 @@ serve(async (req: Request) => {
         });
       }
 
-      if (message.sender_id !== user.id && message.receiver_id !== user.id) {
+      const isParticipant =
+        message.sender_id === user.id || message.receiver_id === user.id;
+
+      if (
+        !isParticipant &&
+        !(await isModeratorWithOpenReport(serviceClient, user.id, 'direct_message', messageId))
+      ) {
         return new Response(JSON.stringify({ message: 'Forbidden' }), {
           headers: CORS_HEADERS,
           status: 403,
@@ -155,7 +189,10 @@ serve(async (req: Request) => {
       .eq('status', 'active')
       .maybeSingle();
 
-    if (!membership) {
+    if (
+      !membership &&
+      !(await isModeratorWithOpenReport(serviceClient, user.id, 'group_message', messageId))
+    ) {
       return new Response(JSON.stringify({ message: 'Forbidden' }), {
         headers: CORS_HEADERS,
         status: 403,

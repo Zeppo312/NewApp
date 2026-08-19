@@ -1545,7 +1545,7 @@ export default function HomeScreen() {
             />
 
             <View style={styles.greetingHeader}>
-              <View>
+              <View style={styles.greetingTextBlock}>
                 <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
                   {t('greeting.hello', { name: displayName })}
                 </ThemedText>
@@ -1680,9 +1680,9 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, isStackedLayout ? styles.statsContainerStacked : null]}>
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, {
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
@@ -1693,7 +1693,7 @@ export default function HomeScreen() {
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>🍼</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>🍼</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
@@ -1729,7 +1729,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, {
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
@@ -1740,7 +1740,7 @@ export default function HomeScreen() {
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>💩</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>💩</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
@@ -1754,7 +1754,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, {
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
                   backgroundColor: 'rgba(94, 61, 179, 0.05)',
                   borderColor: 'rgba(94, 61, 179, 0.15)'
                 }]}
@@ -1765,7 +1765,7 @@ export default function HomeScreen() {
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>💤</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>💤</Text>
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
@@ -2390,7 +2390,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 16,
+  },
+  greetingTextBlock: {
+    // Ohne flex drängt der Gruß bei großer Schrift das Profilbild aus der Karte.
+    flex: 1,
+    minWidth: 0,
   },
   greeting: {
     fontSize: 30,
@@ -2406,6 +2412,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   profileBadge: {
+    flexShrink: 0,
     width: 68,
     height: 68,
     alignItems: 'center',
@@ -2729,6 +2736,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'stretch',
     width: '100%',
+  },
+  statsContainerStacked: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  statItemStacked: {
+    width: '100%',
+    minWidth: '100%',
+    maxWidth: '100%',
   },
   statItem: {
     alignItems: 'center',

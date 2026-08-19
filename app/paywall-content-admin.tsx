@@ -40,7 +40,7 @@ import {
   clonePaywallContent,
   fetchPaywallContent,
   formatEuroAmount,
-  PAYWALL_LITE_TIER_ENABLED,
+  PAYWALL_VISIBLE_TIER_IDS,
   sanitizePaywallContent,
   savePaywallContent,
   type PaywallContent,
@@ -85,10 +85,8 @@ const setValueAtPath = (
   return sanitizePaywallContent(next);
 };
 
-// Lite ist derzeit global deaktiviert und taucht deshalb auch im Editor nicht auf.
-const TIER_IDS: PaywallPlansTierId[] = PAYWALL_LITE_TIER_ENABLED
-  ? ['premium', 'standard', 'lite']
-  : ['premium', 'standard'];
+// Im Editor erscheinen nur die Tarife, die auf der Live-Paywall beworben werden.
+const TIER_IDS: PaywallPlansTierId[] = [...PAYWALL_VISIBLE_TIER_IDS];
 
 export default function PaywallContentAdminScreen() {
   const colorScheme = useColorScheme() ?? 'light';

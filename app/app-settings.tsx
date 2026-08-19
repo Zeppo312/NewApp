@@ -45,6 +45,8 @@ import {
   AppSettingsTranslationKey,
   translateAppSettingsText,
 } from '@/lib/appSettingsTranslations';
+import { translateModerationText } from '@/lib/moderationTranslations';
+import { translateAdminDashboardText } from '@/lib/adminDashboardTranslations';
 import type { LanguagePreference } from '@/lib/localization';
 
 const PRESET_OPTIONS = [
@@ -78,6 +80,14 @@ export default function AppSettingsScreen() {
     key: AppSettingsTranslationKey,
     params?: Record<string, string | number>,
   ) => translateAppSettingsText(locale, key, params);
+  const tm = (
+    key: Parameters<typeof translateModerationText>[1],
+    params?: Record<string, string | number>,
+  ) => translateModerationText(locale, key, params);
+  const td = (
+    key: Parameters<typeof translateAdminDashboardText>[1],
+    params?: Record<string, string | number>,
+  ) => translateAdminDashboardText(locale, key, params);
   const { activeBabyId } = useActiveBaby();
   const {
     autoDarkModeEnabled,
@@ -1615,6 +1625,22 @@ export default function AppSettingsScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
+                      style={styles.rowItem}
+                      onPress={() => router.push('/blocked-users')}
+                    >
+                      <View style={styles.rowIcon}>
+                        <IconSymbol name="hand.raised.fill" size={24} color={primaryIconColor} />
+                      </View>
+                      <View style={styles.rowContent}>
+                        <ThemedText style={styles.rowTitle}>{tm('blocked.settingsLabel')}</ThemedText>
+                        <ThemedText style={styles.rowDescription}>{tm('blocked.settingsDescription')}</ThemedText>
+                      </View>
+                      <View style={styles.trailing}>
+                        <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       style={[styles.rowItem, isDeletingData && styles.disabledRow]}
                       onPress={handleDeleteDataRequest}
                       disabled={isDeletingData}
@@ -1678,6 +1704,38 @@ export default function AppSettingsScreen() {
                           ) : (
                             <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                           )}
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/admin-dashboard')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>📊</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>{td('settingsLabel')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{td('settingsDescription')}</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
+                        onPress={() => router.push('/moderation-admin')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🛡️</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>{tm('admin.settingsLabel')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{tm('admin.settingsDescription')}</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
                         </View>
                       </TouchableOpacity>
 

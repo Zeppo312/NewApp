@@ -55,14 +55,12 @@ import {
   translateSubscriptionText,
   type SubscriptionTranslationKey,
 } from '@/lib/subscriptionTranslations';
-import { PAYWALL_LITE_TIER_ENABLED } from '@/lib/paywallContent';
+import { PAYWALL_VISIBLE_TIER_IDS } from '@/lib/paywallContent';
 
-// Lite ist auf der Paywall deaktiviert und wird hier deshalb nicht beworben.
-const PLAN_TIER_PILLS = (
-  PAYWALL_LITE_TIER_ENABLED
-    ? (['lite', 'standard', 'premium'] as const)
-    : (['standard', 'premium'] as const)
-) satisfies readonly SubscriptionTier[];
+// Standard wird als Bestandstier erkannt, aber nicht mehr als neuer Tarif beworben.
+const PLAN_TIER_PILLS = [
+  ...PAYWALL_VISIBLE_TIER_IDS,
+] satisfies readonly SubscriptionTier[];
 
 type SubscriptionViewState = {
   isAdmin: boolean;

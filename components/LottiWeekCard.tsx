@@ -100,6 +100,9 @@ export function LottiWeekCard({ style }: Props) {
   const twoLineLimit = useLineLimit(2);
   const reviewCtaHeight = useScaledSize(32);
   const reviewEmojiBubbleSize = useScaledSize(38);
+  // Feste 22pt-Spalte pro Wochentag reicht bei großer Schrift nicht für
+  // zweibuchstabige Kürzel (Lu, Ma, …).
+  const dayChipWidth = useScaledSize(22);
   const c = {
     de: { completeTitle: 'Euer Wochen-Review ist bereit 🤍', title: 'Lottis Wochenmoment 🤍', details: 'Details', collect: 'einsammeln', hearts: 'Herzen', moments: 'Momente', waiting: 'Wochen-Review wartet', days: 'Tage', startHint: 'Sobald ihr trackt, entsteht hier euer Rückblick.', level: 'Stufe', until: 'Noch {{points}} Herzen bis Stufe {{level}}', max: 'Höchste Stufe erreicht 🤍', avatar: 'Lotti-Avatar', storyA11y: 'Wochen-Review als Story ansehen', story: 'Story', dayLabels: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] },
     en: { completeTitle: 'Your weekly review is ready 🤍', title: "Lotti's weekly moment 🤍", details: 'Details', collect: 'collect', hearts: 'hearts', moments: 'moments', waiting: 'Weekly review waiting', days: 'days', startHint: 'Your review will appear as soon as you start tracking.', level: 'Level', until: '{{points}} hearts until level {{level}}', max: 'Highest level reached 🤍', avatar: 'Lotti avatar', storyA11y: 'View weekly review as a story', story: 'Story', dayLabels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] },
@@ -312,7 +315,7 @@ export function LottiWeekCard({ style }: Props) {
               { backgroundColor: glassContainerBg, borderColor: glassBorder },
             ]}
           >
-            <View style={styles.row}>
+            <View style={[styles.row, isStacked ? styles.rowStacked : null]}>
               <Animated.View
                 style={[
                   styles.avatarBlock,
@@ -363,7 +366,7 @@ export function LottiWeekCard({ style }: Props) {
                 </View>
               </Animated.View>
 
-              <View style={styles.textBlock}>
+              <View style={[styles.textBlock, isStacked ? styles.textBlockStacked : null]}>
                 <ThemedText
                   adaptive={false}
                   style={[styles.title, { color: textPrimary }]}
@@ -480,7 +483,13 @@ export function LottiWeekCard({ style }: Props) {
                   const isToday = idx === todayIndex;
                   const isOn = days[idx];
                   return (
-                    <View key={label} style={styles.dayChip}>
+                    <View
+                      key={label}
+                      style={[
+                        styles.dayChip,
+                        isStacked ? styles.dayChipStacked : { width: dayChipWidth },
+                      ]}
+                    >
                       <ThemedText
                         adaptive={false}
                         style={[
@@ -569,6 +578,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
   },
+  rowStacked: {
+    // Avatar + Text nebeneinander lassen dem Titel bei großer Schrift keine
+    // Breite mehr — „Wochenmoment" bricht sonst mitten im Wort.
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
   avatarBlock: {
     position: 'relative',
     width: PLACEHOLDER_SIZE,
@@ -628,6 +643,10 @@ const styles = StyleSheet.create({
   textBlock: {
     flex: 1,
     minWidth: 0,
+  },
+  textBlockStacked: {
+    flex: 0,
+    alignSelf: 'stretch',
   },
   title: {
     fontSize: 16,
@@ -745,6 +764,12 @@ const styles = StyleSheet.create({
   daysRowStacked: {
     alignSelf: 'stretch',
     justifyContent: 'space-between',
+  },
+  dayChipStacked: {
+    // Volle Breite gleichmäßig auf die sieben Tage verteilen, statt feste
+    // Spaltenbreiten zu skalieren (die sonst über den Kartenrand laufen).
+    flex: 1,
+    width: 'auto',
   },
   daysRow: {
     flexDirection: 'row',
