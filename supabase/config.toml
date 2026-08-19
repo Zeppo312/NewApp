@@ -8,3 +8,8 @@ verify_jwt = true
 # requires both the configured Authorization value and RevenueCat's HMAC.
 [functions.revenuecat-webhook]
 verify_jwt = false
+
+# Database webhook endpoint: the gateway cannot validate the custom shared
+# secret as a user JWT. The function itself requires MODERATION_WEBHOOK_SECRET.
+[functions.moderation-report-notify]
+verify_jwt = false

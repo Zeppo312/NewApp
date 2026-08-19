@@ -26,4 +26,15 @@ describe('authentication translations', () => {
     expect(getAuthLocaleTag('en')).toBe('en-US');
     expect(getAuthLocaleTag('es')).toBe('es-ES');
   });
+
+  it('provides a fail-closed consent error in every locale', () => {
+    (['de', 'en', 'es'] as const).forEach((locale) => {
+      expect(translateAuthText(locale, 'login.termsSaveFailed')).not.toBe(
+        'login.termsSaveFailed',
+      );
+      expect(translateAuthText(locale, 'otp.termsSaveFailed')).not.toBe(
+        'otp.termsSaveFailed',
+      );
+    });
+  });
 });

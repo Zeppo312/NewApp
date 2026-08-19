@@ -12,7 +12,8 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { invalidateAllCaches } from '@/lib/appCache';
-import { verifyOTPToken, resendOTPToken } from '@/lib/supabase';
+import { supabase, verifyOTPToken, resendOTPToken } from '@/lib/supabase';
+import { acceptTerms } from '@/lib/termsConsent';
 import {
   AuthTranslationKey,
   DEFAULT_AUTH_LOCALE,
@@ -151,6 +152,13 @@ export default function VerifyOTPScreen() {
       }
 
       if (data.user) {
+        const consentResult = await acceptTerms('otp', data.user.id);
+        if (!consentResult.success) {
+          await supabase.auth.signOut();
+          Alert.alert(t('common.error'), t('otp.termsSaveFailed'));
+          return;
+        }
+
         Alert.alert(
           t('otp.confirmedTitle'),
           t('otp.confirmedMessage'),

@@ -111,7 +111,11 @@ const de = {
   'admin.suspendUser': 'Nutzer sperren',
   'admin.suspendConfirmTitle': 'Nutzer sperren?',
   'admin.suspendConfirmMessage':
-    'Die Person kann danach keine Beiträge und Nachrichten mehr erstellen. Alle offenen Meldungen zu ihr werden als bearbeitet markiert.',
+    'Die Person kann danach keine Beiträge und Nachrichten mehr erstellen. Offene Meldungen bleiben unverändert.',
+  'admin.removeAndSuspend': 'Inhalt entfernen & Nutzer sperren',
+  'admin.removeAndSuspendConfirmTitle': 'Inhalt entfernen und Nutzer sperren?',
+  'admin.removeAndSuspendConfirmMessage':
+    'Der gemeldete Inhalt wird entfernt, das Konto aus der Community ausgeschlossen und die Meldung erst nach beiden erfolgreichen Schritten geschlossen.',
   'admin.unsuspendUser': 'Sperre aufheben',
   'admin.dismiss': 'Verwerfen',
   'admin.dismissConfirmTitle': 'Meldung verwerfen?',
@@ -261,7 +265,11 @@ const en: Catalog = {
   'admin.suspendUser': 'Suspend user',
   'admin.suspendConfirmTitle': 'Suspend user?',
   'admin.suspendConfirmMessage':
-    'They will no longer be able to create posts or messages. All open reports about them are marked as resolved.',
+    'They will no longer be able to create posts or messages. Open reports remain unchanged.',
+  'admin.removeAndSuspend': 'Remove content & suspend user',
+  'admin.removeAndSuspendConfirmTitle': 'Remove content and suspend user?',
+  'admin.removeAndSuspendConfirmMessage':
+    'The reported content is removed, the account is excluded from the community, and the report closes only after both actions succeed.',
   'admin.unsuspendUser': 'Lift suspension',
   'admin.dismiss': 'Dismiss',
   'admin.dismissConfirmTitle': 'Dismiss report?',
@@ -408,7 +416,11 @@ const es: Catalog = {
   'admin.suspendUser': 'Suspender usuario',
   'admin.suspendConfirmTitle': '¿Suspender al usuario?',
   'admin.suspendConfirmMessage':
-    'Después no podrá crear publicaciones ni mensajes. Todas las denuncias abiertas sobre esa persona se marcan como resueltas.',
+    'Después no podrá crear publicaciones ni mensajes. Las denuncias abiertas permanecen sin cambios.',
+  'admin.removeAndSuspend': 'Eliminar contenido y suspender usuario',
+  'admin.removeAndSuspendConfirmTitle': '¿Eliminar el contenido y suspender al usuario?',
+  'admin.removeAndSuspendConfirmMessage':
+    'El contenido denunciado se elimina, la cuenta queda excluida de la comunidad y la denuncia se cierra solo cuando ambas acciones se completan.',
   'admin.unsuspendUser': 'Levantar la suspensión',
   'admin.dismiss': 'Descartar',
   'admin.dismissConfirmTitle': '¿Descartar la denuncia?',

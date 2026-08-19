@@ -1,4 +1,4 @@
-import { getCachedUser, supabase } from './supabase';
+import { supabase } from './supabase';
 import { invalidateUserProfileCache } from './appCache';
 
 /**
@@ -15,26 +15,26 @@ export type TermsConsentState = {
   acceptedAt: string | null;
 };
 
+export type TermsConsentSource = 'signup' | 'login' | 'otp' | 'gate';
+
 /**
  * Speichert die Zustimmung des aktuell angemeldeten Nutzers.
  */
-export const acceptTerms = async (): Promise<{ success: boolean; error?: string }> => {
+export const acceptTerms = async (
+  source: TermsConsentSource = 'gate',
+  expectedUserId?: string,
+): Promise<{ success: boolean; error?: string }> => {
   try {
-    const { data: userData } = await getCachedUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
-    if (!userId) return { success: false, error: 'not_authenticated' };
+    if (userError || !userId || (expectedUserId && expectedUserId !== userId)) {
+      return { success: false, error: 'not_authenticated' };
+    }
 
-    // Upsert, weil das Profil bei sehr frühen Zustimmungen (direkt nach der
-    // Registrierung) noch nicht existieren muss – sonst würde das Gate erneut
-    // erscheinen, ohne dass die Zustimmung gespeichert wird.
-    const { error } = await supabase.from('profiles').upsert(
-      {
-        id: userId,
-        terms_accepted_at: new Date().toISOString(),
-        terms_version: TERMS_VERSION,
-      },
-      { onConflict: 'id' },
-    );
+    const { error } = await supabase.rpc('record_terms_consent', {
+      terms_version_param: TERMS_VERSION,
+      source_param: source,
+    });
 
     if (error) {
       console.error('termsConsent: failed to store acceptance', error);
@@ -55,24 +55,25 @@ export const acceptTerms = async (): Promise<{ success: boolean; error?: string 
  */
 export const getTermsConsentState = async (): Promise<TermsConsentState> => {
   try {
-    const { data: userData } = await getCachedUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
-    if (!userId) return { accepted: false, acceptedVersion: null, acceptedAt: null };
+    if (userError || !userId) {
+      return { accepted: false, acceptedVersion: null, acceptedAt: null };
+    }
 
     const { data, error } = await supabase
-      .from('profiles')
-      .select('terms_accepted_at, terms_version')
-      .eq('id', userId)
+      .from('terms_consents')
+      .select('accepted_at, terms_version')
+      .eq('user_id', userId)
+      .eq('terms_version', TERMS_VERSION)
       .maybeSingle();
 
     if (error) {
-      // Bei einem Netzwerkfehler nicht aussperren – der Gate-Screen würde sonst
-      // dauerhaft blockieren. Der Check läuft beim nächsten Start erneut.
       console.error('termsConsent: failed to read acceptance', error);
-      return { accepted: true, acceptedVersion: null, acceptedAt: null };
+      return { accepted: false, acceptedVersion: null, acceptedAt: null };
     }
 
-    const acceptedAt = (data?.terms_accepted_at as string | null) ?? null;
+    const acceptedAt = (data?.accepted_at as string | null) ?? null;
     const acceptedVersion = (data?.terms_version as string | null) ?? null;
 
     return {
@@ -82,6 +83,6 @@ export const getTermsConsentState = async (): Promise<TermsConsentState> => {
     };
   } catch (err) {
     console.error('termsConsent: unexpected error reading acceptance', err);
-    return { accepted: true, acceptedVersion: null, acceptedAt: null };
+    return { accepted: false, acceptedVersion: null, acceptedAt: null };
   }
 };

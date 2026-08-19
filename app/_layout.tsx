@@ -154,6 +154,7 @@ function RootLayoutNav() {
   const paywallCheckInFlight = useRef(false);
   const startupMessageCheckInFlight = useRef(false);
   const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
+  const isLegalConsentRoute = pathname === '/nutzungsbedingungen' || pathname === '/datenschutz';
   const shouldSkipGlobalPaywallCheck = useMemo(() => {
     if (!pathname || PAYWALL_EXCLUDED_PATHS.has(pathname)) {
       return true;
@@ -178,7 +179,10 @@ function RootLayoutNav() {
   }, [activeBackend, convexClient, userId]);
   const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
-  const [needsTermsConsent, setNeedsTermsConsent] = useState(false);
+  const [termsConsent, setTermsConsent] = useState<{
+    userId: string | null;
+    accepted: boolean;
+  }>({ userId: null, accepted: false });
 
   const refreshPaywallState = useCallback(async () => {
     await invalidateUserProfileCache();
@@ -330,8 +334,7 @@ function RootLayoutNav() {
   // EULA-Gate: Bestandsnutzer ohne aktuelle Zustimmung müssen bestätigen,
   // bevor sie Community und Chat weiter nutzen können (App Store Guideline 1.2).
   useEffect(() => {
-    if (loading || !userId || primarySegment === '(auth)' || primarySegment === 'auth') {
-      if (!userId) setNeedsTermsConsent(false);
+    if (loading || !userId || primarySegment === '(auth)' || primarySegment === 'auth' || isLegalConsentRoute) {
       return;
     }
 
@@ -339,13 +342,13 @@ function RootLayoutNav() {
 
     void getTermsConsentState().then((state) => {
       if (cancelled) return;
-      setNeedsTermsConsent(!state.accepted);
+      setTermsConsent({ userId, accepted: state.accepted });
     });
 
     return () => {
       cancelled = true;
     };
-  }, [appStateRevision, loading, primarySegment, userId]);
+  }, [appStateRevision, isLegalConsentRoute, loading, primarySegment, userId]);
 
   const handleStartupMessageConfirm = useCallback(async () => {
     if (!startupMessage || isAcknowledgingStartupMessage) {
@@ -808,9 +811,15 @@ function RootLayoutNav() {
         }}
       />
       <TermsConsentGate
-        visible={needsTermsConsent}
+        visible={
+          Boolean(userId) &&
+          primarySegment !== '(auth)' &&
+          primarySegment !== 'auth' &&
+          !isLegalConsentRoute &&
+          (termsConsent.userId !== userId || !termsConsent.accepted)
+        }
         locale={locale}
-        onAccepted={() => setNeedsTermsConsent(false)}
+        onAccepted={() => setTermsConsent({ userId: userId ?? null, accepted: true })}
         onSignOut={() => {
           void signOut();
         }}

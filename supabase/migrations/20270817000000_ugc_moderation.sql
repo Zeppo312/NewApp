@@ -1043,14 +1043,6 @@ BEGIN
   SET suspended_at = now(),
       suspension_reason = reason_param
   WHERE id = target_user_id;
-
-  UPDATE public.content_reports
-  SET status = 'resolved',
-      resolution = 'user_suspended',
-      resolved_by = auth.uid(),
-      resolved_at = now()
-  WHERE reported_user_id = target_user_id
-    AND status = 'open';
 END;
 $$;
 
@@ -1119,16 +1111,23 @@ DECLARE
   webhook_secret TEXT;
   request_headers JSONB;
 BEGIN
-  -- Optionales Shared Secret. Setzen mit:
+  -- Verpflichtendes Shared Secret. Setzen mit:
   --   ALTER DATABASE postgres SET "app.settings.moderation_webhook_secret" = '...';
   -- und denselben Wert als MODERATION_WEBHOOK_SECRET in der Edge Function.
-  webhook_secret := current_setting('app.settings.moderation_webhook_secret', true);
+  webhook_secret := NULLIF(
+    current_setting('app.settings.moderation_webhook_secret', true),
+    ''
+  );
 
-  request_headers := jsonb_build_object('Content-Type', 'application/json');
-  IF webhook_secret IS NOT NULL AND webhook_secret <> '' THEN
-    request_headers := request_headers
-      || jsonb_build_object('Authorization', 'Bearer ' || webhook_secret);
+  IF webhook_secret IS NULL THEN
+    RAISE WARNING 'Moderation webhook secret missing; notification was not sent';
+    RETURN NEW;
   END IF;
+
+  request_headers := jsonb_build_object(
+    'Content-Type', 'application/json',
+    'Authorization', 'Bearer ' || webhook_secret
+  );
 
   SELECT net.http_post(
     url := 'https://kwniiyayhzgjfqjsjcfu.supabase.co/functions/v1/moderation-report-notify',

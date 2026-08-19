@@ -210,10 +210,26 @@ export type FeatureRequest = {
 // Hilfsfunktionen für die Authentifizierung
 
 // E-Mail-Authentifizierung
-export const signUpWithEmail = async (email: string, password: string) => {
+export type SignUpTermsConsent = {
+  version: string;
+  acceptedAt: string;
+};
+
+export const signUpWithEmail = async (
+  email: string,
+  password: string,
+  termsConsent: SignUpTermsConsent,
+) => {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        terms_version: termsConsent.version,
+        terms_accepted_at: termsConsent.acceptedAt,
+        terms_consent_source: 'signup',
+      },
+    },
   });
   return { data, error };
 };

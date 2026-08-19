@@ -15,7 +15,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { acceptTerms } from '@/lib/termsConsent';
+import { acceptTerms, TERMS_VERSION } from '@/lib/termsConsent';
 import {
   AuthTranslationKey,
   DEFAULT_AUTH_LOCALE,
@@ -45,7 +45,7 @@ export default function LoginScreen() {
   const accentColor = Colors.light.accent;
   const primaryTextColor = Colors.light.textPrimary;
   const secondaryTextColor = Colors.light.textSecondary;
-  const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithApple, signOut } = useAuth();
   const normalizedInvitationCode = showInvitationField && invitationCode
     ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
     : undefined;
@@ -138,11 +138,8 @@ export default function LoginScreen() {
     return null;
   };
 
-  // Die Zustimmung wird nur bei der Registrierung aktiv abgefragt. Beim
-  // Anmelden entscheidet der zentrale Consent-Gate, ob ein Bestandskonto die
-  // aktuellen Bedingungen noch bestätigen muss.
   const ensureTermsAccepted = () => {
-    if (!isRegistering || termsAccepted) return true;
+    if (termsAccepted) return true;
     Alert.alert(t('login.termsRequiredTitle'), t('login.termsRequiredMessage'), [
       { text: t('common.ok') },
     ]);
@@ -166,11 +163,23 @@ export default function LoginScreen() {
 
       if (isRegistering) {
         // Registrierung mit Supabase
-        const { data, error: signUpError } = await signUpWithEmail(email, password);
+        const { data, error: signUpError } = await signUpWithEmail(email, password, {
+          version: TERMS_VERSION,
+          acceptedAt: new Date().toISOString(),
+        });
 
         if (signUpError) {
           console.error('Sign up error:', signUpError);
           throw signUpError;
+        }
+
+        if (data?.session?.user) {
+          const consentResult = await acceptTerms('signup', data.session.user.id);
+          if (!consentResult.success) {
+            await signOut();
+            setError(t('login.termsSaveFailed'));
+            return;
+          }
         }
 
         // Wenn die Registrierung erfolgreich war
@@ -211,9 +220,13 @@ export default function LoginScreen() {
           return;
         }
 
-        // Beim Anmelden wird keine Zustimmung gespeichert – das würde eine
-        // Einwilligung dokumentieren, die hier niemand gegeben hat, und den
-        // Consent-Gate für Bestandskonten aushebeln.
+        const consentResult = await acceptTerms('login', session.user.id);
+        if (!consentResult.success) {
+          await signOut();
+          setError(t('login.termsSaveFailed'));
+          return;
+        }
+
         await navigateAfterAuth();
       }
     } catch (err: any) {
@@ -257,9 +270,11 @@ export default function LoginScreen() {
       
       // Check if this is a new user or existing user
       if (data && data.user) {
-        // Nur dokumentieren, wenn im Registrierungsmodus aktiv zugestimmt wurde.
-        if (isRegistering && termsAccepted) {
-          await acceptTerms();
+        const consentResult = await acceptTerms(isRegistering ? 'signup' : 'login', data.user.id);
+        if (!consentResult.success) {
+          await signOut();
+          setError(t('login.termsSaveFailed'));
+          return;
         }
 
         // Check if user profile exists and is complete
@@ -387,8 +402,7 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
-                {isRegistering ? (
-                  <View style={styles.termsContainer}>
+                <View style={styles.termsContainer}>
                     <TouchableOpacity
                       style={styles.termsCheckboxRow}
                       onPress={() => setTermsAccepted((current) => !current)}
@@ -438,42 +452,15 @@ export default function LoginScreen() {
                       {t('login.termsRulesHint')}
                     </ThemedText>
                   </View>
-                ) : (
-                  <ThemedText
-                    style={styles.termsPassive}
-                    lightColor={secondaryTextColor}
-                    darkColor={secondaryTextColor}
-                  >
-                    {t('login.termsPassiveIntro')}{' '}
-                    <ThemedText
-                      style={styles.termsPassiveLink}
-                      lightColor={accentColor}
-                      darkColor={accentColor}
-                      onPress={() => router.push('/nutzungsbedingungen')}
-                    >
-                      {t('login.termsLink')}
-                    </ThemedText>{' '}
-                    {t('login.termsAnd')}{' '}
-                    <ThemedText
-                      style={styles.termsPassiveLink}
-                      lightColor={accentColor}
-                      darkColor={accentColor}
-                      onPress={() => router.push('/datenschutz')}
-                    >
-                      {t('login.privacyLink')}
-                    </ThemedText>
-                    .
-                  </ThemedText>
-                )}
 
                 <TouchableOpacity
                   style={[
                     styles.button,
                     styles.loginButton,
-                    (isLoading || (isRegistering && !termsAccepted)) && styles.buttonDisabled,
+                    (isLoading || !termsAccepted) && styles.buttonDisabled,
                   ]}
                   onPress={handleAuth}
-                  disabled={isLoading || (isRegistering && !termsAccepted)}
+                  disabled={isLoading || !termsAccepted}
                   activeOpacity={0.9}
                 >
                   <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
@@ -493,10 +480,10 @@ export default function LoginScreen() {
                     style={[
                       styles.button,
                       styles.appleButton,
-                      (isLoading || (isRegistering && !termsAccepted)) && styles.buttonDisabled,
+                      (isLoading || !termsAccepted) && styles.buttonDisabled,
                     ]}
                     onPress={handleAppleSignIn}
-                    disabled={isLoading || (isRegistering && !termsAccepted)}
+                    disabled={isLoading || !termsAccepted}
                     activeOpacity={0.9}
                   >
                     <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
@@ -552,6 +539,7 @@ export default function LoginScreen() {
                   style={styles.switchModeButton}
                   onPress={() => {
                     setIsRegistering(!isRegistering);
+                    setTermsAccepted(false);
                     setShowInvitationField(false);
                     setInvitationCode('');
                   }}

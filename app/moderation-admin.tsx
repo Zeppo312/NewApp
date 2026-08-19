@@ -30,6 +30,7 @@ import {
   getModerationReports,
   moderationAskReporter,
   moderationDeleteContent,
+  moderationRemoveContentAndSuspendUser,
   moderationResolveReport,
   moderationSuspendUser,
   moderationUnsuspendUser,
@@ -199,6 +200,29 @@ export default function ModerationAdminScreen() {
             ),
         },
       ]);
+    },
+    [runAction, t],
+  );
+
+  const handleRemoveAndSuspend = useCallback(
+    (report: ModerationReport) => {
+      if (!report.reported_user_id) return;
+
+      Alert.alert(
+        t('admin.removeAndSuspendConfirmTitle'),
+        t('admin.removeAndSuspendConfirmMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('admin.removeAndSuspend'),
+            style: 'destructive',
+            onPress: () =>
+              void runAction(report.id, () =>
+                moderationRemoveContentAndSuspendUser(report.id, `report:${report.id}`),
+              ),
+          },
+        ],
+      );
     },
     [runAction, t],
   );
@@ -494,6 +518,20 @@ export default function ModerationAdminScreen() {
                   <ActivityIndicator style={styles.pendingSpinner} color={theme.accent} />
                 ) : (
                   <View style={styles.actionRow}>
+                    {report.reported_user_id &&
+                    !report.reported_user_suspended &&
+                    report.status === 'open' ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: dangerColor }]}
+                        onPress={() => handleRemoveAndSuspend(report)}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={styles.actionButtonText}>
+                          {t('admin.removeAndSuspend')}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ) : null}
+
                     {report.target_type !== 'profile' && report.status === 'open' ? (
                       <TouchableOpacity
                         style={[styles.actionButton, { backgroundColor: dangerColor }]}
@@ -506,7 +544,7 @@ export default function ModerationAdminScreen() {
                       </TouchableOpacity>
                     ) : null}
 
-                    {report.reported_user_id ? (
+                    {report.reported_user_id && report.status !== 'open' ? (
                       report.reported_user_suspended ? (
                         <TouchableOpacity
                           style={[styles.actionButton, { backgroundColor: theme.accent }]}

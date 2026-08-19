@@ -23,7 +23,11 @@ type AuthContextType = {
   refreshSession: () => Promise<Session | null>;
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
-  signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => Promise<{ data?: any, error: any }>;
   // Apple Sign-In
   signInWithApple: () => Promise<{ data?: any, error: any }>;
   // OTP-Verifikation
@@ -156,8 +160,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { data, error };
   };
 
-  const handleSignUpWithEmail = async (email: string, password: string) => {
-    const { data, error } = await signUpWithEmail(email, password);
+  const handleSignUpWithEmail = async (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => {
+    const { data, error } = await signUpWithEmail(email, password, termsConsent);
     if (!error && data?.session) {
       applySession(data.session);
     }

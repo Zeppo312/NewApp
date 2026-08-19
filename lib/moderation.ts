@@ -382,6 +382,15 @@ export const moderationSuspendUser = (
     reason_param: reason ?? null,
   });
 
+export const moderationRemoveContentAndSuspendUser = (
+  reportId: string,
+  reason?: string | null,
+): Promise<ModerationResult> =>
+  callModerationRpc('moderation_remove_content_and_suspend_user', {
+    report_id_param: reportId,
+    reason_param: reason ?? null,
+  });
+
 export const moderationUnsuspendUser = (userId: string): Promise<ModerationResult> =>
   callModerationRpc('moderation_unsuspend_user', { target_user_id: userId });
 

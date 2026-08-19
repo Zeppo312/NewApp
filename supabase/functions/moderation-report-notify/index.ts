@@ -48,18 +48,21 @@ const TARGET_LABELS: Record<string, { de: string; en: string; es: string }> = {
 
 serve(async (req: Request) => {
   try {
-    // Der Trigger sendet den Secret-Header nur, wenn er in der Datenbank
-    // gesetzt ist. Ist in der Function kein Secret konfiguriert, wird die
-    // Prüfung übersprungen, damit Meldungen nie stillschweigend verloren gehen.
     const expectedSecret = Deno.env.get('MODERATION_WEBHOOK_SECRET');
-    if (expectedSecret) {
-      const authorization = req.headers.get('Authorization');
-      if (authorization !== `Bearer ${expectedSecret}`) {
-        return new Response(JSON.stringify({ message: 'Unauthorized' }), {
-          headers: { 'Content-Type': 'application/json' },
-          status: 401,
-        });
-      }
+    if (!expectedSecret) {
+      console.error('MODERATION_WEBHOOK_SECRET is required');
+      return new Response(JSON.stringify({ message: 'Webhook secret is not configured' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 503,
+      });
+    }
+
+    const authorization = req.headers.get('Authorization');
+    if (authorization !== `Bearer ${expectedSecret}`) {
+      return new Response(JSON.stringify({ message: 'Unauthorized' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 401,
+      });
     }
 
     const payload: ModerationReportWebhookPayload = await req.json();
@@ -71,8 +74,11 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Supabase service credentials are not configured');
+    }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { id: reportId, target_type, reason, target_snapshot, source } = payload.record;
@@ -86,6 +92,7 @@ serve(async (req: Request) => {
 
     if (reportError) {
       console.error('Error verifying moderation report:', reportError);
+      throw reportError;
     }
 
     if (!report) {
@@ -107,40 +114,31 @@ serve(async (req: Request) => {
 
     const adminIds = (admins || []).map((admin: { id: string }) => admin.id);
 
-    if (adminIds.length === 0) {
-      return new Response(JSON.stringify({ message: 'No moderators configured' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200,
-      });
-    }
-
     const { count: openCount } = await supabase
       .from('content_reports')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'open');
 
-    const { data: tokens, error: tokenError } = await supabase
-      .from('user_push_tokens')
-      .select('token, user_id')
-      .in('user_id', adminIds);
+    const tokenResult = adminIds.length > 0
+      ? await supabase
+          .from('user_push_tokens')
+          .select('token, user_id')
+          .in('user_id', adminIds)
+      : { data: [], error: null };
+    const { data: tokens, error: tokenError } = tokenResult;
 
     if (tokenError) {
       console.error('Error fetching moderator push tokens:', tokenError);
       throw tokenError;
     }
 
-    if (!tokens || tokens.length === 0) {
-      console.warn('Moderation report received but no moderator push tokens found', reportId);
-      return new Response(JSON.stringify({ message: 'No push tokens for moderators' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200,
-      });
-    }
-
-    const { data: adminSettings } = await supabase
-      .from('user_settings')
-      .select('user_id, resolved_language, language_preference')
-      .in('user_id', adminIds);
+    const settingsResult = adminIds.length > 0
+      ? await supabase
+          .from('user_settings')
+          .select('user_id, resolved_language, language_preference')
+          .in('user_id', adminIds)
+      : { data: [] };
+    const adminSettings = settingsResult.data;
 
     const settingsByUser = new Map(
       (adminSettings || []).map((entry: { user_id: string }) => [entry.user_id, entry]),
@@ -149,7 +147,7 @@ serve(async (req: Request) => {
     const snapshot = (report.target_snapshot ?? target_snapshot ?? '').trim();
     const preview = snapshot.length > 120 ? `${snapshot.slice(0, 117)}...` : snapshot;
 
-    const pushRequests = tokens.map((tokenRecord: { token: string; user_id: string }) => {
+    const pushRequests = (tokens ?? []).map((tokenRecord: { token: string; user_id: string }) => {
       const locale = getSettingsLocale(settingsByUser.get(tokenRecord.user_id));
       const targetLabel = localize(
         locale,
@@ -197,16 +195,40 @@ serve(async (req: Request) => {
             targetType: report.target_type ?? target_type,
           },
         }),
+      }).then(async (response) => {
+        const responseBody = await response.json().catch(() => null);
+        const ticket = Array.isArray(responseBody?.data) ? responseBody.data[0] : responseBody?.data;
+        if (!response.ok || ticket?.status === 'error') {
+          throw new Error(`Expo push rejected: ${response.status} ${JSON.stringify(responseBody)}`);
+        }
       });
     });
 
     const results = await Promise.allSettled(pushRequests);
     const failed = results.filter((result) => result.status === 'rejected').length;
+    const sent = results.length - failed;
+
+    if (sent === 0) {
+      // The report was verified above and remains durably visible in the admin
+      // moderation queue. Push is an alerting convenience, not the source of
+      // truth, so a missing device token must never discard or retry the report.
+      console.warn('No moderation push notification was delivered; report remains queued', reportId);
+      return new Response(
+        JSON.stringify({
+          message: 'Moderation report queued for admin review',
+          queued: true,
+          sent,
+          failed,
+        }),
+        { headers: { 'Content-Type': 'application/json' }, status: 202 },
+      );
+    }
 
     return new Response(
       JSON.stringify({
         message: 'Moderation notifications sent',
-        sent: results.length - failed,
+        queued: true,
+        sent,
         failed,
       }),
       {

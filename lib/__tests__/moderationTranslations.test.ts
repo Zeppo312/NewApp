@@ -64,4 +64,15 @@ describe('moderation translations', () => {
       expect(translateModerationText('es', key)).not.toBe(key);
     });
   });
+
+  it('beschreibt die atomare Entfernen-und-Sperren-Aktion in allen Sprachen', () => {
+    (['de', 'en', 'es'] as const).forEach((locale) => {
+      expect(translateModerationText(locale, 'admin.removeAndSuspend')).not.toBe(
+        'admin.removeAndSuspend',
+      );
+      expect(translateModerationText(locale, 'admin.removeAndSuspendConfirmMessage')).not.toBe(
+        'admin.removeAndSuspendConfirmMessage',
+      );
+    });
+  });
 });

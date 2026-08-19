@@ -59,7 +59,7 @@ export default function NutzungsbedingungenScreen() {
               ]}
             >
               <ThemedText style={styles.pageTitle}>Nutzungsbedingungen</ThemedText>
-              <ThemedText style={styles.paragraph}>Stand: 17. August 2026</ThemedText>
+              <ThemedText style={styles.paragraph}>Stand: 19. August 2026</ThemedText>
 
               <Section title="Geltungsbereich">
                 <ThemedText style={styles.paragraph}>
@@ -129,6 +129,21 @@ export default function NutzungsbedingungenScreen() {
                   miteinander kommunizieren: Community-Beiträge und Kommentare, Gruppen, Gruppen-Chats,
                   Direktnachrichten sowie Profilangaben. Für diese Inhalte ist ausschließlich die Person
                   verantwortlich, die sie erstellt hat.
+                </ThemedText>
+                <ThemedText style={styles.paragraph}>
+                  Die Rechte an eigenen Inhalten verbleiben bei der Person, die sie erstellt hat. Mit dem Einstellen
+                  eines Inhalts räumt sie Lotti Baby für die Dauer seiner Bereitstellung ein unentgeltliches,
+                  nicht ausschließliches und räumlich unbeschränktes Nutzungsrecht ein, soweit dies erforderlich ist,
+                  um den Inhalt innerhalb der App zu speichern, technisch zu verarbeiten, zu übertragen, anzuzeigen,
+                  zu vervielfältigen und zu moderieren. Dieses Recht darf ausschließlich in dem für Betrieb,
+                  Bereitstellung und Sicherheit der App erforderlichen Umfang durch beauftragte technische
+                  Dienstleister ausgeübt werden.
+                </ThemedText>
+                <ThemedText style={styles.paragraph}>
+                  Wer Inhalte einstellt, bestätigt, über die dafür erforderlichen Rechte zu verfügen und keine Rechte
+                  Dritter zu verletzen. Nach dem Löschen eines Inhalts endet das eingeräumte Nutzungsrecht, soweit
+                  keine vorübergehende Speicherung in Sicherungskopien oder eine weitere Aufbewahrung zur Erfüllung
+                  gesetzlicher Pflichten, zur Moderation von Meldungen oder zur Rechtsverteidigung erforderlich ist.
                 </ThemedText>
                 <ThemedText style={styles.paragraph}>
                   Für anstößige Inhalte und missbräuchliches Verhalten gilt eine Null-Toleranz-Regel. Untersagt sind
