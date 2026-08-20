@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getSettingsLocale, localize } from '../_shared/localization.ts';
+import { sendModerationFallbackEmail } from '../_shared/moderationAlert.ts';
 
 /**
  * Benachrichtigt alle Moderatoren (profiles.is_admin) über eine neue Meldung.
@@ -86,7 +87,7 @@ serve(async (req: Request) => {
     // Meldung serverseitig verifizieren, damit gefälschte Aufrufe nichts auslösen.
     const { data: report, error: reportError } = await supabase
       .from('content_reports')
-      .select('id, target_type, reason, target_snapshot, source, status')
+      .select('id, target_type, reason, target_snapshot, source, status, created_at')
       .eq('id', reportId)
       .maybeSingle();
 
@@ -209,16 +210,55 @@ serve(async (req: Request) => {
     const sent = results.length - failed;
 
     if (sent === 0) {
+      const fallbackEmail = await sendModerationFallbackEmail(
+        {
+          apiKey: Deno.env.get('RESEND_API_KEY'),
+          from: Deno.env.get('MODERATION_ALERT_EMAIL_FROM'),
+          to: Deno.env.get('MODERATION_ALERT_EMAIL_TO'),
+        },
+        {
+          reportId,
+          targetType: report.target_type ?? target_type,
+          reason: report.reason ?? reason,
+          source: report.source ?? source,
+          createdAt: report.created_at ?? payload.record.created_at,
+          openCount: typeof openCount === 'number' ? openCount : null,
+        },
+      );
+
+      if (fallbackEmail.status === 'sent') {
+        console.info('Moderation fallback email delivered', reportId);
+        return new Response(
+          JSON.stringify({
+            message: 'Moderation fallback email sent',
+            queued: true,
+            sent,
+            failed,
+            fallbackEmail: 'sent',
+          }),
+          { headers: { 'Content-Type': 'application/json' }, status: 200 },
+        );
+      }
+
+      if (fallbackEmail.status === 'not_configured') {
+        console.error(
+          'Moderation fallback email is not configured; missing secrets:',
+          fallbackEmail.missing.join(', '),
+        );
+      } else {
+        console.error('Moderation fallback email failed:', fallbackEmail.error);
+      }
+
       // The report was verified above and remains durably visible in the admin
-      // moderation queue. Push is an alerting convenience, not the source of
-      // truth, so a missing device token must never discard or retry the report.
-      console.warn('No moderation push notification was delivered; report remains queued', reportId);
+      // moderation queue. Alert delivery must never discard the report.
+      console.warn('No moderation alert was delivered; report remains queued', reportId);
       return new Response(
         JSON.stringify({
           message: 'Moderation report queued for admin review',
           queued: true,
           sent,
           failed,
+          fallbackEmail: fallbackEmail.status,
         }),
         { headers: { 'Content-Type': 'application/json' }, status: 202 },
       );
