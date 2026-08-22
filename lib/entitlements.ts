@@ -16,6 +16,7 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import { getCachedUserProfile } from '@/lib/appCache';
+import { getPaywallAccessTier } from '@/lib/paywallAccess';
 import { getCachedUser } from '@/lib/supabase';
 import {
   getRevenueCatSubscriptionSummary,
@@ -254,21 +255,10 @@ export const resolveSubscriptionTier = async (): Promise<AppSubscriptionTier> =>
 
   try {
     const profile = await getCachedUserProfile();
-    if (
-      profile?.is_admin === true ||
-      profile?.paywall_access_role === 'premium_tester'
-    ) {
-      return 'premium';
-    }
-    if (profile?.paywall_access_role === 'lite_tester') {
-      return 'lite';
-    }
-    if (
-      profile?.paywall_access_role === 'tester' ||
-      profile?.paywall_access_role === 'cooperation_partner'
-    ) {
-      return 'standard';
-    }
+    if (profile?.is_admin === true) return 'premium';
+
+    const accessTier = getPaywallAccessTier(profile?.paywall_access_role);
+    if (accessTier) return accessTier;
   } catch {
     // Profil nicht verfügbar → weiter mit Abo-Prüfung
   }

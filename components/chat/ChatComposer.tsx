@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Platform,
   StyleSheet,
   TextInput,
@@ -89,6 +90,7 @@ export default function ChatComposer({
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 200);
 
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [recorderMode, setRecorderMode] = useState<RecorderMode>('idle');
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
@@ -100,6 +102,19 @@ export default function ChatComposer({
   useEffect(() => {
     recorderModeRef.current = recorderMode;
   }, [recorderMode]);
+
+  // While the keyboard is up it already covers the home indicator area, so the
+  // extra safe-area padding would leave a visible gap between composer and keyboard.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const resetRecording = useCallback(() => {
     if (manualTimerRef.current) {
@@ -304,6 +319,8 @@ export default function ChatComposer({
     });
   }, [recordingDurationMs, recorderState.metering]);
 
+  const composerBackground = isDark ? '#2A2321' : '#F9F5F1';
+
   return (
     <>
       {replyPreviewText && (
@@ -355,12 +372,22 @@ export default function ChatComposer({
         style={[
           styles.composer,
           {
-            backgroundColor: isDark ? '#2A2321' : '#F9F5F1',
+            backgroundColor: composerBackground,
             borderTopColor: replyPreviewText ? 'transparent' : isDark ? '#3D3330' : '#E8DDD6',
-            paddingBottom: Math.max(bottomInset, Platform.OS === 'ios' ? 6 : 10),
+            paddingBottom: keyboardVisible
+              ? Platform.OS === 'ios'
+                ? 6
+                : 10
+              : Math.max(bottomInset, Platform.OS === 'ios' ? 6 : 10),
           },
         ]}
       >
+        {/* Bleeds the composer colour underneath the keyboard so no background
+            image shows through in the seam above the keyboard. */}
+        <View
+          pointerEvents="none"
+          style={[styles.bottomBleed, { backgroundColor: composerBackground }]}
+        />
         {recorderMode === 'idle' ? (
           <>
             {leadingAction ? <View style={styles.leadingActionSlot}>{leadingAction}</View> : null}
@@ -534,6 +561,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
+  },
+  bottomBleed: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -60,
+    height: 60,
   },
   leadingActionSlot: {
     marginBottom: Platform.OS === 'ios' ? 1 : 0,

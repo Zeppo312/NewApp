@@ -186,6 +186,9 @@ function RootLayoutNav() {
 
   const refreshPaywallState = useCallback(async () => {
     await invalidateUserProfileCache();
+    // Sonderrollen (einschließlich Lite-Tester) beeinflussen denselben
+    // Tier-Cache wie Store-Abos und müssen nach dem Profil-Refresh neu gelten.
+    invalidateSubscriptionTierCache();
     setAppStateRevision((prev) => prev + 1);
   }, []);
 
@@ -210,6 +213,9 @@ function RootLayoutNav() {
   }, [refreshPaywallState]);
 
   useEffect(() => {
+    // Der Tier-Cache darf weder zwischen Konten noch zwischen neu gesetzten
+    // Sonderzugängen weiterverwendet werden.
+    invalidateSubscriptionTierCache();
     if (!userId) return;
 
     return subscribeToRevenueCatCustomerInfoUpdates(userId, () => {

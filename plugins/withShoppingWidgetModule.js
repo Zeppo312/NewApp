@@ -125,10 +125,41 @@ function withReleaseAppGroup(config) {
   ]);
 }
 
+/**
+ * Step 5 – Debug-Build auf die Debug-Entitlements zeigen lassen.
+ * withLiveActivityModule setzt nur CODE_SIGN_ENTITLEMENTS für Release. Fehlte
+ * der Eintrag für Debug, lief der Dev-Build ohne App-Group — das Widget blieb
+ * dann leer, obwohl die Entitlements-Datei die Gruppe enthielt.
+ */
+function withDebugEntitlements(config) {
+  return withXcodeProject(config, (cfg) => {
+    const project = cfg.modResults;
+    const appName = cfg.modRequest.projectName;
+
+    const { target } = IOSConfig.XcodeUtils.getApplicationNativeTarget({
+      project,
+      projectName: appName,
+    });
+
+    const buildConfigurations = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
+      project,
+      target.buildConfigurationList
+    );
+    for (const [, buildConfiguration] of buildConfigurations) {
+      if (buildConfiguration.name === 'Debug') {
+        buildConfiguration.buildSettings.CODE_SIGN_ENTITLEMENTS = `${appName}/${appName}.entitlements`;
+      }
+    }
+
+    return cfg;
+  });
+}
+
 module.exports = function withShoppingWidgetModule(config) {
   config = withAppGroupEntitlement(config);
   config = withCopyFiles(config);
   config = withAddToXcode(config);
   config = withReleaseAppGroup(config);
+  config = withDebugEntitlements(config);
   return config;
 };

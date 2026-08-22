@@ -387,13 +387,16 @@ export default function ChatThreadScreen() {
     setPartnerName(t('chat.title'));
   }, [partnerId]);
 
-  const loadMessages = useCallback(async () => {
+  const loadMessages = useCallback(async (options?: { showSpinner?: boolean }) => {
     if (!user?.id || !partnerId) {
       setLoading(false);
       return;
     }
+    const showSpinner = options?.showSpinner ?? true;
     try {
-      setLoading(true);
+      if (showSpinner) {
+        setLoading(true);
+      }
 
       const { data, error } = await supabase
         .from('direct_messages')
@@ -527,7 +530,7 @@ export default function ChatThreadScreen() {
       setDraft('');
       setReplyTo(null);
       setTimeout(() => {
-        void loadMessages();
+        void loadMessages({ showSpinner: false });
         scrollToBottom(true);
       }, 600);
     } catch (error) {
@@ -574,7 +577,7 @@ export default function ChatThreadScreen() {
 
       setReplyTo(null);
       setTimeout(() => {
-        void loadMessages();
+        void loadMessages({ showSpinner: false });
         scrollToBottom(true);
       }, 300);
     },
@@ -1095,7 +1098,7 @@ export default function ChatThreadScreen() {
           target={moderationTarget}
           locale={ACTIVE_COMMUNITY_LOCALE}
           onClose={() => setModerationTarget(null)}
-          onContentHidden={() => void loadMessages()}
+          onContentHidden={() => void loadMessages({ showSpinner: false })}
           onUserBlocked={() => router.push('/(tabs)/notifications')}
         />
       </View>

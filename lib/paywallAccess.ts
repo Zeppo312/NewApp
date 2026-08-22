@@ -11,6 +11,29 @@ export type PaywallAccessReason =
   | PaywallAccessRole
   | 'none';
 
+export type PaywallAccessTier = 'lite' | 'standard' | 'premium';
+
+/**
+ * Sonderzugänge werden auf dieselben Tiers wie echte Abos abgebildet.
+ * Dadurch verwendet insbesondere der Lite-Tester immer exakt die
+ * Feature-Matrix und Verlaufslimits des Lite-Abos.
+ */
+export const getPaywallAccessTier = (
+  role: PaywallAccessRole | null | undefined,
+): PaywallAccessTier | null => {
+  switch (role) {
+    case 'lite_tester':
+      return 'lite';
+    case 'tester':
+    case 'cooperation_partner':
+      return 'standard';
+    case 'premium_tester':
+      return 'premium';
+    default:
+      return null;
+  }
+};
+
 export type PaywallAccessAdminUser = {
   user_id: string;
   email: string | null;

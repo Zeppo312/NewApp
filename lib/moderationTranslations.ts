@@ -65,6 +65,8 @@ const de = {
   'blocked.since': 'Blockiert am {{date}}',
   'blocked.action': 'Freigeben',
   'blocked.count': '{{count}} blockiert',
+  'blocked.unknownName': 'Nutzer ohne Profil',
+  'blocked.unknownHint': 'Profil nicht mehr verfügbar',
 
   'filter.blockedTitle': 'Beitrag nicht gesendet',
   'filter.blockedMessage':
@@ -219,6 +221,8 @@ const en: Catalog = {
   'blocked.since': 'Blocked on {{date}}',
   'blocked.action': 'Unblock',
   'blocked.count': '{{count}} blocked',
+  'blocked.unknownName': 'User without profile',
+  'blocked.unknownHint': 'Profile no longer available',
 
   'filter.blockedTitle': 'Not sent',
   'filter.blockedMessage':
@@ -370,6 +374,8 @@ const es: Catalog = {
   'blocked.since': 'Bloqueado el {{date}}',
   'blocked.action': 'Desbloquear',
   'blocked.count': '{{count}} bloqueados',
+  'blocked.unknownName': 'Usuario sin perfil',
+  'blocked.unknownHint': 'Perfil ya no disponible',
 
   'filter.blockedTitle': 'No se ha enviado',
   'filter.blockedMessage':
