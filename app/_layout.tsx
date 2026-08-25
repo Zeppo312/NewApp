@@ -46,6 +46,7 @@ import {
   invalidateUserProfileCache,
   preloadAppData,
 } from '@/lib/appCache';
+import { maybeCleanupCache } from '@/lib/imageCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import { subscribeToRevenueCatCustomerInfoUpdates } from '@/lib/revenuecat';
@@ -825,48 +826,112 @@ function RootLayoutNav() {
         }}
       />
       <LottiMomentToast />
+      <ImageCacheMaintenance />
       <StatusBar hidden={true} />
     </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
 
+// Preload der App-Daten laeuft bewusst unterhalb des AuthProvider: die Session
+// ist dann bereits aufgeloest und die User-ID wird direkt durchgereicht, statt
+// erneut getUser() aufzurufen. Rendert nichts und blockiert nichts.
+function AppDataPreloader() {
+  const { user, loading } = useAuth();
+  const userId = user?.id ?? null;
+  const preloadedUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (!userId) {
+      // Nach einem Logout erneut vorladen, auch wenn sich derselbe Nutzer
+      // danach wieder anmeldet.
+      preloadedUserIdRef.current = null;
+      return;
+    }
+
+    if (preloadedUserIdRef.current === userId) return;
+    preloadedUserIdRef.current = userId;
+
+    void preloadAppData(userId).catch((preloadError) => {
+      console.warn('Preload warning (non-critical):', preloadError);
+    });
+  }, [loading, userId]);
+
+  return null;
+}
+
+// Bild-Cache-Pflege. Diese Komponente wird bewusst erst im gerenderten Baum
+// von RootLayoutNav gemountet, also hinter dem echten Ready-Gate (Auth, Route,
+// Locale aufgeloest). Damit konkurriert die Dateisystemarbeit nicht mehr mit
+// der Provider-Initialisierung. Zweiter Ausloeser ist der Wechsel in den
+// Hintergrund. Die Drosselung auf einen Lauf pro Tag steckt in
+// maybeCleanupCache().
+function ImageCacheMaintenance() {
+  useEffect(() => {
+    const runCleanup = () => {
+      void maybeCleanupCache()
+        .then((result) => {
+          if (!result.skipped && result.removed > 0) {
+            console.log(
+              `Image cache cleanup: ${result.removed} files removed, ${result.freedMB.toFixed(2)} MB freed`
+            );
+          }
+        })
+        .catch(() => {
+          // imageCache ist optional
+        });
+    };
+
+    // Erster Lauf erst im Leerlauf nach dem ersten sichtbaren Frame. Der
+    // Mount liegt zwar hinter dem Ready-Gate, faellt aber noch mit dem
+    // Splash-Hide zusammen - an einem Tag mit tatsaechlich faelliger
+    // Bereinigung wuerde die Dateisystemarbeit sonst damit konkurrieren.
+    // Ohne requestIdleCallback bleibt der Background-Wechsel als Ausloeser.
+    const idleApi = globalThis as unknown as {
+      requestIdleCallback?: (cb: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idleHandle = idleApi.requestIdleCallback?.(runCleanup, { timeout: 10000 });
+
+    const appStateSubscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background') {
+        runCleanup();
+      }
+    });
+
+    return () => {
+      if (idleHandle !== undefined) {
+        idleApi.cancelIdleCallback?.(idleHandle);
+      }
+      appStateSubscription.remove();
+    };
+  }, []);
+
+  return null;
+}
+
 // Hauptkomponente, die den AuthProvider einrichtet
 export default Sentry.wrap(function RootLayout() {
-  const [loaded] = useFonts({
+  const [loaded, fontError] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [appIsReady, setAppIsReady] = useState(false);
   const deviceLocale = getDeviceAppLocale();
   const preparingText = deviceLocale === 'en' ? 'Loading app …' : deviceLocale === 'es' ? 'Cargando la app …' : 'App wird geladen …';
 
-  // Vorbereiten der App
+  // Vor dem Mount wird nur noch auf die Schriftarten gewartet. Kein Preload und
+  // kein Netzwerkaufruf: der Auth-Start soll nicht dahinter eingereiht werden.
+  // Ein Font-Fehler darf die App nicht dauerhaft im Ladezustand festhalten.
   useEffect(() => {
-    async function prepare() {
-      try {
-        // Warten, bis die Schriftarten geladen sind
-        if (loaded) {
-          // Preload wichtige App-Daten (User Settings, Profile, Premium Status)
-          // Dies reduziert Supabase-Aufrufe während der App-Nutzung
-          try {
-            await preloadAppData();
-          } catch (preloadError) {
-            console.warn('Preload warning (non-critical):', preloadError);
-          }
-
-          // Kurze Verzögerung, um sicherzustellen, dass alles bereit ist
-          await new Promise(resolve => setTimeout(resolve, 300));
-
-          // App ist bereit
-          setAppIsReady(true);
-        }
-      } catch (e) {
-        console.warn('Error preparing app:', e);
+    if (loaded || fontError) {
+      if (fontError) {
+        console.warn('Font loading failed, continuing with system fonts:', fontError);
       }
+      setAppIsReady(true);
     }
-
-    prepare();
-  }, [loaded]);
+  }, [loaded, fontError]);
 
   // Splash-Screen wird in RootLayoutNav ausgeblendet, sobald Auth + Baby-Status resolved sind.
   // Dadurch wird verhindert, dass der falsche Modus kurz aufblitzt.
@@ -885,6 +950,7 @@ export default Sentry.wrap(function RootLayout() {
   // ConvexProvider und BackendProvider für Dual-Backend-Architektur hinzugefügt
   return (
     <AuthProvider>
+      <AppDataPreloader />
       <LocaleProvider>
         <ConvexProvider>
           <BackendProvider>

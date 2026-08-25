@@ -17,6 +17,8 @@ const IMAGE_CACHE_DIR = `${FileSystem.cacheDirectory}images/`;
 
 // Cache-Metadaten für Invalidierung
 const CACHE_METADATA_KEY = 'image_cache_metadata';
+const CACHE_CLEANUP_TIMESTAMP_KEY = 'image_cache_last_cleanup';
+const CLEANUP_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000; // hoechstens einmal taeglich
 const MAX_CACHE_AGE_MS = 10 * 24 * 60 * 60 * 1000; // 10 Tage
 const MAX_CACHE_SIZE_MB = 100; // 100 MB max
 
@@ -284,6 +286,52 @@ export const cleanupCache = async (): Promise<{ removed: number; freedMB: number
   }
 };
 
+let cleanupInFlight: Promise<{ removed: number; freedMB: number; skipped: boolean }> | null = null;
+
+/**
+ * Gedrosselte Cache-Bereinigung
+ *
+ * Bewusst nicht Teil des Startpfads: der Aufrufer startet sie nach dem ersten
+ * Render (oder beim Wechsel in den Hintergrund) und wartet nicht darauf.
+ * Mehrfachaufrufe innerhalb eines Tages sind No-Ops, parallele Aufrufe teilen
+ * sich denselben Durchlauf.
+ */
+export const maybeCleanupCache = async (): Promise<{
+  removed: number;
+  freedMB: number;
+  skipped: boolean;
+}> => {
+  if (cleanupInFlight) return cleanupInFlight;
+
+  const run = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(CACHE_CLEANUP_TIMESTAMP_KEY);
+      const lastRun = stored ? Number(stored) : 0;
+      if (Number.isFinite(lastRun) && lastRun > 0 && Date.now() - lastRun < CLEANUP_MIN_INTERVAL_MS) {
+        return { removed: 0, freedMB: 0, skipped: true };
+      }
+    } catch {
+      // Ohne Drossel-Zeitstempel wird einmal regulaer bereinigt
+    }
+
+    const result = await cleanupCache();
+
+    try {
+      await AsyncStorage.setItem(CACHE_CLEANUP_TIMESTAMP_KEY, String(Date.now()));
+    } catch {
+      // Zeitstempel ist nur eine Optimierung
+    }
+
+    return { ...result, skipped: false };
+  };
+
+  cleanupInFlight = run().finally(() => {
+    cleanupInFlight = null;
+  });
+
+  return cleanupInFlight;
+};
+
 /**
  * Lösche den gesamten Bild-Cache
  */
@@ -291,7 +339,7 @@ export const clearImageCache = async (): Promise<void> => {
   try {
     await FileSystem.deleteAsync(IMAGE_CACHE_DIR, { idempotent: true });
     metadataCache = {};
-    await AsyncStorage.removeItem(CACHE_METADATA_KEY);
+    await AsyncStorage.multiRemove([CACHE_METADATA_KEY, CACHE_CLEANUP_TIMESTAMP_KEY]);
     await ensureCacheDir();
   } catch (err) {
     console.warn('Failed to clear image cache:', err);

@@ -100,6 +100,48 @@ const getFromStorage = async <T>(key: string, ttl: number): Promise<T | null> =>
   }
 };
 
+/**
+ * In-Flight-Deduplizierung
+ *
+ * Ohne diese Sperre koennen Preload und ein Screen bei kaltem Cache dieselbe
+ * Abfrage gleichzeitig ausloesen. Parallele Aufrufer teilen sich hier dasselbe
+ * Promise, statt zwei identische Supabase-Requests zu starten.
+ */
+const inFlightRequests = new Map<string, Promise<unknown>>();
+
+/**
+ * Generation-Zaehler: jede Invalidierung erhoeht ihn. Ein Request, der vor der
+ * Invalidierung gestartet ist, darf danach nicht mehr in den Cache schreiben -
+ * sonst holt seine spaete Antwort genau den Zustand zurueck, der gerade
+ * verworfen wurde.
+ */
+let cacheGeneration = 0;
+
+const bumpCacheGeneration = (): void => {
+  cacheGeneration += 1;
+};
+
+const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): Promise<T> => {
+  const pending = inFlightRequests.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const generation = cacheGeneration;
+  const isCurrent = () => generation === cacheGeneration;
+
+  const request: Promise<T> = run(isCurrent).finally(() => {
+    // Nur den eigenen Eintrag abraeumen. Wurde zwischenzeitlich invalidiert und
+    // ein neuer Request fuer denselben Key registriert, wuerde ein blindes
+    // delete dessen Eintrag entfernen - der naechste Aufrufer startete dann
+    // einen dritten Request, statt dem laufenden beizutreten.
+    if (inFlightRequests.get(key) === request) {
+      inFlightRequests.delete(key);
+    }
+  });
+
+  inFlightRequests.set(key, request);
+  return request;
+};
+
 const setToStorage = async <T>(key: string, data: T): Promise<void> => {
   try {
     await AsyncStorage.setItem(key, JSON.stringify({
@@ -152,9 +194,10 @@ export interface UserSettings {
   [key: string]: any;
 }
 
-export const getCachedUserSettings = async (): Promise<UserSettings | null> => {
-  const { data: userData } = await getCachedUser();
-  const userId = userData.user?.id;
+export const getCachedUserSettings = async (knownUserId?: string): Promise<UserSettings | null> => {
+  // Aufrufer mit bereits aufgeloester Session reichen die User-ID durch und
+  // vermeiden damit einen zusaetzlichen getUser()-Roundtrip.
+  const userId = knownUserId ?? (await getCachedUser()).data.user?.id;
   if (!userId) return null;
 
   const key = getScopedCacheKey(CACHE_KEYS.USER_SETTINGS, userId);
@@ -166,37 +209,42 @@ export const getCachedUserSettings = async (): Promise<UserSettings | null> => {
   const memory = getFromMemory<UserSettings>(key);
   if (memory) return memory;
 
-  // 2. Storage Cache
-  const storage = await getFromStorage<UserSettings>(key, ttl);
-  if (storage) return storage;
+  return dedupe(key, async (isCurrent) => {
+    // 2. Storage Cache
+    const storage = await getFromStorage<UserSettings>(key, ttl);
+    if (storage) return storage;
 
-  // 3. Fetch from Supabase
-  try {
-    const { data, error } = await supabase
-      .from('user_settings')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 3. Fetch from Supabase
+    try {
+      const { data, error } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (error && (error as any).code !== 'PGRST116') {
-      console.error('Failed to fetch user settings:', error);
+      if (error && (error as any).code !== 'PGRST116') {
+        console.error('Failed to fetch user settings:', error);
+        return null;
+      }
+
+      const settings = data || {};
+      if (isCurrent()) {
+        setToMemory(key, settings, ttl);
+        await setToStorage(key, settings);
+      }
+
+      return settings;
+    } catch (err) {
+      console.error('Error fetching user settings:', err);
       return null;
     }
-
-    const settings = data || {};
-    setToMemory(key, settings, ttl);
-    await setToStorage(key, settings);
-
-    return settings;
-  } catch (err) {
-    console.error('Error fetching user settings:', err);
-    return null;
-  }
+  });
 };
 
 export const invalidateUserSettingsCache = async (): Promise<void> => {
+  bumpCacheGeneration();
   const { data: userData } = await getCachedUser();
   const userId = userData.user?.id;
 
@@ -222,9 +270,8 @@ export interface UserProfile {
   [key: string]: any;
 }
 
-export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
-  const { data: userData } = await getCachedUser();
-  const userId = userData.user?.id;
+export const getCachedUserProfile = async (knownUserId?: string): Promise<UserProfile | null> => {
+  const userId = knownUserId ?? (await getCachedUser()).data.user?.id;
   if (!userId) return null;
 
   const key = getScopedCacheKey(CACHE_KEYS.USER_PROFILE, userId);
@@ -235,34 +282,37 @@ export const getCachedUserProfile = async (): Promise<UserProfile | null> => {
   const memory = getFromMemory<UserProfile>(key);
   if (memory) return memory;
 
-  const storage = await getFromStorage<UserProfile>(key, ttl);
-  if (storage) return storage;
+  return dedupe(key, async (isCurrent) => {
+    const storage = await getFromStorage<UserProfile>(key, ttl);
+    if (storage) return storage;
 
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error && (error as any).code !== 'PGRST116') {
-      console.error('Failed to fetch user profile:', error);
+      if (error && (error as any).code !== 'PGRST116') {
+        console.error('Failed to fetch user profile:', error);
+        return null;
+      }
+
+      if (data && isCurrent()) {
+        setToMemory(key, data, ttl);
+        await setToStorage(key, data);
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
       return null;
     }
-
-    if (data) {
-      setToMemory(key, data, ttl);
-      await setToStorage(key, data);
-    }
-
-    return data;
-  } catch (err) {
-    console.error('Error fetching user profile:', err);
-    return null;
-  }
+  });
 };
 
 export const invalidateUserProfileCache = async (): Promise<void> => {
+  bumpCacheGeneration();
   const { data: userData } = await getCachedUser();
   const userId = userData.user?.id;
 
@@ -387,27 +437,19 @@ export const invalidatePremiumStatusCache = async (): Promise<void> => {
  * Preload wichtige Daten beim App-Start
  * Rufe diese Funktion in _layout.tsx oder App.tsx auf
  */
-export const preloadAppData = async (): Promise<void> => {
-  const { data: userData } = await getCachedUser();
-  if (!userData.user) return;
+export const preloadAppData = async (knownUserId?: string): Promise<void> => {
+  // Wird bewusst erst unterhalb des AuthProvider aufgerufen: mit bekannter
+  // User-ID entfaellt der getUser()-Roundtrip komplett. Die Bild-Cache-Pflege
+  // laeuft getrennt davon (siehe maybeCleanupCache in ./imageCache).
+  const userId = knownUserId ?? (await getCachedUser()).data.user?.id;
+  if (!userId) return;
 
   // Parallel laden für bessere Performance
   await Promise.allSettled([
-    getCachedUserSettings(),
-    getCachedUserProfile(),
+    getCachedUserSettings(userId),
+    getCachedUserProfile(userId),
     getCachedPremiumStatus(),
   ]);
-
-  // Bild-Cache bereinigen (alte Einträge löschen)
-  try {
-    const { cleanupCache } = await import('./imageCache');
-    const result = await cleanupCache();
-    if (result.removed > 0) {
-      console.log(`Image cache cleanup: ${result.removed} files removed, ${result.freedMB.toFixed(2)} MB freed`);
-    }
-  } catch {
-    // imageCache ist optional
-  }
 
   console.log('App data preloaded');
 };
@@ -416,7 +458,11 @@ export const preloadAppData = async (): Promise<void> => {
  * Alle Caches invalidieren (z.B. bei Logout)
  */
 export const invalidateAllCaches = async (): Promise<void> => {
+  bumpCacheGeneration();
   memoryCache.clear();
+  // Laufende Requests nicht mehr wiederverwenden: nach einem Nutzerwechsel
+  // darf kein Aufrufer mehr auf ein Promise des alten Kontexts warten.
+  inFlightRequests.clear();
 
   try {
     const allKeys = await AsyncStorage.getAllKeys();

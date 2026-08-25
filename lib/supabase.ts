@@ -41,6 +41,26 @@ let cachedUser: any = null;
 let cachedUserTimestamp = 0;
 const USER_CACHE_DURATION_MS = 5 * 60 * 1000; // 5 Minuten
 
+type SupabaseUserResponse = Awaited<ReturnType<typeof supabase.auth.getUser>>;
+
+/**
+ * In-Flight-Deduplizierung mit Generation-Guard
+ *
+ * Beim Kaltstart ist der Zeitstempel-Cache noch leer, sodass alle Aufrufer
+ * gleichzeitig loslaufen und jeder einen eigenen Auth-Roundtrip erzeugt.
+ * Parallele Aufrufer teilen sich deshalb ein Promise.
+ *
+ * Der Generation-Zaehler schuetzt den Auth-Wechsel: jede Invalidierung
+ * (Logout, Login, Token-Refresh) erhoeht ihn. Eine Antwort, die noch zu einer
+ * aelteren Generation gehoert, darf den Cache nicht mehr fuellen - sonst
+ * schriebe ein Request des vorherigen Nutzers nach dem Wechsel dessen Daten
+ * zurueck.
+ */
+let userCacheGeneration = 0;
+let inFlightUserRequest:
+  | { generation: number; promise: Promise<SupabaseUserResponse> }
+  | null = null;
+
 /**
  * Cached version of supabase.auth.getUser()
  * Use this instead of calling supabase.auth.getUser() directly!
@@ -53,15 +73,39 @@ export const getCachedUser = async () => {
     return { data: { user: cachedUser }, error: null };
   }
 
-  // Fetch fresh user data
-  const { data, error } = await supabase.auth.getUser();
-
-  if (!error && data.user) {
-    cachedUser = data.user;
-    cachedUserTimestamp = now;
+  // Laufenden Request derselben Generation mitbenutzen.
+  if (inFlightUserRequest && inFlightUserRequest.generation === userCacheGeneration) {
+    return inFlightUserRequest.promise;
   }
 
-  return { data, error };
+  const generation = userCacheGeneration;
+
+  const request = (async (): Promise<SupabaseUserResponse> => {
+    const result = await supabase.auth.getUser();
+
+    // Nur cachen, wenn zwischenzeitlich nicht invalidiert wurde. Der
+    // Zeitstempel entsteht erst jetzt, damit die Laufzeit des Requests nicht
+    // von der TTL abgezogen wird.
+    if (generation === userCacheGeneration && !result.error && result.data.user) {
+      cachedUser = result.data.user;
+      cachedUserTimestamp = Date.now();
+    }
+
+    return result;
+  })();
+
+  const entry = { generation, promise: request };
+  inFlightUserRequest = entry;
+
+  try {
+    return await request;
+  } finally {
+    // Nur den eigenen Eintrag abraeumen: eine Invalidierung waehrend des
+    // Requests kann bereits einen neuen registriert haben.
+    if (inFlightUserRequest === entry) {
+      inFlightUserRequest = null;
+    }
+  }
 };
 
 /**
@@ -70,6 +114,10 @@ export const getCachedUser = async () => {
 export const invalidateUserCache = () => {
   cachedUser = null;
   cachedUserTimestamp = 0;
+  // Generation erhoehen und laufenden Request verwerfen: sein Ergebnis gehoert
+  // zum alten Auth-Zustand und darf weder gecacht noch geteilt werden.
+  userCacheGeneration += 1;
+  inFlightUserRequest = null;
 };
 
 // Listen to auth state changes and invalidate cache
@@ -960,8 +1008,6 @@ export const getLinkedUsersWithDetails = async () => {
     return { success: false, error: err };
   }
 };
-
-
 
 export const updateContraction = async (id: string, updates: Partial<Contraction>) => {
   const { data, error } = await supabase
