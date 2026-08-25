@@ -36,6 +36,25 @@ export const resolveAppLocale = (
   deviceLocale = getDeviceAppLocale(),
 ): AppLocale => preference === 'system' ? deviceLocale : preference;
 
+/**
+ * Nutzerspezifischer Schluessel fuer die Sprachpraeferenz.
+ *
+ * Der globale Schluessel bleibt bestehen und spiegelt die zuletzt aktive
+ * Praeferenz - Notification- und Background-Code (getPersistedAppLocale) hat
+ * keinen Nutzerkontext und liest weiterhin ihn. Zusaetzlich wird die
+ * Praeferenz pro Nutzer abgelegt, damit nach einem Accountwechsel nicht kurz
+ * die Sprache des vorherigen Accounts steht.
+ */
+export const getUserLanguagePreferenceStorageKey = (userId: string): string =>
+  `${LANGUAGE_PREFERENCE_STORAGE_KEY}:${userId}`;
+
+/**
+ * Gespeicherten Wert in eine Praeferenz uebersetzen. Ohne gueltigen Wert gilt
+ * der Standard, nie der Wert eines anderen Nutzers.
+ */
+export const resolvePreferenceForUser = (storedPreference: unknown): LanguagePreference =>
+  isLanguagePreference(storedPreference) ? storedPreference : DEFAULT_LANGUAGE_PREFERENCE;
+
 export const getPersistedAppLocale = async (): Promise<AppLocale> => {
   try {
     const preference = await AsyncStorage.getItem(LANGUAGE_PREFERENCE_STORAGE_KEY);

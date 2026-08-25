@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { AppState } from 'react-native';
@@ -15,8 +16,10 @@ import {
   getAppLocaleTag,
   getDeviceAppLocale,
   LANGUAGE_PREFERENCE_STORAGE_KEY,
+  getUserLanguagePreferenceStorageKey,
   isLanguagePreference,
   resolveAppLocale,
+  resolvePreferenceForUser,
   type AppLocale,
   type LanguagePreference,
 } from '@/lib/localization';
@@ -34,12 +37,16 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [preference, setPreferenceState] = useState<LanguagePreference>(
     DEFAULT_LANGUAGE_PREFERENCE,
   );
   const [deviceLocale, setDeviceLocale] = useState<AppLocale>(getDeviceAppLocale);
   const [isLocalPreferenceLoaded, setIsLocalPreferenceLoaded] = useState(false);
   const [isAccountPreferenceLoaded, setIsAccountPreferenceLoaded] = useState(false);
+  // Fuer welchen Nutzer die aktuell angezeigte Praeferenz gilt. undefined =
+  // seit App-Start noch kein Nutzer aufgeloest.
+  const preferenceUserIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,10 +69,70 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, []);
 
+  // Praeferenz global (zuletzt aktiv, fuer Background-Code ohne Nutzerkontext)
+  // und zusaetzlich nutzerspezifisch ablegen.
+  const persistPreference = useCallback(
+    async (nextPreference: LanguagePreference, forUserId: string | null) => {
+      const writes = [AsyncStorage.setItem(LANGUAGE_PREFERENCE_STORAGE_KEY, nextPreference)];
+      if (forUserId) {
+        writes.push(
+          AsyncStorage.setItem(getUserLanguagePreferenceStorageKey(forUserId), nextPreference),
+        );
+      }
+      await Promise.all(writes);
+    },
+    [],
+  );
+
+  // Nutzerwechsel: die fuer diesen Nutzer gespeicherte Praeferenz anwenden.
+  // Ohne gespeicherten Wert faellt ein echter Wechsel auf den Standard zurueck,
+  // damit nicht die Sprache des vorherigen Accounts stehen bleibt.
   useEffect(() => {
     if (authLoading || !isLocalPreferenceLoaded) return;
 
-    if (!user?.id) {
+    if (!userId) {
+      preferenceUserIdRef.current = null;
+      return;
+    }
+
+    if (preferenceUserIdRef.current === userId) return;
+
+    const previousUserId = preferenceUserIdRef.current;
+    preferenceUserIdRef.current = userId;
+
+    let cancelled = false;
+
+    AsyncStorage.getItem(getUserLanguagePreferenceStorageKey(userId))
+      .then((storedPreference) => {
+        if (cancelled) return;
+
+        if (isLanguagePreference(storedPreference)) {
+          setPreferenceState(storedPreference);
+          return;
+        }
+
+        // Beim ersten Aufloesen nach App-Start hat der globale Schluessel
+        // bereits den richtigen Wert. Nur ein echter Wechsel muss zuruecksetzen.
+        if (previousUserId && previousUserId !== userId) {
+          setPreferenceState(resolvePreferenceForUser(storedPreference));
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load per-user language preference:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, isLocalPreferenceLoaded, userId]);
+
+  // Account-Praeferenz wird im Hintergrund abgeglichen. Sie haelt die Anzeige
+  // bewusst nicht mehr auf - das war der Netzwerk-Roundtrip, der den Splash
+  // zusaetzlich blockiert hat.
+  useEffect(() => {
+    if (authLoading || !isLocalPreferenceLoaded) return;
+
+    if (!userId) {
       setIsAccountPreferenceLoaded(true);
       return;
     }
@@ -78,7 +145,7 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const accountPreference = data?.language_preference;
         if (!cancelled && isLanguagePreference(accountPreference)) {
           setPreferenceState(accountPreference);
-          return AsyncStorage.setItem(LANGUAGE_PREFERENCE_STORAGE_KEY, accountPreference);
+          return persistPreference(accountPreference, userId);
         }
         return undefined;
       })
@@ -92,7 +159,7 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => {
       cancelled = true;
     };
-  }, [authLoading, isLocalPreferenceLoaded, user?.id]);
+  }, [authLoading, isLocalPreferenceLoaded, persistPreference, userId]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -109,35 +176,34 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setDeviceLocale(getDeviceAppLocale());
     }
 
-    await AsyncStorage.setItem(LANGUAGE_PREFERENCE_STORAGE_KEY, nextPreference);
+    await persistPreference(nextPreference, userId);
 
-    if (user?.id) {
+    if (userId) {
       const { error } = await saveAppSettings({
         language_preference: nextPreference,
         resolved_language: resolveAppLocale(nextPreference, getDeviceAppLocale()),
       });
       if (error) throw error;
     }
-  }, [user?.id]);
+  }, [persistPreference, userId]);
 
   const locale = resolveAppLocale(preference, deviceLocale);
 
   useEffect(() => {
-    if (!user?.id || !isLocalPreferenceLoaded || !isAccountPreferenceLoaded) return;
+    if (!userId || !isLocalPreferenceLoaded || !isAccountPreferenceLoaded) return;
     void saveAppSettings({ resolved_language: locale }).then(({ error }) => {
       if (error) console.warn('Failed to sync resolved app language:', error);
     });
-  }, [isAccountPreferenceLoaded, isLocalPreferenceLoaded, locale, user?.id]);
+  }, [isAccountPreferenceLoaded, isLocalPreferenceLoaded, locale, userId]);
 
   const value = useMemo<LocaleContextValue>(() => ({
     locale,
     localeTag: getAppLocaleTag(locale),
     preference,
-    isLocaleReady: isLocalPreferenceLoaded && (authLoading || isAccountPreferenceLoaded),
+    // Nur lokaler Zustand. Der Account-Abgleich laeuft im Hintergrund weiter.
+    isLocaleReady: isLocalPreferenceLoaded,
     setPreference,
   }), [
-    authLoading,
-    isAccountPreferenceLoaded,
     isLocalPreferenceLoaded,
     locale,
     preference,
