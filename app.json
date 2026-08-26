@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.20",
+    "version": "1.0.21",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
@@ -10,8 +10,8 @@
     "ios": {
       "supportsTablet": true,
       "appleTeamId": "FWCPXYUKA2",
-      "buildNumber": "7",
-      "version": "1.0.20",
+      "buildNumber": "8",
+      "version": "1.0.21",
       "bundleIdentifier": "com.LottiBaby.app",
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -62,7 +62,7 @@
         "android.permission.WAKE_LOCK"
       ],
       "package": "com.LottiBaby.app",
-      "versionCode": 6
+      "versionCode": 7
     },
     "web": {
       "bundler": "metro",
@@ -158,7 +158,7 @@
       }
     },
     "owner": "janzeppi",
-    "runtimeVersion": "1.0.20",
+    "runtimeVersion": "1.0.21",
     "updates": {
       "url": "https://u.expo.dev/d7120520-e4ff-4967-a797-627a2cb3680b",
       "enabled": true,

@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  getPaywallAccessTier,
+  isPaywallAccessRole,
+} from '@/lib/paywallAccess';
 import { supabase } from '@/lib/supabase';
 import {
   getCurrentSubscriptionFeaturePolicy,
@@ -152,19 +156,11 @@ const tierFromSpecialAccess = (
   profile: { is_admin?: boolean | null; paywall_access_role?: string | null } | null,
 ): { tier: AppSubscriptionTier; source: SubscriptionAccessSource } | null => {
   if (profile?.is_admin === true) return { tier: 'premium', source: 'admin' };
-  if (profile?.paywall_access_role === 'premium_tester') {
-    return { tier: 'premium', source: 'premium_tester' };
-  }
-  if (profile?.paywall_access_role === 'lite_tester') {
-    return { tier: 'lite', source: 'lite_tester' };
-  }
-  if (profile?.paywall_access_role === 'tester') {
-    return { tier: 'standard', source: 'tester' };
-  }
-  if (profile?.paywall_access_role === 'cooperation_partner') {
-    return { tier: 'standard', source: 'cooperation_partner' };
-  }
-  return null;
+  const role = profile?.paywall_access_role;
+  if (!isPaywallAccessRole(role)) return null;
+
+  const tier = getPaywallAccessTier(role);
+  return tier ? { tier, source: role } : null;
 };
 
 const resolveVerifiedTier = async (

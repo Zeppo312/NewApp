@@ -178,6 +178,30 @@ export type DrainResult = {
 };
 
 /**
+ * Lädt die Einkaufsliste frisch aus Supabase und schreibt sie ins Widget.
+ * Nötig, damit das Widget auch dann gefüllt ist, wenn der Einkaufslisten-Screen
+ * seit dem App-Start nie geöffnet wurde.
+ */
+export const refreshShoppingWidget = async (
+  babyId: string,
+  options: { locale?: ShoppingLocale; babyName?: string | null } = {}
+): Promise<ShoppingListItem[] | null> => {
+  if (!nativeModule || !babyId) return null;
+
+  const { data: state, error } = await fetchShoppingState(babyId);
+  if (error || !state) {
+    console.warn('Failed to load shopping state for widget refresh:', error);
+    return null;
+  }
+
+  await syncShoppingWidget(state.shoppingItems, {
+    locale: options.locale ?? DEFAULT_SHOPPING_LOCALE,
+    babyName: options.babyName ?? null,
+  });
+  return state.shoppingItems;
+};
+
+/**
  * Überträgt die im Widget abgehakten Posten nach Supabase, zieht verknüpfte
  * Vorräte nach und schreibt den frischen Stand zurück ins Widget.
  */
@@ -188,7 +212,11 @@ export const drainShoppingWidgetToggles = async (
   if (!nativeModule || !babyId) return { applied: 0, items: null };
 
   const pending = await readPendingToggles();
-  if (pending.length === 0) return { applied: 0, items: null };
+  if (pending.length === 0) {
+    // Nichts abzuarbeiten, aber das Widget soll trotzdem den aktuellen Stand zeigen.
+    await refreshShoppingWidget(babyId, options);
+    return { applied: 0, items: null };
+  }
 
   const locale = options.locale ?? DEFAULT_SHOPPING_LOCALE;
   const { data: state, error } = await fetchShoppingState(babyId);

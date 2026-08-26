@@ -30,7 +30,8 @@ export type ReportReason =
 
 export type BlockedUser = {
   id: string;
-  name: string;
+  /** null, wenn sich kein Profil auflösen lässt – der Screen zeigt dann einen Platzhalter. */
+  name: string | null;
   avatar_url: string | null;
   created_at: string;
 };
@@ -236,6 +237,49 @@ export const unblockUser = async (userId: string): Promise<ModerationResult> => 
  * Liste der selbst blockierten Nutzer (für den Verwaltungs-Screen).
  * Nutzer, die den aktuellen Nutzer blockiert haben, erscheinen hier nicht.
  */
+type ProfileRow = {
+  id?: string | null;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar_url?: string | null;
+};
+
+const profileDisplayName = (profile: ProfileRow | undefined | null): string | null => {
+  if (!profile) return null;
+  const username = profile.username?.trim();
+  if (username) return username;
+  const fullName = [profile.first_name, profile.last_name]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return fullName || null;
+};
+
+/**
+ * Profile, die die RLS-Policies von `profiles` nicht herausgibt (z. B. weil man
+ * mit der Person verblockt ist), über die SECURITY-DEFINER-RPC nachladen.
+ * Sonst stünde im Verwaltungs-Screen nur "Unbekannt".
+ */
+const fetchProfilesViaRpc = async (userIds: string[]): Promise<Map<string, ProfileRow>> => {
+  const resolved = new Map<string, ProfileRow>();
+
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const { data, error } = await supabase.rpc('get_user_profile', { user_id_param: userId });
+      if (error) {
+        console.error('moderation: failed to load blocked profile via rpc', error);
+        return;
+      }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) resolved.set(userId, row as ProfileRow);
+    }),
+  );
+
+  return resolved;
+};
+
 export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
   try {
     const { data: userData } = await getCachedUser();
@@ -253,28 +297,43 @@ export const getBlockedUsers = async (): Promise<BlockedUser[]> => {
       return [];
     }
 
-    const rows = data || [];
+    const rows = (data || []) as { blocked_id: string; created_at: string }[];
     if (rows.length === 0) return [];
 
-    const { data: profiles } = await supabase
+    const blockedIds = rows.map((row) => row.blocked_id);
+
+    const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
       .select('id, username, first_name, last_name, avatar_url')
-      .in(
-        'id',
-        rows.map((row: { blocked_id: string }) => row.blocked_id),
-      );
+      .in('id', blockedIds);
 
-    const profileById = new Map(
-      (profiles || []).map((profile: any) => [profile.id as string, profile]),
+    if (profilesError) {
+      console.error('moderation: failed to load blocked profiles', profilesError);
+    }
+
+    const profileById = new Map<string, ProfileRow>(
+      ((profiles || []) as ProfileRow[]).map((profile) => [profile.id as string, profile]),
     );
 
-    return rows.map((row: { blocked_id: string; created_at: string }) => {
+    const missingIds = blockedIds.filter((id) => !profileDisplayName(profileById.get(id)));
+    if (missingIds.length > 0) {
+      const fallbackProfiles = await fetchProfilesViaRpc(missingIds);
+      fallbackProfiles.forEach((profile, id) => {
+        const existing = profileById.get(id);
+        profileById.set(id, {
+          ...existing,
+          ...profile,
+          avatar_url: profile.avatar_url ?? existing?.avatar_url ?? null,
+        });
+      });
+    }
+
+    return rows.map((row) => {
       const profile = profileById.get(row.blocked_id);
-      const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();
 
       return {
         id: row.blocked_id,
-        name: profile?.username?.trim() || fullName || 'Unbekannt',
+        name: profileDisplayName(profile),
         avatar_url: profile?.avatar_url ?? null,
         created_at: row.created_at,
       };

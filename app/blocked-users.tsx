@@ -63,7 +63,7 @@ export default function BlockedUsersScreen() {
     (target: BlockedUser) => {
       Alert.alert(
         t('unblock.confirmTitle'),
-        t('unblock.confirmMessage', { name: target.name }),
+        t('unblock.confirmMessage', { name: target.name?.trim() || t('blocked.unknownName') }),
         [
           { text: t('common.cancel'), style: 'cancel' },
           {
@@ -84,6 +84,11 @@ export default function BlockedUsersScreen() {
         ],
       );
     },
+    [t],
+  );
+
+  const displayName = useCallback(
+    (entry: BlockedUser) => entry.name?.trim() || t('blocked.unknownName'),
     [t],
   );
 
@@ -136,18 +141,24 @@ export default function BlockedUsersScreen() {
                       <Image source={{ uri: entry.avatar_url }} style={styles.avatar} />
                     ) : (
                       <View style={[styles.avatarPlaceholder, { backgroundColor: isDark ? '#3D3330' : '#F3ECE7' }]}>
-                        <ThemedText style={[styles.avatarInitial, { color: theme.accent }]}>
-                          {entry.name.charAt(0).toUpperCase()}
-                        </ThemedText>
+                        {entry.name?.trim() ? (
+                          <ThemedText style={[styles.avatarInitial, { color: theme.accent }]}>
+                            {entry.name.trim().charAt(0).toUpperCase()}
+                          </ThemedText>
+                        ) : (
+                          <IconSymbol name="person.fill" size={20} color={theme.accent} />
+                        )}
                       </View>
                     )}
 
                     <View style={styles.userMeta}>
                       <ThemedText style={[styles.userName, { color: textPrimary }]} numberOfLines={1}>
-                        {entry.name}
+                        {displayName(entry)}
                       </ThemedText>
                       <ThemedText style={[styles.userSince, { color: textSecondary }]}>
-                        {formatBlockedSince(entry.created_at)}
+                        {entry.name?.trim()
+                          ? formatBlockedSince(entry.created_at)
+                          : `${t('blocked.unknownHint')} · ${formatBlockedSince(entry.created_at)}`}
                       </ThemedText>
                     </View>
 
