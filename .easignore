@@ -4,6 +4,11 @@ node_modules/
 .expo-shared/
 node_local/
 
+# Local environment files (provided by EAS environments in cloud builds)
+.env
+.env.*
+build.*.env
+
 # Generated app and web build artifacts
 dist*/
 web-build/
