@@ -1773,6 +1773,26 @@ export default function AppSettingsScreen() {
 
                       <TouchableOpacity
                         style={styles.rowItem}
+                        onPress={() => router.push('/subscription-features-admin')}
+                      >
+                        <View style={styles.rowIcon}>
+                          <ThemedText style={{ fontSize: 24 }}>🧩</ThemedText>
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>
+                            {t('admin.featuresTitle')}
+                          </ThemedText>
+                          <ThemedText style={styles.rowDescription}>
+                            {t('admin.featuresDescription')}
+                          </ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                        </View>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.rowItem}
                         onPress={() => router.push('/startup-message-admin')}
                       >
                         <View style={styles.rowIcon}>

@@ -8,66 +8,27 @@
  *
  * Die Tier-Auflösung läuft über die RevenueCat-Produkt-IDs (Naming bleibt
  * unverändert). Solange die neuen Produkte/Entitlements in RevenueCat noch
- * nicht verknüpft sind, kann über MOCK_SUBSCRIPTION_TIER bzw. die Env-Variable
- * EXPO_PUBLIC_MOCK_SUBSCRIPTION_TIER ein Tier simuliert werden.
+ * nicht verknüpft sind, kann über EXPO_PUBLIC_MOCK_SUBSCRIPTION_TIER ein Tier
+ * simuliert werden.
  */
 
-import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-
-import { getCachedUserProfile } from '@/lib/appCache';
-import { getCachedUser } from '@/lib/supabase';
+import { useSubscriptionAccess } from "@/contexts/SubscriptionAccessContext";
 import {
-  getRevenueCatSubscriptionSummary,
-  getTierFromProductId,
-} from '@/lib/revenuecat';
+  getSubscriptionAccessState,
+  markSubscriptionAccessStale,
+  refreshCurrentSubscriptionAccess,
+} from "@/lib/subscriptionAccess";
+import {
+  featureAllowedByPolicy,
+  getCurrentSubscriptionFeaturePolicy,
+  type AppFeature,
+  type AppSubscriptionTier,
+} from "@/lib/subscriptionFeaturePolicy";
 
-export type AppSubscriptionTier = 'lite' | 'standard' | 'premium';
-
-/**
- * Mock-Override für Entwicklung/Tests, solange RevenueCat noch nicht auf die
- * neuen Produkte umgestellt ist. Entweder hier hart setzen (z. B. 'lite')
- * oder per EXPO_PUBLIC_MOCK_SUBSCRIPTION_TIER=lite starten. null = echte
- * Auflösung über RevenueCat.
- */
-export const MOCK_SUBSCRIPTION_TIER: AppSubscriptionTier | null = null;
-
-const parseTier = (value: string | null | undefined): AppSubscriptionTier | null =>
-  value === 'lite' || value === 'standard' || value === 'premium' ? value : null;
-
-const getMockTier = (): AppSubscriptionTier | null =>
-  MOCK_SUBSCRIPTION_TIER ??
-  parseTier(process.env.EXPO_PUBLIC_MOCK_SUBSCRIPTION_TIER);
-
-export type AppFeature =
-  | 'basisTracker'
-  | 'partnerLink'
-  | 'planner'
-  | 'shoppingList'
-  | 'wochenmomente'
-  | 'pdfExport'
-  | 'recipes'
-  | 'fullHistory'
-  | 'voiceLog'
-  | 'fuersorge'
-  | 'fragLotti'
-  | 'pregnancyBriefing';
-
-const FEATURE_MATRIX: Record<AppFeature, AppSubscriptionTier[]> = {
-  basisTracker: ['lite', 'standard', 'premium'],
-  partnerLink: ['standard', 'premium'],
-  planner: ['standard', 'premium'],
-  shoppingList: ['standard', 'premium'],
-  wochenmomente: ['standard', 'premium'],
-  pdfExport: ['standard', 'premium'],
-  recipes: ['standard', 'premium'],
-  fullHistory: ['standard', 'premium'],
-  // KI-Features – nur Premium
-  voiceLog: ['premium'],
-  fuersorge: ['premium'],
-  fragLotti: ['premium'],
-  pregnancyBriefing: ['premium'],
-};
+export type {
+  AppFeature,
+  AppSubscriptionTier,
+} from "@/lib/subscriptionFeaturePolicy";
 
 /** Lite sieht nur die letzten N Tage Verlauf (heute eingeschlossen). */
 export const LITE_HISTORY_DAYS = 7;
@@ -85,7 +46,7 @@ const startOfDay = (date: Date): Date => {
 export const getHistoryCutoffDate = (
   tier: AppSubscriptionTier | null,
 ): Date | null => {
-  if (tier !== 'lite') return null;
+  if (tier !== "lite") return null;
   const cutoff = startOfDay(new Date());
   cutoff.setDate(cutoff.getDate() - (LITE_HISTORY_DAYS - 1));
   return cutoff;
@@ -101,8 +62,14 @@ export const isBeforeHistoryCutoff = (
  * Tier unbegrenzten Verlauf hat.
  */
 export const useHistoryCutoff = (): Date | null => {
-  const tier = useSubscriptionTier();
-  return getHistoryCutoffDate(tier);
+  const access = useFeatureAccess("fullHistory");
+  // Während der lokale Stand initialisiert wird, niemals vorsorglich sperren.
+  // Erst eine gültige Policy-Entscheidung aktiviert das 7-Tage-Limit.
+  if (access.hasAccess !== false) return null;
+
+  const cutoff = startOfDay(new Date());
+  cutoff.setDate(cutoff.getDate() - (LITE_HISTORY_DAYS - 1));
+  return cutoff;
 };
 
 export type LockedFeatureCopy = {
@@ -110,130 +77,154 @@ export type LockedFeatureCopy = {
   subtitle: string;
   bullets: string[];
   /** Tier, das das Feature freischaltet – steuert die CTA-Beschriftung. */
-  requiredTier: 'standard' | 'premium';
+  requiredTier: "standard" | "premium";
 };
 
 export const LOCKED_FEATURE_COPY: Record<AppFeature, LockedFeatureCopy> = {
   basisTracker: {
-    title: 'Basis-Tracker',
-    subtitle: 'In jedem Lotti-Abo enthalten.',
+    title: "Basis-Tracker",
+    subtitle: "In jedem Lotti-Abo enthalten.",
     bullets: [],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   partnerLink: {
-    title: 'Gemeinsam als Familie',
+    title: "Gemeinsam als Familie",
     subtitle:
-      'Verknüpfe dein Konto mit deinem Partner – beide sehen und tracken dasselbe Baby.',
+      "Verknüpfe dein Konto mit deinem Partner – beide sehen und tracken dasselbe Baby.",
     bullets: [
-      'Einträge landen sofort bei euch beiden',
-      'Wer übernimmt die Nacht? Ihr seht beide den Stand',
-      'Benachrichtigungen für den Partner',
+      "Einträge landen sofort bei euch beiden",
+      "Wer übernimmt die Nacht? Ihr seht beide den Stand",
+      "Benachrichtigungen für den Partner",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   planner: {
-    title: 'Planer & Termine',
-    subtitle: 'Behaltet Arzttermine, U-Untersuchungen und euren Alltag im Blick.',
+    title: "Planer & Termine",
+    subtitle:
+      "Behaltet Arzttermine, U-Untersuchungen und euren Alltag im Blick.",
     bullets: [
-      'Gemeinsamer Familienkalender',
-      'Erinnerungen an wichtige Termine',
-      'Synchron mit deinem Partner',
+      "Gemeinsamer Familienkalender",
+      "Erinnerungen an wichtige Termine",
+      "Synchron mit deinem Partner",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   shoppingList: {
-    title: 'Einkaufslisten',
-    subtitle: 'Windeln fast leer? Einmal eintragen, beide sehen es.',
+    title: "Einkaufslisten",
+    subtitle: "Windeln fast leer? Einmal eintragen, beide sehen es.",
     bullets: [
-      'Geteilte Listen für euch beide',
-      'Vorrats-Erinnerungen bei niedrigem Bestand',
-      'Vorlagen für Baby-Erstausstattung',
+      "Geteilte Listen für euch beide",
+      "Vorrats-Erinnerungen bei niedrigem Bestand",
+      "Vorlagen für Baby-Erstausstattung",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   wochenmomente: {
-    title: 'Wochenmomente',
-    subtitle: 'Sammle jede Woche einen besonderen Moment eures Babys.',
+    title: "Wochenmomente",
+    subtitle: "Sammle jede Woche einen besonderen Moment eures Babys.",
     bullets: [
-      'Wöchentliche Erinnerungs-Sammlung',
-      'Eure Geschichte zum Zurückblättern',
-      'Momente mit dem Partner teilen',
+      "Wöchentliche Erinnerungs-Sammlung",
+      "Eure Geschichte zum Zurückblättern",
+      "Momente mit dem Partner teilen",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   pdfExport: {
-    title: 'Auswertungen & PDF-Export',
-    subtitle: 'Alle Daten übersichtlich – auch für den Kinderarzt.',
+    title: "Auswertungen & PDF-Export",
+    subtitle: "Alle Daten übersichtlich – auch für den Kinderarzt.",
     bullets: [
-      'PDF-Berichte für U-Untersuchungen',
-      'Schlaf- und Fütter-Auswertungen',
-      'Daten gehören euch – jederzeit exportierbar',
+      "PDF-Berichte für U-Untersuchungen",
+      "Schlaf- und Fütter-Auswertungen",
+      "Daten gehören euch – jederzeit exportierbar",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   recipes: {
-    title: 'Rezepte & Beikost',
-    subtitle: 'Rezeptideen und Beikost-Begleitung für euer Baby.',
+    title: "Rezepte & Beikost",
+    subtitle: "Rezeptideen und Beikost-Begleitung für euer Baby.",
     bullets: [
-      'Altersgerechte Rezeptideen',
-      'Eigene Rezepte speichern',
-      'Beikost-Videokurs',
+      "Altersgerechte Rezeptideen",
+      "Eigene Rezepte speichern",
+      "Beikost-Videokurs",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
   },
   fullHistory: {
-    title: 'Kompletter Verlauf',
+    title: "Kompletter Verlauf",
     subtitle:
-      'In Lotti Lite siehst du die letzten 7 Tage – mit einem Abo bleibt eure ganze Geschichte erreichbar.',
+      "In Lotti Lite siehst du die letzten 7 Tage – mit einem Abo bleibt eure ganze Geschichte erreichbar.",
     bullets: [
-      'Alle Einträge seit dem ersten Tag',
-      'Entwicklungen über Wochen und Monate verfolgen',
-      'Nichts geht verloren – deine Daten bleiben gespeichert',
+      "Alle Einträge seit dem ersten Tag",
+      "Entwicklungen über Wochen und Monate verfolgen",
+      "Nichts geht verloren – deine Daten bleiben gespeichert",
     ],
-    requiredTier: 'standard',
+    requiredTier: "standard",
+  },
+  sleepMonthView: {
+    title: "Monatsansicht im Schlaftracker",
+    subtitle:
+      "Mit der Monatsansicht erkennst du Schlafmuster und Entwicklungen auf einen Blick.",
+    bullets: [
+      "Schlafkalender für den ganzen Monat",
+      "Durchschnitt und längste Schlafphase vergleichen",
+      "Entwicklungen über mehrere Wochen erkennen",
+    ],
+    requiredTier: "standard",
+  },
+  dailyMonthView: {
+    title: "Monatsansicht in Unser Tag",
+    subtitle:
+      "Mit dem Aktivitätskalender erkennst du Fütter- und Wickelmuster über den ganzen Monat.",
+    bullets: [
+      "Aktivitätskalender für den ganzen Monat",
+      "Mahlzeiten und Wickeleinträge zusammenfassen",
+      "Entwicklungen über mehrere Wochen erkennen",
+    ],
+    requiredTier: "standard",
   },
   voiceLog: {
-    title: 'Sprach-Logging',
+    title: "Sprach-Logging",
     subtitle:
-      'Einfach einsprechen – Lotti trägt Stillen, Schlafen & Wickeln für dich ein.',
+      "Einfach einsprechen – Lotti trägt Stillen, Schlafen & Wickeln für dich ein.",
     bullets: [
-      'Nachts mit einer Hand bedienbar',
-      'Lotti versteht dich und ordnet alles richtig zu',
-      'Ein KI-Feature aus Lotti Premium',
+      "Nachts mit einer Hand bedienbar",
+      "Lotti versteht dich und ordnet alles richtig zu",
+      "Ein KI-Feature aus Lotti Premium",
     ],
-    requiredTier: 'premium',
+    requiredTier: "premium",
   },
   fuersorge: {
-    title: 'Lottis Fürsorge',
+    title: "Lottis Fürsorge",
     subtitle:
-      'Tägliche, persönliche Hinweise für euch – aus Wetter, Alter und euren Daten.',
+      "Tägliche, persönliche Hinweise für euch – aus Wetter, Alter und euren Daten.",
     bullets: [
-      'UV-, Regen- und Temperatur-Hinweise für euer Baby',
-      'Persönliche Impulse statt generischer Tipps',
-      'Ein KI-Feature aus Lotti Premium',
+      "UV-, Regen- und Temperatur-Hinweise für euer Baby",
+      "Persönliche Impulse statt generischer Tipps",
+      "Ein KI-Feature aus Lotti Premium",
     ],
-    requiredTier: 'premium',
+    requiredTier: "premium",
   },
   fragLotti: {
-    title: 'Frag Lotti',
-    subtitle: 'Stelle Fragen rund um euren Babyalltag und erhalte allgemeine Orientierung, ergänzt durch passende Lotti-Daten.',
+    title: "Frag Lotti",
+    subtitle:
+      "Stelle Fragen rund um euren Babyalltag und erhalte allgemeine Orientierung, ergänzt durch passende Lotti-Daten.",
     bullets: [
-      'Alltagsfragen zu Schlaf, Fütterung, Größen und Routinen stellen',
-      'Passende Einträge werden automatisch und sichtbar einbezogen',
-      'Keine Diagnosen und keine erfundenen Ursachen',
+      "Alltagsfragen zu Schlaf, Fütterung, Größen und Routinen stellen",
+      "Passende Einträge werden automatisch und sichtbar einbezogen",
+      "Keine Diagnosen und keine erfundenen Ursachen",
     ],
-    requiredTier: 'premium',
+    requiredTier: "premium",
   },
   pregnancyBriefing: {
-    title: 'Persönliches Schwangerschafts-Briefing',
+    title: "Persönliches Schwangerschafts-Briefing",
     subtitle:
-      'Dein täglicher Überblick passend zu deiner SSW, deinen Einträgen und euren nächsten Schritten.',
+      "Dein täglicher Überblick passend zu deiner SSW, deinen Einträgen und euren nächsten Schritten.",
     bullets: [
-      'Selfcare passend zu deinem letzten Check-in',
-      'Termine und offene Arztfragen auf einen Blick',
-      'Eine Partner-Aufgabe und die nächste Vorbereitung',
+      "Selfcare passend zu deinem letzten Check-in",
+      "Termine und offene Arztfragen auf einen Blick",
+      "Eine Partner-Aufgabe und die nächste Vorbereitung",
     ],
-    requiredTier: 'premium',
+    requiredTier: "premium",
   },
 };
 
@@ -248,83 +239,38 @@ export const LOCKED_FEATURE_COPY: Record<AppFeature, LockedFeatureCopy> = {
  *   6. Kein Abo (Trial) → standard: die Testphase zeigt die volle App ohne
  *      KI, damit das KI-Budget hinter dem Premium-Abo bleibt
  */
-export const resolveSubscriptionTier = async (): Promise<AppSubscriptionTier> => {
-  const mockTier = getMockTier();
-  if (mockTier) return mockTier;
+export const resolveSubscriptionTier =
+  async (): Promise<AppSubscriptionTier> => {
+    const state = await refreshCurrentSubscriptionAccess({ force: true });
+    return state.tier;
+  };
 
-  try {
-    const profile = await getCachedUserProfile();
-    if (
-      profile?.is_admin === true ||
-      profile?.paywall_access_role === 'premium_tester'
-    ) {
-      return 'premium';
-    }
-    if (profile?.paywall_access_role === 'lite_tester') {
-      return 'lite';
-    }
-    if (
-      profile?.paywall_access_role === 'tester' ||
-      profile?.paywall_access_role === 'cooperation_partner'
-    ) {
-      return 'standard';
-    }
-  } catch {
-    // Profil nicht verfügbar → weiter mit Abo-Prüfung
-  }
-
-  try {
-    const { data: userData } = await getCachedUser();
-    const userId = userData.user?.id;
-    if (!userId) return 'standard';
-
-    const summary = await getRevenueCatSubscriptionSummary(userId);
-    if (summary.isActive) {
-      const tier = getTierFromProductId(summary.productId);
-      if (tier === 'lite') return 'lite';
-      if (tier === 'premium') {
-        // Legacy-Produkte zählen als Standard (alles ohne KI); nur die neuen
-        // lottibaby_premium_*-Produkte schalten KI frei.
-        return summary.productId?.startsWith('lottibaby_premium')
-          ? 'premium'
-          : 'standard';
-      }
-      // Aktives, aber unbekanntes Produkt → sichere Mitte
-      return 'standard';
-    }
-  } catch {
-    // RevenueCat nicht erreichbar/konfiguriert → Trial-Verhalten
-  }
-
-  return 'standard';
-};
-
-let tierCache: { tier: AppSubscriptionTier; at: number } | null = null;
-const TIER_CACHE_TTL_MS = 5 * 60 * 1000;
-
+/**
+ * Markiert den Stand nur als veraltet. Der last-known-good Cache bleibt
+ * erhalten und wird nicht aufgrund eines Timeouts oder Netzfehlers gelöscht.
+ */
 export const invalidateSubscriptionTierCache = () => {
-  tierCache = null;
+  markSubscriptionAccessStale();
+  void refreshCurrentSubscriptionAccess({ force: true }).catch((error) => {
+    console.warn("Subscription access refresh unavailable:", error);
+  });
 };
 
-export const getSubscriptionTier = async (): Promise<AppSubscriptionTier> => {
-  if (tierCache && Date.now() - tierCache.at < TIER_CACHE_TTL_MS) {
-    return tierCache.tier;
-  }
+export const getSubscriptionTier = async (): Promise<AppSubscriptionTier> =>
+  (await getSubscriptionAccessState()).tier;
 
-  const tier = await resolveSubscriptionTier();
-  tierCache = { tier, at: Date.now() };
-  return tier;
-};
-
-export const hasFeatureAccess = async (feature: AppFeature): Promise<boolean> => {
-  const tier = await getSubscriptionTier();
-  return FEATURE_MATRIX[feature].includes(tier);
+export const hasFeatureAccess = async (
+  feature: AppFeature,
+): Promise<boolean> => {
+  const state = await getSubscriptionAccessState();
+  return featureAllowedByPolicy(state.policy, feature, state.tier);
 };
 
 export const featureAllowedForTier = (
   feature: AppFeature,
   tier: AppSubscriptionTier,
-): boolean => FEATURE_MATRIX[feature].includes(tier);
+): boolean =>
+  featureAllowedByPolicy(getCurrentSubscriptionFeaturePolicy(), feature, tier);
 
 export type FeatureAccessState = {
   /** null = wird noch geprüft */
@@ -332,50 +278,16 @@ export type FeatureAccessState = {
   tier: AppSubscriptionTier | null;
 };
 
-/**
- * Prüft den Zugriff bei jedem Fokus neu (Abo/Rolle kann sich ändern).
- */
+/** Liefert synchron den lokalen Stand; Aktualisierungen laufen zentral. */
 export const useFeatureAccess = (feature: AppFeature): FeatureAccessState => {
-  const [state, setState] = useState<FeatureAccessState>({
-    hasAccess: null,
-    tier: null,
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-
-      void getSubscriptionTier().then((tier) => {
-        if (!active) return;
-        setState({
-          hasAccess: featureAllowedForTier(feature, tier),
-          tier,
-        });
-      });
-
-      return () => {
-        active = false;
-      };
-    }, [feature]),
-  );
-
-  return state;
+  const access = useSubscriptionAccess();
+  return {
+    hasAccess: featureAllowedByPolicy(access.policy, feature, access.tier),
+    tier: access.tier,
+  };
 };
 
 export const useSubscriptionTier = (): AppSubscriptionTier | null => {
-  const [tier, setTier] = useState<AppSubscriptionTier | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void getSubscriptionTier().then((resolved) => {
-        if (active) setTier(resolved);
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
-
-  return tier;
+  const access = useSubscriptionAccess();
+  return access.tier;
 };

@@ -21,10 +21,12 @@ import { Code128Barcode } from '@/components/code-128-barcode';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLocale } from '@/contexts/LocaleContext';
 import Header from '@/components/Header';
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
+import { useFeatureAccess } from '@/lib/entitlements';
 import { canEncodeCode128 } from '@/lib/code-128';
 import { translateLoyaltyCards, type LoyaltyCardsTranslationKey } from '@/lib/loyaltyCardsTranslations';
 import {
@@ -78,6 +80,15 @@ const readableBarcodeType = (type: string) => {
 };
 
 export default function LoyaltyCardsScreen() {
+  const access = useFeatureAccess('shoppingList');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) return <LockedFeatureScreen feature="shoppingList" />;
+
+  return <LoyaltyCardsContent />;
+}
+
+function LoyaltyCardsContent() {
   const router = useRouter();
   const { locale } = useLocale();
   const t = useCallback((key: LoyaltyCardsTranslationKey, params?: Record<string, string | number>) =>

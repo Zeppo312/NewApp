@@ -8,7 +8,7 @@
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 // @ts-ignore Deno Edge import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
-import { syncRevenueCatPremium } from '../_shared/premiumAccess.ts';
+import { syncRevenueCatTier } from '../_shared/premiumAccess.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -49,6 +49,8 @@ serve(async (req: Request) => {
     const revenueCatKey = Deno.env.get('REVENUECAT_SECRET_API_KEY');
     const revenueCatProjectId = Deno.env.get('REVENUECAT_PROJECT_ID');
     const premiumEntitlementId = Deno.env.get('REVENUECAT_PREMIUM_ENTITLEMENT_ID');
+    const standardEntitlementId = Deno.env.get('REVENUECAT_STANDARD_ENTITLEMENT_ID');
+    const liteEntitlementId = Deno.env.get('REVENUECAT_LITE_ENTITLEMENT_ID');
     const expectedAuthorization = Deno.env.get('REVENUECAT_WEBHOOK_AUTHORIZATION');
     const signingSecret = Deno.env.get('REVENUECAT_WEBHOOK_SIGNING_SECRET');
     if (!supabaseUrl || !serviceKey || !revenueCatKey || !revenueCatProjectId || !premiumEntitlementId || !expectedAuthorization || !signingSecret) return json({ error: 'not_configured' }, 503);
@@ -84,12 +86,16 @@ serve(async (req: Request) => {
     }
 
     for (const userId of candidates.slice(0, 10)) {
-      await syncRevenueCatPremium(
+      await syncRevenueCatTier(
         admin,
         userId,
         revenueCatKey,
         revenueCatProjectId,
-        premiumEntitlementId,
+        {
+          premium: premiumEntitlementId,
+          standard: standardEntitlementId,
+          lite: liteEntitlementId,
+        },
         'revenuecat_webhook',
       );
     }

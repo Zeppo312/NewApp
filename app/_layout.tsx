@@ -29,6 +29,7 @@ import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
 import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
+import { SubscriptionAccessProvider } from '@/contexts/SubscriptionAccessContext';
 import { getDeviceAppLocale } from '@/lib/localization';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
@@ -65,7 +66,7 @@ import {
   getPendingStartupMessage,
   type StartupMessage,
 } from '@/lib/startupMessages';
-import { getTermsConsentState } from '@/lib/termsConsent';
+import { getTermsConsentState, type TermsConsentStatus } from '@/lib/termsConsent';
 
 // Importieren der Meilenstein-Task-Definition
 import { defineMilestoneCheckerTask } from '@/tasks/milestoneCheckerTask';
@@ -124,6 +125,11 @@ const PAYWALL_EXCLUDED_PATHS = new Set([
   '/dsgvo',
 ]);
 
+type TermsConsentCheck = {
+  userId: string | null;
+  status: 'idle' | 'loading' | TermsConsentStatus;
+};
+
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
   const router = useRouter();
@@ -180,10 +186,13 @@ function RootLayoutNav() {
   }, [activeBackend, convexClient, userId]);
   const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
-  const [termsConsent, setTermsConsent] = useState<{
-    userId: string | null;
-    accepted: boolean;
-  }>({ userId: null, accepted: false });
+  // `status` unterscheidet bewusst zwischen "noch nicht geprueft" (idle/loading),
+  // "belegt fehlend" (required) und "unbekannt" (error). Nur `required` darf das
+  // Gate oeffnen, sonst blitzt es waehrend der Pruefung auf.
+  const [termsConsent, setTermsConsent] = useState<TermsConsentCheck>({
+    userId: null,
+    status: 'idle',
+  });
 
   const refreshPaywallState = useCallback(async () => {
     await invalidateUserProfileCache();
@@ -341,9 +350,13 @@ function RootLayoutNav() {
 
     let cancelled = false;
 
-    void getTermsConsentState().then((state) => {
+    setTermsConsent((current) =>
+      current.userId === userId ? current : { userId, status: 'loading' },
+    );
+
+    void getTermsConsentState(userId).then((state) => {
       if (cancelled) return;
-      setTermsConsent({ userId, accepted: state.accepted });
+      setTermsConsent({ userId, status: state.status });
     });
 
     return () => {
@@ -785,6 +798,7 @@ function RootLayoutNav() {
         <Stack.Screen name="frag-lotti" />
         <Stack.Screen name="paywall-access-admin" />
         <Stack.Screen name="paywall-content-admin" />
+        <Stack.Screen name="subscription-features-admin" />
         <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-briefing" />
@@ -817,10 +831,11 @@ function RootLayoutNav() {
           primarySegment !== '(auth)' &&
           primarySegment !== 'auth' &&
           !isLegalConsentRoute &&
-          (termsConsent.userId !== userId || !termsConsent.accepted)
+          termsConsent.userId === userId &&
+          termsConsent.status === 'required'
         }
         locale={locale}
-        onAccepted={() => setTermsConsent({ userId: userId ?? null, accepted: true })}
+        onAccepted={() => setTermsConsent({ userId: userId ?? null, status: 'accepted' })}
         onSignOut={() => {
           void signOut();
         }}
@@ -951,23 +966,25 @@ export default Sentry.wrap(function RootLayout() {
   return (
     <AuthProvider>
       <AppDataPreloader />
-      <LocaleProvider>
-        <ConvexProvider>
-          <BackendProvider>
-            <BackgroundProvider>
-              <AppThemeProvider>
-                <NavigationProvider>
-                  <ActiveBabyProvider>
-                    <BabyStatusProvider>
-                      <RootLayoutNav />
-                    </BabyStatusProvider>
-                  </ActiveBabyProvider>
-                </NavigationProvider>
-              </AppThemeProvider>
-            </BackgroundProvider>
-          </BackendProvider>
-        </ConvexProvider>
-      </LocaleProvider>
+      <SubscriptionAccessProvider>
+        <LocaleProvider>
+          <ConvexProvider>
+            <BackendProvider>
+              <BackgroundProvider>
+                <AppThemeProvider>
+                  <NavigationProvider>
+                    <ActiveBabyProvider>
+                      <BabyStatusProvider>
+                        <RootLayoutNav />
+                      </BabyStatusProvider>
+                    </ActiveBabyProvider>
+                  </NavigationProvider>
+                </AppThemeProvider>
+              </BackgroundProvider>
+            </BackendProvider>
+          </ConvexProvider>
+        </LocaleProvider>
+      </SubscriptionAccessProvider>
     </AuthProvider>
   );
 });

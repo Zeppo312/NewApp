@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useSubscriptionAccess } from '@/contexts/SubscriptionAccessContext';
 import { translatePaywall, type PaywallTranslationKey } from '@/lib/paywallTranslations';
 
 import {
@@ -19,6 +20,7 @@ import {
   applyPaywallPlansTemplate,
   clonePaywallPlansContent,
   formatEuroAmount,
+  isPaywallComparisonIncluded,
   PAYWALL_VISIBLE_TIER_IDS,
   type PaywallPlansContent,
   type PaywallPlansTierId,
@@ -144,6 +146,7 @@ export function PaywallPlansExperience({
   onOpenDataManagement,
 }: PaywallPlansExperienceProps) {
   const { locale, localeTag } = useLocale();
+  const subscriptionAccess = useSubscriptionAccess();
   const t = (key: PaywallTranslationKey, params?: Record<string, string | number>) => translatePaywall(locale, key, params);
   const { width } = useWindowDimensions();
   const contentMaxWidth = Math.min(width - 40, 640);
@@ -540,7 +543,14 @@ export function PaywallPlansExperience({
             </View>
             {compareColumns.map((columnTier) => (
               <React.Fragment key={`${index}-${columnTier}`}>
-                {renderCheck(row[columnTier], columnTier === 'premium')}
+                {renderCheck(
+                  isPaywallComparisonIncluded(
+                    row,
+                    columnTier,
+                    subscriptionAccess.policy,
+                  ),
+                  columnTier === 'premium',
+                )}
               </React.Fragment>
             ))}
           </View>

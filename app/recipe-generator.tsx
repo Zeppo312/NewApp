@@ -24,6 +24,7 @@ import { Stack, useRouter } from "expo-router";
 import { ThemedBackground } from "@/components/ThemedBackground";
 import Header from "@/components/Header";
 import { RecipeVideoCourse } from "@/components/RecipeVideoCourse";
+import { LockedFeatureScreen } from "@/components/LockedFeatureScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { Colors } from "@/constants/Colors";
@@ -46,6 +47,7 @@ import {
 import { extractYouTubeVideoId } from "@/lib/recipeVideo";
 import { addRecipeIngredientsToShoppingList } from "@/lib/shopping";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
+import { useFeatureAccess } from "@/lib/entitlements";
 import {
   DEFAULT_RECIPE_LOCALE,
   getRecipeAllergenLabel,
@@ -167,6 +169,15 @@ const lightenHex = (hex: string, amount = 0.35) => {
 };
 
 const RecipeGeneratorScreen = () => {
+  const access = useFeatureAccess("recipes");
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) return <LockedFeatureScreen feature="recipes" />;
+
+  return <RecipeGeneratorContent />;
+};
+
+const RecipeGeneratorContent = () => {
   ACTIVE_RECIPE_LOCALE = useLocale().locale;
   RECIPE_LOCALE_TAG = getRecipeLocaleTag(ACTIVE_RECIPE_LOCALE);
   const sampleRecipes: RecipeSample[] = useMemo(

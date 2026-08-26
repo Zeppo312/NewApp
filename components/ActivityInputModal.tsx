@@ -25,6 +25,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useFeatureAccess } from '@/lib/entitlements';
 import { DailyTranslationKey, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 import {
   computeTotalQuantity,
@@ -122,6 +123,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   initialData,
 }) => {
   const { locale } = useLocale();
+  const recipesAccess = useFeatureAccess('recipes').hasAccess;
   const t = useCallback((key: DailyTranslationKey) => translateDailyText(locale, key), [locale]);
   const localeTag = getDailyLocaleTag(locale);
   const colorScheme = useColorScheme() ?? 'light';
@@ -462,7 +464,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
     const loadRecipes = async () => {
-      if (!(visible && activityType === 'feeding' && feedingType === 'solids')) return;
+      if (!(visible && activityType === 'feeding' && feedingType === 'solids' && recipesAccess === true)) return;
       try {
         setIsLoadingRecipes(true);
         const { data, error } = await fetchRecipes();
@@ -485,7 +487,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       }
     };
     loadRecipes();
-  }, [visible, activityType, feedingType]);
+  }, [visible, activityType, feedingType, recipesAccess]);
 
   useEffect(() => {
     if (feedingType === 'pump' || feedingType === 'water') {
@@ -1265,7 +1267,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </Text>
           </View>
         )}
-        {feedingOptions.length > 0 && feedingType === 'solids' && (
+        {feedingOptions.length > 0 && feedingType === 'solids' && recipesAccess === true && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}

@@ -9,8 +9,15 @@ import { invalidateUserProfileCache } from './appCache';
  */
 export const TERMS_VERSION = '2026-08-17';
 
+/**
+ * `required` heisst belegbar "keine Zustimmung fuer die aktuelle Version",
+ * `error` heisst "unbekannt" (Netz-/DB-Fehler, keine Session). Beides darf der
+ * Aufrufer nicht zusammenwerfen: nur `required` rechtfertigt das Gate.
+ */
+export type TermsConsentStatus = 'accepted' | 'required' | 'error';
+
 export type TermsConsentState = {
-  accepted: boolean;
+  status: TermsConsentStatus;
   acceptedVersion: string | null;
   acceptedAt: string | null;
 };
@@ -52,13 +59,28 @@ export const acceptTerms = async (
 /**
  * Liest den Zustimmungsstand direkt aus der Datenbank (nicht aus dem Cache,
  * damit das Gate nach dem Zustimmen nicht erneut erscheint).
+ *
+ * `expectedUserId` spart den zusaetzlichen `getUser()`-Roundtrip, wenn der
+ * Aufrufer die aufgeloeste User-ID bereits hat.
  */
-export const getTermsConsentState = async (): Promise<TermsConsentState> => {
+export const getTermsConsentState = async (
+  expectedUserId?: string,
+): Promise<TermsConsentState> => {
+  const unknown: TermsConsentState = {
+    status: 'error',
+    acceptedVersion: null,
+    acceptedAt: null,
+  };
+
   try {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    if (userError || !userId) {
-      return { accepted: false, acceptedVersion: null, acceptedAt: null };
+    let userId = expectedUserId;
+
+    if (!userId) {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      userId = userData?.user?.id;
+      if (userError || !userId) {
+        return unknown;
+      }
     }
 
     const { data, error } = await supabase
@@ -70,19 +92,20 @@ export const getTermsConsentState = async (): Promise<TermsConsentState> => {
 
     if (error) {
       console.error('termsConsent: failed to read acceptance', error);
-      return { accepted: false, acceptedVersion: null, acceptedAt: null };
+      return unknown;
     }
 
     const acceptedAt = (data?.accepted_at as string | null) ?? null;
     const acceptedVersion = (data?.terms_version as string | null) ?? null;
+    const accepted = !!acceptedAt && acceptedVersion === TERMS_VERSION;
 
     return {
-      accepted: !!acceptedAt && acceptedVersion === TERMS_VERSION,
+      status: accepted ? 'accepted' : 'required',
       acceptedVersion,
       acceptedAt,
     };
   } catch (err) {
     console.error('termsConsent: unexpected error reading acceptance', err);
-    return { accepted: false, acceptedVersion: null, acceptedAt: null };
+    return unknown;
   }
 };

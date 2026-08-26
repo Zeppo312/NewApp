@@ -26,6 +26,7 @@ import {
 import { generateAiText } from './advisorAi.ts';
 import { localizeAdvisorCandidate } from '../_shared/advisorLocalization.ts';
 import { getSettingsLocale, localize, SupportedLocale } from '../_shared/localization.ts';
+import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -242,17 +243,19 @@ serve(async (req: Request) => {
       // Nur im 8-Uhr-Fenster der jeweiligen Zeitzone verarbeiten.
       if (!force && localHour !== SEND_HOUR_LOCAL) continue;
 
-      // Zugriff: in Erprobung nur Premiumtester/Admins.
-      // TODO(Premium-Abo): später zusätzlich Premium-Entitlement zulassen.
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin, paywall_access_role')
-        .eq('id', settings.user_id)
-        .maybeSingle();
-      const hasAccess =
-        profile?.is_admin === true ||
-        profile?.paywall_access_role === 'premium_tester';
-      if (!hasAccess) {
+      const featureAccess = await verifySubscriptionFeatureAccess(
+        supabase,
+        settings.user_id,
+        'fuersorge',
+        Deno.env.get('REVENUECAT_SECRET_API_KEY'),
+        Deno.env.get('REVENUECAT_PROJECT_ID'),
+        {
+          premium: Deno.env.get('REVENUECAT_PREMIUM_ENTITLEMENT_ID'),
+          standard: Deno.env.get('REVENUECAT_STANDARD_ENTITLEMENT_ID'),
+          lite: Deno.env.get('REVENUECAT_LITE_ENTITLEMENT_ID'),
+        },
+      );
+      if (!featureAccess.allowed) {
         results[settings.user_id] = 'no_access';
         continue;
       }

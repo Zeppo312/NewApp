@@ -19,19 +19,15 @@ const mockRpc = supabase.rpc as jest.Mock;
 const mockFrom = supabase.from as jest.Mock;
 const mockInvalidateUserProfileCache = invalidateUserProfileCache as jest.Mock;
 const mockMaybeSingle = jest.fn();
+const mockEq = jest.fn();
 
 describe('terms consent evidence', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUser.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
     mockRpc.mockResolvedValue({ error: null });
-    mockFrom.mockReturnValue({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          eq: jest.fn(() => ({ maybeSingle: mockMaybeSingle })),
-        })),
-      })),
-    });
+    mockEq.mockImplementation(() => ({ eq: mockEq, maybeSingle: mockMaybeSingle }));
+    mockFrom.mockReturnValue({ select: jest.fn(() => ({ eq: mockEq })) });
   });
 
   it('stores the current version only for the authenticated expected user', async () => {
@@ -63,16 +59,52 @@ describe('terms consent evidence', () => {
     errorSpy.mockRestore();
   });
 
-  it('treats a read error as no consent', async () => {
+  it('reports a read error as unknown instead of missing consent', async () => {
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     mockMaybeSingle.mockResolvedValue({ data: null, error: { message: 'offline' } });
 
     await expect(getTermsConsentState()).resolves.toEqual({
-      accepted: false,
+      status: 'error',
       acceptedVersion: null,
       acceptedAt: null,
     });
     errorSpy.mockRestore();
+  });
+
+  it('reports a missing record as required consent', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    await expect(getTermsConsentState()).resolves.toEqual({
+      status: 'required',
+      acceptedVersion: null,
+      acceptedAt: null,
+    });
+  });
+
+  it('reports an unresolvable session as unknown', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'no session' } });
+
+    await expect(getTermsConsentState()).resolves.toEqual({
+      status: 'error',
+      acceptedVersion: null,
+      acceptedAt: null,
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('uses a passed user id without another getUser roundtrip', async () => {
+    mockMaybeSingle.mockResolvedValue({
+      data: { accepted_at: '2026-08-20T10:00:00.000Z', terms_version: TERMS_VERSION },
+      error: null,
+    });
+
+    await expect(getTermsConsentState('user-999')).resolves.toEqual({
+      status: 'accepted',
+      acceptedVersion: TERMS_VERSION,
+      acceptedAt: '2026-08-20T10:00:00.000Z',
+    });
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockEq).toHaveBeenCalledWith('user_id', 'user-999');
   });
 
   it('accepts only a persisted record for the current terms version', async () => {
@@ -82,7 +114,7 @@ describe('terms consent evidence', () => {
     });
 
     await expect(getTermsConsentState()).resolves.toEqual({
-      accepted: true,
+      status: 'accepted',
       acceptedVersion: TERMS_VERSION,
       acceptedAt: '2026-08-20T10:00:00.000Z',
     });

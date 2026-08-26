@@ -1,13 +1,20 @@
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import {
   DEFAULT_DISPLAY_MONTHLY_PRICE,
   DEFAULT_DISPLAY_YEARLY_PRICE,
   DEFAULT_PAYWALL_TRIAL_DAYS,
-} from './paywallDefaults';
-import { supabase } from './supabase';
+} from "./paywallDefaults";
+import {
+  featureAllowedByPolicy,
+  isAppFeature,
+  type AppFeature,
+  type AppSubscriptionTier,
+  type SubscriptionFeaturePolicy,
+} from "./subscriptionFeaturePolicy";
+import { supabase } from "./supabase";
 
-export const PAYWALL_CONTENT_CONFIG_ID = 'default';
+export const PAYWALL_CONTENT_CONFIG_ID = "default";
 
 export type PaywallContentSettings = {
   trialDays: string;
@@ -70,15 +77,15 @@ export type PaywallLegalLinks = {
   dataManagement: string;
 };
 
-export type PaywallPlansTierId = 'premium' | 'standard' | 'lite';
+export type PaywallPlansTierId = "premium" | "standard" | "lite";
 
 /**
  * Nur diese Tarife werden auf der Paywall und in Tarifübersichten beworben.
  * Standard bleibt als technisches Bestandstier vollständig erhalten.
  */
 export const PAYWALL_VISIBLE_TIER_IDS = [
-  'lite',
-  'premium',
+  "lite",
+  "premium",
 ] as const satisfies readonly PaywallPlansTierId[];
 
 export type PaywallPlansTierContent = {
@@ -91,10 +98,26 @@ export type PaywallPlansTierContent = {
 
 export type PaywallPlansComparisonRow = {
   label: string;
+  /** Verknüpft die Anzeige mit derselben dynamischen Matrix wie das Gating. */
+  featureKey?: AppFeature;
   lite: boolean;
   standard: boolean;
   premium: boolean;
 };
+
+/**
+ * Eine einzige Auswertung für Live-Paywall, Paywall-Vorschau und Admin-Matrix.
+ * Zeilen ohne Feature-Key sind feste Basisleistungen; alle anderen kommen
+ * ausschließlich aus der veröffentlichten bzw. im Admin angezeigten Policy.
+ */
+export const isPaywallComparisonIncluded = (
+  row: PaywallPlansComparisonRow,
+  tier: AppSubscriptionTier,
+  policy: SubscriptionFeaturePolicy,
+): boolean =>
+  row.featureKey
+    ? featureAllowedByPolicy(policy, row.featureKey, tier)
+    : row[tier];
 
 export type PaywallPlansContent = {
   brandLogo: string;
@@ -175,130 +198,275 @@ export const PAYWALL_TEMPLATE_HINTS: {
   token: keyof PaywallTemplateValues;
   description: string;
 }[] = [
-  { token: 'trialDays', description: 'z. B. 14 Tage' },
-  { token: 'trialDaysAfter', description: 'z. B. 14 Tagen' },
-  { token: 'trialDaysNumber', description: 'z. B. 14' },
-  { token: 'trialDaysPlusOne', description: 'z. B. 15' },
-  { token: 'storeProvider', description: 'z. B. Apple oder Google Play' },
-  { token: 'monthlyDisplayPrice', description: 'z. B. 4,99 €' },
-  { token: 'yearlyDisplayPrice', description: 'z. B. 44,99 €' },
-  { token: 'monthlyPriceText', description: 'z. B. 4,99 € pro Monat' },
-  { token: 'yearlyPriceText', description: 'z. B. 44,99 € pro Jahr' },
-  { token: 'billingLabel', description: 'Store-Hinweis je Plattform' },
-  { token: 'yearlySavings', description: 'Ersparnis Jahresabo' },
-  { token: 'appName', description: 'Lotti Baby' },
+  { token: "trialDays", description: "z. B. 14 Tage" },
+  { token: "trialDaysAfter", description: "z. B. 14 Tagen" },
+  { token: "trialDaysNumber", description: "z. B. 14" },
+  { token: "trialDaysPlusOne", description: "z. B. 15" },
+  { token: "storeProvider", description: "z. B. Apple oder Google Play" },
+  { token: "monthlyDisplayPrice", description: "z. B. 4,99 €" },
+  { token: "yearlyDisplayPrice", description: "z. B. 44,99 €" },
+  { token: "monthlyPriceText", description: "z. B. 4,99 € pro Monat" },
+  { token: "yearlyPriceText", description: "z. B. 44,99 € pro Jahr" },
+  { token: "billingLabel", description: "Store-Hinweis je Plattform" },
+  { token: "yearlySavings", description: "Ersparnis Jahresabo" },
+  { token: "appName", description: "Lotti Baby" },
 ];
 
 const DEFAULT_MONTHLY_PLAN: PaywallPlanCopy = {
-  badge: 'Monatsabo',
-  highlight: 'pro Monat',
-  title: 'Monatlich flexibel',
+  badge: "Monatsabo",
+  highlight: "pro Monat",
+  title: "Monatlich flexibel",
   description:
-    '{{appName}} wird direkt freigeschaltet. Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor der Kaufbestätigung im Store.',
+    "{{appName}} wird direkt freigeschaltet. Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor der Kaufbestätigung im Store.",
   bullets: [
-    'Voller Zugriff auf alle Inhalte',
-    'Jederzeit in den Store-Einstellungen kündbar',
+    "Voller Zugriff auf alle Inhalte",
+    "Jederzeit in den Store-Einstellungen kündbar",
   ],
-  note: 'Ideal, wenn du flexibel bleiben möchtest.',
-  buttonLabel: 'Monatsabo starten',
+  note: "Ideal, wenn du flexibel bleiben möchtest.",
+  buttonLabel: "Monatsabo starten",
 };
 
 const DEFAULT_YEARLY_PLAN: PaywallPlanCopy = {
-  badge: 'Jahresabo',
-  highlight: '{{yearlySavings}} sparen',
-  title: 'Bester Preis im Jahresabo',
+  badge: "Jahresabo",
+  highlight: "{{yearlySavings}} sparen",
+  title: "Bester Preis im Jahresabo",
   description:
-    '{{appName}} direkt freischalten und, falls verfügbar, zuerst die Testphase von {{storeProvider}} nutzen. Danach sparst du {{yearlySavings}} gegenüber dem Monatsabo.',
+    "{{appName}} direkt freischalten und, falls verfügbar, zuerst die Testphase von {{storeProvider}} nutzen. Danach sparst du {{yearlySavings}} gegenüber dem Monatsabo.",
   bullets: [
-    'Bester Preis für die ganze App',
-    '{{storeProvider}} zeigt die Testphase direkt im Kaufdialog',
+    "Bester Preis für die ganze App",
+    "{{storeProvider}} zeigt die Testphase direkt im Kaufdialog",
   ],
-  note: 'Automatische Verlängerung bis zur Kündigung in den Store-Einstellungen.',
-  buttonLabel: 'Jahresabo starten',
-  savingsInline: 'Spare {{yearlySavings}}',
+  note: "Automatische Verlängerung bis zur Kündigung in den Store-Einstellungen.",
+  buttonLabel: "Jahresabo starten",
+  savingsInline: "Spare {{yearlySavings}}",
 };
 
 const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
-  brandLogo: 'Lotti Baby',
-  brandSubtitle: 'Schwangerschaft bis Baby-Alltag',
-  headline: 'Weniger Kopf-Chaos.\nMehr Zeit für euer Baby.',
+  brandLogo: "Lotti Baby",
+  brandSubtitle: "Schwangerschaft bis Baby-Alltag",
+  headline: "Weniger Kopf-Chaos.\nMehr Zeit für euer Baby.",
   subline:
-    'Lotti begleitet euch von der Schwangerschaft durch die ersten Jahre – alles Wichtige an einem Ort, für dich und deinen Partner.',
-  socialProofText: 'Von Eltern entwickelt – für Familien wie eure',
-  popularBadge: 'Beliebteste Wahl',
+    "Lotti begleitet euch von der Schwangerschaft durch die ersten Jahre – alles Wichtige an einem Ort, für dich und deinen Partner.",
+  socialProofText: "Von Eltern entwickelt – für Familien wie eure",
+  popularBadge: "Beliebteste Wahl",
   ctaNote:
-    'Jederzeit kündbar · {{billingLabel}} · Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor dem Kauf im Store.',
-  compareTitle: 'Was steckt drin?',
+    "Jederzeit kündbar · {{billingLabel}} · Falls {{storeProvider}} eine kostenlose Testphase anbietet, siehst du sie vor dem Kauf im Store.",
+  compareTitle: "Was steckt drin?",
   comparisonRows: [
-    { label: 'Schlaftracker, Schlafphasen & Schlafprognosen', lite: true, standard: true, premium: true },
-    { label: 'Stillen, Flasche, Pumpen, Beikost & Wasser', lite: true, standard: true, premium: true },
-    { label: 'Wickeln, Vitamin D & Tagesübersicht', lite: true, standard: true, premium: true },
-    { label: 'Schwangerschaft: Countdown, SSW & Wehen-Tracker', lite: true, standard: true, premium: true },
-    { label: 'Kliniktaschen-Checkliste, Geburtsplan & Arztfragen', lite: true, standard: true, premium: true },
-    { label: 'Babynamen & Babyprofile', lite: true, standard: true, premium: true },
-    { label: 'Gewichts- & Größenkurven', lite: true, standard: true, premium: true },
-    { label: 'Meilensteine, Zahn-Tracker & Fotobuch als PDF', lite: true, standard: true, premium: true },
-    { label: 'Babywetter & Kleidungsempfehlungen', lite: true, standard: true, premium: true },
-    { label: 'Selfcare & Wohlbefinden', lite: true, standard: true, premium: true },
-    { label: 'Erinnerungen & Benachrichtigungen', lite: true, standard: true, premium: true },
-    { label: 'Community, Gruppen & private Chats', lite: true, standard: true, premium: true },
-    { label: 'Ratgeber & Blog', lite: true, standard: true, premium: true },
-    { label: 'Produktempfehlungen & Prints-Shop', lite: true, standard: true, premium: true },
-    { label: 'Kompletter Schlaf- & Tagesverlauf', lite: false, standard: true, premium: true },
-    { label: 'Partner-Verknüpfung: gemeinsam tracken', lite: false, standard: true, premium: true },
-    { label: 'Planer, Termine & gemeinsamer Kalender', lite: false, standard: true, premium: true },
-    { label: 'Einkaufslisten, Vorräte, Warnungen & Kundenkarten', lite: false, standard: true, premium: true },
-    { label: 'Wochenmomente & Erinnerungs-Sammlung', lite: false, standard: true, premium: true },
-    { label: 'Rezepte, Generator, eigene Rezepte & Beikost-Videos', lite: false, standard: true, premium: true },
-    { label: 'Auswertungen, Datenberichte & PDF-Gesamtexport', lite: false, standard: true, premium: true },
-    { label: '✨ Persönliches Schwangerschafts-Briefing', lite: false, standard: false, premium: true },
-    { label: '✨ KI: Sprach-Logging – Einträge einsprechen', lite: false, standard: false, premium: true },
-    { label: '✨ KI: Lottis Fürsorge – tägliche Hinweise', lite: false, standard: false, premium: true },
-    { label: '✨ KI: Frag Lotti – belegte Antworten aus euren Daten', lite: false, standard: false, premium: true },
+    {
+      label: "Schlaftracker, Schlafphasen & Schlafprognosen",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Stillen, Flasche, Pumpen, Beikost & Wasser",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Wickeln, Vitamin D & Tagesübersicht",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Schwangerschaft: Countdown, SSW & Wehen-Tracker",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Kliniktaschen-Checkliste, Geburtsplan & Arztfragen",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Babynamen & Babyprofile",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Gewichts- & Größenkurven",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Meilensteine, Zahn-Tracker & Fotobuch als PDF",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Babywetter & Kleidungsempfehlungen",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Selfcare & Wohlbefinden",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Erinnerungen & Benachrichtigungen",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Community, Gruppen & private Chats",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    { label: "Ratgeber & Blog", lite: true, standard: true, premium: true },
+    {
+      label: "Produktempfehlungen & Prints-Shop",
+      lite: true,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Kompletter Schlaf- & Tagesverlauf",
+      featureKey: "fullHistory",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Schlaftracker: Monatsansicht & Schlafkalender",
+      featureKey: "sleepMonthView",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Unser Tag: Monatsansicht & Aktivitätskalender",
+      featureKey: "dailyMonthView",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Partner-Verknüpfung: gemeinsam tracken",
+      featureKey: "partnerLink",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Planer, Termine & gemeinsamer Kalender",
+      featureKey: "planner",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",
+      featureKey: "shoppingList",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Wochenmomente & Erinnerungs-Sammlung",
+      featureKey: "wochenmomente",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Rezepte, Generator, eigene Rezepte & Beikost-Videos",
+      featureKey: "recipes",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "Auswertungen, Datenberichte & PDF-Gesamtexport",
+      featureKey: "pdfExport",
+      lite: false,
+      standard: true,
+      premium: true,
+    },
+    {
+      label: "✨ Persönliches Schwangerschafts-Briefing",
+      featureKey: "pregnancyBriefing",
+      lite: false,
+      standard: false,
+      premium: true,
+    },
+    {
+      label: "✨ KI: Sprach-Logging – Einträge einsprechen",
+      featureKey: "voiceLog",
+      lite: false,
+      standard: false,
+      premium: true,
+    },
+    {
+      label: "✨ KI: Lottis Fürsorge – tägliche Hinweise",
+      featureKey: "fuersorge",
+      lite: false,
+      standard: false,
+      premium: true,
+    },
+    {
+      label: "✨ KI: Frag Lotti – belegte Antworten aus euren Daten",
+      featureKey: "fragLotti",
+      lite: false,
+      standard: false,
+      premium: true,
+    },
   ],
   quoteText:
-    '„Nachts um 3 mit einer Hand den Still-Timer starten – und mein Partner sieht morgens direkt, wie die Nacht war. Genau das haben wir gebraucht.“',
-  quoteAuthor: 'Eine Lotti-Mama, 4 Monate dabei',
-  trustChips: ['Jederzeit kündbar', 'Sichere Zahlung', 'Für euch beide'],
-  restoreLabel: 'Käufe wiederherstellen / Status prüfen',
-  cancelLabel: 'Vielleicht später',
+    "„Nachts um 3 mit einer Hand den Still-Timer starten – und mein Partner sieht morgens direkt, wie die Nacht war. Genau das haben wir gebraucht.“",
+  quoteAuthor: "Eine Lotti-Mama, 4 Monate dabei",
+  trustChips: ["Jederzeit kündbar", "Sichere Zahlung", "Für euch beide"],
+  restoreLabel: "Käufe wiederherstellen / Status prüfen",
+  cancelLabel: "Vielleicht später",
   legalText:
-    'Für die Nutzung von Lotti Baby ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Die Zahlung wird bei Kaufbestätigung deinem Store-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden.',
+    "Für die Nutzung von Lotti Baby ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Die Zahlung wird bei Kaufbestätigung deinem Store-Konto belastet. Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden.",
   tiers: {
     premium: {
       visible: true,
-      name: 'Lotti Premium',
-      tagline: 'Volle Familienbegleitung plus Briefing & Lottis KI-Features',
-      ctaLabel: 'Premium starten',
+      name: "Lotti Premium",
+      tagline: "Volle Familienbegleitung plus Briefing & Lottis KI-Features",
+      ctaLabel: "Premium starten",
       bullets: [
-        'Kompletter Verlauf, Partner, Planer, Listen, Rezepte & Auswertungen',
-        '✨ Persönliches Schwangerschafts-Briefing',
-        '✨ Sprach-Logging & Lottis Fürsorge',
-        '✨ Frag Lotti mit passenden Daten aus eurem Alltag',
+        "Kompletter Verlauf, Partner, Planer, Listen, Rezepte & Auswertungen",
+        "✨ Persönliches Schwangerschafts-Briefing",
+        "✨ Sprach-Logging & Lottis Fürsorge",
+        "✨ Frag Lotti mit passenden Daten aus eurem Alltag",
       ],
     },
     standard: {
       visible: false,
-      name: 'Lotti Standard',
-      tagline: 'Die volle Begleitung für eure Familie',
-      ctaLabel: 'Standard starten',
+      name: "Lotti Standard",
+      tagline: "Die volle Begleitung für eure Familie",
+      ctaLabel: "Standard starten",
       bullets: [
-        'Alle Basis-Tracker mit vollständigem Schlaf- & Tagesverlauf',
-        'Partner-Verknüpfung, Planer & gemeinsamer Kalender',
-        'Einkaufslisten, Vorräte, Warnungen & Kundenkarten',
-        'Wochenmomente, Rezepte, Auswertungen & Datenexport',
+        "Alle Basis-Tracker mit vollständigem Schlaf- & Tagesverlauf",
+        "Partner-Verknüpfung, Planer & gemeinsamer Kalender",
+        "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",
+        "Wochenmomente, Rezepte, Auswertungen & Datenexport",
       ],
     },
     lite: {
       visible: true,
-      name: 'Lotti Lite',
-      tagline: 'Der einfache Start ins Tracking',
-      ctaLabel: 'Lite starten',
+      name: "Lotti Lite",
+      tagline: "Der einfache Start ins Tracking",
+      ctaLabel: "Lite starten",
       bullets: [
-        'Alle Basis-Tracker & 7 Tage Schlaf- und Tagesverlauf',
-        'Schwangerschafts-Tools, Wachstum & Babyprofile',
-        'Meilensteine, Fotobuch, Babywetter & Selfcare',
-        'Community, Gruppen, Chats, Ratgeber & Erinnerungen',
+        "Alle Basis-Tracker & 7 Tage Schlaf- und Tagesverlauf",
+        "Schwangerschafts-Tools, Wachstum & Babyprofile",
+        "Meilensteine, Fotobuch, Babywetter & Selfcare",
+        "Community, Gruppen, Chats, Ratgeber & Erinnerungen",
       ],
     },
   },
@@ -307,153 +475,152 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
 export const DEFAULT_PAYWALL_CONTENT: PaywallContent = {
   settings: {
     trialDays: `${DEFAULT_PAYWALL_TRIAL_DAYS}`,
-    monthlyPrice: `${DEFAULT_DISPLAY_MONTHLY_PRICE}`.replace('.', ','),
-    yearlyPrice: `${DEFAULT_DISPLAY_YEARLY_PRICE}`.replace('.', ','),
+    monthlyPrice: `${DEFAULT_DISPLAY_MONTHLY_PRICE}`.replace(".", ","),
+    yearlyPrice: `${DEFAULT_DISPLAY_YEARLY_PRICE}`.replace(".", ","),
   },
   plans: DEFAULT_PLANS_CONTENT,
   brand: {
-    logo: 'Lotti Baby',
-    subtitle: 'Schwangerschaft bis Baby-Alltag',
+    logo: "Lotti Baby",
+    subtitle: "Schwangerschaft bis Baby-Alltag",
   },
   steps: {
-    introEyebrow: 'Abo erforderlich',
-    reminderEyebrow: 'Testphase im Store',
-    pricingEyebrow: 'Abo auswählen',
+    introEyebrow: "Abo erforderlich",
+    reminderEyebrow: "Testphase im Store",
+    pricingEyebrow: "Abo auswählen",
   },
   progressCard: {
-    title: 'So funktioniert dein Start',
+    title: "So funktioniert dein Start",
     subtitle:
-      '{{appName}} wird direkt per Abo freigeschaltet. Eine kostenlose Testphase zeigt {{storeProvider}} dir vor dem Kauf im Store an, falls sie verfügbar ist.',
-    buttonLabel: 'Weiter',
-    skipLabel: 'Vielleicht später',
+      "{{appName}} wird direkt per Abo freigeschaltet. Eine kostenlose Testphase zeigt {{storeProvider}} dir vor dem Kauf im Store an, falls sie verfügbar ist.",
+    buttonLabel: "Weiter",
+    skipLabel: "Vielleicht später",
   },
   intro: {
-    title: 'Abo abschließen und App freischalten',
+    title: "Abo abschließen und App freischalten",
     subtitle:
-      '{{appName}} ist für neue Nutzer direkt nur mit aktivem Abo nutzbar. Falls {{storeProvider}} eine kostenlose Testphase anbietet, startet sie beim Abschluss im Store.',
-    summary: 'Aktuell {{monthlyPriceText}} oder {{yearlyPriceText}}.',
+      "{{appName}} ist für neue Nutzer direkt nur mit aktivem Abo nutzbar. Falls {{storeProvider}} eine kostenlose Testphase anbietet, startet sie beim Abschluss im Store.",
+    summary: "Aktuell {{monthlyPriceText}} oder {{yearlyPriceText}}.",
     miniBenefit:
-      'Die kostenlose Testphase kommt, falls verfügbar, direkt von {{storeProvider}} beim Abo-Abschluss.',
+      "Die kostenlose Testphase kommt, falls verfügbar, direkt von {{storeProvider}} beim Abo-Abschluss.",
     heroDealNote:
-      'Im Jahresabo nur {{yearlyDisplayPrice}} · {{storeProvider}} zeigt dir die Testphase im Kaufdialog',
-    heroTitle: 'Alles direkt freigeschaltet',
-    heroSubtitle: 'Von Schwangerschaft bis Baby-Alltag in einem Abo.',
+      "Im Jahresabo nur {{yearlyDisplayPrice}} · {{storeProvider}} zeigt dir die Testphase im Kaufdialog",
+    heroTitle: "Alles direkt freigeschaltet",
+    heroSubtitle: "Von Schwangerschaft bis Baby-Alltag in einem Abo.",
     heroStats: [
-      { value: '{{storeProvider}}', label: 'zeigt Testphase' },
-      { value: '{{monthlyDisplayPrice}}', label: 'ab pro Monat' },
-      { value: 'Abo', label: 'direkt erforderlich' },
+      { value: "{{storeProvider}}", label: "zeigt Testphase" },
+      { value: "{{monthlyDisplayPrice}}", label: "ab pro Monat" },
+      { value: "Abo", label: "direkt erforderlich" },
     ],
     previewRows: [
       {
-        label: 'Schwangerschaft',
-        value: 'Wehen, Checkliste, Geburtsplan',
+        label: "Schwangerschaft",
+        value: "Wehen, Checkliste, Geburtsplan",
       },
       {
-        label: 'Baby',
-        value: 'Schlaf, Füttern, Wachstum',
+        label: "Baby",
+        value: "Schlaf, Füttern, Wachstum",
       },
       {
-        label: 'Organisation',
-        value: 'Planner, Listen, Auswertungen',
+        label: "Organisation",
+        value: "Planner, Listen, Auswertungen",
       },
     ],
   },
   reminder: {
-    title: 'So läuft der Start',
+    title: "So läuft der Start",
     subtitle:
-      'Wähle dein Abo. Wenn {{storeProvider}} für dein Produkt eine Testphase hinterlegt hat, siehst du sie direkt vor der Kaufbestätigung.',
+      "Wähle dein Abo. Wenn {{storeProvider}} für dein Produkt eine Testphase hinterlegt hat, siehst du sie direkt vor der Kaufbestätigung.",
     timelineItems: [
       {
-        badge: '1',
-        label: 'Abo wählen',
+        badge: "1",
+        label: "Abo wählen",
+        description: "Monats- oder Jahresabo direkt in der App auswählen.",
+      },
+      {
+        badge: "2",
+        label: "{{storeProvider}} zeigt die Testphase",
         description:
-          'Monats- oder Jahresabo direkt in der App auswählen.',
+          "Falls verfügbar, erscheint die kostenlose Testphase im App-Store-Kaufdialog.",
       },
       {
-        badge: '2',
-        label: '{{storeProvider}} zeigt die Testphase',
+        badge: "3",
+        label: "Danach läuft das Abo",
         description:
-          'Falls verfügbar, erscheint die kostenlose Testphase im App-Store-Kaufdialog.',
+          "Nach der Testphase von {{storeProvider}} bleibt {{appName}} mit aktivem Abo freigeschaltet.",
       },
       {
-        badge: '3',
-        label: 'Danach läuft das Abo',
-        description:
-          'Nach der Testphase von {{storeProvider}} bleibt {{appName}} mit aktivem Abo freigeschaltet.',
+        badge: "M",
+        label: "Monatsabo",
+        description: "{{monthlyPriceText}} · {{billingLabel}}",
       },
       {
-        badge: 'M',
-        label: 'Monatsabo',
-        description: '{{monthlyPriceText}} · {{billingLabel}}',
+        badge: "J",
+        label: "Jahresabo",
+        description: "{{yearlyPriceText}} · {{billingLabel}}",
       },
       {
-        badge: 'J',
-        label: 'Jahresabo',
-        description: '{{yearlyPriceText}} · {{billingLabel}}',
-      },
-      {
-        badge: '✓',
-        label: 'Kündigung',
-        description: 'Jederzeit in den Store-Einstellungen.',
+        badge: "✓",
+        label: "Kündigung",
+        description: "Jederzeit in den Store-Einstellungen.",
       },
     ],
   },
   pricing: {
-    title: '{{appName}} freischalten',
+    title: "{{appName}} freischalten",
     subtitle:
-      'Wähle dein Abo. Eine eventuelle kostenlose Testphase wird von {{storeProvider}} direkt im Kaufdialog angezeigt.',
-    socialProof:
-      'Alles enthalten, was dich vor und nach der Geburt begleitet.',
-    featureTitle: 'Das ist in {{appName}} enthalten:',
+      "Wähle dein Abo. Eine eventuelle kostenlose Testphase wird von {{storeProvider}} direkt im Kaufdialog angezeigt.",
+    socialProof: "Alles enthalten, was dich vor und nach der Geburt begleitet.",
+    featureTitle: "Das ist in {{appName}} enthalten:",
     features: [
       {
-        badge: '1',
-        text: 'Schwangerschaft: Wehen-Tracker, Kliniktaschen-Checkliste, Geburtsplan und Babynamen',
+        badge: "1",
+        text: "Schwangerschaft: Wehen-Tracker, Kliniktaschen-Checkliste, Geburtsplan und Babynamen",
       },
       {
-        badge: '2',
-        text: 'Baby: Schlaftracker, Stillen, Flasche, Beikost und Tagesübersicht',
+        badge: "2",
+        text: "Baby: Schlaftracker, Stillen, Flasche, Beikost und Tagesübersicht",
       },
       {
-        badge: '3',
-        text: 'Entwicklung: Gewichtskurve, Größenkurve, Zahn-Tracker und Meilensteine',
+        badge: "3",
+        text: "Entwicklung: Gewichtskurve, Größenkurve, Zahn-Tracker und Meilensteine",
       },
       {
-        badge: '4',
-        text: 'Alltag: Planer, Listen, Auswertungen, PDF-Exporte und weitere Familien-Tools',
+        badge: "4",
+        text: "Alltag: Planer, Listen, Auswertungen, PDF-Exporte und weitere Familien-Tools",
       },
     ],
     monthlyPlan: DEFAULT_MONTHLY_PLAN,
     yearlyPlan: DEFAULT_YEARLY_PLAN,
-    restoreLabel: 'Käufe wiederherstellen / Status prüfen',
-    cancelLabel: 'Vielleicht später',
+    restoreLabel: "Käufe wiederherstellen / Status prüfen",
+    cancelLabel: "Vielleicht später",
   },
   legal: {
     paragraphs: [
-      'Für die Nutzung von {{appName}} ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet.',
-      'Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden. Mit dem Kauf gelten die Nutzungsbedingungen und auf iOS ergänzend die Apple-Standard-EULA.',
+      "Für die Nutzung von {{appName}} ist ein aktives Abo erforderlich. Falls {{storeProvider}} für dein gewähltes Produkt eine kostenlose Testphase anbietet, wird sie vor dem Kauf im Store angezeigt. Zahlung wird bei Kaufbestätigung deinem App-Store/Google-Play-Konto belastet.",
+      "Abos verlängern sich automatisch, wenn sie nicht rechtzeitig in den Store-Einstellungen gekündigt werden. Mit dem Kauf gelten die Nutzungsbedingungen und auf iOS ergänzend die Apple-Standard-EULA.",
     ],
     links: {
-      privacy: 'Datenschutz',
-      terms: 'Nutzungsbedingungen',
-      appleEula: 'Apple-Standard-EULA',
-      imprint: 'Impressum',
-      dataManagement: 'Konto & Daten verwalten',
+      privacy: "Datenschutz",
+      terms: "Nutzungsbedingungen",
+      appleEula: "Apple-Standard-EULA",
+      imprint: "Impressum",
+      dataManagement: "Konto & Daten verwalten",
     },
   },
 };
 
-const cloneArray = <T,>(items: T[]): T[] => items.map((item) => {
-  if (Array.isArray(item)) {
-    return cloneArray(item) as T;
-  }
+const cloneArray = <T>(items: T[]): T[] =>
+  items.map((item) => {
+    if (Array.isArray(item)) {
+      return cloneArray(item) as T;
+    }
 
-  if (item && typeof item === 'object') {
-    return { ...(item as Record<string, unknown>) } as T;
-  }
+    if (item && typeof item === "object") {
+      return { ...(item as Record<string, unknown>) } as T;
+    }
 
-  return item;
-});
+    return item;
+  });
 
 const clonePlansTier = (
   tier: PaywallPlansTierContent,
@@ -511,10 +678,10 @@ export const clonePaywallContent = (
 });
 
 const pickString = (value: unknown, fallback: string): string =>
-  typeof value === 'string' ? value : fallback;
+  typeof value === "string" ? value : fallback;
 
 const normalizeNumberishString = (value: string): string =>
-  value.replace(/\s+/g, '').trim();
+  value.replace(/\s+/g, "").trim();
 
 const parseNumberish = (
   value: string | null | undefined,
@@ -523,8 +690,8 @@ const parseNumberish = (
   if (!value) return fallback;
 
   const normalized = normalizeNumberishString(value)
-    .replace('€', '')
-    .replace(',', '.');
+    .replace("€", "")
+    .replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
@@ -542,12 +709,12 @@ const pickStringArray = (value: unknown, fallback: string[]): string[] => {
     return [...fallback];
   }
 
-  const next = value.filter((item): item is string => typeof item === 'string');
+  const next = value.filter((item): item is string => typeof item === "string");
   return next.length > 0 ? next : [...fallback];
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 const sanitizeHeroStats = (value: unknown): PaywallHeroStat[] => {
   if (!Array.isArray(value)) {
@@ -558,8 +725,8 @@ const sanitizeHeroStats = (value: unknown): PaywallHeroStat[] => {
     .map((item) => {
       if (!isRecord(item)) return null;
       return {
-        value: pickString(item.value, ''),
-        label: pickString(item.label, ''),
+        value: pickString(item.value, ""),
+        label: pickString(item.label, ""),
       };
     })
     .filter((item): item is PaywallHeroStat => item !== null);
@@ -578,8 +745,8 @@ const sanitizePreviewRows = (value: unknown): PaywallPreviewRow[] => {
     .map((item) => {
       if (!isRecord(item)) return null;
       return {
-        label: pickString(item.label, ''),
-        value: pickString(item.value, ''),
+        label: pickString(item.label, ""),
+        value: pickString(item.value, ""),
       };
     })
     .filter((item): item is PaywallPreviewRow => item !== null);
@@ -598,9 +765,9 @@ const sanitizeTimelineItems = (value: unknown): PaywallTimelineItem[] => {
     .map((item) => {
       if (!isRecord(item)) return null;
       return {
-        badge: pickString(item.badge, ''),
-        label: pickString(item.label, ''),
-        description: pickString(item.description, ''),
+        badge: pickString(item.badge, ""),
+        label: pickString(item.label, ""),
+        description: pickString(item.description, ""),
       };
     })
     .filter((item): item is PaywallTimelineItem => item !== null);
@@ -619,8 +786,8 @@ const sanitizeFeatureItems = (value: unknown): PaywallFeatureItem[] => {
     .map((item) => {
       if (!isRecord(item)) return null;
       return {
-        badge: pickString(item.badge, ''),
-        text: pickString(item.text, ''),
+        badge: pickString(item.badge, ""),
+        text: pickString(item.text, ""),
       };
     })
     .filter((item): item is PaywallFeatureItem => item !== null);
@@ -644,25 +811,46 @@ const sanitizePlanCopy = (
     note: pickString(source.note, fallback.note),
     buttonLabel: pickString(source.buttonLabel, fallback.buttonLabel),
     savingsInline:
-      typeof fallback.savingsInline === 'string'
+      typeof fallback.savingsInline === "string"
         ? pickString(source.savingsInline, fallback.savingsInline)
-        : pickString(source.savingsInline, ''),
+        : pickString(source.savingsInline, ""),
   };
 };
 
 const pickBoolean = (value: unknown, fallback: boolean): boolean =>
-  typeof value === 'boolean' ? value : fallback;
+  typeof value === "boolean" ? value : fallback;
 
-const sanitizeComparisonRows = (value: unknown): PaywallPlansComparisonRow[] => {
+const sanitizeComparisonRows = (
+  value: unknown,
+): PaywallPlansComparisonRow[] => {
   if (!Array.isArray(value)) {
     return cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
   }
 
+  const originalDefaults = DEFAULT_PLANS_CONTENT.comparisonRows.filter(
+    (row) =>
+      row.featureKey !== "sleepMonthView" &&
+      row.featureKey !== "dailyMonthView",
+  );
+  const sleepMonthDefaults = DEFAULT_PLANS_CONTENT.comparisonRows.filter(
+    (row) => row.featureKey !== "dailyMonthView",
+  );
+  const positionalDefaults =
+    value.length === originalDefaults.length
+      ? originalDefaults
+      : value.length === sleepMonthDefaults.length
+        ? sleepMonthDefaults
+        : DEFAULT_PLANS_CONTENT.comparisonRows;
+
   const items = value
-    .map((item) => {
+    .map((item, index) => {
       if (!isRecord(item)) return null;
+      const featureKey = isAppFeature(item.featureKey)
+        ? item.featureKey
+        : positionalDefaults[index]?.featureKey;
       return {
-        label: pickString(item.label, ''),
+        label: pickString(item.label, ""),
+        ...(featureKey ? { featureKey } : {}),
         lite: pickBoolean(item.lite, false),
         standard: pickBoolean(item.standard, false),
         premium: pickBoolean(item.premium, false),
@@ -670,9 +858,27 @@ const sanitizeComparisonRows = (value: unknown): PaywallPlansComparisonRow[] => 
     })
     .filter((item): item is PaywallPlansComparisonRow => item !== null);
 
-  return items.length > 0
-    ? items
-    : cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
+  if (items.length === 0) {
+    return cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
+  }
+
+  // Bereits gespeicherte Paywall-Inhalte können aus einer älteren App-Version
+  // stammen. Dynamische Zeilen werden anhand ihres stabilen Keys in die aktuelle
+  // Reihenfolge gebracht; neue Funktionen erhalten ihren Default-Text.
+  const fixedRows = items.filter((item) => !item.featureKey);
+  const dynamicRows = new Map(
+    items.flatMap((item) =>
+      item.featureKey ? [[item.featureKey, item] as const] : [],
+    ),
+  );
+  const canonicalDynamicRows = DEFAULT_PLANS_CONTENT.comparisonRows.flatMap(
+    (fallback) => {
+      if (!fallback.featureKey) return [];
+      return [dynamicRows.get(fallback.featureKey) ?? { ...fallback }];
+    },
+  );
+
+  return [...fixedRows, ...canonicalDynamicRows];
 };
 
 const sanitizePlansTier = (
@@ -825,10 +1031,7 @@ export const sanitizePaywallContent = (value: unknown): PaywallContent => {
       previewRows: sanitizePreviewRows(intro.previewRows),
     },
     reminder: {
-      title: pickString(
-        reminder.title,
-        DEFAULT_PAYWALL_CONTENT.reminder.title,
-      ),
+      title: pickString(reminder.title, DEFAULT_PAYWALL_CONTENT.reminder.title),
       subtitle: pickString(
         reminder.subtitle,
         DEFAULT_PAYWALL_CONTENT.reminder.subtitle,
@@ -898,8 +1101,10 @@ export const sanitizePaywallContent = (value: unknown): PaywallContent => {
   };
 };
 
-export const formatEuroAmount = (value: number, locale = 'de-DE') =>
-  new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(value);
+export const formatEuroAmount = (value: number, locale = "de-DE") =>
+  new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(
+    value,
+  );
 
 export const applyPaywallPlansTemplate = (
   value: string,
@@ -934,15 +1139,15 @@ export const getPaywallTemplateValues = (
     Math.max(0, monthlyPrice * 12 - yearlyPrice),
   );
   const normalizedBillingLabel = billingLabel.toLowerCase();
-  const storeProvider = normalizedBillingLabel.includes('google')
-    ? 'Google Play'
-    : normalizedBillingLabel.includes('app store') ||
-        normalizedBillingLabel.includes('apple')
-      ? 'Apple'
-      : 'der Store';
+  const storeProvider = normalizedBillingLabel.includes("google")
+    ? "Google Play"
+    : normalizedBillingLabel.includes("app store") ||
+        normalizedBillingLabel.includes("apple")
+      ? "Apple"
+      : "der Store";
 
   return {
-    appName: 'Lotti Baby',
+    appName: "Lotti Baby",
     trialDays: `${trialDaysNumber} Tage`,
     trialDaysAfter: `${trialDaysNumber} Tagen`,
     trialDaysNumber: `${trialDaysNumber}`,
@@ -961,9 +1166,12 @@ const applyTemplate = (
   value: string,
   variables: PaywallTemplateValues,
 ): string =>
-  value.replace(/\{\{(\w+)\}\}/g, (_match, key: keyof PaywallTemplateValues) => {
-    return variables[key] ?? '';
-  });
+  value.replace(
+    /\{\{(\w+)\}\}/g,
+    (_match, key: keyof PaywallTemplateValues) => {
+      return variables[key] ?? "";
+    },
+  );
 
 export const resolvePaywallContent = (
   content: PaywallContent,
@@ -1066,7 +1274,7 @@ export const resolvePaywallContent = (
           variables,
         ),
         savingsInline: applyTemplate(
-          source.pricing.yearlyPlan.savingsInline ?? '',
+          source.pricing.yearlyPlan.savingsInline ?? "",
           variables,
         ),
       },
@@ -1093,9 +1301,9 @@ export const resolvePaywallContent = (
 
 export const fetchPaywallContent = async (): Promise<PaywallContentRecord> => {
   const { data, error } = await supabase
-    .from('paywall_content_config')
-    .select('content,updated_at')
-    .eq('id', PAYWALL_CONTENT_CONFIG_ID)
+    .from("paywall_content_config")
+    .select("content,updated_at")
+    .eq("id", PAYWALL_CONTENT_CONFIG_ID)
     .maybeSingle();
 
   if (error) {
@@ -1117,20 +1325,21 @@ export const invalidatePaywallContentCache = () => {
   paywallContentCacheAt = 0;
 };
 
-export const getCachedPaywallContent = async (): Promise<PaywallContentRecord> => {
-  const now = Date.now();
-  if (
-    paywallContentCache &&
-    now - paywallContentCacheAt < PAYWALL_CONTENT_CACHE_DURATION_MS
-  ) {
-    return paywallContentCache;
-  }
+export const getCachedPaywallContent =
+  async (): Promise<PaywallContentRecord> => {
+    const now = Date.now();
+    if (
+      paywallContentCache &&
+      now - paywallContentCacheAt < PAYWALL_CONTENT_CACHE_DURATION_MS
+    ) {
+      return paywallContentCache;
+    }
 
-  const record = await fetchPaywallContent();
-  paywallContentCache = record;
-  paywallContentCacheAt = now;
-  return record;
-};
+    const record = await fetchPaywallContent();
+    paywallContentCache = record;
+    paywallContentCacheAt = now;
+    return record;
+  };
 
 export const savePaywallContent = async (
   content: PaywallContent,
@@ -1138,16 +1347,16 @@ export const savePaywallContent = async (
 ): Promise<PaywallContentRecord> => {
   const payload = sanitizePaywallContent(content);
   const { data, error } = await supabase
-    .from('paywall_content_config')
+    .from("paywall_content_config")
     .upsert(
       {
         id: PAYWALL_CONTENT_CONFIG_ID,
         content: payload,
         updated_by: updatedBy,
       },
-      { onConflict: 'id' },
+      { onConflict: "id" },
     )
-    .select('content,updated_at')
+    .select("content,updated_at")
     .single();
 
   if (error) {
@@ -1168,13 +1377,13 @@ export const subscribeToPaywallContent = (
   onError?: (error: unknown) => void,
 ): RealtimeChannel =>
   supabase
-    .channel('paywall-content-config')
+    .channel("paywall-content-config")
     .on(
-      'postgres_changes',
+      "postgres_changes",
       {
-        event: '*',
-        schema: 'public',
-        table: 'paywall_content_config',
+        event: "*",
+        schema: "public",
+        table: "paywall_content_config",
         filter: `id=eq.${PAYWALL_CONTENT_CONFIG_ID}`,
       },
       () => {

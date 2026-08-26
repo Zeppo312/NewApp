@@ -20,7 +20,7 @@ import {
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { isBeforeHistoryCutoff, useHistoryCutoff } from '@/lib/entitlements';
+import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
 import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
@@ -785,8 +785,30 @@ export default function DailyScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const historyCutoff = useHistoryCutoff();
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const monthViewAccess = useFeatureAccess('dailyMonthView');
+  const isMonthViewLocked = monthViewAccess.hasAccess === false;
+  const visibleTab = selectedTab === 'month' && isMonthViewLocked ? 'day' : selectedTab;
   const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
   const [monthOffset, setMonthOffset] = useState(0); // align with sleep-tracker month nav
+  const showMonthViewLockedAlert = useCallback(() => {
+    Alert.alert(t('view.monthLockedTitle'), t('view.monthLockedBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('view.monthLockedAction'),
+        onPress: () => router.push('/paywall?origin=lock_dailyMonthView' as any),
+      },
+    ]);
+  }, [router]);
+
+  useEffect(() => {
+    if (selectedTab === 'month' && isMonthViewLocked) {
+      const normalizationTimer = setTimeout(() => {
+        setSelectedTab('day');
+        setMonthOffset(0);
+      }, 0);
+      return () => clearTimeout(normalizationTimer);
+    }
+  }, [isMonthViewLocked, selectedTab]);
   const selectedWeekDate = useMemo(() => {
     const date = new Date();
     date.setDate(date.getDate() + weekOffset * 7);
@@ -1526,16 +1548,16 @@ export default function DailyScreen() {
   useEffect(() => {
     if (!isReady || !activeBabyId) return;
     const timeoutId = setTimeout(() => {
-      if (selectedTab === 'week') {
+      if (visibleTab === 'week') {
         void loadWeekEntries();
-      } else if (selectedTab === 'month') {
+      } else if (visibleTab === 'month') {
         void loadMonthEntries();
       } else {
         void loadEntries();
       }
     }, 0);
     return () => clearTimeout(timeoutId);
-  }, [selectedDate, selectedWeekDate, selectedMonthDate, selectedTab, activeBabyId, isReady]);
+  }, [selectedDate, selectedWeekDate, selectedMonthDate, visibleTab, activeBabyId, isReady]);
 
   const syncDailyEntries = async () => {};
 
@@ -1791,9 +1813,9 @@ export default function DailyScreen() {
     }
 
     // Reload current view
-    if (selectedTab === 'week') {
+    if (visibleTab === 'week') {
       loadWeekEntries();
-    } else if (selectedTab === 'month') {
+    } else if (visibleTab === 'month') {
       loadMonthEntries();
     } else {
       loadEntries();
@@ -1899,9 +1921,9 @@ export default function DailyScreen() {
     await invalidateDailyCache(activeBabyId);
 
     // Reload current view
-    if (selectedTab === 'week') {
+    if (visibleTab === 'week') {
       loadWeekEntries();
-    } else if (selectedTab === 'month') {
+    } else if (visibleTab === 'month') {
       loadMonthEntries();
     } else {
       loadEntries();
@@ -1914,7 +1936,7 @@ export default function DailyScreen() {
     activeTimer,
     endBreastfeedingLiveActivity,
     maybeOfferNightWake,
-    selectedTab,
+    visibleTab,
     loadWeekEntries,
     loadMonthEntries,
     loadEntries,
@@ -2019,9 +2041,9 @@ export default function DailyScreen() {
           await invalidateDailyCache(activeBabyId);
 
           // Reload current view
-          if (selectedTab === 'week') {
+          if (visibleTab === 'week') {
             loadWeekEntries();
-          } else if (selectedTab === 'month') {
+          } else if (visibleTab === 'month') {
             loadMonthEntries();
           } else {
             loadEntries();
@@ -2036,12 +2058,16 @@ export default function DailyScreen() {
   const TopTabs = () => (
     <View style={s.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={22}>
+        <GlassCard key={tab} style={[s.topTab, visibleTab === tab && s.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={s.topTabInner}
             hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
             pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
+              if (tab === 'month' && isMonthViewLocked) {
+                showMonthViewLockedAlert();
+                return;
+              }
               setSelectedTab(tab);
               if (tab === 'week') setWeekOffset(0);
               if (tab === 'month') setMonthOffset(0);
@@ -2052,8 +2078,9 @@ export default function DailyScreen() {
             }}
             activeOpacity={0.85}
           >
-            <Text style={[s.topTabText, { color: textSecondary }, selectedTab === tab && s.activeTopTabText]}>
+            <Text style={[s.topTabText, { color: textSecondary }, visibleTab === tab && s.activeTopTabText]}>
               {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
+              {tab === 'month' && isMonthViewLocked ? '  🔒' : ''}
             </Text>
           </TouchableOpacity>
         </GlassCard>
@@ -2508,7 +2535,7 @@ export default function DailyScreen() {
   };
 
   const KPISection = () => {
-    const currentEntries = selectedTab === 'week' ? weekEntries : entries;
+    const currentEntries = visibleTab === 'week' ? weekEntries : entries;
     const feedingOverview = buildFeedingOverview(currentEntries as any[]);
     const diaperEntries = currentEntries.filter((e) => e.entry_type === 'diaper');
 
@@ -2705,9 +2732,9 @@ export default function DailyScreen() {
         >
           {TopTabs()}
 
-          {selectedTab === 'week' ? (
+          {visibleTab === 'week' ? (
             WeekView()
-          ) : selectedTab === 'month' ? (
+          ) : visibleTab === 'month' ? (
             MonthView()
           ) : (
             <View style={s.content}>

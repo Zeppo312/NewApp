@@ -63,18 +63,49 @@ const quantityLabel = (locale: ShoppingLocale, item: ShoppingListItem): string |
   return formatShoppingQuantity(locale, item.quantity_value, item.quantity_unit ?? '');
 };
 
+/**
+ * Wurde der Posten heute abgehakt? `shopping_list_items` führt keinen eigenen
+ * Zeitstempel fürs Abhaken — `updated_at` wird per Trigger bei jeder Änderung
+ * gesetzt und ist für diesen Zweck nah genug dran.
+ */
+export const wasPurchasedToday = (item: ShoppingListItem, now: Date = new Date()): boolean => {
+  if (!item.is_purchased) return false;
+
+  const updated = new Date(item.updated_at);
+  if (Number.isNaN(updated.getTime())) return false;
+
+  return (
+    updated.getFullYear() === now.getFullYear() &&
+    updated.getMonth() === now.getMonth() &&
+    updated.getDate() === now.getDate()
+  );
+};
+
+/**
+ * Das Widget zeigt den heutigen Einkauf: alles Offene plus das, was heute
+ * abgehakt wurde. Ältere Erledigte bleiben in der App, würden hier aber nur
+ * die knappen Zeilen belegen.
+ */
+export const selectWidgetItems = (
+  items: ShoppingListItem[],
+  now: Date = new Date()
+): { open: ShoppingListItem[]; doneToday: ShoppingListItem[] } => ({
+  open: items.filter((item) => !item.is_purchased),
+  doneToday: items.filter((item) => wasPurchasedToday(item, now)),
+});
+
 const buildSnapshot = (
   items: ShoppingListItem[],
   locale: ShoppingLocale,
-  babyName: string | null
+  babyName: string | null,
+  now: Date = new Date()
 ) => {
   const t = (key: string) => translateShoppingText(locale, key);
 
+  const { open, doneToday } = selectWidgetItems(items, now);
+
   // Offene Posten zuerst, damit das Widget bei begrenztem Platz das Wichtige zeigt.
-  const ordered = [
-    ...items.filter((item) => !item.is_purchased),
-    ...items.filter((item) => item.is_purchased),
-  ];
+  const ordered = [...open, ...doneToday];
 
   const widgetItems: WidgetItem[] = ordered.slice(0, MAX_SNAPSHOT_ITEMS).map((item) => ({
     id: item.id,
@@ -87,8 +118,8 @@ const buildSnapshot = (
   return {
     updatedAt: Date.now() / 1000,
     babyName,
-    openCount: items.filter((item) => !item.is_purchased).length,
-    purchasedCount: items.filter((item) => item.is_purchased).length,
+    openCount: open.length,
+    purchasedCount: doneToday.length,
     items: widgetItems,
     strings: {
       title: t('widget.title'),

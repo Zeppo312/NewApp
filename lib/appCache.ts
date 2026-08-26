@@ -33,6 +33,7 @@ const CACHE_KEY_PREFIXES_TO_CLEAR = [
   'baby_list_cache_v1',
   'active_baby_id',
   'screen_cache_baby_info_',
+  'subscription_access_v1',
 ] as const;
 
 // Cache Durations (in Millisekunden)
@@ -448,7 +449,6 @@ export const preloadAppData = async (knownUserId?: string): Promise<void> => {
   await Promise.allSettled([
     getCachedUserSettings(userId),
     getCachedUserProfile(userId),
-    getCachedPremiumStatus(),
   ]);
 
   console.log('App data preloaded');

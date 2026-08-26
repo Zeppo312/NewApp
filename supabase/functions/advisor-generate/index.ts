@@ -21,6 +21,7 @@ import {
 import { generateAiText } from './advisorAi.ts';
 import { localizeAdvisorCandidate } from '../_shared/advisorLocalization.ts';
 import { normalizeLocale } from '../_shared/localization.ts';
+import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -78,17 +79,31 @@ serve(async (req: Request) => {
     const admin = createClient(supabaseUrl, serviceKey);
     const locale = normalizeLocale(body.locale);
 
-    // Zugriff: in Erprobung nur Premiumtester/Admins.
-    // TODO(Premium-Abo): später zusätzlich Premium-Entitlement zulassen.
+    const featureAccess = await verifySubscriptionFeatureAccess(
+      admin,
+      user.id,
+      'fuersorge',
+      Deno.env.get('REVENUECAT_SECRET_API_KEY'),
+      Deno.env.get('REVENUECAT_PROJECT_ID'),
+      {
+        premium: Deno.env.get('REVENUECAT_PREMIUM_ENTITLEMENT_ID'),
+        standard: Deno.env.get('REVENUECAT_STANDARD_ENTITLEMENT_ID'),
+        lite: Deno.env.get('REVENUECAT_LITE_ENTITLEMENT_ID'),
+      },
+    );
+    if (!featureAccess.allowed) {
+      return json(
+        { error: featureAccess.reason === 'unavailable' ? 'Subscription check unavailable' : 'Feature not unlocked' },
+        featureAccess.reason === 'unavailable' ? 503 : 403,
+      );
+    }
+
+    // Wird zusätzlich für die bestehende Admin-Ausnahme am KI-Tageslimit benötigt.
     const { data: profile } = await admin
       .from('profiles')
       .select('is_admin, paywall_access_role')
       .eq('id', user.id)
       .maybeSingle();
-    const hasAccess =
-      profile?.is_admin === true ||
-      profile?.paywall_access_role === 'premium_tester';
-    if (!hasAccess) return json({ error: 'Feature not unlocked' }, 403);
 
     // Einstellungen (Themen, KI an/aus) + Cooldown der letzten 3 Tage laden.
     const threeDaysAgo = new Date(`${body.localDate}T00:00:00Z`);

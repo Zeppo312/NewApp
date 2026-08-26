@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { useFocusEffect , useRouter } from 'expo-router';
 
-import { isBeforeHistoryCutoff, useHistoryCutoff } from '@/lib/entitlements';
+import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
 import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
@@ -1330,6 +1330,9 @@ export default function SleepTrackerScreen() {
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const historyCutoff = useHistoryCutoff();
+  const monthViewAccess = useFeatureAccess('sleepMonthView');
+  const isMonthViewLocked = monthViewAccess.hasAccess === false;
+  const visibleTab = selectedTab === 'month' && isMonthViewLocked ? 'day' : selectedTab;
   const [editingEntry, setEditingEntry] = useState<ClassifiedSleepEntry | null>(null);
   const hasAutoSelectedDateRef = useRef(false);
   const [partnerId, setPartnerId] = useState<string | null>(null);
@@ -1342,6 +1345,24 @@ export default function SleepTrackerScreen() {
     setWeekOffset(0);
     setMonthOffset(0);
   }, []);
+  const showMonthViewLockedAlert = useCallback(() => {
+    Alert.alert(t('view.monthLockedTitle'), t('view.monthLockedBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('view.monthLockedAction'),
+        onPress: () => router.push('/paywall?origin=lock_sleepMonthView' as any),
+      },
+    ]);
+  }, [router]);
+
+  useEffect(() => {
+    // Wird die Policy im Hintergrund aktualisiert, darf eine bereits geöffnete
+    // Monatsansicht nicht bis zum nächsten Tab-Wechsel sichtbar bleiben.
+    if (selectedTab === 'month' && isMonthViewLocked) {
+      const normalizationTimer = setTimeout(() => selectTab('day'), 0);
+      return () => clearTimeout(normalizationTimer);
+    }
+  }, [isMonthViewLocked, selectTab, selectedTab]);
   const [isLiveStatusLoaded, setIsLiveStatusLoaded] = useState(false);
   const [babyBirthdate, setBabyBirthdate] = useState<Date | null>(null);
   const [babyBedtime, setBabyBedtime] = useState<string>('19:30');
@@ -3724,13 +3745,17 @@ export default function SleepTrackerScreen() {
   const TopTabs = () => (
     <View style={styles.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[styles.topTab, selectedTab === tab && styles.activeTopTab]} intensity={22}>
+        <GlassCard key={tab} style={[styles.topTab, visibleTab === tab && styles.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={styles.topTabInner}
             hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
             pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
               triggerHaptic();
+              if (tab === 'month' && isMonthViewLocked) {
+                showMonthViewLockedAlert();
+                return;
+              }
               selectTab(tab);
               // Wenn Tag-Tab gewählt wird, springe zu heute
               if (tab === 'day') {
@@ -3739,8 +3764,9 @@ export default function SleepTrackerScreen() {
             }}
             activeOpacity={0.85}
           >
-            <Text style={[styles.topTabText, { color: textSecondary }, selectedTab === tab && styles.activeTopTabText]}>
+            <Text style={[styles.topTabText, { color: textSecondary }, visibleTab === tab && styles.activeTopTabText]}>
               {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
+              {tab === 'month' && isMonthViewLocked ? '  🔒' : ''}
             </Text>
           </TouchableOpacity>
         </GlassCard>
@@ -4593,9 +4619,9 @@ export default function SleepTrackerScreen() {
             </View>
           )}
 
-          {selectedTab === 'week' ? (
+          {visibleTab === 'week' ? (
             WeekView()
-          ) : selectedTab === 'month' ? (
+          ) : visibleTab === 'month' ? (
             MonthView()
           ) : (
             <>

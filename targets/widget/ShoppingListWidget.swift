@@ -72,15 +72,22 @@ struct ShoppingListProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ShoppingListEntry) -> Void) {
-        let snapshot = ShoppingWidgetStore.readSnapshot() ?? (context.isPreview ? .placeholder : nil)
+        let snapshot = ShoppingWidgetStore.readSnapshot()?.forToday() ?? (context.isPreview ? .placeholder : nil)
         completion(ShoppingListEntry(date: Date(), snapshot: snapshot))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ShoppingListEntry>) -> Void) {
-        let entry = ShoppingListEntry(date: Date(), snapshot: ShoppingWidgetStore.readSnapshot())
-        // Die App lädt das Widget bei jeder Änderung selbst neu; der stündliche
-        // Refresh ist nur ein Sicherheitsnetz.
-        let next = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
+        let entry = ShoppingListEntry(date: Date(), snapshot: ShoppingWidgetStore.readSnapshot()?.forToday())
+        // Die App lädt das Widget bei jeder Änderung selbst neu; der Refresh ist
+        // ein Sicherheitsnetz — spätestens zum Tageswechsel, damit die gestrigen
+        // Abhakungen verschwinden.
+        let hourly = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date().addingTimeInterval(3600)
+        let midnight = Calendar.current.nextDate(
+            after: Date(),
+            matching: DateComponents(hour: 0, minute: 0),
+            matchingPolicy: .nextTime
+        ) ?? hourly
+        let next = min(hourly, midnight)
         completion(Timeline(entries: [entry], policy: .after(next)))
     }
 }

@@ -15,7 +15,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 // @ts-ignore Deno Edge import
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
 
-import { verifyPremiumAccess } from "../_shared/premiumAccess.ts";
+import { verifySubscriptionFeatureAccess } from "../_shared/premiumAccess.ts";
 import {
   babyAge,
   computeMetrics,
@@ -557,22 +557,27 @@ serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const premium = await verifyPremiumAccess(
+    const featureAccess = await verifySubscriptionFeatureAccess(
       admin,
       userId,
+      "fragLotti",
       Deno.env.get("REVENUECAT_SECRET_API_KEY"),
       Deno.env.get("REVENUECAT_PROJECT_ID"),
-      Deno.env.get("REVENUECAT_PREMIUM_ENTITLEMENT_ID"),
+      {
+        premium: Deno.env.get("REVENUECAT_PREMIUM_ENTITLEMENT_ID"),
+        standard: Deno.env.get("REVENUECAT_STANDARD_ENTITLEMENT_ID"),
+        lite: Deno.env.get("REVENUECAT_LITE_ENTITLEMENT_ID"),
+      },
     );
-    if (!premium.allowed)
+    if (!featureAccess.allowed)
       return json(
         {
           error:
-            premium.reason === "unavailable"
+            featureAccess.reason === "unavailable"
               ? "premium_check_unavailable"
               : "premium_required",
         },
-        premium.reason === "unavailable" ? 503 : 403,
+        featureAccess.reason === "unavailable" ? 503 : 403,
       );
 
     // RLS remains the authorization boundary for owners and linked members.

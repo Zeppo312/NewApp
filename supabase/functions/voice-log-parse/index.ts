@@ -14,6 +14,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 // @ts-ignore - Deno edge function import.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { localize, normalizeLocale, SupportedLocale } from '../_shared/localization.ts';
+import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -235,18 +236,25 @@ serve(async (req: Request) => {
         ? body.recentMilkPreference
         : null;
 
-    // Zugriff: Premium-Feature — aktuell Premiumtester/Admins.
-    // TODO(Premium-Abo): später zusätzlich Premium-Entitlement zulassen.
     const admin = createClient(supabaseUrl, serviceKey);
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('is_admin, paywall_access_role')
-      .eq('id', user.id)
-      .maybeSingle();
-    const hasAccess =
-      profile?.is_admin === true ||
-      profile?.paywall_access_role === 'premium_tester';
-    if (!hasAccess) return json({ error: 'Feature not unlocked' }, 403);
+    const featureAccess = await verifySubscriptionFeatureAccess(
+      admin,
+      user.id,
+      'voiceLog',
+      Deno.env.get('REVENUECAT_SECRET_API_KEY'),
+      Deno.env.get('REVENUECAT_PROJECT_ID'),
+      {
+        premium: Deno.env.get('REVENUECAT_PREMIUM_ENTITLEMENT_ID'),
+        standard: Deno.env.get('REVENUECAT_STANDARD_ENTITLEMENT_ID'),
+        lite: Deno.env.get('REVENUECAT_LITE_ENTITLEMENT_ID'),
+      },
+    );
+    if (!featureAccess.allowed) {
+      return json(
+        { error: featureAccess.reason === 'unavailable' ? 'Subscription check unavailable' : 'Feature not unlocked' },
+        featureAccess.reason === 'unavailable' ? 503 : 403,
+      );
+    }
 
     // Rate-Limit: Versuche im größten Fenster laden und beide Fenster in
     // Code auszählen (eine Query statt zwei).

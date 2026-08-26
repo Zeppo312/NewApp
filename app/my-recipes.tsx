@@ -21,6 +21,7 @@ import { Stack, useRouter } from 'expo-router';
 
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
+import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { LiquidGlassCard, PRIMARY } from '@/constants/DesignGuide';
@@ -33,6 +34,7 @@ import {
   RecipeUpdate,
 } from '@/lib/recipes';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useFeatureAccess } from '@/lib/entitlements';
 import { getRecipeAllergenLabel, RecipeTranslationKey, translateRecipeText } from '@/lib/recipeTranslations';
 
 const AGE_LIMITS = { min: 4, max: 24 };
@@ -53,6 +55,15 @@ const CARD_INTERNAL_PADDING = 32;
 const CARD_SPACING = 16;
 
 const MyRecipesScreen = () => {
+  const access = useFeatureAccess('recipes');
+
+  if (access.hasAccess === null) return null;
+  if (!access.hasAccess) return <LockedFeatureScreen feature="recipes" />;
+
+  return <MyRecipesContent />;
+};
+
+const MyRecipesContent = () => {
   const { locale } = useLocale();
   const t = (key: RecipeTranslationKey, params?: Record<string, string | number>) =>
     translateRecipeText(locale, key, params);
