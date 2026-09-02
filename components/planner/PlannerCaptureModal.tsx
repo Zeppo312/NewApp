@@ -18,8 +18,15 @@ import {
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PRIMARY, GLASS_OVERLAY } from "@/constants/PlannerDesign";
+import {
+  adaptPlannerColor,
+  isSamePlannerColor,
+  normalizePlannerColor,
+  PLANNER_ITEM_COLORS,
+} from "@/constants/PlannerColors";
 import { Colors } from "@/constants/Colors";
 import { PlannerAssignee, PlannerEvent, PlannerTodo } from "@/services/planner";
 import TextInputOverlay from "@/components/modals/TextInputOverlay";
@@ -51,6 +58,8 @@ export type PlannerCapturePayload = {
   assignee?: PlannerAssignee;
   babyId?: string;
   ownerId?: string;
+  /** Eigene Farbe (#rrggbb) oder null für die Personenfarbe. */
+  color?: string | null;
   isAllDay?: boolean;
   repeatEnabled?: boolean;
   repeatDays?: number[];
@@ -225,7 +234,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [recurrenceEndsOn, setRecurrenceEndsOn] = useState<Date | null>(null);
+  const [color, setColor] = useState<string | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return t("person.partner");
@@ -285,6 +296,14 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     }
     return assigneeOptions.find((opt) => opt.value === assignee)?.label ?? t("person.me");
   }, [assignee, assigneeOptions, selectedBabyLabel, babyOptions, t]);
+
+  const selectedColorLabel = useMemo(() => {
+    const option = PLANNER_ITEM_COLORS.find((entry) =>
+      isSamePlannerColor(color, entry.hex),
+    );
+    if (!option) return t("capture.colorAutoHint");
+    return t(`color.${option.key}` as PlannerTranslationKey);
+  }, [color, t]);
 
   const selectedReminderLabel = useMemo(
     () => formatReminderLabel(reminderMinutes, t),
@@ -478,6 +497,9 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       } else {
         setSelectedBabyId(null);
       }
+      setColor(
+        "color" in item ? normalizePlannerColor(item.color) : null,
+      );
       if (item.isRecurring) {
         setRepeatEnabled(true);
         setRepeatDays(item.repeatDays?.length ? item.repeatDays : [1, 2, 3, 4, 5]);
@@ -504,6 +526,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       setNotesExpanded(false);
       setAssignee("me");
       setSelectedBabyId(null);
+      setColor(null);
       setIsAllDay(false);
       setReminderMinutes(15);
       setRepeatEnabled(false);
@@ -690,6 +713,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       title: trimmedTitle,
       notes: trimmedNotes || undefined,
       ownerId: defaultOwnerId ?? undefined,
+      color: normalizePlannerColor(color),
     };
 
     if (currentType === "todo") {
@@ -1032,18 +1056,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 {showAdvancedOptions ? t("capture.details") : t("capture.quick")}
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.roundButton, { backgroundColor: accentColor }]}
-              onPress={handleSave}
-              accessibilityLabel={t("common.save")}
-            >
-              <Text style={[styles.roundButtonLabel, { color: "#fff" }]}>
-                ✓
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.roundButton} />
           </View>
 
           <ScrollView
+            style={styles.scroll}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
@@ -1165,6 +1182,80 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                         ▾
                       </Text>
                     </TouchableOpacity>
+                  </View>
+                )}
+
+                {showAdvancedOptions && (
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
+                      {t("capture.color")}
+                    </Text>
+                    <View style={styles.colorSelector}>
+                      <TouchableOpacity
+                        style={[
+                          styles.colorSwatch,
+                          {
+                            backgroundColor: theme.field,
+                            borderColor: color ? theme.border : accentColor,
+                            borderWidth: color ? 1 : 3,
+                          },
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={() => setColor(null)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: !color }}
+                        accessibilityLabel={t("capture.colorAuto")}
+                      >
+                        <Text
+                          style={[
+                            styles.colorSwatchAutoLabel,
+                            { color: color ? theme.textSecondary : accentColor },
+                          ]}
+                        >
+                          A
+                        </Text>
+                      </TouchableOpacity>
+                      {PLANNER_ITEM_COLORS.map((option) => {
+                        const selected = isSamePlannerColor(color, option.hex);
+                        return (
+                          <TouchableOpacity
+                            key={option.key}
+                            style={[
+                              styles.colorSwatch,
+                              {
+                                backgroundColor: adaptPlannerColor(
+                                  option.hex,
+                                  isDark,
+                                ),
+                                borderColor: selected
+                                  ? theme.text
+                                  : "transparent",
+                                borderWidth: selected ? 3 : 1,
+                              },
+                            ]}
+                            activeOpacity={0.85}
+                            onPress={() => setColor(option.hex)}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected }}
+                            accessibilityLabel={t(
+                              `color.${option.key}` as PlannerTranslationKey,
+                            )}
+                          >
+                            {selected ? (
+                              <Text style={styles.colorSwatchCheck}>✓</Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text
+                      style={[
+                        styles.colorHint,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {selectedColorLabel}
+                    </Text>
                   </View>
                 )}
 
@@ -1578,6 +1669,43 @@ export const PlannerCaptureModal: React.FC<Props> = ({
               </View>
             </TouchableWithoutFeedback>
           </ScrollView>
+
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: theme.border,
+                paddingBottom: Math.max(insets.bottom, 12),
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.footerSecondaryButton,
+                { backgroundColor: theme.soft, borderColor: theme.border },
+              ]}
+              onPress={onClose}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.cancel")}
+            >
+              <Text style={[styles.footerSecondaryText, { color: theme.text }]}>
+                {t("common.cancel")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.footerPrimaryButton,
+                { backgroundColor: accentColor, shadowColor: accentColor },
+              ]}
+              onPress={handleSave}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.save")}
+            >
+              <Text style={styles.footerPrimaryText}>✓ {t("common.save")}</Text>
+            </TouchableOpacity>
+          </View>
         </BlurView>
 
         {showAssigneePicker && (
@@ -2012,8 +2140,46 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     overflow: "hidden",
     paddingHorizontal: 20,
-    paddingBottom: 28,
     paddingTop: 16,
+    maxHeight: "92%",
+  },
+  scroll: {
+    flexShrink: 1,
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerSecondaryButton: {
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  footerSecondaryText: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  footerPrimaryButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  footerPrimaryText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
   },
   header: {
     flexDirection: "row",
@@ -2047,7 +2213,7 @@ const styles = StyleSheet.create({
     color: THEME.textSecondary,
   },
   contentWrapper: {
-    paddingBottom: 32,
+    paddingBottom: 20,
     gap: 24,
   },
   typeSwitchRow: {
@@ -2187,6 +2353,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  colorSelector: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  colorSwatch: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  colorSwatchAutoLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  colorSwatchCheck: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  colorHint: {
+    fontSize: 12,
+    marginTop: -4,
   },
   weekdayButton: {
     minWidth: 42,

@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe('Kundenkarten in Supabase', () => {
-  it('lädt nur die Karten des angemeldeten Benutzers', async () => {
+  it('lädt alle per RLS freigegebenen eigenen und Partner-Karten', async () => {
     const chain = chainResolving({
       data: [
         {
@@ -51,7 +51,7 @@ describe('Kundenkarten in Supabase', () => {
     const { data, error } = await fetchLoyaltyCards();
 
     expect(error).toBeNull();
-    expect(chain.eq).toHaveBeenCalledWith('user_id', 'user-1');
+    expect(chain.eq).not.toHaveBeenCalled();
     expect(data).toEqual([
       {
         id: 'card-1',
@@ -94,14 +94,14 @@ describe('Kundenkarten in Supabase', () => {
     expect(data?.id).toBe('card-2');
   });
 
-  it('begrenzt das Löschen zusätzlich auf den angemeldeten Benutzer', async () => {
+  it('löscht nach Karten-ID und überlässt die Partner-Autorisierung der RLS-Policy', async () => {
     const chain = chainResolving({ data: null, error: null });
     mockedFrom.mockReturnValue(chain);
 
     const { error } = await deleteLoyaltyCard('card-1');
 
     expect(error).toBeNull();
-    expect(chain.eq).toHaveBeenNthCalledWith(1, 'id', 'card-1');
-    expect(chain.eq).toHaveBeenNthCalledWith(2, 'user_id', 'user-1');
+    expect(chain.eq).toHaveBeenCalledTimes(1);
+    expect(chain.eq).toHaveBeenCalledWith('id', 'card-1');
   });
 });

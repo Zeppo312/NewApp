@@ -42,6 +42,10 @@ module.exports = function({ config }) {
   addPlugin(plugins, './plugins/withLiveActivityModule');
   // Muss nach withLiveActivityModule laufen: patcht dessen Release-Entitlements.
   addPlugin(plugins, './plugins/withShoppingWidgetModule');
+  // Setzt die App-Group von withShoppingWidgetModule voraus und ergänzt nur die
+  // Bridge des Schlaf-Widgets.
+  addPlugin(plugins, './plugins/withSleepWidgetModule');
+  addPlugin(plugins, './plugins/withPlannerWidgetModule');
 
   // Konfiguration für Updates
   const updatedConfig = {

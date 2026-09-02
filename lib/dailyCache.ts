@@ -25,6 +25,7 @@ import {
 export const mapCareToDaily = (rows: any[]): any[] =>
   rows.map((r) => ({
     id: r.id,
+    baby_id: r.baby_id ?? undefined,
     entry_date: r.start_time,
     entry_type: r.entry_type,
     start_time: r.start_time,
@@ -38,6 +39,13 @@ export const mapCareToDaily = (rows: any[]): any[] =>
     diaper_temperature_c: r.diaper_temperature_c ?? undefined,
     diaper_suppository_given: r.diaper_suppository_given ?? undefined,
     diaper_suppository_dose_mg: r.diaper_suppository_dose_mg ?? undefined,
+    custom_activity_type_id: r.custom_activity_type_id ?? undefined,
+    custom_name: r.custom_name ?? undefined,
+    custom_emoji: r.custom_emoji ?? undefined,
+    custom_color: r.custom_color ?? undefined,
+    custom_tracking_mode: r.custom_tracking_mode ?? undefined,
+    custom_quantity: r.custom_quantity ?? undefined,
+    custom_unit: r.custom_unit ?? undefined,
     sub_type:
       r.entry_type === 'feeding'
         ? r.feeding_type === 'BREAST'

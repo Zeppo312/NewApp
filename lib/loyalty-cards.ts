@@ -46,7 +46,6 @@ export const fetchLoyaltyCards = async (): Promise<DataResult<LoyaltyCard[]>> =>
   const { data, error } = await supabase
     .from('loyalty_cards')
     .select('id, name, barcode, scanned_type, color, created_at')
-    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   return {
@@ -86,8 +85,7 @@ export const deleteLoyaltyCard = async (cardId: string): Promise<{ error: unknow
   const { error } = await supabase
     .from('loyalty_cards')
     .delete()
-    .eq('id', cardId)
-    .eq('user_id', user.id);
+    .eq('id', cardId);
 
   return { error };
 };

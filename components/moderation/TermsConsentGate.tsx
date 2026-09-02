@@ -29,8 +29,8 @@ type TermsConsentGateProps = {
 };
 
 /**
- * Blockierender Zustimmungsdialog für Bestandsnutzer, die die aktualisierten
- * Nutzungsbedingungen mit den Community-Regeln noch nicht bestätigt haben.
+ * Blockierender Zustimmungsdialog für Bestandsnutzer, die die aktuelle Fassung
+ * der Nutzungsbedingungen noch nicht bestätigt haben.
  */
 export function TermsConsentGate({
   visible,

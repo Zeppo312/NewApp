@@ -1,7 +1,26 @@
-import type { DailySignals } from './types';
+import type { AnalysisCard, DailySignals } from './types';
+import type { CareDayTimelineItem } from './day-timeline';
 import { getAppLocaleTag, type AppLocale } from '@/lib/localization';
 
 export type CarePredictionKind = 'sleep' | 'feeding';
+
+/**
+ * Zusatzinhalte der Seite, damit die Übergabe das komplette Tagesbriefing
+ * enthält und nicht nur Jetzt/Als Nächstes. Alles optional: fehlt ein Teil,
+ * bleibt der entsprechende Abschnitt einfach weg.
+ */
+export interface CareHandoffBriefing {
+  /** Kernaussage des Tagesbriefings (Hero-Text). */
+  headline?: string | null;
+  /** Ausführlicher Hinweistext der Hauptkarte. */
+  body?: string | null;
+  /** „Warum dieser Hinweis?" – kombinierte Datenpunkte. */
+  reasons?: string[] | null;
+  /** Tageswerte (Schlaf/Ernährung/Windeln/Wetter); Beispielkarten fliegen raus. */
+  cards?: AnalysisCard[] | null;
+  /** Tagesplan inklusive Termin-Kollisionen mit der Prognose. */
+  timeline?: CareDayTimelineItem[] | null;
+}
 
 export interface CareHorizon {
   headline: string;
@@ -14,6 +33,8 @@ export interface CareHorizon {
   nextWindowEnd: string | null;
   windowMinutes: number | null;
   roughNight: boolean;
+  /** Lotti rät heute zu echter Ablösung – aus den Tagesdaten abgeleitet. */
+  needsRelief: boolean;
   isLearning: boolean;
   handoffLabel: string;
   handoffMessage: string;
@@ -35,6 +56,10 @@ const validDate = (value: string | null | undefined): Date | null => {
 
 const formatTime = (date: Date, locale: AppLocale): string =>
   date.toLocaleTimeString(getAppLocaleTag(locale), { hour: '2-digit', minute: '2-digit' });
+
+/** Kurzform für die dreisprachigen Textbausteine der Übergabe. */
+const say = (locale: AppLocale, de: string, en: string, es: string): string =>
+  locale === 'en' ? en : locale === 'es' ? es : de;
 
 const durationText = (minutes: number, locale: AppLocale): string => {
   const safe = Math.max(0, Math.round(minutes));
@@ -121,9 +146,110 @@ const handoffRequest = (signals: DailySignals, prediction: Prediction | null, lo
   return locale === 'en' ? `Could you take over with ${signals.babyName} for the next 30 minutes?` : locale === 'es' ? `¿Puedes encargarte de ${signals.babyName} durante los próximos 30 minutos?` : `Kannst du ${signals.babyName} bitte für die nächsten 30 Minuten übernehmen?`;
 };
 
+/** „Montag, 01.09., Stand 08:00 Uhr" – damit die Nachricht datierbar bleibt. */
+const handoffStamp = (now: Date, locale: AppLocale): string => {
+  const day = now.toLocaleDateString(getAppLocaleTag(locale), {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+  });
+  const time = formatTime(now, locale);
+  return say(
+    locale,
+    `${day}, Stand ${time} Uhr`,
+    `${day}, as of ${time}`,
+    `${day}, a las ${time}`,
+  );
+};
+
+/** Ein Abschnitt der Übergabe – Überschrift + Zeilen, leer wird verworfen. */
+const section = (title: string, lines: (string | null)[]): string | null => {
+  const body = lines.filter((line): line is string => !!line);
+  return body.length > 0 ? [title, ...body].join('\n') : null;
+};
+
+/**
+ * Tageswerte aus den Briefing-Karten. Beispielkarten (isReal = false) bleiben
+ * draußen: In einer Übergabe darf nichts stehen, was nicht gemessen wurde.
+ */
+const cardLines = (cards: AnalysisCard[] | null | undefined): string[] =>
+  (cards ?? [])
+    .filter((card) => card.isReal)
+    .map(
+      (card) =>
+        `• ${card.emoji} ${card.label}: ${card.value}${card.caption ? ` – ${card.caption}` : ''}`,
+    );
+
+/** Termine und Aufgaben von heute; Prognosen stehen schon in „Als Nächstes". */
+const planLines = (
+  timeline: CareDayTimelineItem[] | null | undefined,
+): string[] =>
+  (timeline ?? [])
+    .filter((item) => !item.isPredicted)
+    .slice(0, 5)
+    .map(
+      (item) =>
+        `• ${item.timeLabel} ${item.title}${item.subtitle ? ` (${item.subtitle})` : ''}`,
+    );
+
+/** Termin, der in das prognostizierte Fenster fällt – für die Übergabe wichtig. */
+const conflictLine = (
+  timeline: CareDayTimelineItem[] | null | undefined,
+  locale: AppLocale,
+): string | null => {
+  const conflict = (timeline ?? []).find(
+    (item) => item.isPredicted && item.conflictTitle,
+  );
+  if (!conflict?.conflictTitle) return null;
+  return say(
+    locale,
+    `• Achtung: „${conflict.conflictTitle}" fällt in dieses Zeitfenster.`,
+    `• Heads-up: “${conflict.conflictTitle}” falls into this window.`,
+    `• Atención: «${conflict.conflictTitle}» cae en ese margen.`,
+  );
+};
+
+/**
+ * Ob Lotti heute zu echter Ablösung rät statt nur zum Übergeben. Bewusst
+ * konservativ: nur bei einer deutlich kürzeren Nacht **und** einem zweiten
+ * harten Signal – sonst nutzt sich der dringende Ton ab. Bewertet wird die
+ * Lage, nie die Verfassung der Eltern.
+ */
+const needsReliefFrom = (
+  signals: DailySignals,
+  windowMinutes: number | null,
+): boolean => {
+  if (!signals.sleep.roughNight) return false;
+  const {
+    lastNightMinutes,
+    typicalNightMinutes,
+    typicalMinutesByNow,
+    minutes,
+    baselineSampleDays,
+  } = signals.sleep;
+  const nightDeficit =
+    lastNightMinutes != null && typicalNightMinutes != null
+      ? typicalNightMinutes - lastNightMinutes
+      : null;
+  const dayDeficit =
+    typicalMinutesByNow != null && baselineSampleDays >= 4
+      ? typicalMinutesByNow - minutes
+      : null;
+  return (
+    (nightDeficit != null && nightDeficit >= 90) ||
+    (dayDeficit != null && dayDeficit >= 45) ||
+    (windowMinutes != null && windowMinutes < 15)
+  );
+};
+
 export const buildCareHorizon = (
   signals: DailySignals,
-  options: { now?: Date; atLimit?: boolean; locale?: AppLocale } = {},
+  options: {
+    now?: Date;
+    locale?: AppLocale;
+    /** Inhalte der Briefing-Karten, damit die Übergabe vollständig ist. */
+    briefing?: CareHandoffBriefing;
+  } = {},
 ): CareHorizon => {
   const now = options.now ?? new Date();
   const locale = options.locale ?? 'de';
@@ -176,44 +302,91 @@ export const buildCareHorizon = (
   const nextText = signals.sleep.isSleepingNow
     ? locale === 'en' ? 'Lotti will wait until the current sleep ends before making the next prediction.' : locale === 'es' ? 'Lotti esperará a que termine el sueño actual para hacer la próxima previsión.' : 'Lotti wartet mit der nächsten Prognose, bis der laufende Schlaf beendet ist.'
     : nextTextFor(next, now, locale);
+  const needsRelief = needsReliefFrom(signals, windowMinutes);
+  const headlineText = needsRelief
+    ? say(locale, 'Heute wäre echte Entlastung dran', 'Real relief would matter today', 'Hoy haría falta un relevo de verdad')
+    : signals.sleep.roughNight
+      ? say(locale, 'Heute im Schonmodus', 'Recovery mode today', 'Hoy, modo descanso')
+      : next
+        ? say(locale, 'Das ist wahrscheinlich als Nächstes dran', 'This is probably up next', 'Esto es probablemente lo siguiente')
+        : say(locale, 'Lotti lernt euren Rhythmus', 'Lotti is learning your rhythm', 'Lotti está aprendiendo vuestro ritmo');
   const lastWet = validDate(signals.diaper.lastWetAt);
-  const handoffLines = [
-    options.atLimit ? (locale === 'en' ? 'I am at my limit and need someone to take over now.' : locale === 'es' ? 'Estoy al límite y necesito un relevo concreto.' : 'Ich bin gerade am Limit und brauche eine konkrete Ablösung.') : (locale === 'en' ? 'Quick handoff from Lotti:' : locale === 'es' ? 'Relevo rápido de Lotti:' : 'Kurze Übergabe von Lotti:'),
-    signals.sleep.roughNight && !options.atLimit
-      ? locale === 'en' ? '• Lotti detected a much shorter night than usual – use recovery mode today.' : locale === 'es' ? '• Lotti ha detectado una noche mucho más corta de lo habitual: hoy toca modo descanso.' : '• Lotti hat eine deutlich kürzere Nacht als sonst erkannt – heute ist Schonmodus.'
-      : null,
-    `• ${nowText}`,
-    lastWet ? `• ${locale === 'en' ? 'Last wet diaper' : locale === 'es' ? 'Último pañal mojado' : 'Letzte nasse Windel'} ${locale === 'de' ? 'vor ' : locale === 'es' ? 'hace ' : ''}${durationText(minutesSince(lastWet, now), locale)}${locale === 'en' ? ' ago' : ''}` : null,
-    `• ${locale === 'en' ? 'Up next' : locale === 'es' ? 'A continuación' : 'Als Nächstes'}: ${nextText}`,
-    '',
-    handoffRequest(signals, next, locale),
-  ].filter((line): line is string => line != null);
-
   const sampleCount = next?.samples ?? 0;
+  const confidenceText =
+    sampleCount >= 4
+      ? say(locale, `Aus ${sampleCount} persönlichen Abständen abgeleitet`, `Based on ${sampleCount} personal intervals`, `Basado en ${sampleCount} intervalos personales`)
+      : say(locale, 'Noch nicht genug persönliche Vergleichsdaten', 'Not enough personal comparison data yet', 'Aún no hay suficientes datos personales');
+  const briefing = options.briefing;
+  const reasons = (briefing?.reasons ?? []).filter((reason) => !!reason);
+
+  /* Komplettes Briefing statt Kurzfassung: Wer übernimmt, bekommt Stand,
+     Prognose, Tageswerte, Lottis Hinweis und den Tagesplan in einer Nachricht. */
+  const handoffBlocks = [
+    [
+      needsRelief
+        ? say(locale, 'Übergabe von Lotti – heute wäre echte Ablösung wichtig:', 'Handoff from Lotti – real relief would matter today:', 'Resumen de Lotti: hoy haría falta un relevo de verdad:')
+        : say(locale, 'Kurze Übergabe von Lotti:', 'Quick handoff from Lotti:', 'Relevo rápido de Lotti:'),
+      handoffStamp(now, locale),
+      // Bei Ablösungsbedarf sagt schon die Kopfzeile, worum es geht.
+      needsRelief ? null : headlineText,
+    ]
+      .filter((line): line is string => !!line)
+      .join('\n'),
+
+    section(say(locale, 'JETZT', 'RIGHT NOW', 'AHORA'), [
+      signals.sleep.roughNight
+        ? say(locale, '• Lotti hat eine deutlich kürzere Nacht als sonst erkannt – heute ist Schonmodus.', '• Lotti detected a much shorter night than usual – use recovery mode today.', '• Lotti ha detectado una noche mucho más corta de lo habitual: hoy toca modo descanso.')
+        : null,
+      `• ${nowText}`,
+      lastWet
+        ? `• ${say(locale, `Letzte nasse Windel vor ${durationText(minutesSince(lastWet, now), locale)}`, `Last wet diaper ${durationText(minutesSince(lastWet, now), locale)} ago`, `Último pañal mojado hace ${durationText(minutesSince(lastWet, now), locale)}`)}`
+        : null,
+    ]),
+
+    section(say(locale, 'ALS NÄCHSTES', 'UP NEXT', 'A CONTINUACIÓN'), [
+      `• ${nextText}`,
+      `• ${say(locale, 'Dein Fenster', 'Your window', 'Tu margen')}: ${windowText}`,
+      conflictLine(briefing?.timeline, locale),
+      `• ${confidenceText}`,
+    ]),
+
+    section(
+      say(locale, 'TAGESWERTE', "TODAY'S NUMBERS", 'DATOS DE HOY'),
+      cardLines(briefing?.cards),
+    ),
+
+    section(say(locale, 'LOTTIS HINWEIS', "LOTTI'S TIP", 'CONSEJO DE LOTTI'), [
+      briefing?.headline ? `• ${briefing.headline}` : null,
+      briefing?.body ? `• ${briefing.body}` : null,
+      reasons.length > 0
+        ? `• ${say(locale, 'Warum', 'Why', 'Por qué')}: ${reasons.join(' · ')}`
+        : null,
+    ]),
+
+    section(
+      say(locale, 'HEUTE IM PLAN', "TODAY'S PLAN", 'PLAN DE HOY'),
+      planLines(briefing?.timeline),
+    ),
+
+    handoffRequest(signals, next, locale),
+  ].filter((block): block is string => !!block);
+
   return {
-    headline: options.atLimit
-      ? locale === 'en' ? 'Getting relief is all that matters now' : locale === 'es' ? 'Ahora solo importa conseguir relevo' : 'Jetzt zählt nur die Ablösung'
-      : signals.sleep.roughNight
-        ? locale === 'en' ? 'Recovery mode today' : locale === 'es' ? 'Hoy, modo descanso' : 'Heute im Schonmodus'
-        : next
-          ? locale === 'en' ? 'This is probably up next' : locale === 'es' ? 'Esto es probablemente lo siguiente' : 'Das ist wahrscheinlich als Nächstes dran'
-          : locale === 'en' ? 'Lotti is learning your rhythm' : locale === 'es' ? 'Lotti está aprendiendo vuestro ritmo' : 'Lotti lernt euren Rhythmus',
+    headline: headlineText,
     nowText,
     nextText,
     windowText,
-    confidenceText:
-      sampleCount >= 4
-        ? locale === 'en' ? `Based on ${sampleCount} personal intervals` : locale === 'es' ? `Basado en ${sampleCount} intervalos personales` : `Aus ${sampleCount} persönlichen Abständen abgeleitet`
-        : locale === 'en' ? 'Not enough personal comparison data yet' : locale === 'es' ? 'Aún no hay suficientes datos personales' : 'Noch nicht genug persönliche Vergleichsdaten',
+    confidenceText,
     nextKind: next?.kind ?? null,
     nextWindowStart: next?.start.toISOString() ?? null,
     nextWindowEnd: next?.end.toISOString() ?? null,
     windowMinutes,
     roughNight: signals.sleep.roughNight,
+    needsRelief,
     isLearning: !next && !signals.sleep.isSleepingNow,
     handoffLabel:
-      options.atLimit
-        ? locale === 'en' ? 'Ask for relief now' : locale === 'es' ? 'Pedir relevo ahora' : 'Jetzt Ablösung anfragen'
+      needsRelief
+        ? locale === 'en' ? 'Ask for relief' : locale === 'es' ? 'Pedir relevo' : 'Ablösung anfragen'
         : signals.sleep.roughNight
           ? locale === 'en' ? 'Share recovery mode' : locale === 'es' ? 'Compartir modo descanso' : 'Schonmodus übergeben'
         : next?.kind === 'sleep'
@@ -221,6 +394,6 @@ export const buildCareHorizon = (
           : next?.kind === 'feeding'
             ? locale === 'en' ? 'Hand off the next feed' : locale === 'es' ? 'Delegar la próxima toma' : 'Nächste Mahlzeit übergeben'
             : locale === 'en' ? 'Share current status' : locale === 'es' ? 'Compartir situación actual' : 'Aktuellen Stand übergeben',
-    handoffMessage: handoffLines.join('\n'),
+    handoffMessage: handoffBlocks.join('\n\n'),
   };
 };

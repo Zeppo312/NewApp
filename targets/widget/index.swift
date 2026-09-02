@@ -7,5 +7,8 @@ struct exportWidgets: WidgetBundle {
         WidgetLiveActivity()
         QuickLaunchWidget()
         ShoppingListWidget()
+        SleepWidget()
+        PlannerTimelineWidget()
+        PlannerTasksWidget()
     }
 }

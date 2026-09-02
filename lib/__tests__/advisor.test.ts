@@ -186,16 +186,119 @@ describe('advisor care horizon', () => {
     expect(horizon.nextText).toContain('keine erfundene Uhrzeit');
   });
 
-  it('turns limit mode into a concrete handoff request', () => {
+  it('keeps the calm tone when the night matched the personal baseline', () => {
     const horizon = buildCareHorizon(signals(), {
       now: new Date(2026, 6, 21, 8, 0),
-      atLimit: true,
     });
 
-    expect(horizon.headline).toBe('Jetzt zählt nur die Ablösung');
-    expect(horizon.handoffLabel).toBe('Jetzt Ablösung anfragen');
-    expect(horizon.handoffMessage).toContain('Ich bin gerade am Limit');
+    expect(horizon.needsRelief).toBe(false);
+    expect(horizon.handoffMessage).toContain('Kurze Übergabe von Lotti:');
+  });
+
+  it('derives a relief request from a clearly shorter night', () => {
+    const value = signals();
+    value.sleep.roughNight = true;
+    value.sleep.lastNightMinutes = 380;
+
+    const horizon = buildCareHorizon(value, {
+      now: new Date(2026, 6, 21, 8, 0),
+    });
+
+    expect(horizon.needsRelief).toBe(true);
+    expect(horizon.headline).toBe('Heute wäre echte Entlastung dran');
+    expect(horizon.handoffLabel).toBe('Ablösung anfragen');
+    expect(horizon.handoffMessage).toContain('heute wäre echte Ablösung wichtig');
     expect(horizon.handoffMessage).toContain('Einschlafen');
+  });
+
+  it('does not escalate on a rough night without a second hard signal', () => {
+    const value = signals();
+    value.sleep.roughNight = true;
+    value.sleep.lastNightMinutes = 500;
+
+    const horizon = buildCareHorizon(value, {
+      now: new Date(2026, 6, 21, 8, 0),
+    });
+
+    expect(horizon.needsRelief).toBe(false);
+    expect(horizon.headline).toBe('Heute im Schonmodus');
+    expect(horizon.handoffLabel).toBe('Schonmodus übergeben');
+  });
+
+  it('hands over the complete briefing, not just the next need', () => {
+    const horizon = buildCareHorizon(signals(), {
+      now: new Date(2026, 6, 21, 8, 0),
+      briefing: {
+        headline: 'Heute läuft es rund',
+        body: 'Schlaf und Mahlzeiten liegen im gewohnten Rahmen.',
+        reasons: ['Schlaf wie sonst um diese Zeit', '1 Mahlzeit bis jetzt'],
+        cards: [
+          {
+            key: 'sleep',
+            emoji: '💤',
+            label: 'Schlaf',
+            value: '8 Std 30 Min',
+            caption: 'wie sonst um diese Zeit',
+            progress: 0.9,
+            isReal: true,
+          },
+          {
+            key: 'weather',
+            emoji: '🌤️',
+            label: 'Wetter',
+            value: '22°',
+            caption: 'Beispielwert',
+            progress: 0.5,
+            isReal: false,
+          },
+        ],
+        timeline: [
+          {
+            id: 'planner:1',
+            kind: 'planner',
+            title: 'Kinderarzt',
+            subtitle: 'Vorsorge U5',
+            timeLabel: '10:00–10:30',
+            startAt: '2026-07-21T10:00:00',
+            endAt: '2026-07-21T10:30:00',
+            status: 'later',
+            isPredicted: false,
+            isAllDay: false,
+            conflictTitle: null,
+          },
+          {
+            id: 'sleep:1',
+            kind: 'sleep',
+            title: 'Schlaffenster',
+            subtitle: null,
+            timeLabel: '08:30–09:00',
+            startAt: '2026-07-21T08:30:00',
+            endAt: '2026-07-21T09:00:00',
+            status: 'upcoming',
+            isPredicted: true,
+            isAllDay: false,
+            conflictTitle: 'Kinderarzt',
+          },
+        ],
+      },
+    });
+
+    const message = horizon.handoffMessage;
+    expect(message).toContain('Kurze Übergabe von Lotti:');
+    expect(message).toContain('Stand 08:00 Uhr');
+    expect(message).toContain('JETZT');
+    expect(message).toContain('ALS NÄCHSTES');
+    expect(message).toContain('Dein Fenster');
+    expect(message).toContain('Achtung: „Kinderarzt" fällt in dieses Zeitfenster.');
+    expect(message).toContain('💤 Schlaf: 8 Std 30 Min – wie sonst um diese Zeit');
+    // Beispielkarten gehören nicht in eine Übergabe.
+    expect(message).not.toContain('Wetter');
+    expect(message).toContain('LOTTIS HINWEIS');
+    expect(message).toContain('Heute läuft es rund');
+    expect(message).toContain('Warum: Schlaf wie sonst um diese Zeit · 1 Mahlzeit bis jetzt');
+    expect(message).toContain('HEUTE IM PLAN');
+    expect(message).toContain('10:00–10:30 Kinderarzt (Vorsorge U5)');
+    expect(message).toContain('Einschlafen in diesem Zeitfenster');
   });
 
   it('asks a partner to take over around breastfeeding instead of the feed itself', () => {

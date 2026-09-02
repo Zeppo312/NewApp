@@ -296,7 +296,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       premium: true,
     },
     {
-      label: "Meilensteine, Zahn-Tracker & Fotobuch als PDF",
+      label: "Meilensteine & Zahn-Tracker",
       lite: true,
       standard: true,
       premium: true,
@@ -465,7 +465,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       bullets: [
         "Alle Basis-Tracker & 7 Tage Schlaf- und Tagesverlauf",
         "Schwangerschafts-Tools, Wachstum & Babyprofile",
-        "Meilensteine, Fotobuch, Babywetter & Selfcare",
+        "Meilensteine, Babywetter & Selfcare",
         "Community, Gruppen, Chats, Ratgeber & Erinnerungen",
       ],
     },

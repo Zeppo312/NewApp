@@ -78,10 +78,10 @@ const de = {
 
   'consent.gateTitle': 'Bitte kurz bestätigen',
   'consent.gateIntro':
-    'Wir haben unsere Nutzungsbedingungen um klare Community-Regeln ergänzt: keine Toleranz für anstößige Inhalte oder missbräuchliches Verhalten. Bitte bestätige sie, um Community und Chat weiter zu nutzen.',
+    'Wir haben unsere Nutzungsbedingungen und die Datenschutzerklärung aktualisiert. Bitte bestätige sie kurz, um Lotti Baby weiter zu nutzen.',
   'consent.checkbox': 'Ich akzeptiere die Nutzungsbedingungen und die Datenschutzerklärung.',
   'consent.rulesHint':
-    'Anstößige Inhalte und missbräuchliches Verhalten werden nicht toleriert. Inhalte können gemeldet, Nutzer blockiert werden.',
+    'Lotti Baby ersetzt keine medizinische Beratung. Deine Inhalte bleiben privat und sind nur für dich und eine verknüpfte Partnerperson sichtbar.',
   'consent.terms': 'Nutzungsbedingungen',
   'consent.privacy': 'Datenschutzerklärung',
   'consent.accept': 'Zustimmen und fortfahren',
@@ -234,10 +234,10 @@ const en: Catalog = {
 
   'consent.gateTitle': 'One quick confirmation',
   'consent.gateIntro':
-    'We added clear community rules to our terms of use: zero tolerance for objectionable content or abusive behavior. Please accept them to keep using community and chat.',
+    'We updated our terms of use and privacy policy. Please confirm them to keep using Lotti Baby.',
   'consent.checkbox': 'I accept the terms of use and the privacy policy.',
   'consent.rulesHint':
-    'Objectionable content and abusive behavior are not tolerated. Content can be reported and users can be blocked.',
+    'Lotti Baby does not replace medical advice. Your content stays private and is visible only to you and a linked partner.',
   'consent.terms': 'Terms of use',
   'consent.privacy': 'Privacy policy',
   'consent.accept': 'Accept and continue',
@@ -387,10 +387,10 @@ const es: Catalog = {
 
   'consent.gateTitle': 'Una confirmación rápida',
   'consent.gateIntro':
-    'Hemos añadido normas claras de comunidad a nuestras condiciones de uso: tolerancia cero con los contenidos ofensivos y el comportamiento abusivo. Acéptalas para seguir usando la comunidad y el chat.',
+    'Hemos actualizado nuestras condiciones de uso y la política de privacidad. Confírmalas para seguir usando Lotti Baby.',
   'consent.checkbox': 'Acepto las condiciones de uso y la política de privacidad.',
   'consent.rulesHint':
-    'No se toleran los contenidos ofensivos ni el comportamiento abusivo. Puedes denunciar contenido y bloquear usuarios.',
+    'Lotti Baby no sustituye el asesoramiento médico. Tus contenidos son privados y solo son visibles para ti y para una pareja vinculada.',
   'consent.terms': 'Condiciones de uso',
   'consent.privacy': 'Política de privacidad',
   'consent.accept': 'Aceptar y continuar',

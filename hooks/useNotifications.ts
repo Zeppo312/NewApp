@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
+import { COMMUNITY_FALLBACK_ROUTE } from '@/lib/communityAccess';
 import Constants from 'expo-constants';
 import { savePushToken } from '@/lib/notificationService';
 import { getAppSettings } from '@/lib/supabase';
@@ -230,7 +231,9 @@ export function useNotifications() {
           break;
 
         case 'message':
-          router.push(`/chat/${referenceId}` as any);
+          // Direktnachrichten sind gesperrt (siehe lib/communityAccess.ts).
+          // Alte Push-Nachrichten von vorher landen auf dem Start.
+          router.push(COMMUNITY_FALLBACK_ROUTE as any);
           break;
 
         default:

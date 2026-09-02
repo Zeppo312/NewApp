@@ -161,7 +161,7 @@ const localizedDefaults: Record<
         premium: true,
       },
       {
-        label: "Milestones, tooth tracker & PDF photobook",
+        label: "Milestones & tooth tracker",
         lite: true,
         standard: true,
         premium: true,
@@ -318,7 +318,7 @@ const localizedDefaults: Record<
         bullets: [
           "All core trackers & 7 days of sleep and daily history",
           "Pregnancy tools, growth & baby profiles",
-          "Milestones, photobook, baby weather & self-care",
+          "Milestones, baby weather & self-care",
           "Community, groups, chats, guides & reminders",
         ],
       },
@@ -380,7 +380,7 @@ const localizedDefaults: Record<
         premium: true,
       },
       {
-        label: "Hitos, seguimiento dental y álbum en PDF",
+        label: "Hitos y seguimiento dental",
         lite: true,
         standard: true,
         premium: true,
@@ -537,7 +537,7 @@ const localizedDefaults: Record<
         bullets: [
           "Seguimientos básicos y 7 días de historial",
           "Herramientas de embarazo, crecimiento y perfiles",
-          "Hitos, álbum, tiempo para el bebé y autocuidado",
+          "Hitos, tiempo para el bebé y autocuidado",
           "Comunidad, grupos, chats, guías y recordatorios",
         ],
       },

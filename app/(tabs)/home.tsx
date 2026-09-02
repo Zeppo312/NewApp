@@ -130,7 +130,10 @@ const HOME_QUICK_ACCESS_CARD_DEFINITIONS: HomeQuickAccessCardDefinition[] = [
     titleKey: 'card.shopping.title',
     descriptionKey: 'card.shopping.description',
     iconName: 'cart',
-    destination: '/shopping-list',
+    destination: {
+      pathname: '/shopping-list',
+      params: { returnTo: 'home' },
+    },
     cardBackgroundColor: 'rgba(210, 235, 215, 0.6)',
     iconBackgroundColor: 'rgba(140, 200, 150, 0.9)',
   },
@@ -1066,13 +1069,9 @@ export default function HomeScreen() {
   };
 
   const loadLowStockCount = useCallback(async () => {
-    if (!activeBabyId) {
-      setLowStockCount(0);
-      return;
-    }
-    const { count } = await fetchLowStockCount(activeBabyId);
+    const { count } = await fetchLowStockCount();
     setLowStockCount(count);
-  }, [activeBabyId]);
+  }, []);
 
   useEffect(() => {
     const syncNow = () => setActiveHomeTimerNow(Date.now());

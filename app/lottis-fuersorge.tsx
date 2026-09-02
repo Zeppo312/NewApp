@@ -36,13 +36,11 @@ import { useAdvisorAccess } from '@/lib/advisor/access';
 import {
   fetchAdvisorSettings,
   fetchHistory,
-  fetchTodayMamaCheckin,
   fetchTodayState,
   localDateString,
   markInsightShared,
   markTodayRead,
   saveAdvisorSettings,
-  saveMamaCheckin,
   saveTodayInsight,
   setActed,
   updateAdvisorContext,
@@ -51,7 +49,6 @@ import {
   type AdvisorHistoryItem,
   type AdvisorSettings,
   type AdvisorTodayState,
-  type MamaEnergy,
 } from '@/lib/advisor/advisorStorage';
 import { buildDailySignals } from '@/lib/advisor/buildDailySignals';
 import {
@@ -101,10 +98,6 @@ type AdvisorTheme = {
   controlSurface: string;
   controlBorder: string;
   switchTrack: string;
-  limitTitle: string;
-  limitText: string;
-  limitSurface: string;
-  limitBorder: string;
 };
 
 /** Themen-Chips, optional aus dem Haupt-Hinweis abgeleitet. */
@@ -301,10 +294,6 @@ export default function LottisFuersorgeScreen() {
       controlSurface: isDark ? 'rgba(255,255,255,0.075)' : 'rgba(94,61,179,0.09)',
       controlBorder: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(94,61,179,0.20)',
       switchTrack: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(74,58,51,0.18)',
-      limitTitle: isDark ? '#F4B7D4' : '#74335B',
-      limitText: isDark ? '#DCA0BD' : '#95617A',
-      limitSurface: isDark ? 'rgba(201,104,146,0.14)' : 'rgba(161,77,116,0.08)',
-      limitBorder: isDark ? 'rgba(242,167,197,0.30)' : 'rgba(161,77,116,0.22)',
     }),
     [adaptiveColors, isDark],
   );
@@ -349,7 +338,6 @@ export default function LottisFuersorgeScreen() {
   const [history, setHistory] = useState<AdvisorHistoryItem[] | null>(null);
   const [settings, setSettings] = useState<AdvisorSettings | null>(null);
   const [todayState, setTodayState] = useState<AdvisorTodayState | null>(null);
-  const [mamaEnergy, setMamaEnergy] = useState<MamaEnergy | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => new Date());
   const plannerDateKey = `${clockNow.getFullYear()}-${clockNow.getMonth()}-${clockNow.getDate()}`;
@@ -435,11 +423,10 @@ export default function LottisFuersorgeScreen() {
     // Einstellungen laden. Fällt still zurück, wenn Tabellen fehlen.
     if (babyId) {
       if (!persistedByServer) messageId = await saveTodayInsight(babyId, result);
-      const [dbHistory, dbSettings, dbTodayState, dbMamaEnergy] = await Promise.all([
+      const [dbHistory, dbSettings, dbTodayState] = await Promise.all([
         fetchHistory(babyId),
         fetchAdvisorSettings(),
         fetchTodayState(babyId),
-        fetchTodayMamaCheckin(babyId),
       ]);
       if (!alive()) return;
       setHistory(dbHistory?.map((item) => localizeStoredAdvisorInsight(locale, item)) ?? dbHistory);
@@ -456,7 +443,6 @@ export default function LottisFuersorgeScreen() {
               }
             : null),
       );
-      setMamaEnergy(dbMamaEnergy);
       markTodayRead(babyId);
     } else {
       const dbSettings = await fetchAdvisorSettings();
@@ -464,7 +450,6 @@ export default function LottisFuersorgeScreen() {
       setHistory(null);
       setSettings(dbSettings);
       setTodayState(null);
-      setMamaEnergy(null);
     }
   }, [activeBaby, locale]);
 
@@ -558,14 +543,6 @@ export default function LottisFuersorgeScreen() {
   const chips = useMemo(() => (main ? chipsForInsight(main.id, locale) : []), [locale, main]);
   const summary = main?.headline ?? main?.title ?? '';
   const whyLine = analysis?.reasons?.[0] ?? '';
-  const atLimit = mamaEnergy === 'low';
-  const careHorizon = useMemo(
-    () =>
-      dailySignals
-        ? buildCareHorizon(dailySignals, { now: clockNow, atLimit, locale })
-        : null,
-    [atLimit, clockNow, dailySignals, locale],
-  );
   const dayTimeline = useMemo(
     () =>
       dailySignals
@@ -577,6 +554,25 @@ export default function LottisFuersorgeScreen() {
           })
         : [],
     [clockNow, dailySignals, locale, todayPlanner.blocks],
+  );
+  // Die Übergabe enthält das komplette Briefing: Stand, Prognose, Tageswerte,
+  // Lottis Hinweis und den Tagesplan – deshalb bekommt sie die Kartendaten mit.
+  const careHorizon = useMemo(
+    () =>
+      dailySignals
+        ? buildCareHorizon(dailySignals, {
+            now: clockNow,
+            locale,
+            briefing: {
+              headline: analysis?.main.headline ?? analysis?.main.title ?? null,
+              body: analysis?.main.body ?? null,
+              reasons: analysis?.reasons ?? null,
+              cards: analysis?.cards ?? null,
+              timeline: dayTimeline,
+            },
+          })
+        : null,
+    [analysis, clockNow, dailySignals, dayTimeline, locale],
   );
 
   const haptic = () => {
@@ -603,24 +599,6 @@ export default function LottisFuersorgeScreen() {
     } finally {
       setActionBusy(false);
     }
-  };
-
-  const activateLimitMode = async () => {
-    if (actionBusy) return;
-    haptic();
-    setMamaEnergy('low');
-    setActionBusy(true);
-    if (activeBaby?.id) await saveMamaCheckin(activeBaby.id, 'low');
-    setActionBusy(false);
-  };
-
-  const leaveLimitMode = async () => {
-    if (actionBusy) return;
-    haptic();
-    setMamaEnergy('okay');
-    setActionBusy(true);
-    if (activeBaby?.id) await saveMamaCheckin(activeBaby.id, 'okay');
-    setActionBusy(false);
   };
 
   /* ---- Tagesbriefing-Karte: Struktur steht sofort, Text per Skeleton ---- */
@@ -760,13 +738,13 @@ export default function LottisFuersorgeScreen() {
           <View
             style={[
               styles.horizonBadge,
-              atLimit && styles.horizonBadgeLimit,
-              careHorizon.roughNight && !atLimit && styles.horizonBadgeNight,
+              careHorizon.roughNight && styles.horizonBadgeNight,
+              careHorizon.needsRelief && styles.horizonBadgeRelief,
             ]}
           >
             <Text style={styles.horizonBadgeText}>
-              {atLimit
-                ? t('limitMode')
+              {careHorizon.needsRelief
+                ? t('reliefNeeded')
                 : careHorizon.roughNight
                   ? t('shortNight')
                   : t('rhythm')}
@@ -777,40 +755,34 @@ export default function LottisFuersorgeScreen() {
             {careHorizon.headline}
           </ThemedText>
 
-          {atLimit ? (
-            <ThemedText adaptive={false} style={styles.horizonLimitText}>
-              {t('limitText')}
-            </ThemedText>
-          ) : (
-            <View style={styles.horizonRows}>
-              {[
-                { emoji: '●', label: t('now'), text: careHorizon.nowText },
-                { emoji: '→', label: t('next'), text: careHorizon.nextText },
-                { emoji: '○', label: t('yourWindow'), text: careHorizon.windowText },
-              ].map((row) => (
-                <View key={row.label} style={styles.horizonRow}>
-                  <View style={styles.horizonRowIcon}>
-                    <Text style={styles.horizonRowIconText}>{row.emoji}</Text>
-                  </View>
-                  <View style={styles.horizonRowText}>
-                    <ThemedText adaptive={false} style={styles.horizonRowLabel}>
-                      {row.label}
-                    </ThemedText>
-                    <ThemedText adaptive={false} style={styles.horizonRowBody}>
-                      {row.text}
-                    </ThemedText>
-                  </View>
+          <View style={styles.horizonRows}>
+            {[
+              { emoji: '●', label: t('now'), text: careHorizon.nowText },
+              { emoji: '→', label: t('next'), text: careHorizon.nextText },
+              { emoji: '○', label: t('yourWindow'), text: careHorizon.windowText },
+            ].map((row) => (
+              <View key={row.label} style={styles.horizonRow}>
+                <View style={styles.horizonRowIcon}>
+                  <Text style={styles.horizonRowIconText}>{row.emoji}</Text>
                 </View>
-              ))}
-            </View>
-          )}
+                <View style={styles.horizonRowText}>
+                  <ThemedText adaptive={false} style={styles.horizonRowLabel}>
+                    {row.label}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={styles.horizonRowBody}>
+                    {row.text}
+                  </ThemedText>
+                </View>
+              </View>
+            ))}
+          </View>
 
-          {!atLimit ? (
-            <ThemedText adaptive={false} style={styles.horizonConfidence}>
-              {careHorizon.confidenceText}
-            </ThemedText>
-          ) : null}
+          <ThemedText adaptive={false} style={styles.horizonConfidence}>
+            {careHorizon.confidenceText}
+          </ThemedText>
 
+          {/* Einzige Aktion der Karte. Den Ton der Nachricht leitet Lotti aus
+              den Tagesdaten ab – kein Moduswechsel, keine zweite Schaltfläche. */}
           <TouchableOpacity
             activeOpacity={0.9}
             disabled={actionBusy}
@@ -819,7 +791,7 @@ export default function LottisFuersorgeScreen() {
           >
             <LinearGradient
               colors={
-                atLimit
+                careHorizon.needsRelief
                   ? ['#A14D74', '#74335B']
                   : isDark
                     ? ['#A98BFA', '#6F4CC3']
@@ -833,31 +805,6 @@ export default function LottisFuersorgeScreen() {
               <IconSymbol name="square.and.arrow.up" size={15} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>
-
-          {atLimit ? (
-            <TouchableOpacity
-              activeOpacity={0.72}
-              disabled={actionBusy}
-              onPress={leaveLimitMode}
-              style={styles.horizonQuietButton}
-            >
-              <Text style={styles.horizonQuietButtonText}>{t('normalOverview')}</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              activeOpacity={0.78}
-              disabled={actionBusy}
-              onPress={activateLimitMode}
-              style={styles.limitButton}
-            >
-              <Text style={styles.limitButtonEmoji}>🫶</Text>
-              <View style={styles.limitButtonTextColumn}>
-                <Text style={styles.limitButtonTitle}>{t('atLimit')}</Text>
-                <Text style={styles.limitButtonHint}>{t('limitHint')}</Text>
-              </View>
-              <IconSymbol name="chevron.right" size={14} color={theme.limitTitle} />
-            </TouchableOpacity>
-          )}
         </>
       )}
     </GlassCard>
@@ -1198,19 +1145,15 @@ export default function LottisFuersorgeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {renderCareHorizon()}
-          {!atLimit ? renderDayTimeline() : null}
+          {renderDayTimeline()}
           {renderCopilotBriefing()}
-          {!atLimit ? (
-            <>
-              <CareAnalyticsSection babyId={activeBaby?.id} />
-              {history && history.length > 0
-                ? renderRealHistory(history)
-                : analysis && analysis.history.length > 0
-                  ? renderHistory(analysis.history)
-                  : null}
-              {renderSettings()}
-            </>
-          ) : null}
+          <CareAnalyticsSection babyId={activeBaby?.id} />
+          {history && history.length > 0
+            ? renderRealHistory(history)
+            : analysis && analysis.history.length > 0
+              ? renderHistory(analysis.history)
+              : null}
+          {renderSettings()}
 
           <View style={styles.disclaimerWrap}>
             <IconSymbol name="info.circle" size={14} color={theme.textTertiary} />
@@ -1429,7 +1372,7 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
   horizonBadgeNight: {
     backgroundColor: theme.isDark ? 'rgba(151,141,224,0.22)' : 'rgba(83,73,145,0.13)',
   },
-  horizonBadgeLimit: {
+  horizonBadgeRelief: {
     backgroundColor: theme.isDark ? 'rgba(226,140,180,0.20)' : 'rgba(161,77,116,0.13)',
   },
   horizonBadgeText: {
@@ -1445,7 +1388,6 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     color: theme.textPrimary,
     letterSpacing: -0.45,
   },
-  horizonLimitText: { fontSize: 14.5, lineHeight: 21, color: theme.textSecondary },
   horizonRows: { gap: 4 },
   horizonRow: {
     flexDirection: 'row',
@@ -1487,26 +1429,7 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     borderRadius: 999,
   },
   horizonPrimaryText: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '800' },
-  horizonQuietButton: { alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6 },
-  horizonQuietButtonText: { fontSize: 12.5, fontWeight: '700', color: theme.textTertiary },
   timelineContent: { padding: 20 },
-  limitButton: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 13,
-    paddingVertical: 10,
-    borderRadius: 18,
-    borderCurve: 'continuous',
-    backgroundColor: theme.limitSurface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.limitBorder,
-  },
-  limitButtonEmoji: { fontSize: 20 },
-  limitButtonTextColumn: { flex: 1, gap: 2 },
-  limitButtonTitle: { fontSize: 13.5, fontWeight: '800', color: theme.limitTitle },
-  limitButtonHint: { fontSize: 11.5, lineHeight: 15, color: theme.limitText },
 
   /* Sichtbarer Eltern-Copilot: Orientierung und Tagesbriefing gehören zusammen. */
   copilotSection: { gap: 14 },

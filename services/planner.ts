@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { normalizePlannerColor } from '@/constants/PlannerColors';
 import { getLinkedUsers, supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { parseSafeDate } from '@/lib/safeDate';
@@ -18,6 +19,8 @@ export type PlannerTodo = {
   assignee?: PlannerAssignee;
   babyId?: string;
   userId?: string;
+  /** Eigene Farbe des Eintrags (#rrggbb); ohne Wert gilt die Personenfarbe. */
+  color?: string;
   entryType?: 'todo' | 'note';
   isRecurring?: boolean;
   seriesId?: string;
@@ -38,6 +41,8 @@ export type PlannerEvent = {
   babyId?: string;
   blockId?: string;
   userId?: string;
+  /** Eigene Farbe des Termins (#rrggbb); ohne Wert gilt die Personenfarbe. */
+  color?: string;
   isAllDay?: boolean;
   isRecurring?: boolean;
   seriesId?: string;
@@ -100,6 +105,7 @@ export type PlannerItemRow = {
   end_at: string | null;
   is_all_day: boolean | null;
   reminder_minutes: number | null;
+  color: string | null;
   created_at: string;
   updated_at: string;
   is_recurring?: boolean;
@@ -126,6 +132,7 @@ export type RecurringItemRow = {
   repeat_days: number[];
   starts_on: string;
   ends_on: string | null;
+  color: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -146,6 +153,7 @@ export type RecurringExceptionRow = {
   due_at_minutes: number | null;
   start_at_minutes: number | null;
   end_at_minutes: number | null;
+  color: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -165,6 +173,7 @@ export type RecurringSeriesInput = {
   ownerId?: string;
   startsOn?: string;
   endsOn?: string | null;
+  color?: string | null;
 };
 
 export type RecurringOccurrenceOverrideInput = {
@@ -178,6 +187,7 @@ export type RecurringOccurrenceOverrideInput = {
   dueAtMinutes?: number | null;
   startAtMinutes?: number | null;
   endAtMinutes?: number | null;
+  color?: string | null;
 };
 
 type PlannerItemConversion = {
@@ -189,6 +199,7 @@ type PlannerItemConversion = {
   end?: string | null;
   location?: string;
   reminderMinutes?: number | null;
+  color?: string | null;
 };
 
 type LoadedPlannerData = {
@@ -228,7 +239,7 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((v): v is string => typeof v === 'string' && v.length > 0)));
 }
 
-function convertAssigneePerspective(
+export function convertAssigneePerspective(
   assignee: PlannerAssignee | null | undefined,
   fromUserId: string,
   toUserId: string,
@@ -266,7 +277,8 @@ function hasRecurringOverride(exception?: RecurringExceptionRow | null) {
     exception.is_all_day !== null ||
     exception.due_at_minutes !== null ||
     exception.start_at_minutes !== null ||
-    exception.end_at_minutes !== null
+    exception.end_at_minutes !== null ||
+    (exception.color ?? null) !== null
   );
 }
 
@@ -436,6 +448,7 @@ function buildRecurringPlannerItemRow(
         : null,
     is_all_day: isTodo ? false : isAllDay,
     reminder_minutes: null,
+    color: exception?.color ?? series.color ?? null,
     created_at: series.created_at,
     updated_at: exception?.updated_at ?? series.updated_at,
     is_recurring: true,
@@ -560,6 +573,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
         babyId: row.baby_id ?? undefined,
         blockId: row.block_id ?? undefined,
         userId: row.user_id,
+        color: normalizePlannerColor(row.color) ?? undefined,
         isAllDay: isEffectivelyAllDay,
         isRecurring: !!row.is_recurring,
         seriesId: row.recurring_series_id ?? undefined,
@@ -593,6 +607,7 @@ function buildAggregatedData(date: Date, dayRows: PlannerDayRow[], itemRows: Pla
       assignee: convertAssigneePerspective(row.assignee, row.user_id, baseUserId),
       babyId: row.baby_id ?? undefined,
       userId: row.user_id,
+      color: normalizePlannerColor(row.color) ?? undefined,
       entryType: row.entry_type,
       isRecurring: !!row.is_recurring,
       seriesId: row.recurring_series_id ?? undefined,
@@ -757,7 +772,7 @@ export function usePlannerDay(
       ? await supabase
           .from('planner_items')
           .select(
-            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
+            'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,color,created_at,updated_at',
           )
           .in('day_id', dayIds)
       : { data: [], error: null };
@@ -774,7 +789,7 @@ export function usePlannerDay(
     const { data: multiDayEventRows, error: multiDayError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,color,created_at,updated_at',
       )
       .in('user_id', scopedOwnerIds)
       .eq('entry_type', 'event')
@@ -796,7 +811,7 @@ export function usePlannerDay(
     const { data: recurringSeriesRows, error: recurringSeriesError } = await supabase
       .from('planner_recurring_items')
       .select(
-        'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on,created_at,updated_at',
+        'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on,color,created_at,updated_at',
       )
       .in('user_id', scopedOwnerIds);
 
@@ -813,7 +828,7 @@ export function usePlannerDay(
       ? await supabase
           .from('planner_recurring_exceptions')
           .select(
-            'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,created_at,updated_at',
+            'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,color,created_at,updated_at',
           )
           .in('recurring_item_id', recurringSeriesIds)
           .eq('day', dateIso)
@@ -838,7 +853,7 @@ export function usePlannerDay(
     const { data: floatingOpenRows, error: floatingOpenError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,color,created_at,updated_at',
       )
       .in('user_id', scopedOwnerIds)
       .is('due_at', null)
@@ -856,7 +871,7 @@ export function usePlannerDay(
     const { data: floatingDoneRows, error: floatingDoneError } = await supabase
       .from('planner_items')
       .select(
-        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,created_at,updated_at',
+        'id,user_id,day_id,block_id,entry_type,title,completed,assignee,baby_id,notes,location,due_at,start_at,end_at,is_all_day,reminder_minutes,color,created_at,updated_at',
       )
       .in('user_id', scopedOwnerIds)
       .is('due_at', null)
@@ -1004,6 +1019,7 @@ export function usePlannerDay(
       assignee: PlannerAssignee = 'me',
       babyId?: string,
       ownerIdOverride?: string,
+      color?: string | null,
     ) => {
       if (!user?.id) return;
       const viewerId = user.id;
@@ -1044,6 +1060,7 @@ export function usePlannerDay(
         baby_id: babyId ?? null,
         notes: notes ?? null,
         due_at: normalizedDueAt ?? null,
+        color: normalizePlannerColor(color),
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -1068,6 +1085,7 @@ export function usePlannerDay(
       ownerIdOverride?: string,
       isAllDay?: boolean,
       reminderMinutes?: number | null,
+      color?: string | null,
     ) => {
       if (!user?.id) return;
       const viewerId = user.id;
@@ -1114,6 +1132,7 @@ export function usePlannerDay(
         baby_id: babyId ?? null,
         is_all_day: isAllDay ?? false,
         reminder_minutes: normalizeReminderMinutes(reminderMinutes, 15),
+        color: normalizePlannerColor(color),
       };
       const { error: insertError } = await supabase.from('planner_items').insert(payload);
       if (insertError) {
@@ -1127,7 +1146,7 @@ export function usePlannerDay(
   );
 
   const updateTodo = useCallback(
-    async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee; babyId?: string | null }) => {
+    async (id: string, updates: { title?: string; notes?: string; dueAt?: string | null; assignee?: PlannerAssignee; babyId?: string | null; color?: string | null }) => {
       const row = itemsMapRef.current[id];
       if (!row || row.entry_type !== 'todo') return;
       if (!user?.id) return;
@@ -1140,6 +1159,9 @@ export function usePlannerDay(
       }
       if (updates.babyId !== undefined) {
         payload.baby_id = updates.babyId ?? null;
+      }
+      if (updates.color !== undefined) {
+        payload.color = normalizePlannerColor(updates.color);
       }
 
       let newDayId: string | undefined;
@@ -1184,7 +1206,7 @@ export function usePlannerDay(
   );
 
   const updateEvent = useCallback(
-    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string; assignee?: PlannerAssignee; babyId?: string | null; isAllDay?: boolean; reminderMinutes?: number | null }) => {
+    async (id: string, updates: { title?: string; start?: string; end?: string; location?: string; assignee?: PlannerAssignee; babyId?: string | null; isAllDay?: boolean; reminderMinutes?: number | null; color?: string | null }) => {
       const row = itemsMapRef.current[id];
       if (!row || row.entry_type !== 'event') return;
       if (!user?.id) return;
@@ -1222,6 +1244,9 @@ export function usePlannerDay(
           updates.reminderMinutes,
           15,
         );
+      }
+      if (updates.color !== undefined) {
+        payload.color = normalizePlannerColor(updates.color);
       }
 
       let newDayId: string | undefined;
@@ -1274,6 +1299,9 @@ export function usePlannerDay(
 
       if (updates.notes !== undefined) {
         payload.notes = updates.notes ?? null;
+      }
+      if (updates.color !== undefined) {
+        payload.color = normalizePlannerColor(updates.color);
       }
 
       let newDayId: string | undefined;
@@ -1445,6 +1473,7 @@ export function usePlannerDay(
         repeat_days: repeatDays,
         starts_on: input.startsOn ?? dateIso,
         ends_on: input.endsOn ?? null,
+        color: normalizePlannerColor(input.color),
       };
 
       const { error: insertError } = await supabase
@@ -1466,7 +1495,7 @@ export function usePlannerDay(
       const { data: existing, error: fetchError } = await supabase
         .from('planner_recurring_items')
         .select(
-          'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on',
+          'id,user_id,entry_type,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,repeat_days,starts_on,ends_on,color',
         )
         .eq('id', seriesId)
         .maybeSingle();
@@ -1495,6 +1524,7 @@ export function usePlannerDay(
       }
       if (updates.startsOn !== undefined) payload.starts_on = updates.startsOn ?? dateIso;
       if (updates.endsOn !== undefined) payload.ends_on = updates.endsOn;
+      if (updates.color !== undefined) payload.color = normalizePlannerColor(updates.color);
 
       const nextEntryType = updates.entryType ?? existing.entry_type;
       const nextIsAllDay =
@@ -1592,6 +1622,7 @@ export function usePlannerDay(
             : convertAssigneePerspective(overrides.assignee, viewerId, series.user_id);
       }
       if (overrides.babyId !== undefined) payload.baby_id = overrides.babyId;
+      if (overrides.color !== undefined) payload.color = normalizePlannerColor(overrides.color);
       if (overrides.isAllDay !== undefined) payload.is_all_day = overrides.isAllDay;
       if (series.entry_type === 'todo' && overrides.dueAtMinutes !== undefined) {
         payload.due_at_minutes = sanitizeMinutesOfDay(overrides.dueAtMinutes);
@@ -1640,7 +1671,7 @@ export function usePlannerDay(
       const { data: existing, error: existingError } = await supabase
         .from('planner_recurring_exceptions')
         .select(
-          'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,created_at,updated_at',
+          'id,user_id,recurring_item_id,day,deleted,completed,title,notes,location,assignee,baby_id,is_all_day,due_at_minutes,start_at_minutes,end_at_minutes,color,created_at,updated_at',
         )
         .eq('recurring_item_id', seriesId)
         .eq('day', occurrenceDate)
@@ -1789,6 +1820,7 @@ export function usePlannerDay(
                   )
                 : currentValues.assignee ?? null,
               baby_id: currentValues.babyId ?? null,
+              color: normalizePlannerColor(currentValues.color),
               notes: currentValues.notes ?? null,
               due_at:
                 sanitizeMinutesOfDay(currentValues.dueAtMinutes) !== null
@@ -1820,6 +1852,7 @@ export function usePlannerDay(
                   )
                 : currentValues.assignee ?? null,
               baby_id: currentValues.babyId ?? null,
+              color: normalizePlannerColor(currentValues.color),
               is_all_day: !!currentValues.isAllDay,
               reminder_minutes: null,
             };

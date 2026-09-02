@@ -12,6 +12,8 @@ export const SECTION_GAP_BOTTOM = 12;
 
 export const RADIUS = 22;
 export const PRIMARY = '#8E4EC6';
+// Helles Brand-Lila für Icons und Text auf dunklen bzw. getönten Flächen.
+export const PRIMARY_DARK_FOREGROUND = '#E9D5FF';
 export const TEXT_PRIMARY = '#7D5A50';
 export const GLASS_BORDER = 'rgba(255,255,255,0.55)';
 export const GLASS_OVERLAY = 'rgba(255,255,255,0.16)';
@@ -32,6 +34,7 @@ export const designTokens = {
   SECTION_GAP_BOTTOM,
   RADIUS,
   PRIMARY,
+  PRIMARY_DARK_FOREGROUND,
   TEXT_PRIMARY,
   GLASS_BORDER,
   GLASS_OVERLAY,

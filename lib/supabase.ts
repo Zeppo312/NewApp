@@ -1,6 +1,7 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Linking from 'expo-linking';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 
@@ -27,6 +28,36 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce', // Empfohlen für mobile Apps
   },
 });
+
+/**
+ * Auto-Refresh an den AppState koppeln.
+ *
+ * auth-js erkennt React Native nicht als Browser (kein `document`) und laesst
+ * seinen 30-Sekunden-Ticker deshalb dauerhaft laufen - auch waehrend iOS die
+ * App suspendiert. Wird die App genau in dem Moment in den Hintergrund
+ * geschickt, in dem ein Token-Refresh unterwegs ist, rotiert GoTrue den
+ * Refresh-Token serverseitig, waehrend die Antwort den Client nie erreicht.
+ * Beim naechsten Start schickt der Client den alten Token, bekommt
+ * "Invalid Refresh Token: Already Used" - einen nicht wiederholbaren Fehler -
+ * und auth-js verwirft die Sitzung. Genau das laesst Nutzer sich scheinbar
+ * grundlos neu anmelden.
+ *
+ * Deshalb: im Hintergrund keinen Refresh anstossen, beim Aktivieren wieder
+ * starten. `startAutoRefresh()` fuehrt sofort einen Tick aus und holt einen
+ * faelligen Refresh damit direkt nach dem Resume nach.
+ */
+if (isReactNativeRuntime) {
+  const syncAutoRefreshWithAppState = (state: AppStateStatus) => {
+    if (state === 'active') {
+      void supabase.auth.startAutoRefresh();
+    } else {
+      void supabase.auth.stopAutoRefresh();
+    }
+  };
+
+  syncAutoRefreshWithAppState(AppState.currentState);
+  AppState.addEventListener('change', syncAutoRefreshWithAppState);
+}
 
 /**
  * 🚀 PERFORMANCE OPTIMIZATION: Auth User Cache
@@ -225,7 +256,7 @@ export type BabyCareEntry = {
   id?: string;
   user_id?: string;
   baby_id?: string | null;
-  entry_type: 'feeding' | 'diaper';
+  entry_type: 'feeding' | 'diaper' | 'custom';
   start_time: string; // ISO
   end_time?: string | null; // ISO
   notes?: string | null;
@@ -239,6 +270,14 @@ export type BabyCareEntry = {
   diaper_temperature_c?: number | null;
   diaper_suppository_given?: boolean | null;
   diaper_suppository_dose_mg?: number | null;
+  // Benutzerdefinierte Aktivitaet (Snapshot + Referenz auf die Vorlage)
+  custom_activity_type_id?: string | null;
+  custom_name?: string | null;
+  custom_emoji?: string | null;
+  custom_color?: string | null;
+  custom_tracking_mode?: 'event' | 'quantity' | 'duration' | null;
+  custom_quantity?: number | null;
+  custom_unit?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -501,6 +540,13 @@ export const addBabyCareEntry = async (
       diaper_temperature_c: entry.diaper_temperature_c ?? null,
       diaper_suppository_given: entry.diaper_suppository_given ?? null,
       diaper_suppository_dose_mg: entry.diaper_suppository_dose_mg ?? null,
+      custom_activity_type_id: entry.custom_activity_type_id ?? null,
+      custom_name: entry.custom_name ?? null,
+      custom_emoji: entry.custom_emoji ?? null,
+      custom_color: entry.custom_color ?? null,
+      custom_tracking_mode: entry.custom_tracking_mode ?? null,
+      custom_quantity: entry.custom_quantity ?? null,
+      custom_unit: entry.custom_unit ?? null,
     };
 
     const { data, error } = await supabase
@@ -666,6 +712,13 @@ export const updateBabyCareEntry = async (
       diaper_temperature_c: updates.diaper_temperature_c ?? null,
       diaper_suppository_given: updates.diaper_suppository_given ?? null,
       diaper_suppository_dose_mg: updates.diaper_suppository_dose_mg ?? null,
+      custom_activity_type_id: updates.custom_activity_type_id ?? null,
+      custom_name: updates.custom_name ?? null,
+      custom_emoji: updates.custom_emoji ?? null,
+      custom_color: updates.custom_color ?? null,
+      custom_tracking_mode: updates.custom_tracking_mode ?? null,
+      custom_quantity: updates.custom_quantity ?? null,
+      custom_unit: updates.custom_unit ?? null,
       updated_at: new Date().toISOString(),
     };
 

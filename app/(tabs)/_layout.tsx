@@ -14,7 +14,7 @@ import {
 } from 'expo-router/js-tabs';
 import { ParamListBase, TabNavigationState } from 'expo-router/react-navigation';
 import React, { useEffect, useMemo } from 'react';
-import { ColorValue, Platform, View, ActivityIndicator, Text } from 'react-native';
+import { Platform, View, ActivityIndicator } from 'react-native';
 import type { ComponentProps } from 'react';
 
 import { HapticTab } from '@/components/HapticTab';
@@ -25,7 +25,6 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { useCommunityUnreadCounts } from '@/hooks/useCommunityUnreadCounts';
 import { getOnboardingCompletionState } from '@/lib/onboarding';
 import {
   DEFAULT_NAVIGATION_LOCALE,
@@ -125,7 +124,6 @@ export default function TabLayout() {
   const pathname = usePathname();
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
-  const { unreadCommunityTotal } = useCommunityUnreadCounts(session?.user?.id);
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
   const userId = session?.user?.id ?? null;
   const canCheckOnboarding = !authLoading && isResolved && userId !== null;
@@ -165,6 +163,7 @@ export default function TabLayout() {
       '/period-tracker',
       '/more',
       '/community',
+      '/shopping-list',
       '/debug',
     ]);
 
@@ -249,32 +248,6 @@ export default function TabLayout() {
           tabBarItemStyle: { display: 'none' as const },
         }
       : {};
-  const renderCommunityTabIcon = (color: ColorValue) => (
-    <View style={{ width: 32, height: 32, alignItems: 'center', justifyContent: 'center' }}>
-      <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
-      {unreadCommunityTotal > 0 ? (
-        <View
-          style={{
-            position: 'absolute',
-            top: -2,
-            right: -8,
-            minWidth: 18,
-            height: 18,
-            paddingHorizontal: 4,
-            borderRadius: 9,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#FF6B6B',
-          }}
-        >
-          <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700' }}>
-            {unreadCommunityTotal > 99 ? '99+' : unreadCommunityTotal}
-          </Text>
-        </View>
-      ) : null}
-    </View>
-  );
-
   return (
     <Tabs
       initialRouteName={isBabyBorn ? 'home' : 'pregnancy-home'}
@@ -450,12 +423,24 @@ export default function TabLayout() {
         }}
       />
 
-      {/* Community-Tab fuer Fragen und Antworten */}
+      {/* Community-Route bleibt erhalten, ist aber nicht mehr in der Tab-Leiste sichtbar */}
       <Tabs.Screen
         name="community"
         options={{
           title: t('tab.community'),
-          tabBarIcon: ({ color }) => renderCommunityTabIcon(color),
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
+          ),
+          ...getTabVisibilityOptions(true),
+        }}
+      />
+
+      {/* Tab 4/5: Einkaufsliste (ersetzt den frueheren Community-Tab) */}
+      <Tabs.Screen
+        name="shopping-list"
+        options={{
+          title: t('tab.shoppingList'),
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="cart.fill" color={color} />,
           ...getTabVisibilityOptions(false),
         }}
       />

@@ -38,6 +38,7 @@ type Props = {
     assignee?: PlannerAssignee,
     babyId?: string,
     ownerId?: string,
+    itemColor?: string | null,
   ) => string;
   readOnly?: boolean;
   onToggleTodo: (id: string) => void;
@@ -69,6 +70,8 @@ type TimelineTodo = {
   endMinute: number;
   timeLabel: string;
   assignee: PlannerAssignee;
+  /** Eigene Farbe der Aufgabe; ohne Wert bleibt die neutrale Glaskarte. */
+  todoColor?: string;
   isRecurring?: boolean;
   column?: number;
   totalColumns?: number;
@@ -184,8 +187,12 @@ export const StructuredTimeline: React.FC<Props> = ({
       const locationSuffix = event.location ? ` · ${event.location}` : "";
       const recurring = isRecurringId(event.id);
       const eventColor =
-        getEventColor?.(event.assignee, event.babyId, event.userId) ??
-        accentColor;
+        getEventColor?.(
+          event.assignee,
+          event.babyId,
+          event.userId,
+          event.color,
+        ) ?? accentColor;
       entries.push({
         kind: "event",
         id: event.id,
@@ -231,6 +238,14 @@ export const StructuredTimeline: React.FC<Props> = ({
         endMinute: endMinute,
         timeLabel,
         assignee: todo.assignee ?? "me",
+        todoColor: todo.color
+          ? getEventColor?.(
+              todo.assignee,
+              todo.babyId,
+              todo.userId,
+              todo.color,
+            )
+          : undefined,
         isRecurring: recurring,
       });
       minutesSet.add(dueMinute);
@@ -474,8 +489,12 @@ export const StructuredTimeline: React.FC<Props> = ({
                 event.userId,
               );
               const eventColor =
-                getEventColor?.(event.assignee, event.babyId, event.userId) ??
-                accentColor;
+                getEventColor?.(
+                  event.assignee,
+                  event.babyId,
+                  event.userId,
+                  event.color,
+                ) ?? accentColor;
               const metaLabel =
                 assigneeLabel && assigneeLabel !== c.me
                   ? assigneeLabel
@@ -793,31 +812,27 @@ export const StructuredTimeline: React.FC<Props> = ({
                 : item.assignee === "child"
                   ? "heart.fill"
                   : "person.fill";
+          // Ohne eigene Farbe bleibt der bisherige Akzent erhalten.
+          const todoAccent = item.todoColor ?? accentColor;
           const iconColor =
             item.completed || item.assignee === "partner"
               ? "#fff"
-              : accentColor;
+              : todoAccent;
           const iconWrapperStyle = item.completed
             ? styles.cardIconDone
             : item.assignee === "partner"
               ? styles.cardIconPartner
               : styles.cardIconMe;
           const iconWrapperDynamic = item.completed
-            ? { backgroundColor: accentColor, borderColor: accentColor }
+            ? { backgroundColor: todoAccent, borderColor: todoAccent }
             : item.assignee === "partner"
               ? {
-                  backgroundColor: isDark
-                    ? toRgba(accentColor, 0.24)
-                    : "rgba(94,61,179,0.2)",
-                  borderColor: isDark
-                    ? toRgba(accentColor, 0.48)
-                    : "rgba(94,61,179,0.55)",
+                  backgroundColor: toRgba(todoAccent, isDark ? 0.24 : 0.2),
+                  borderColor: toRgba(todoAccent, isDark ? 0.48 : 0.55),
                 }
               : {
                   backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "#fff",
-                  borderColor: isDark
-                    ? toRgba(accentColor, 0.4)
-                    : "rgba(94,61,179,0.45)",
+                  borderColor: toRgba(todoAccent, isDark ? 0.4 : 0.45),
                 };
 
           // Hide icon when todos are side-by-side
@@ -836,7 +851,18 @@ export const StructuredTimeline: React.FC<Props> = ({
                   style={[
                     StyleSheet.absoluteFill,
                     styles.cardOverlay,
-                    { backgroundColor: glassOverlay, borderColor: glassBorder },
+                    item.todoColor
+                      ? {
+                          backgroundColor: toRgba(
+                            item.todoColor,
+                            isDark ? 0.22 : 0.14,
+                          ),
+                          borderColor: toRgba(
+                            item.todoColor,
+                            isDark ? 0.5 : 0.34,
+                          ),
+                        }
+                      : { backgroundColor: glassOverlay, borderColor: glassBorder },
                   ]}
                 />
                 <View style={[styles.cardRow, !showIcon && { gap: 0 }]}>
@@ -862,6 +888,7 @@ export const StructuredTimeline: React.FC<Props> = ({
                       type="todo"
                       completed={item.completed}
                       isRecurring={isRecurringId(item.id)}
+                      accentColor={item.todoColor}
                       onComplete={
                         readOnly ? undefined : () => onToggleTodo(item.id)
                       }

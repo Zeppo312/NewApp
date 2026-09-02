@@ -5,7 +5,9 @@ import { invalidateUserProfileCache } from './appCache';
  * Zustimmung zu den Nutzungsbedingungen (EULA-Gate, App Store Guideline 1.2).
  *
  * Die Version wird mitgespeichert, damit eine spätere inhaltliche Änderung der
- * Community-Regeln erneut bestätigt werden kann.
+ * Bedingungen erneut bestätigt werden kann. Sie bleibt hier bewusst auf
+ * 2026-08-17: Der Wegfall der Community-Regeln nimmt Pflichten weg und
+ * rechtfertigt kein erneutes Gate für Bestandsnutzer.
  */
 export const TERMS_VERSION = '2026-08-17';
 

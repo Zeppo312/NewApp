@@ -59,7 +59,7 @@ export default function NutzungsbedingungenScreen() {
               ]}
             >
               <ThemedText style={styles.pageTitle}>Nutzungsbedingungen</ThemedText>
-              <ThemedText style={styles.paragraph}>Stand: 19. August 2026</ThemedText>
+              <ThemedText style={styles.paragraph}>Stand: 26. August 2026</ThemedText>
 
               <Section title="Geltungsbereich">
                 <ThemedText style={styles.paragraph}>
@@ -123,59 +123,26 @@ export default function NutzungsbedingungenScreen() {
                 />
               </Section>
 
-              <Section title="Nutzergenerierte Inhalte und Community-Regeln">
+              <Section title="Eigene Inhalte">
                 <ThemedText style={styles.paragraph}>
-                  Lotti Baby enthält Bereiche, in denen Nutzerinnen und Nutzer eigene Inhalte erstellen und
-                  miteinander kommunizieren: Community-Beiträge und Kommentare, Gruppen, Gruppen-Chats,
-                  Direktnachrichten sowie Profilangaben. Für diese Inhalte ist ausschließlich die Person
-                  verantwortlich, die sie erstellt hat.
+                  In Lotti Baby werden eigene Inhalte erstellt und gespeichert, etwa Tagebucheinträge, Fotos,
+                  Tracking-Daten, Listen und Profilangaben. Diese Inhalte sind privat: Sie werden nicht
+                  veröffentlicht und sind ausschließlich für das eigene Konto sichtbar sowie – sofern eine
+                  Partnerverknüpfung eingerichtet wurde – für die damit verbundene Person.
                 </ThemedText>
                 <ThemedText style={styles.paragraph}>
-                  Die Rechte an eigenen Inhalten verbleiben bei der Person, die sie erstellt hat. Mit dem Einstellen
+                  Die Rechte an eigenen Inhalten verbleiben bei der Person, die sie erstellt hat. Mit dem Speichern
                   eines Inhalts räumt sie Lotti Baby für die Dauer seiner Bereitstellung ein unentgeltliches,
                   nicht ausschließliches und räumlich unbeschränktes Nutzungsrecht ein, soweit dies erforderlich ist,
-                  um den Inhalt innerhalb der App zu speichern, technisch zu verarbeiten, zu übertragen, anzuzeigen,
-                  zu vervielfältigen und zu moderieren. Dieses Recht darf ausschließlich in dem für Betrieb,
-                  Bereitstellung und Sicherheit der App erforderlichen Umfang durch beauftragte technische
-                  Dienstleister ausgeübt werden.
+                  um den Inhalt innerhalb der App zu speichern, technisch zu verarbeiten, zu übertragen, anzuzeigen
+                  und zu vervielfältigen. Dieses Recht darf ausschließlich in dem für Betrieb, Bereitstellung und
+                  Sicherheit der App erforderlichen Umfang durch beauftragte technische Dienstleister ausgeübt werden.
                 </ThemedText>
                 <ThemedText style={styles.paragraph}>
                   Wer Inhalte einstellt, bestätigt, über die dafür erforderlichen Rechte zu verfügen und keine Rechte
                   Dritter zu verletzen. Nach dem Löschen eines Inhalts endet das eingeräumte Nutzungsrecht, soweit
                   keine vorübergehende Speicherung in Sicherungskopien oder eine weitere Aufbewahrung zur Erfüllung
-                  gesetzlicher Pflichten, zur Moderation von Meldungen oder zur Rechtsverteidigung erforderlich ist.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Für anstößige Inhalte und missbräuchliches Verhalten gilt eine Null-Toleranz-Regel. Untersagt sind
-                  insbesondere:
-                </ThemedText>
-                <BulletList
-                  items={[
-                    'Beleidigungen, Belästigung, Mobbing, Bedrohungen und Stalking.',
-                    'Hassrede und Herabwürdigung wegen Herkunft, Hautfarbe, Religion, Geschlecht, sexueller Orientierung, Behinderung oder Alter.',
-                    'Sexuelle, pornografische oder gewaltverherrlichende Inhalte sowie jede Form der Darstellung sexualisierter Gewalt.',
-                    'Inhalte, die Selbstverletzung oder Suizid verherrlichen oder dazu auffordern.',
-                    'Gefährliche Falschinformationen zu Gesundheit, Schwangerschaft oder Kinderpflege.',
-                    'Spam, Werbung, Kettenbriefe, Betrugsversuche und das Veröffentlichen personenbezogener Daten Dritter.',
-                    'Das Erstellen von Inhalten im Namen einer anderen Person oder unter falscher Identität.',
-                  ]}
-                />
-                <ThemedText style={styles.paragraph}>
-                  Jeder Inhalt kann über die Funktion „Melden“ direkt in der App gemeldet werden. Zusätzlich können
-                  Nutzerinnen und Nutzer andere Personen blockieren; deren Inhalte werden dann sofort ausgeblendet und
-                  sie können keine Nachrichten mehr senden. Blockierte Personen lassen sich in den App-Einstellungen
-                  unter „Blockierte Nutzer“ verwalten.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Gemeldete Inhalte werden innerhalb von 24 Stunden geprüft. Verstößt ein Inhalt gegen diese Regeln,
-                  wird er entfernt; das Konto der verantwortlichen Person wird gesperrt und kann dauerhaft
-                  ausgeschlossen werden. Ein automatischer Filter blockiert bestimmte Begriffe bereits beim Absenden.
-                  Ein Anspruch auf Wiederherstellung entfernter Inhalte oder gesperrter Konten besteht nicht.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Mit der Nutzung der Community- und Chat-Funktionen wird diesen Regeln zugestimmt. Verstöße können
-                  ohne Vorankündigung zur Sperrung führen. Meldungen zu Rechtsverstößen können zusätzlich an
-                  support@lottibaby.de gerichtet werden.
+                  gesetzlicher Pflichten oder zur Rechtsverteidigung erforderlich ist.
                 </ThemedText>
               </Section>
 

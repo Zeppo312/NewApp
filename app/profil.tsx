@@ -545,7 +545,7 @@ export default function ProfilScreen() {
       if (settingsError) throw settingsError;
 
       Alert.alert(t('save.successTitle'), t('save.successMessage'), [
-        { text: t('common.ok'), onPress: () => router.push(shouldCompleteCommunityUsername ? '/community' : '/more') },
+        { text: t('common.ok'), onPress: () => router.push('/more') },
       ]);
     } catch (e: any) {
       console.error(e);
@@ -581,7 +581,7 @@ export default function ProfilScreen() {
             title={t('screen.title')}
             subtitle={t('screen.subtitle')}
             showBackButton
-            onBackPress={() => router.push(shouldCompleteCommunityUsername ? '/community' : '/more')}
+            onBackPress={() => router.push('/more')}
           />
 
           <ScrollView

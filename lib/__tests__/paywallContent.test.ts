@@ -29,7 +29,7 @@ describe("paywall feature comparison", () => {
         "Schlaftracker, Schlafphasen & Schlafprognosen",
         "Stillen, Flasche, Pumpen, Beikost & Wasser",
         "Kliniktaschen-Checkliste, Geburtsplan & Arztfragen",
-        "Meilensteine, Zahn-Tracker & Fotobuch als PDF",
+        "Meilensteine & Zahn-Tracker",
         "Babywetter & Kleidungsempfehlungen",
         "Community, Gruppen & private Chats",
         "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",

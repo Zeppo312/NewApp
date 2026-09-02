@@ -428,7 +428,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
     let cancelled = false;
     setSelectedDiaperItemId(null);
-    fetchDiaperInventoryItems(activeBabyId).then(({ data }) => {
+    fetchDiaperInventoryItems().then(({ data }) => {
       if (!cancelled) {
         setDiaperInventoryItems(data);
       }
@@ -447,7 +447,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
     let cancelled = false;
     setSelectedFormulaItemId(null);
-    fetchFormulaInventoryItems(activeBabyId).then(({ data }) => {
+    fetchFormulaInventoryItems().then(({ data }) => {
       if (!cancelled) {
         setFormulaInventoryItems(
           data.filter(

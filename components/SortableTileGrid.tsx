@@ -64,10 +64,12 @@ const AUTO_SCROLL_DRAG_INTENT_THRESHOLD = 12;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-function arraysEqualById<T extends { id: string }>(left: T[], right: T[]) {
+// Reihenfolge UND Inhalt vergleichen: Bei einem Sprachwechsel bleiben die IDs
+// gleich, die Kachel-Objekte tragen aber neue Titel/Beschreibungen.
+function arraysEqualByIdentity<T extends { id: string }>(left: T[], right: T[]) {
   if (left.length !== right.length) return false;
 
-  return left.every((item, index) => item.id === right[index]?.id);
+  return left.every((item, index) => item === right[index]);
 }
 
 function moveItem<T>(items: T[], from: number, to: number) {
@@ -252,7 +254,7 @@ export default function SortableTileGrid<T extends { id: string }>({
 
   useEffect(() => {
     if (activeIdRef.current) return;
-    if (arraysEqualById(orderedItemsRef.current, items)) return;
+    if (arraysEqualByIdentity(orderedItemsRef.current, items)) return;
 
     orderedItemsRef.current = items;
     setOrderedItems(items);

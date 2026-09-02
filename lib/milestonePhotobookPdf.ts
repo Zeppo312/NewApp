@@ -1,5 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import * as Print from 'expo-print';
+import { Image } from 'react-native';
 import type { BabyMilestoneEntry } from './milestones';
 import {
   DEFAULT_MILESTONE_LOCALE,
@@ -39,19 +41,74 @@ const safeFilePart = (value: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'baby';
 
-const imageToDataUri = async (sourceUri: string, localUri: string) => {
-  if (sourceUri.startsWith('data:image/')) return sourceUri;
+const PDF_IMAGE_MAX_DIMENSION = 1200;
+const PDF_IMAGE_QUALITY = 0.68;
 
+const getImageDimensions = (uri: string) =>
+  new Promise<{ width: number; height: number } | null>((resolve) => {
+    Image.getSize(
+      uri,
+      (width, height) => resolve({ width, height }),
+      () => resolve(null),
+    );
+  });
+
+/**
+ * WKWebView has to decode every inline image before expo-print can render the
+ * document. Feeding it the original photos (or legacy HEIC/PNG bytes labelled
+ * as JPEG) can terminate the web content process and reject the whole export.
+ * Normalize every photo to a bounded JPEG before it enters the HTML string.
+ */
+const imageToDataUri = async (sourceUri: string, localUri: string) => {
   let readableUri = sourceUri;
-  if (!sourceUri.startsWith('file://')) {
+  let manipulatedUri: string | null = null;
+
+  if (sourceUri.startsWith('data:image/')) {
+    const base64 = sourceUri.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/s)?.[1];
+    if (!base64) throw new Error('Das eingebettete Foto hat ein ungültiges Datenformat.');
+    await FileSystem.writeAsStringAsync(localUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    readableUri = localUri;
+  } else if (!sourceUri.startsWith('file://')) {
     const download = await FileSystem.downloadAsync(sourceUri, localUri);
+    if (download.status < 200 || download.status >= 300) {
+      throw new Error(`Foto-Download fehlgeschlagen (HTTP ${download.status})`);
+    }
     readableUri = download.uri;
   }
 
-  const base64 = await FileSystem.readAsStringAsync(readableUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  return `data:image/jpeg;base64,${base64}`;
+  try {
+    const dimensions = await getImageDimensions(readableUri);
+    const maxSide = dimensions ? Math.max(dimensions.width, dimensions.height) : null;
+    const resizeAction =
+      dimensions && maxSide && maxSide > PDF_IMAGE_MAX_DIMENSION
+        ? dimensions.width >= dimensions.height
+          ? { resize: { width: PDF_IMAGE_MAX_DIMENSION } }
+          : { resize: { height: PDF_IMAGE_MAX_DIMENSION } }
+        : null;
+    const manipulated = await ImageManipulator.manipulateAsync(
+      readableUri,
+      resizeAction ? [resizeAction] : [],
+      {
+        base64: true,
+        compress: PDF_IMAGE_QUALITY,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
+    manipulatedUri = manipulated.uri;
+
+    const base64 =
+      manipulated.base64 ??
+      (await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      }));
+    return `data:image/jpeg;base64,${base64}`;
+  } finally {
+    if (manipulatedUri && manipulatedUri !== readableUri) {
+      await FileSystem.deleteAsync(manipulatedUri, { idempotent: true }).catch(() => undefined);
+    }
+  }
 };
 
 export const buildMilestonePhotobookHtml = ({
@@ -895,28 +952,69 @@ export const generateMilestonePhotobookPdf = async ({
       }
     }
 
-    const { html, pageCount } = buildMilestonePhotobookHtml({
-      entries,
-      babyName,
-      birthDate,
-      imageDataUris,
-      locale,
-    });
-    const generatedPdf = await Print.printToFileAsync({
-      html,
-      width: 595,
-      height: 842,
-      margins: { top: 0, right: 0, bottom: 0, left: 0 },
-    });
+    const renderPdf = (images: Record<string, string | null>) => {
+      const { html, pageCount } = buildMilestonePhotobookHtml({
+        entries,
+        babyName,
+        birthDate,
+        imageDataUris: images,
+        locale,
+      });
+      return {
+        pageCount,
+        promise: Print.printToFileAsync({
+          html,
+          width: 595,
+          height: 842,
+          margins: { top: 0, right: 0, bottom: 0, left: 0 },
+        }),
+      };
+    };
+
+    let render = renderPdf(imageDataUris);
+    let generatedPdf: Awaited<ReturnType<typeof Print.printToFileAsync>>;
+    try {
+      generatedPdf = await render.promise;
+    } catch (error) {
+      const entriesWithImages = entries.filter((entry) => Boolean(imageDataUris[entry.id]));
+      if (entriesWithImages.length === 0) throw error;
+
+      // A corrupt image or a device-specific WKWebView memory limit must not
+      // make the complete memory book unavailable. Retry with placeholders and
+      // report exactly which photos had to be omitted.
+      console.warn('Fotobuch-PDF mit Bildern fehlgeschlagen, versuche Platzhalter:', error);
+      for (const entry of entriesWithImages) {
+        imageDataUris[entry.id] = null;
+        const warning = t('pdf.photoWarning', { title: entry.title });
+        if (!warnings.includes(warning)) warnings.push(warning);
+      }
+      render = renderPdf(imageDataUris);
+      generatedPdf = await render.promise;
+    }
+
+    const generatedInfo = await FileSystem.getInfoAsync(generatedPdf.uri);
+    if (!generatedInfo.exists || (typeof generatedInfo.size === 'number' && generatedInfo.size === 0)) {
+      throw new Error('expo-print hat keine lesbare PDF-Datei erstellt.');
+    }
+
     const fileName = `LottiBaby-${safeFilePart(t('pdf.fileLabel'))}-${safeFilePart(
       babyName || t('pdf.defaultFileName'),
     )}-${Date.now()}.pdf`;
     const finalUri = `${cacheRoot}${fileName}`;
-    await FileSystem.copyAsync({ from: generatedPdf.uri, to: finalUri });
+    let shareUri = generatedPdf.uri;
+    try {
+      await FileSystem.copyAsync({ from: generatedPdf.uri, to: finalUri });
+      shareUri = finalUri;
+    } catch (error) {
+      // Renaming is cosmetic. The PDF returned by expo-print is already valid
+      // and shareable, so a failed copy must not turn a successful export into
+      // the generic "PDF nicht erstellt" error.
+      console.warn('Fotobuch-PDF konnte nicht umbenannt werden, verwende Originaldatei:', error);
+    }
 
     return {
-      uri: finalUri,
-      pageCount,
+      uri: shareUri,
+      pageCount: render.pageCount,
       warnings,
     };
   } finally {

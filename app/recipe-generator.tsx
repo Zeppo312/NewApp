@@ -114,6 +114,13 @@ const formatAllergens = (allergens: string[] = []) =>
     .map((id) => getRecipeAllergenLabel(ACTIVE_RECIPE_LOCALE, id))
     .join(", ");
 
+const normalizeRecipeSearchText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase(RECIPE_LOCALE_TAG)
+    .trim();
+
 type InstructionStep = {
   number: string;
   text: string;
@@ -233,6 +240,7 @@ const RecipeGeneratorContent = () => {
 
   const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
   const [ageMonths, setAgeMonths] = useState<number>(FILTER_AGE_LIMITS.min);
   const [selectedAllergies, setSelectedAllergies] = useState<AllergenId[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeRecord | null>(
@@ -247,18 +255,19 @@ const RecipeGeneratorContent = () => {
 
   const handleAddIngredientsToShoppingList = useCallback(
     async (recipe: RecipeRecord) => {
-      if (!activeBabyId) {
-        Alert.alert(t("shopping.noBabyTitle"), t("shopping.noBabyMessage"));
-        return;
-      }
       setIsAddingToShoppingList(true);
-      const { data, error } = await addRecipeIngredientsToShoppingList(
-        recipe,
-        activeBabyId,
-      );
+      const { data, error } = await addRecipeIngredientsToShoppingList(recipe);
       setIsAddingToShoppingList(false);
       if (error || !data) {
-        Alert.alert(t("common.error"), t("shopping.addFailed"));
+        console.error("Failed to add recipe ingredients to shopping list:", error);
+        const detail =
+          error && typeof error === "object" && "message" in error
+            ? String((error as { message?: unknown }).message ?? "")
+            : "";
+        Alert.alert(
+          t("common.error"),
+          detail ? `${t("shopping.addFailed")}\n\n${detail}` : t("shopping.addFailed"),
+        );
         return;
       }
       const message =
@@ -274,11 +283,17 @@ const RecipeGeneratorContent = () => {
         { text: t("common.ok") },
         {
           text: t("shopping.open"),
-          onPress: () => router.push("/shopping-list" as any),
+          onPress: () => {
+            setSelectedRecipe(null);
+            router.push({
+              pathname: "/shopping-list",
+              params: { returnTo: "recipes" },
+            } as any);
+          },
         },
       ]);
     },
-    [activeBabyId, router],
+    [router],
   );
 
   const [newTitle, setNewTitle] = useState("");
@@ -292,14 +307,36 @@ const RecipeGeneratorContent = () => {
   const [newImage, setNewImage] = useState<string | null>(null);
   const [newVideoUrl, setNewVideoUrl] = useState("");
 
+  const normalizedSearchQuery = useMemo(
+    () => normalizeRecipeSearchText(searchQuery),
+    [searchQuery],
+  );
+  const hasActiveSearch = normalizedSearchQuery.length > 0;
+
   const sortedRecipes = useMemo(() => {
-    return [...recipes].sort((a, b) => {
-      if (a.min_months === b.min_months) {
-        return a.title.localeCompare(b.title, RECIPE_LOCALE_TAG);
-      }
-      return a.min_months - b.min_months;
-    });
-  }, [recipes]);
+    return recipes
+      .filter((recipe) => {
+        if (!normalizedSearchQuery) return true;
+        const searchableText = normalizeRecipeSearchText(
+          [
+            recipe.title,
+            recipe.description,
+            recipe.ingredients.join(" "),
+            recipe.instructions,
+            recipe.tip,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        );
+        return searchableText.includes(normalizedSearchQuery);
+      })
+      .sort((a, b) => {
+        if (a.min_months === b.min_months) {
+          return a.title.localeCompare(b.title, RECIPE_LOCALE_TAG);
+        }
+        return a.min_months - b.min_months;
+      });
+  }, [normalizedSearchQuery, recipes]);
 
   const blockedRecipeCount = useMemo(() => {
     if (selectedAllergies.length === 0) return 0;
@@ -602,65 +639,6 @@ const RecipeGeneratorContent = () => {
             showsVerticalScrollIndicator={false}
           >
             <View style={[styles.contentContainer, { width: contentWidth }]}>
-              {/* Hero Card */}
-              <LiquidGlassCard
-                style={[styles.card, styles.topCard]}
-                intensity={28}
-                overlayColor={
-                  isDark ? "rgba(0,0,0,0.4)" : "rgba(255,255,255,0.22)"
-                }
-                borderColor={isDark ? glassBorder : "rgba(255,255,255,0.35)"}
-              >
-                <View style={styles.heroGlowLarge} />
-                <View style={styles.heroGlowSmall} />
-                <View style={styles.heroRow}>
-                  <View style={styles.heroIcon}>
-                    <IconSymbol
-                      name="checklist"
-                      size={26}
-                      color={accentColor}
-                    />
-                  </View>
-                  <View style={styles.heroTextWrap}>
-                    <ThemedText style={styles.heroEyebrow}>
-                      {t("hero.eyebrow")}
-                    </ThemedText>
-                    <ThemedText style={styles.heroTitle}>
-                      {t("hero.title")}
-                    </ThemedText>
-                    <ThemedText style={styles.heroSubtitle}>
-                      {t("hero.subtitle")}
-                    </ThemedText>
-                  </View>
-                </View>
-                <View style={styles.heroStatsRow}>
-                  <View style={styles.heroStatPill}>
-                    <IconSymbol
-                      name="fork.knife"
-                      size={14}
-                      color={accentColor}
-                    />
-                    <ThemedText style={styles.heroStatText}>
-                      {translateRecipePlural(
-                        ACTIVE_RECIPE_LOCALE,
-                        "hero.recipeCount",
-                        recipes.length,
-                      )}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.heroStatPill}>
-                    <IconSymbol
-                      name="slider.horizontal.3"
-                      size={14}
-                      color={accentColor}
-                    />
-                    <ThemedText style={styles.heroStatText}>
-                      {t("hero.personalized")}
-                    </ThemedText>
-                  </View>
-                </View>
-              </LiquidGlassCard>
-
               <View style={styles.quickActionRow}>
                 <TouchableOpacity
                   style={styles.quickActionButton}
@@ -767,6 +745,40 @@ const RecipeGeneratorContent = () => {
                 </TouchableOpacity>
               </View>
 
+              <View style={styles.searchContainer}>
+                <IconSymbol
+                  name="magnifyingglass"
+                  size={19}
+                  color={textTertiary}
+                />
+                <TextInput
+                  accessibilityLabel={t("catalog.searchAccessibility")}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setSearchQuery}
+                  placeholder={t("catalog.searchPlaceholder")}
+                  placeholderTextColor={placeholderTextColor}
+                  returnKeyType="search"
+                  style={styles.searchInput}
+                  value={searchQuery}
+                />
+                {searchQuery.length > 0 ? (
+                  <TouchableOpacity
+                    accessibilityLabel={t("catalog.searchClear")}
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => setSearchQuery("")}
+                    style={styles.searchClearButton}
+                  >
+                    <IconSymbol
+                      name="xmark.circle.fill"
+                      size={20}
+                      color={textTertiary}
+                    />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
               {/* Loading State */}
               {isLoading ? (
                 <View style={styles.loadingWrapper}>
@@ -807,7 +819,7 @@ const RecipeGeneratorContent = () => {
                     </TouchableOpacity>
                   </View>
 
-                  {sortedRecipes.length === 0 ? (
+                  {recipes.length === 0 ? (
                     <LiquidGlassCard
                       style={styles.card}
                       intensity={24}
@@ -853,6 +865,42 @@ const RecipeGeneratorContent = () => {
                               </ThemedText>
                             </>
                           )}
+                        </TouchableOpacity>
+                      </View>
+                    </LiquidGlassCard>
+                  ) : sortedRecipes.length === 0 && hasActiveSearch ? (
+                    <LiquidGlassCard
+                      style={styles.card}
+                      intensity={24}
+                      overlayColor={
+                        isDark ? "rgba(0,0,0,0.38)" : "rgba(255,255,255,0.2)"
+                      }
+                      borderColor={
+                        isDark ? glassBorder : "rgba(255,255,255,0.32)"
+                      }
+                    >
+                      <View style={styles.emptyStateBody}>
+                        <IconSymbol
+                          name="magnifyingglass"
+                          size={24}
+                          color={accentColor}
+                        />
+                        <ThemedText style={styles.emptyStateTitle}>
+                          {t("catalog.searchEmptyTitle")}
+                        </ThemedText>
+                        <ThemedText style={styles.emptyStateText}>
+                          {t("catalog.searchEmptyText", {
+                            query: searchQuery.trim(),
+                          })}
+                        </ThemedText>
+                        <TouchableOpacity
+                          style={styles.searchResetButton}
+                          onPress={() => setSearchQuery("")}
+                          activeOpacity={0.85}
+                        >
+                          <ThemedText style={styles.searchResetLabel}>
+                            {t("catalog.searchReset")}
+                          </ThemedText>
                         </TouchableOpacity>
                       </View>
                     </LiquidGlassCard>
@@ -1877,13 +1925,6 @@ const createStyles = ({
       shadowRadius: 18,
       elevation: 3,
     },
-    topCard: {
-      width: "100%",
-      alignSelf: "stretch",
-      marginBottom: 12,
-      overflow: "hidden",
-      padding: isCompact ? 18 : 22,
-    },
     recipeCard: {
       paddingHorizontal: CARD_INTERNAL_PADDING,
       paddingVertical: CARD_INTERNAL_PADDING,
@@ -1939,87 +1980,6 @@ const createStyles = ({
       color: "#FFFFFF",
       fontSize: 12,
       fontWeight: "700",
-    },
-    heroGlowLarge: {
-      position: "absolute",
-      width: 180,
-      height: 180,
-      borderRadius: 90,
-      right: -70,
-      top: -85,
-      backgroundColor: toRgba(accentColor, isDark ? 0.18 : 0.1),
-    },
-    heroGlowSmall: {
-      position: "absolute",
-      width: 90,
-      height: 90,
-      borderRadius: 45,
-      left: -45,
-      bottom: -48,
-      backgroundColor: toRgba(accentColor, isDark ? 0.12 : 0.07),
-    },
-    heroRow: {
-      flexDirection: isCompact ? "column" : "row",
-      alignItems: isCompact ? "flex-start" : "center",
-      gap: 16,
-    },
-    heroIcon: {
-      width: 56,
-      height: 56,
-      borderRadius: 18,
-      backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.14),
-      alignItems: "center",
-      justifyContent: "center",
-      borderWidth: 1,
-      borderColor: toRgba(accentColor, isDark ? 0.34 : 0.18),
-    },
-    heroTextWrap: {
-      flex: 1,
-      alignItems: "flex-start",
-      gap: 4,
-    },
-    heroEyebrow: {
-      fontSize: 11,
-      fontWeight: "800",
-      color: accentColor,
-      letterSpacing: 1.15,
-      marginBottom: 1,
-    },
-    heroTitle: {
-      fontSize: isCompact ? 23 : 25,
-      fontWeight: "800",
-      color: textPrimary,
-      letterSpacing: -0.55,
-      textAlign: "left",
-      lineHeight: 30,
-    },
-    heroSubtitle: {
-      fontSize: 14,
-      color: textSecondary,
-      lineHeight: 20,
-      textAlign: "left",
-    },
-    heroStatsRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 18,
-    },
-    heroStatPill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 7,
-      paddingHorizontal: 11,
-      paddingVertical: 8,
-      borderRadius: 999,
-      backgroundColor: isDark ? "rgba(0,0,0,0.24)" : "rgba(255,255,255,0.52)",
-      borderWidth: 1,
-      borderColor: glassBorder,
-    },
-    heroStatText: {
-      fontSize: 12,
-      fontWeight: "700",
-      color: textSecondary,
     },
     // Action Section
     actionCard: {
@@ -2128,6 +2088,46 @@ const createStyles = ({
     quickActionBadgeText: {
       color: "#FFFFFF",
       fontSize: 11,
+      fontWeight: "700",
+    },
+    searchContainer: {
+      minHeight: 50,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 14,
+      marginBottom: 20,
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor: glassBorder,
+      backgroundColor: isDark
+        ? "rgba(0,0,0,0.34)"
+        : "rgba(255,255,255,0.58)",
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      paddingVertical: 12,
+      color: textPrimary,
+      fontSize: 15,
+    },
+    searchClearButton: {
+      width: 30,
+      height: 30,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 15,
+    },
+    searchResetButton: {
+      marginTop: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 999,
+      backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.15),
+    },
+    searchResetLabel: {
+      color: accentColor,
+      fontSize: 14,
       fontWeight: "700",
     },
     sectionHeader: {

@@ -38,3 +38,4 @@ SET version = version + 1,
     updated_at = clock_timestamp(),
     updated_by = NULL
 WHERE id = 'default';
+ä

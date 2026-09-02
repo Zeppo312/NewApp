@@ -95,8 +95,8 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   // Rendere Icon/Label basierend auf detailliertem Typ
   const getDetail = () => {
     // Falls Custom-Label/Emoji gesetzt sind (z. B. für Gewicht), verwende diese
-    const customEmoji = (entry as any).emoji;
-    const customLabel = (entry as any).label;
+    const customEmoji = entry.custom_emoji ?? (entry as any).emoji;
+    const customLabel = entry.custom_name ?? (entry as any).label;
     if (customEmoji && customLabel) {
       return { emoji: customEmoji, label: customLabel };
     }
@@ -187,6 +187,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       else if (entry.diaper_type === 'DIRTY') color = '#8E5A2B'; // Braun
       else if (entry.diaper_type === 'BOTH') color = '#38A169'; // Grün
     }
+    if (entry.entry_type === 'custom' && entry.custom_color) {
+      color = entry.custom_color;
+    }
     // Sleep
     if (entry.entry_type === 'sleep') {
       // Bestimme Farbe basierend auf Sleep-Typ
@@ -273,6 +276,11 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       ? translateFeedingSide(entry.feeding_side)
       : null;
   const showFeedingSideBadge = !!feedingSideLabel && feedingSideLabel !== '–';
+  const customQuantityValue = entry.entry_type === 'custom' ? toFiniteNumber(entry.custom_quantity) : null;
+  const customQuantityLabel =
+    customQuantityValue !== null
+      ? `${String(customQuantityValue).replace('.', ',')} ${entry.custom_unit ?? ''}`.trim()
+      : null;
   const feverBadgeLabel =
     diaperTemperatureValue !== null
       ? `🌡️ ${String(diaperTemperatureValue).replace('.', ',')} °C`
@@ -364,11 +372,16 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     />
                   </Animated.View>
                 </View>
-                {(auxiliaryBadgeLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
+                {(auxiliaryBadgeLabel || customQuantityLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
                   <View style={styles.badgesWrap}>
                     {auxiliaryBadgeLabel ? (
                       <View style={styles.badgePill}>
                         <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{auxiliaryBadgeLabel}</ThemedText>
+                      </View>
+                    ) : null}
+                    {customQuantityLabel ? (
+                      <View style={styles.badgePill}>
+                        <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>🔢 {customQuantityLabel}</ThemedText>
                       </View>
                     ) : null}
                     {recipeNote ? (

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
   Modal,
@@ -17,16 +18,22 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Swipeable } from 'react-native-gesture-handler';
 
 import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
-import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
+import {
+  LiquidGlassCard,
+  PRIMARY,
+  PRIMARY_DARK_FOREGROUND,
+  RADIUS,
+} from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
@@ -47,6 +54,7 @@ import {
   computeTotalQuantity,
   deleteInventoryItem,
   deleteShoppingItem,
+  deleteShoppingItems,
   fetchInventoryUsageSummaries,
   fetchShoppingState,
   findInventoryItemByBarcode,
@@ -220,6 +228,50 @@ type ScanSheetState =
   | null;
 
 // Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
+
+/**
+ * Wischbare Hülle für eine Vorratskarte: nach links wischen zeigt einen
+ * Löschen-Button, der den bestehenden Bestätigungsdialog auslöst.
+ */
+function InventorySwipeRow({
+  children,
+  onDelete,
+  deleteLabel,
+  accessibilityLabel,
+}: {
+  children: React.ReactNode;
+  onDelete: () => void;
+  deleteLabel: string;
+  accessibilityLabel: string;
+}) {
+  const ref = useRef<Swipeable | null>(null);
+  const triggerDelete = () => {
+    ref.current?.close();
+    onDelete();
+  };
+  return (
+    <Swipeable
+      ref={ref}
+      friction={2}
+      rightThreshold={48}
+      overshootRight={false}
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={styles.inventorySwipeDelete}
+          onPress={triggerDelete}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          <IconSymbol name="trash" size={22} color="#FFFFFF" />
+          <ThemedText style={styles.inventorySwipeDeleteText}>{deleteLabel}</ThemedText>
+        </TouchableOpacity>
+      )}
+    >
+      {children}
+    </Swipeable>
+  );
+}
+
 export default function ShoppingListScreen() {
   ACTIVE_SHOPPING_LOCALE = useLocale().locale;
   SHOPPING_LOCALE_TAG = getShoppingLocaleTag(ACTIVE_SHOPPING_LOCALE);
@@ -235,7 +287,12 @@ export default function ShoppingListScreen() {
 
 function ShoppingListScreenContent() {
   const router = useRouter();
-  const { activeBaby, activeBabyId, isReady } = useActiveBaby();
+  const { returnTo } = useLocalSearchParams<{
+    returnTo?: string | string[];
+  }>();
+  const requestedReturnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
+  const requestedReturnTargetRef = useRef(requestedReturnTarget);
+  const backTargetRef = useRef<'home' | 'recipes'>('home');
   const { hasPermission, scheduleNotification } = useNotifications();
 
   const [section, setSection] = useState<SectionKey>('shopping');
@@ -259,15 +316,18 @@ function ShoppingListScreenContent() {
 
   const [newItemTitle, setNewItemTitle] = useState('');
   const [isAddingItem, setIsAddingItem] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const [editingInventory, setEditingInventory] = useState<Partial<InventoryItem> | null>(null);
 
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [torchEnabled, setTorchEnabled] = useState(false);
   const insets = useSafeAreaInsets();
+  const bottomTabOverflow = useBottomTabOverflow();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const primaryForeground = isDark ? PRIMARY_DARK_FOREGROUND : PRIMARY;
   const [availableLenses, setAvailableLenses] = useState<string[]>([]);
   const [zoomSelection, setZoomSelection] = useState('1x');
   const [purchaseScanVisible, setPurchaseScanVisible] = useState(false);
@@ -312,11 +372,22 @@ function ShoppingListScreenContent() {
   const [unknownPackage, setUnknownPackage] = useState('');
   const [unknownUnit, setUnknownUnit] = useState(DEFAULT_PIECE_UNIT);
 
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   const loadState = useCallback(async () => {
-    if (!activeBabyId) return;
     const [{ data, error }, usageResult] = await Promise.all([
-      fetchShoppingState(activeBabyId),
-      fetchInventoryUsageSummaries(activeBabyId),
+      fetchShoppingState(),
+      fetchInventoryUsageSummaries(),
     ]);
     if (error) {
       console.error('Failed to load shopping state:', error);
@@ -330,41 +401,56 @@ function ShoppingListScreenContent() {
       setUsageSummaries(usageResult.data);
     }
     setIsLoading(false);
-  }, [activeBabyId]);
+  }, []);
 
   useEffect(() => {
-    if (!isReady) return undefined;
+    requestedReturnTargetRef.current = requestedReturnTarget;
+  }, [requestedReturnTarget]);
+
+  useFocusEffect(
+    useCallback(() => {
+      backTargetRef.current =
+        requestedReturnTargetRef.current === 'recipes' ? 'recipes' : 'home';
+
+      if (requestedReturnTargetRef.current !== undefined) {
+        router.setParams({ returnTo: undefined } as any);
+      }
+
+      return () => {
+        backTargetRef.current = 'home';
+      };
+    }, [router])
+  );
+
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
       loadState();
     }, 0);
     return () => clearTimeout(timeoutId);
-  }, [isReady, loadState]);
+  }, [loadState]);
 
   // Im Widget abgehakte Posten übernehmen, sobald der Screen wieder sichtbar ist.
   useFocusEffect(
     useCallback(() => {
-      if (!activeBabyId) return;
       let cancelled = false;
-      void drainShoppingWidgetToggles(activeBabyId, {
+      void drainShoppingWidgetToggles({
         locale: ACTIVE_SHOPPING_LOCALE,
-        babyName: activeBaby?.name ?? null,
       }).then(({ items }) => {
         if (!cancelled && items) setShoppingItems(items);
       });
       return () => {
         cancelled = true;
       };
-    }, [activeBaby?.name, activeBabyId])
+    }, [])
   );
 
   // Home-Screen-Widget bei jeder Änderung der Liste nachziehen.
   useEffect(() => {
-    if (isLoading || !activeBabyId) return;
+    if (isLoading) return;
     void syncShoppingWidget(shoppingItems, {
       locale: ACTIVE_SHOPPING_LOCALE,
-      babyName: activeBaby?.name ?? null,
     });
-  }, [activeBaby?.name, activeBabyId, isLoading, shoppingItems]);
+  }, [isLoading, shoppingItems]);
 
   const lowStockItems = useMemo(
     () => inventoryItems.filter((item) => isLowStock(item)),
@@ -486,9 +572,9 @@ function ShoppingListScreenContent() {
   // --- Einkaufsliste -------------------------------------------------------
 
   const handleAddShoppingItem = useCallback(async () => {
-    if (!activeBabyId || newItemTitle.trim().length === 0) return;
+    if (newItemTitle.trim().length === 0) return;
     setIsAddingItem(true);
-    const { data, error } = await upsertShoppingItem(activeBabyId, {
+    const { data, error } = await upsertShoppingItem({
       title: newItemTitle,
       category: selectedCategory === 'all' ? 'other' : selectedCategory,
     });
@@ -501,7 +587,7 @@ function ShoppingListScreenContent() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsAddShoppingExpanded(false);
     setShoppingItems((items) => [data, ...items]);
-  }, [activeBabyId, newItemTitle, selectedCategory]);
+  }, [newItemTitle, selectedCategory]);
 
   const handleTogglePurchased = useCallback(
     async (item: ShoppingListItem) => {
@@ -562,11 +648,44 @@ function ShoppingListScreenContent() {
     }
   }, []);
 
+  // Alle gekauften Posten der aktuellen Ansicht auf einmal von der Liste nehmen.
+  const handleClearPurchasedItems = useCallback((items: ShoppingListItem[]) => {
+    if (items.length === 0) return;
+    const ids = items.map((item) => item.id);
+    Alert.alert(
+      t('shopping.clearPurchasedTitle'),
+      t(`shopping.clearPurchasedQuestion.${items.length === 1 ? 'one' : 'other'}`, {
+        count: items.length,
+      }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const idSet = new Set(ids);
+            setShoppingItems((current) => current.filter((it) => !idSet.has(it.id)));
+            const { error } = await deleteShoppingItems(ids);
+            if (error) {
+              console.error('Failed to delete purchased shopping items:', error);
+              setShoppingItems((current) => {
+                const remaining = new Set(current.map((it) => it.id));
+                const restored = items.filter((it) => !remaining.has(it.id));
+                return restored.length > 0 ? [...current, ...restored] : current;
+              });
+              Alert.alert(t('shopping.updateFailedTitle'), t('shopping.clearPurchasedFailed'));
+            }
+          },
+        },
+      ]
+    );
+  }, []);
+
   // Barcode-Scan im Einkauf: gescanntes Produkt auf der Liste finden und
   // als gekauft abhaken (inkl. Vorrats-Auffüllung über handleTogglePurchased).
   const handlePurchaseScan = useCallback(
     async (result: BarcodeScanningResult) => {
-      if (!activeBabyId || isResolvingScan) return;
+      if (isResolvingScan) return;
       const barcode = result.data;
       const now = Date.now();
       const last = lastScanRef.current;
@@ -576,7 +695,7 @@ function ShoppingListScreenContent() {
       setIsResolvingScan(true);
       let matchedInventoryId: string | null = null;
       const matchNames: string[] = [];
-      const { data: inventoryMatch } = await findInventoryItemByBarcode(activeBabyId, barcode);
+      const { data: inventoryMatch } = await findInventoryItemByBarcode(barcode);
       if (inventoryMatch) {
         matchedInventoryId = inventoryMatch.id;
         matchNames.push(normalizeItemName(inventoryMatch.name));
@@ -604,7 +723,7 @@ function ShoppingListScreenContent() {
       await handleTogglePurchased(target);
       Alert.alert(t('scan.checkedTitle'), t('scan.checked', { name: target.title }));
     },
-    [activeBabyId, isResolvingScan, shoppingItems, handleTogglePurchased]
+    [isResolvingScan, shoppingItems, handleTogglePurchased]
   );
 
   const handleInventoryBarcodeScan = useCallback((result: BarcodeScanningResult) => {
@@ -663,7 +782,6 @@ function ShoppingListScreenContent() {
 
   const handleInventoryToShoppingList = useCallback(
     async (item: InventoryItem, showConfirmation = true) => {
-      if (!activeBabyId) return;
       const existingOpenItem = shoppingItems.find(
         (shoppingItem) =>
           !shoppingItem.is_purchased && shoppingItem.inventory_item_id === item.id
@@ -679,7 +797,7 @@ function ShoppingListScreenContent() {
       }
       // Packungsartikel landen als "1 Packung" auf der Liste, lose Artikel als Menge.
       const hasPackage = (item.package_quantity ?? 0) > 0;
-      const { data, error } = await upsertShoppingItem(activeBabyId, {
+      const { data, error } = await upsertShoppingItem({
         title: item.name,
         category: item.category,
         quantity_value: isLevelTracked(item) ? null : hasPackage ? 1 : item.package_quantity,
@@ -696,7 +814,7 @@ function ShoppingListScreenContent() {
         Alert.alert(t('inventory.addedTitle'), t('inventory.added', { name: item.name }));
       }
     },
-    [activeBabyId, shoppingItems]
+    [shoppingItems]
   );
 
   const handleSetStockLevel = useCallback(
@@ -715,13 +833,13 @@ function ShoppingListScreenContent() {
   );
 
   const handleSaveInventoryForm = useCallback(async () => {
-    if (!activeBabyId || !editingInventory) return;
+    if (!editingInventory) return;
     const name = editingInventory.name?.trim() ?? '';
     if (name.length === 0) {
       Alert.alert(t('common.error'), t('inventory.nameRequired'));
       return;
     }
-    const { data, error } = await upsertInventoryItem(activeBabyId, {
+    const { data, error } = await upsertInventoryItem({
       id: editingInventory.id,
       name,
       category: editingInventory.category ?? 'other',
@@ -747,7 +865,6 @@ function ShoppingListScreenContent() {
       await handleInventoryToShoppingList(data, false);
     }
   }, [
-    activeBabyId,
     editingInventory,
     applyInventoryUpdate,
     handleInventoryToShoppingList,
@@ -802,10 +919,10 @@ function ShoppingListScreenContent() {
   );
 
   const handleRefillFromScan = useCallback(async () => {
-    if (!activeBabyId || !scanSheet || scanSheet.mode !== 'known') return;
+    if (!scanSheet || scanSheet.mode !== 'known') return;
     const { product } = scanSheet;
     const packageQuantity = product.packageQuantity ?? 1;
-    const { data, error } = await refillInventoryFromProduct(activeBabyId, {
+    const { data, error } = await refillInventoryFromProduct({
       barcode: product.barcode,
       name: product.name,
       category: product.category,
@@ -839,10 +956,10 @@ function ShoppingListScreenContent() {
             quantity: formatQuantity(packageQuantity, product.unit ?? DEFAULT_PIECE_UNIT),
           })
     );
-  }, [activeBabyId, scanSheet, applyInventoryUpdate]);
+  }, [scanSheet, applyInventoryUpdate]);
 
   const handleConfirmUnknownProduct = useCallback(async () => {
-    if (!activeBabyId || !scanSheet || scanSheet.mode !== 'unknown') return;
+    if (!scanSheet || scanSheet.mode !== 'unknown') return;
     const name = unknownName.trim();
     const packageQuantity = parseFloat(unknownPackage.replace(',', '.'));
     if (name.length === 0 || !Number.isFinite(packageQuantity) || packageQuantity <= 0) {
@@ -865,7 +982,7 @@ function ShoppingListScreenContent() {
     if (catalogError) {
       console.error('Failed to save product to catalog:', catalogError);
     }
-    const { data, error } = await refillInventoryFromProduct(activeBabyId, product);
+    const { data, error } = await refillInventoryFromProduct(product);
     if (error || !data) {
       Alert.alert(t('common.error'), t('inventory.createFailed'));
       return;
@@ -873,7 +990,7 @@ function ShoppingListScreenContent() {
     applyInventoryUpdate(data);
     setScanSheet(null);
     Alert.alert(t('inventory.savedTitle'), t('inventory.savedBody', { name }));
-  }, [activeBabyId, scanSheet, unknownName, unknownCategory, unknownPackage, unknownUnit, applyInventoryUpdate]);
+  }, [scanSheet, unknownName, unknownCategory, unknownPackage, unknownUnit, applyInventoryUpdate]);
 
   // --- Rendering ----------------------------------------------------------------
 
@@ -1168,7 +1285,11 @@ function ShoppingListScreenContent() {
         style={[
           styles.shoppingBottomDockSurface,
           isDark && styles.shoppingBottomDockSurfaceDark,
-          { paddingBottom: 4 + insets.bottom },
+          {
+            paddingBottom: isKeyboardVisible
+              ? 4
+              : 4 + insets.bottom + bottomTabOverflow,
+          },
         ]}
       >
         {isShoppingSearchVisible && !isAddShoppingExpanded ? renderListControls() : null}
@@ -1203,15 +1324,15 @@ function ShoppingListScreenContent() {
                   autoFocus
                 />
                 <TouchableOpacity
-                  style={styles.addButton}
+                  style={[styles.addButton, isDark && styles.addButtonDark]}
                   onPress={handleAddShoppingItem}
                   disabled={isAddingItem}
                   accessibilityLabel={t('shopping.addAccessibility')}
                 >
-                  <IconSymbol name="plus" size={20} color={PRIMARY} />
+                  <IconSymbol name="plus" size={20} color={primaryForeground} />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.addButton}
+                  style={[styles.addButton, isDark && styles.addButtonDark]}
                   onPress={async () => {
                     if (!cameraPermission?.granted) {
                       const response = await requestCameraPermission();
@@ -1221,7 +1342,7 @@ function ShoppingListScreenContent() {
                   }}
                   accessibilityLabel={t('shopping.scanAccessibility')}
                 >
-                  <IconSymbol name="barcode.viewfinder" size={20} color={PRIMARY} />
+                  <IconSymbol name="barcode.viewfinder" size={20} color={primaryForeground} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1544,6 +1665,20 @@ function ShoppingListScreenContent() {
               <ThemedText style={[styles.shoppingGroupTitle, isDark && styles.shoppingGroupTitleDark]}>
                 {t('shopping.purchaseDate', { date: formatPurchaseDate(group.purchasedAt) })}
               </ThemedText>
+              <ThemedText style={[styles.shoppingGroupCount, isDark && styles.shoppingGroupCountDark]}>
+                {t(`shopping.itemCount.${group.items.length === 1 ? 'one' : 'other'}`, {
+                  count: group.items.length,
+                })}
+              </ThemedText>
+              {/* Nur diesen Einkaufstag von der Liste nehmen */}
+              <TouchableOpacity
+                style={styles.rowIconButton}
+                onPress={() => handleClearPurchasedItems(group.items)}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('shopping.clearPurchasedTitle')}: ${formatPurchaseDate(group.purchasedAt)}`}
+              >
+                <IconSymbol name="trash" size={18} color="#B0625B" />
+              </TouchableOpacity>
             </View>
             {renderShoppingItems(group.items)}
           </View>
@@ -1570,8 +1705,13 @@ function ShoppingListScreenContent() {
         !shoppingItem.is_purchased && shoppingItem.inventory_item_id === item.id
     );
     return (
-      <LiquidGlassCard
+      <InventorySwipeRow
         key={item.id}
+        onDelete={() => handleDeleteInventory(item)}
+        deleteLabel={t('common.delete')}
+        accessibilityLabel={t('inventory.deleteTitle')}
+      >
+      <LiquidGlassCard
         style={[
           styles.inventoryCard,
           isDark && styles.inventoryCardDark,
@@ -1893,6 +2033,7 @@ function ShoppingListScreenContent() {
           </View>
         ) : null}
       </LiquidGlassCard>
+      </InventorySwipeRow>
     );
   };
 
@@ -1969,7 +2110,14 @@ function ShoppingListScreenContent() {
       );
     }
     return (
-      <View style={styles.scannerContainer}>
+      <View
+        style={[
+          styles.scannerContainer,
+          Platform.OS === 'ios' && {
+            marginBottom: 20 + insets.bottom + bottomTabOverflow,
+          },
+        ]}
+      >
         <CameraView
           style={styles.camera}
           facing="back"
@@ -2012,14 +2160,13 @@ function ShoppingListScreenContent() {
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <Stack.Screen options={{ headerShown: false }} />
         <Header
           title={t('screen.title')}
           subtitle={t('screen.subtitle')}
           showBackButton
           onBackPress={() => {
-            if (router.canGoBack()) {
-              router.back();
+            if (backTargetRef.current === 'recipes') {
+              router.dismissTo('/recipe-generator');
               return;
             }
             router.replace('/(tabs)/home');
@@ -2164,11 +2311,29 @@ function ShoppingListScreenContent() {
                       <View style={styles.shoppingSectionTextBlock}>
                         <ThemedText style={styles.sectionTitle}>{t('shopping.purchased')}</ThemedText>
                       </View>
-                      <IconSymbol
-                        name={isPurchasedExpanded ? 'chevron.up' : 'chevron.down'}
-                        size={20}
-                        color={isDark ? 'rgba(240,230,220,0.7)' : 'rgba(125,90,80,0.65)'}
-                      />
+                      <View style={styles.shoppingPurchasedHeaderRight}>
+                        <TouchableOpacity
+                          style={[
+                            styles.clearPurchasedButton,
+                            isDark && styles.clearPurchasedButtonDark,
+                          ]}
+                          onPress={() => handleClearPurchasedItems(purchasedItems)}
+                          activeOpacity={0.8}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('shopping.clearPurchasedAccessibility')}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <IconSymbol name="trash" size={14} color="#B0625B" />
+                          <ThemedText style={styles.clearPurchasedButtonText}>
+                            {t('shopping.clearPurchased')}
+                          </ThemedText>
+                        </TouchableOpacity>
+                        <IconSymbol
+                          name={isPurchasedExpanded ? 'chevron.up' : 'chevron.down'}
+                          size={20}
+                          color={isDark ? 'rgba(240,230,220,0.7)' : 'rgba(125,90,80,0.65)'}
+                        />
+                      </View>
                     </TouchableOpacity>
                     {isPurchasedExpanded ? renderPurchasedDateGroups(purchasedItems) : null}
                   </View>
@@ -2907,6 +3072,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(142,78,198,0.18)',
   },
+  addButtonDark: {
+    backgroundColor: 'rgba(74,38,100,0.48)',
+    borderColor: 'rgba(233,213,255,0.42)',
+  },
   closeInlineButton: {
     width: 34,
     height: 34,
@@ -3136,6 +3305,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(18,15,22,0.44)',
     borderColor: 'rgba(255,255,255,0.12)',
   },
+  shoppingPurchasedHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  clearPurchasedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(176,98,91,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(176,98,91,0.18)',
+  },
+  clearPurchasedButtonDark: {
+    backgroundColor: 'rgba(176,98,91,0.20)',
+    borderColor: 'rgba(176,98,91,0.34)',
+  },
+  clearPurchasedButtonText: { fontSize: 13, fontWeight: '700', color: '#B0625B' },
   rowIconButton: { padding: 8 },
   collapsibleSectionHeader: {
     minHeight: 34,
@@ -3167,6 +3353,20 @@ const styles = StyleSheet.create({
   inventoryCard: {
     borderRadius: INVENTORY_CARD_RADIUS,
     backgroundColor: 'rgba(255,255,255,0.56)',
+  },
+  inventorySwipeDelete: {
+    width: 88,
+    marginLeft: 8,
+    borderRadius: INVENTORY_CARD_RADIUS,
+    backgroundColor: '#C4453A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  inventorySwipeDeleteText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   inventoryCardDark: {
     backgroundColor: 'rgba(18,15,22,0.52)',

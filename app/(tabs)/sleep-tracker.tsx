@@ -52,6 +52,7 @@ import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BO
 import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, getDailySleepTargetMinutes, type SleepWindowPrediction } from '@/lib/sleep-window';
+import { syncSleepWidget } from '@/lib/sleepWidget';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
@@ -1799,6 +1800,19 @@ export default function SleepTrackerScreen() {
 
     return () => clearInterval(interval);
   }, [sleepEntries, updateSleepPrediction]);
+
+  // Home-Screen-Widget nachziehen, sobald sich Einträge oder Vorhersage ändern.
+  // Ohne das hinge das Widget bis zum nächsten 5-Minuten-Lauf in app/_layout.tsx
+  // hinterher — beim Starten und Stoppen eines Schlafs die auffälligste Stelle.
+  useEffect(() => {
+    if (!activeBabyId) return;
+    void syncSleepWidget(sleepEntries, {
+      prediction: sleepPrediction,
+      locale: ACTIVE_SLEEP_TRACKER_LOCALE,
+      babyName: babyName ?? null,
+      nightWindowSettings,
+    });
+  }, [activeBabyId, babyName, nightWindowSettings, sleepEntries, sleepPrediction]);
 
   useEffect(() => {
     if (!isLiveStatusLoaded || !sleepActivityService.isLiveActivitySupported()) {

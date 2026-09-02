@@ -97,7 +97,6 @@ export const selectWidgetItems = (
 const buildSnapshot = (
   items: ShoppingListItem[],
   locale: ShoppingLocale,
-  babyName: string | null,
   now: Date = new Date()
 ) => {
   const t = (key: string) => translateShoppingText(locale, key);
@@ -117,7 +116,7 @@ const buildSnapshot = (
 
   return {
     updatedAt: Date.now() / 1000,
-    babyName,
+    babyName: null,
     openCount: open.length,
     purchasedCount: doneToday.length,
     items: widgetItems,
@@ -136,12 +135,12 @@ const buildSnapshot = (
 /** Schreibt den aktuellen Stand der Einkaufsliste ins Widget. */
 export const syncShoppingWidget = async (
   items: ShoppingListItem[],
-  options: { locale?: ShoppingLocale; babyName?: string | null } = {}
+  options: { locale?: ShoppingLocale } = {}
 ): Promise<void> => {
   if (!nativeModule) return;
   const locale = options.locale ?? DEFAULT_SHOPPING_LOCALE;
   try {
-    const snapshot = buildSnapshot(items, locale, options.babyName ?? null);
+    const snapshot = buildSnapshot(items, locale);
     await nativeModule.syncSnapshot(JSON.stringify(snapshot));
   } catch (error) {
     console.warn('Failed to sync shopping widget:', error);
@@ -183,12 +182,11 @@ export type DrainResult = {
  * seit dem App-Start nie geöffnet wurde.
  */
 export const refreshShoppingWidget = async (
-  babyId: string,
-  options: { locale?: ShoppingLocale; babyName?: string | null } = {}
+  options: { locale?: ShoppingLocale } = {}
 ): Promise<ShoppingListItem[] | null> => {
-  if (!nativeModule || !babyId) return null;
+  if (!nativeModule) return null;
 
-  const { data: state, error } = await fetchShoppingState(babyId);
+  const { data: state, error } = await fetchShoppingState();
   if (error || !state) {
     console.warn('Failed to load shopping state for widget refresh:', error);
     return null;
@@ -196,7 +194,6 @@ export const refreshShoppingWidget = async (
 
   await syncShoppingWidget(state.shoppingItems, {
     locale: options.locale ?? DEFAULT_SHOPPING_LOCALE,
-    babyName: options.babyName ?? null,
   });
   return state.shoppingItems;
 };
@@ -206,20 +203,19 @@ export const refreshShoppingWidget = async (
  * Vorräte nach und schreibt den frischen Stand zurück ins Widget.
  */
 export const drainShoppingWidgetToggles = async (
-  babyId: string,
-  options: { locale?: ShoppingLocale; babyName?: string | null } = {}
+  options: { locale?: ShoppingLocale } = {}
 ): Promise<DrainResult> => {
-  if (!nativeModule || !babyId) return { applied: 0, items: null };
+  if (!nativeModule) return { applied: 0, items: null };
 
   const pending = await readPendingToggles();
   if (pending.length === 0) {
     // Nichts abzuarbeiten, aber das Widget soll trotzdem den aktuellen Stand zeigen.
-    await refreshShoppingWidget(babyId, options);
+    await refreshShoppingWidget(options);
     return { applied: 0, items: null };
   }
 
   const locale = options.locale ?? DEFAULT_SHOPPING_LOCALE;
-  const { data: state, error } = await fetchShoppingState(babyId);
+  const { data: state, error } = await fetchShoppingState();
   if (error || !state) {
     console.error('Failed to load shopping state for widget sync:', error);
     return { applied: 0, items: null };
@@ -271,7 +267,7 @@ export const drainShoppingWidgetToggles = async (
   }
 
   const items = Array.from(itemsById.values());
-  await syncShoppingWidget(items, { locale, babyName: options.babyName ?? null });
+  await syncShoppingWidget(items, { locale });
 
   return { applied, items: applied > 0 ? items : null };
 };

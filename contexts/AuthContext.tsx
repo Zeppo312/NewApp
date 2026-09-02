@@ -74,8 +74,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { data, error } = await supabase.auth.getSession();
     if (error) {
+      // Bewusst kein applySession(null): ein Fehler heisst hier meistens nur,
+      // dass der faellige Token-Refresh gerade nicht durchging (Funkloch,
+      // Timeout beim Kaltstart). Die persistierte Sitzung liegt dann noch im
+      // Storage und traegt beim naechsten Versuch wieder. Wuerden wir sie
+      // lokal verwerfen, schickte der Guard den Nutzer trotzdem auf den
+      // Login-Screen. Einen echten Abbruch meldet auth-js ohnehin selbst:
+      // `_removeSession()` feuert immer `SIGNED_OUT` an den Listener unten.
       console.error('Error refreshing session:', error);
-      applySession(null);
       return null;
     }
 
@@ -128,9 +134,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Abrufen der aktuellen Session beim Start
         await refreshSession();
       } catch (error) {
+        // Auch hier gilt: eine geworfene Ausnahme ist kein Beleg dafuer, dass
+        // die Sitzung ungueltig ist. Der Zustand bleibt, wie er ist - ein
+        // echter Logout kommt ueber den SIGNED_OUT-Listener.
         console.error('Error initializing auth:', error);
-        // Bei einem Fehler setzen wir den Benutzer auf null
-        applySessionSafe(null);
       } finally {
         // Sicherstellen, dass der Ladeindikator ausgeblendet wird
         if (isMounted) {

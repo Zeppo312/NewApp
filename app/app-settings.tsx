@@ -1625,22 +1625,6 @@ export default function AppSettingsScreen() {
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.rowItem}
-                      onPress={() => router.push('/blocked-users')}
-                    >
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="hand.raised.fill" size={24} color={primaryIconColor} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>{tm('blocked.settingsLabel')}</ThemedText>
-                        <ThemedText style={styles.rowDescription}>{tm('blocked.settingsDescription')}</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
                       style={[styles.rowItem, isDeletingData && styles.disabledRow]}
                       onPress={handleDeleteDataRequest}
                       disabled={isDeletingData}

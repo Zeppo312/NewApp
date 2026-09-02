@@ -1114,7 +1114,12 @@ export default function SelfcareScreen() {
                           >
                             {mood.emoji}
                           </Animated.Text>
-                          <ThemedText style={[styles.moodLabel, isSelected && styles.moodLabelSelected]}>
+                          <ThemedText
+                            style={[styles.moodLabel, isSelected && styles.moodLabelSelected]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.7}
+                          >
                             {moodLabel}
                           </ThemedText>
                         </TouchableOpacity>
@@ -1866,7 +1871,9 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
     moodButton: {
       flex: 1,
       minWidth: 0,
-      height: 64,
+      minHeight: 64,
+      paddingVertical: 8,
+      paddingHorizontal: 4,
       borderRadius: 18,
       justifyContent: 'center',
       alignItems: 'center',
@@ -1884,8 +1891,10 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
       fontSize: 24,
     },
     moodLabel: {
+      alignSelf: 'stretch',
       color: textSecondary,
       fontSize: 9,
+      lineHeight: 12,
       fontWeight: '700',
       textAlign: 'center',
     },

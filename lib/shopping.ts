@@ -7,7 +7,8 @@ export type ShoppingItemSource = 'manual' | 'recipe' | 'inventory';
 
 export interface ShoppingListItem {
   id: string;
-  baby_id: string;
+  /** Legacy/activity context only; shopping data is scoped to linked parents. */
+  baby_id: string | null;
   created_by: string;
   title: string;
   normalized_name: string;
@@ -35,7 +36,8 @@ export const INVENTORY_LEVEL_OPTIONS = [
 
 export interface InventoryItem {
   id: string;
-  baby_id: string;
+  /** Legacy context only; inventory is shared across the linked parents. */
+  baby_id: string | null;
   created_by: string;
   name: string;
   category: InventoryCategory | string;
@@ -302,18 +304,16 @@ export interface ShoppingState {
   inventoryItems: InventoryItem[];
 }
 
-export const fetchShoppingState = async (babyId: string): Promise<DataResult<ShoppingState>> => {
+export const fetchShoppingState = async (): Promise<DataResult<ShoppingState>> => {
   const [shoppingResult, inventoryResult] = await Promise.all([
     supabase
       .from('shopping_list_items')
       .select('*')
-      .eq('baby_id', babyId)
       .order('is_purchased', { ascending: true })
       .order('created_at', { ascending: false }),
     supabase
       .from('inventory_items')
       .select('*')
-      .eq('baby_id', babyId)
       .order('name', { ascending: true }),
   ]);
 
@@ -338,14 +338,13 @@ const numericValue = (value: number | string | null | undefined): number => {
   return 0;
 };
 
-export const fetchInventoryUsageSummaries = async (
-  babyId: string
-): Promise<DataResult<Record<string, InventoryUsageSummary>>> => {
+export const fetchInventoryUsageSummaries = async (): Promise<
+  DataResult<Record<string, InventoryUsageSummary>>
+> => {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('inventory_transactions')
     .select('inventory_item_id, quantity_change, created_at')
-    .eq('baby_id', babyId)
     .gte('created_at', since)
     .order('created_at', { ascending: false });
   if (error) return { data: null, error };
@@ -382,8 +381,7 @@ const getUserId = async (): Promise<{ userId: string | null; error: Error | null
 };
 
 export const addRecipeIngredientsToShoppingList = async (
-  recipe: Pick<RecipeRecord, 'id' | 'ingredients'>,
-  babyId: string
+  recipe: Pick<RecipeRecord, 'id' | 'ingredients'>
 ): Promise<DataResult<{ added: number; skipped: number }>> => {
   const { userId, error: userError } = await getUserId();
   if (!userId) return { data: null, error: userError };
@@ -400,7 +398,6 @@ export const addRecipeIngredientsToShoppingList = async (
   const { data: existing, error: existingError } = await supabase
     .from('shopping_list_items')
     .select('normalized_name')
-    .eq('baby_id', babyId)
     .eq('is_purchased', false);
   if (existingError) return { data: null, error: existingError };
 
@@ -413,7 +410,6 @@ export const addRecipeIngredientsToShoppingList = async (
 
   const { error: insertError } = await supabase.from('shopping_list_items').insert(
     toInsert.map((item) => ({
-      baby_id: babyId,
       created_by: userId,
       title: item.title,
       normalized_name: item.normalizedName,
@@ -441,7 +437,6 @@ export type ShoppingItemUpsert = {
 };
 
 export const upsertShoppingItem = async (
-  babyId: string,
   payload: ShoppingItemUpsert
 ): Promise<DataResult<ShoppingListItem>> => {
   const { userId, error: userError } = await getUserId();
@@ -453,7 +448,6 @@ export const upsertShoppingItem = async (
   }
 
   const row = {
-    baby_id: babyId,
     title,
     normalized_name: normalizeItemName(title),
     category: payload.category ?? 'other',
@@ -487,6 +481,15 @@ export const toggleShoppingItemPurchased = async (
 
 export const deleteShoppingItem = async (itemId: string): Promise<{ error: PostgrestError | null }> => {
   const { error } = await supabase.from('shopping_list_items').delete().eq('id', itemId);
+  return { error };
+};
+
+/** Mehrere Posten auf einmal entfernen (z. B. "Alle gekauften löschen"). */
+export const deleteShoppingItems = async (
+  itemIds: string[]
+): Promise<{ error: PostgrestError | null }> => {
+  if (itemIds.length === 0) return { error: null };
+  const { error } = await supabase.from('shopping_list_items').delete().in('id', itemIds);
   return { error };
 };
 
@@ -541,7 +544,6 @@ export type InventoryItemUpsert = {
 };
 
 export const upsertInventoryItem = async (
-  babyId: string,
   payload: InventoryItemUpsert
 ): Promise<DataResult<InventoryItem>> => {
   const { userId, error: userError } = await getUserId();
@@ -553,7 +555,6 @@ export const upsertInventoryItem = async (
   }
 
   const row = {
-    baby_id: babyId,
     name,
     category: payload.category ?? 'other',
     barcode: payload.barcode ?? null,
@@ -605,7 +606,8 @@ export const adjustInventoryQuantity = async (
   item: Pick<InventoryItem, 'id' | 'baby_id' | 'current_quantity' | 'packages_sealed' | 'package_quantity'>,
   quantityChange: number,
   transactionType: InventoryTransactionType,
-  note?: string
+  note?: string,
+  activityBabyId: string | null = null
 ): Promise<DataResult<InventoryItem>> => {
   const { userId, error: userError } = await getUserId();
   if (!userId) return { data: null, error: userError };
@@ -622,7 +624,7 @@ export const adjustInventoryQuantity = async (
 
   const { error: txError } = await supabase.from('inventory_transactions').insert({
     inventory_item_id: item.id,
-    baby_id: item.baby_id,
+    baby_id: activityBabyId,
     created_by: userId,
     transaction_type: transactionType,
     quantity_change: next.effectiveChange,
@@ -665,7 +667,7 @@ export const adjustSealedPackages = async (
   const packageQuantity = item.package_quantity ?? 1;
   const { error: txError } = await supabase.from('inventory_transactions').insert({
     inventory_item_id: item.id,
-    baby_id: item.baby_id,
+    baby_id: null,
     created_by: userId,
     transaction_type: transactionType,
     quantity_change: round2(effectivePackages * packageQuantity),
@@ -685,7 +687,6 @@ export const adjustSealedPackages = async (
  * Posten mit der Packungsmenge als Startbestand angelegt.
  */
 export const refillInventoryFromProduct = async (
-  babyId: string,
   product: {
     barcode: string;
     name: string;
@@ -697,7 +698,6 @@ export const refillInventoryFromProduct = async (
   const { data: existingItems, error: lookupError } = await supabase
     .from('inventory_items')
     .select('*')
-    .eq('baby_id', babyId)
     .eq('barcode', product.barcode)
     .limit(1);
   if (lookupError) return { data: null, error: lookupError };
@@ -710,7 +710,7 @@ export const refillInventoryFromProduct = async (
     return adjustSealedPackages(existing, 1, 'scan_refill', product.name);
   }
 
-  const created = await upsertInventoryItem(babyId, {
+  const created = await upsertInventoryItem({
     name: product.name,
     category: product.category,
     barcode: product.barcode,
@@ -725,7 +725,7 @@ export const refillInventoryFromProduct = async (
   if (userId) {
     const { error: txError } = await supabase.from('inventory_transactions').insert({
       inventory_item_id: created.data.id,
-      baby_id: babyId,
+      baby_id: null,
       created_by: userId,
       transaction_type: 'scan_refill',
       quantity_change: product.packageQuantity,
@@ -740,27 +740,27 @@ export const refillInventoryFromProduct = async (
   return created;
 };
 
-/** Windel-Vorräte des Babys, älteste zuerst — z. B. für die Auswahl im Wickeleintrag. */
-export const fetchDiaperInventoryItems = async (
-  babyId: string
-): Promise<{ data: InventoryItem[]; error: PostgrestError | null }> => {
+/** Gemeinsame Windel-Vorräte des Haushalts, älteste zuerst. */
+export const fetchDiaperInventoryItems = async (): Promise<{
+  data: InventoryItem[];
+  error: PostgrestError | null;
+}> => {
   const { data, error } = await supabase
     .from('inventory_items')
     .select('*')
-    .eq('baby_id', babyId)
     .eq('category', 'diapers')
     .order('created_at', { ascending: true });
   return { data: (data ?? []) as InventoryItem[], error };
 };
 
-/** Milchpulver-Vorräte des Babys, älteste zuerst — für die Auswahl im Fläschchen-Eintrag. */
-export const fetchFormulaInventoryItems = async (
-  babyId: string
-): Promise<{ data: InventoryItem[]; error: PostgrestError | null }> => {
+/** Gemeinsame Milchpulver-Vorräte des Haushalts, älteste zuerst. */
+export const fetchFormulaInventoryItems = async (): Promise<{
+  data: InventoryItem[];
+  error: PostgrestError | null;
+}> => {
   const { data, error } = await supabase
     .from('inventory_items')
     .select('*')
-    .eq('baby_id', babyId)
     .eq('category', 'formula')
     .order('created_at', { ascending: true });
   return { data: (data ?? []) as InventoryItem[], error };
@@ -779,7 +779,7 @@ export const recordBottleUsage = async (
 ): Promise<DataResult<InventoryItem>> => {
   if (!Number.isFinite(volumeMl) || volumeMl <= 0) return { data: null, error: null };
 
-  const { data: items, error } = await fetchFormulaInventoryItems(babyId);
+  const { data: items, error } = await fetchFormulaInventoryItems();
   if (error) return { data: null, error };
 
   const candidates = items.filter(
@@ -797,18 +797,22 @@ export const recordBottleUsage = async (
   const grams = Math.round((volumeMl / 100) * target.dosage_grams_per_100ml! * 10) / 10;
   if (grams <= 0) return { data: target, error: null };
 
-  return adjustInventoryQuantity(target, -grams, 'usage', `Fläschchen ${volumeMl} ml`);
+  return adjustInventoryQuantity(
+    target,
+    -grams,
+    'usage',
+    `Fläschchen ${volumeMl} ml`,
+    babyId
+  );
 };
 
 /** Vorratsposten anhand eines gescannten Barcodes finden — für den Einkaufs-Scan. */
 export const findInventoryItemByBarcode = async (
-  babyId: string,
   barcode: string
 ): Promise<DataResult<InventoryItem>> => {
   const { data, error } = await supabase
     .from('inventory_items')
     .select('*')
-    .eq('baby_id', babyId)
     .eq('barcode', barcode)
     .limit(1);
   if (error) return { data: null, error };
@@ -824,7 +828,7 @@ export const recordDiaperUsage = async (
   babyId: string,
   preferredItemId?: string | null
 ): Promise<DataResult<InventoryItem>> => {
-  const { data: candidates, error } = await fetchDiaperInventoryItems(babyId);
+  const { data: candidates, error } = await fetchDiaperInventoryItems();
   if (error) return { data: null, error };
   if (candidates.length === 0) return { data: null, error: null };
 
@@ -835,17 +839,25 @@ export const recordDiaperUsage = async (
     preferred ?? candidates.find((item) => computeTotalQuantity(item) > 0) ?? candidates[0];
   if (computeTotalQuantity(target) <= 0) return { data: target, error: null };
 
-  return adjustInventoryQuantity(target, -1, 'usage', 'Wickeleintrag aus Unser Tag');
+  return adjustInventoryQuantity(
+    target,
+    -1,
+    'usage',
+    'Wickeleintrag aus Unser Tag',
+    babyId
+  );
 };
 
 /** Anzahl der Vorräte unter oder auf dem Schwellenwert — für das Badge auf der Home-Karte. */
-export const fetchLowStockCount = async (babyId: string): Promise<{ count: number; error: PostgrestError | null }> => {
+export const fetchLowStockCount = async (): Promise<{
+  count: number;
+  error: PostgrestError | null;
+}> => {
   const { data, error } = await supabase
     .from('inventory_items')
     .select(
       'current_quantity, packages_sealed, package_quantity, reorder_threshold, tracking_mode, stock_level_percent, reorder_level_percent'
-    )
-    .eq('baby_id', babyId);
+    );
   if (error) return { count: 0, error };
   const rows = (data ?? []) as Pick<
     InventoryItem,

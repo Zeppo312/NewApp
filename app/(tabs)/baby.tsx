@@ -18,7 +18,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import { supabase } from '@/lib/supabase';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useLocalSearchParams, useRouter, Stack , useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack , useFocusEffect, useNavigation as useRouteNavigation } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
 import * as Notifications from 'expo-notifications';
@@ -80,6 +80,12 @@ const initialStats = {
 const HEADER_TEXT_COLOR = '#7D5A50';
 const MIN_VALID_BABY_DATE = new Date(2000, 0, 1);
 const MAX_VALID_DUE_DATE = new Date(2100, 11, 31, 23, 59, 59, 999);
+
+// Ein gesetztes Geburtsdatum ist die verlaessliche Quelle fuer "geboren".
+// user_settings.is_baby_born gilt pro Nutzer (nicht pro Kind) und dient nur
+// als Fallback, wenn das Kind noch kein Geburtsdatum hat.
+const resolveIsBabyBorn = (birthDate: Date | null, settingsIsBabyBorn: unknown): boolean =>
+  Boolean(birthDate) || settingsIsBabyBorn === true;
 
 const formatBedtimeInputValue = (value: string): string => {
   const digits = value.replace(/\D/g, '').slice(0, 4);
@@ -202,6 +208,7 @@ export default function BabyScreen() {
   const { activeBabyId, refreshBabies, isReady, setActiveBabyId } = useActiveBaby();
   const { refreshBabyDetails, isBabyBorn } = useBabyStatus();
   const router = useRouter();
+  const routeNavigation = useRouteNavigation();
   const params = useLocalSearchParams<{ babyId?: string | string[]; edit?: string | string[]; created?: string | string[] }>();
   const fallbackHomeRoute = isBabyBorn ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
   const editParamValue = Array.isArray(params.edit) ? params.edit[0] : params.edit;
@@ -217,11 +224,16 @@ export default function BabyScreen() {
   const [babyInfo, setBabyInfo] = useState<BabyInfo>({});
   const [loadedBabyId, setLoadedBabyId] = useState<string | null>(null);
   const babyInfoRequestIdRef = useRef(0);
+  const appliedRouteBabyIdRef = useRef<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [isBabyBornForCurrentBaby, setIsBabyBornForCurrentBaby] = useState(false);
+  // null = fuer das aktuelle Kind noch nicht geladen. Solange faellt die Anzeige
+  // auf den bereits aufgeloesten Context-Status zurueck statt auf ein hartes
+  // "Schwangerschaft", das nach Kindwechsel oder Cold-Start kurz falsch waere.
+  const [loadedIsBabyBorn, setIsBabyBornForCurrentBaby] = useState<boolean | null>(null);
+  const isBabyBornForCurrentBaby = loadedIsBabyBorn ?? isBabyBorn;
   const [bedtimeInput, setBedtimeInput] = useState(DEFAULT_BEDTIME_ANCHOR);
   const [bedtimeInputError, setBedtimeInputError] = useState<string | null>(null);
   const [pendingPhoto, setPendingPhoto] = useState<PreparedBabyPhoto | null>(null);
@@ -278,23 +290,43 @@ export default function BabyScreen() {
     // Invalidate in-flight loads when the selected profile changes. Saving is
     // blocked below until the matching profile has finished loading.
     babyInfoRequestIdRef.current += 1;
+    setIsBabyBornForCurrentBaby(null);
   }, [targetBabyId]);
 
   useEffect(() => {
-    if (autoOpenEdit) {
-      setIsEditing(true);
-    }
-  }, [autoOpenEdit]);
+    if (!autoOpenEdit) return;
+    setIsEditing(true);
+    // Einmalige Absicht: Parameter direkt entfernen, damit ein spaeterer Besuch
+    // des Tabs nicht erneut in den Bearbeiten-Modus springt.
+    routeNavigation.setParams({ edit: undefined } as any);
+  }, [autoOpenEdit, routeNavigation]);
 
   useEffect(() => {
     setBedtimeInput(bedtimeAnchor);
     setBedtimeInputError(null);
   }, [bedtimeAnchor, isEditing]);
 
+  // Der babyId-Parameter ist eine einmalige Absicht ("oeffne genau dieses Kind").
+  // Der Baby-Tab bleibt nach dem ersten Besuch montiert und behaelt seine
+  // Params, deshalb wird der Parameter nur einmal angewendet und danach
+  // entfernt - sonst zieht dieser Effekt jeden spaeteren Kindwechsel im
+  // BabySwitcher sofort wieder zurueck.
   useEffect(() => {
-    if (!routeBabyId || routeBabyId === activeBabyId) return;
+    if (!routeBabyId) {
+      appliedRouteBabyIdRef.current = null;
+      return;
+    }
+
+    if (routeBabyId === activeBabyId) {
+      appliedRouteBabyIdRef.current = null;
+      routeNavigation.setParams({ babyId: undefined } as any);
+      return;
+    }
+
+    if (appliedRouteBabyIdRef.current === routeBabyId) return;
+    appliedRouteBabyIdRef.current = routeBabyId;
     void setActiveBabyId(routeBabyId);
-  }, [activeBabyId, routeBabyId, setActiveBabyId]);
+  }, [activeBabyId, routeBabyId, routeNavigation, setActiveBabyId]);
 
   useEffect(() => {
     if (user) {
@@ -371,7 +403,7 @@ export default function BabyScreen() {
             : null,
         });
         setLoadedBabyId(targetBabyId);
-        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setIsBabyBornForCurrentBaby(resolveIsBabyBorn(safeBirthDate, settingsData?.is_baby_born));
         setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
 
@@ -389,7 +421,7 @@ export default function BabyScreen() {
             : null,
         });
         setLoadedBabyId(targetBabyId);
-        setIsBabyBornForCurrentBaby(Boolean(settingsData?.is_baby_born ?? safeBirthDate));
+        setIsBabyBornForCurrentBaby(resolveIsBabyBorn(safeBirthDate, settingsData?.is_baby_born));
         setDueDate(parseSafeDate(settingsData?.due_date, dueDateBounds));
       }
 

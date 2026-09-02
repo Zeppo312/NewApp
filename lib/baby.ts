@@ -70,7 +70,7 @@ export interface DailyEntry {
   id?: string;
   baby_id?: string | null;
   entry_date: string;
-  entry_type: 'diaper' | 'sleep' | 'feeding' | 'other';
+  entry_type: 'diaper' | 'sleep' | 'feeding' | 'custom' | 'other';
   start_time?: string;
   end_time?: string;
   notes?: string;
@@ -83,6 +83,13 @@ export interface DailyEntry {
   diaper_temperature_c?: number | null;
   diaper_suppository_given?: boolean | null;
   diaper_suppository_dose_mg?: number | null;
+  custom_activity_type_id?: string | null;
+  custom_name?: string | null;
+  custom_emoji?: string | null;
+  custom_color?: string | null;
+  custom_tracking_mode?: 'event' | 'quantity' | 'duration' | null;
+  custom_quantity?: number | null;
+  custom_unit?: string | null;
 }
 
 // Typen für Entwicklungsphasen

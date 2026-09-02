@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { getAppSettings, getCachedUser, supabase } from './supabase';
 import { getPersistedAppLocale } from './localization';
 import { translateNotificationsText } from './notificationsTranslations';
+import { COMMUNITY_FALLBACK_ROUTE } from './communityAccess';
 
 import { router } from 'expo-router';
 
@@ -144,34 +145,19 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
         } as any);
         break;
 
-      // Community notification types
+      // Community-Benachrichtigungen führen nirgendwo mehr hin: die
+      // nutzergenerierten Bereiche sind gesperrt (siehe lib/communityAccess.ts).
+      // Alte Push-Nachrichten aus der Zeit davor landen weiterhin auf dem
+      // Gerät — sie öffnen jetzt den Start statt einer gesperrten Route.
       case 'message':
-        router.push(`/chat/${referenceId}` as any);
-        break;
-
       case 'group_message':
-        router.push({ pathname: `/group-chat/${referenceId}`, params: { from: 'notifications' } } as any);
-        break;
-
       case 'like_post':
       case 'comment':
-        // Navigiere zum Beitrag
-        router.push({
-          pathname: '/community',
-          params: { post: referenceId }
-        } as any);
-        break;
-
       case 'follow':
-        // Bei Follow-Benachrichtigungen zum Profil des Followers navigieren
-        router.push(`/profile/${referenceId}` as any);
-        break;
-
       case 'like_comment':
       case 'reply':
       case 'like_nested_comment':
-        // Bei Kommentar-Aktionen, erst den Eltern-Post finden
-        findParentPostAndNavigate(referenceId);
+        router.push(COMMUNITY_FALLBACK_ROUTE as any);
         break;
 
       // Planner notification types
@@ -189,41 +175,12 @@ export function navigateToNotificationTarget(type: string, referenceId: string) 
         break;
 
       default:
-        // Standardmäßig zur Community-Ansicht
         console.log('Unknown notification type:', type);
-        router.push('/community' as any);
+        router.push(COMMUNITY_FALLBACK_ROUTE as any);
     }
   } catch (error) {
     console.error('Fehler bei der Navigation:', error);
-    // Fallback zur Community-Ansicht
-    router.push('/community' as any);
-  }
-}
-
-// Findet den übergeordneten Beitrag eines Kommentars und navigiert dorthin
-async function findParentPostAndNavigate(commentId: string) {
-  try {
-    // Kommentar abrufen, um die Post-ID zu erhalten
-    const { data: comment, error } = await supabase
-      .from('community_comments')
-      .select('post_id')
-      .eq('id', commentId)
-      .single();
-
-    if (error || !comment) {
-      console.error('Fehler beim Abrufen des Kommentars:', error);
-      router.push('/community' as any);
-      return;
-    }
-
-    // Navigiere zum Beitrag mit dem Fokus auf diesem Kommentar
-    router.push({
-      pathname: '/community',
-      params: { post: comment.post_id, comment: commentId }
-    } as any);
-  } catch (error) {
-    console.error('Fehler beim Finden des übergeordneten Beitrags:', error);
-    router.push('/community' as any);
+    router.push(COMMUNITY_FALLBACK_ROUTE as any);
   }
 }
 

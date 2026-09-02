@@ -377,9 +377,25 @@ export const formatBabyAgeAtMilestone = (
   ].filter((part): part is string => Boolean(part));
 
   if (parts.length === 0) return t('age.birthDay');
-  const age = new Intl.ListFormat(getMilestoneLocaleTag(locale), {
-    style: 'long',
-    type: 'conjunction',
-  }).format(parts);
+  const ListFormat = Intl.ListFormat;
+  const age = typeof ListFormat === 'function'
+    ? new ListFormat(getMilestoneLocaleTag(locale), {
+        style: 'long',
+        type: 'conjunction',
+      }).format(parts)
+    : (() => {
+        if (parts.length === 1) return parts[0];
+
+        const conjunction = {
+          de: 'und',
+          en: 'and',
+          es: 'y',
+        }[locale];
+        const separator = locale === 'en' && parts.length > 2
+          ? `, ${conjunction} `
+          : ` ${conjunction} `;
+
+        return `${parts.slice(0, -1).join(', ')}${separator}${parts.at(-1)}`;
+      })();
   return t('age.at', { age });
 };

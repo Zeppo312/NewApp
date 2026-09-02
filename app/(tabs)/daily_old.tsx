@@ -53,6 +53,10 @@ import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import CustomActivityDefinitionModal from '@/components/CustomActivityDefinitionModal';
+import CustomActivityEntryModal, {
+  CustomActivityEntryPayload,
+} from '@/components/CustomActivityEntryModal';
 import NightWakePrompt from '@/components/NightWakePrompt';
 import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
 import WeekScroller from '@/components/WeekScroller';
@@ -78,6 +82,14 @@ import {
   type VitaminDChecks,
 } from '@/lib/vitaminDReminder';
 import { DailyTranslationKey, DEFAULT_DAILY_LOCALE, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
+import {
+  archiveCustomActivityType,
+  createCustomActivityType,
+  CustomActivityType,
+  CustomActivityTypeDraft,
+  getCustomActivityTypes,
+  updateCustomActivityType,
+} from '@/lib/customActivities';
 
 let ACTIVE_DAILY_LOCALE = DEFAULT_DAILY_LOCALE;
 let DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
@@ -91,6 +103,9 @@ const TIMELINE_INSET = 8;
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 const COLS = 7;
 const GUTTER = 4;
+// Quick-Action-Kreise: eine Groesse fuer Wrapper, Styles und getItemLayout
+const QUICK_BUTTON_SIZE = 96;
+const QUICK_BUTTON_GAP = 16;
 const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
 const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
 const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
@@ -126,13 +141,32 @@ type QuickActionType =
   | 'diaper_dirty'
   | 'diaper_both';
 
-type QuickActionButtonConfig = { icon: string; label: string; action: QuickActionType };
-type QuickActionButtonDefinition = Omit<QuickActionButtonConfig, 'label'> & {
+type CustomQuickActionId = `custom:${string}`;
+type QuickActionId = QuickActionType | CustomQuickActionId;
+
+type QuickActionButtonConfig = {
+  icon: string;
+  label: string;
+  action: QuickActionId;
+  customActivity?: CustomActivityType;
+};
+type QuickActionButtonDefinition = {
+  action: QuickActionType;
+  icon: string;
   labelKey: DailyTranslationKey;
 };
 type QuickActionRowItem =
   | { key: string; type: 'action'; item: QuickActionButtonConfig }
   | { key: string; type: 'restore-toggle' };
+
+type ActiveCareTimer = {
+  id: string;
+  type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'WATER' | 'DIAPER' | 'CUSTOM';
+  start: number;
+  label?: string;
+  emoji?: string;
+  color?: string;
+};
 
 // GlassCard and LiquidGlassCard imported from DesignGuide
 
@@ -162,7 +196,7 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
 
 // Timer Banner (glass)
 const TimerBanner: React.FC<{
-  timer: { id: string; type: string; start: number } | null;
+  timer: ActiveCareTimer | null;
   onStop: () => void;
   onCancel: () => void;
   disabled?: boolean;
@@ -185,7 +219,9 @@ const TimerBanner: React.FC<{
   if (!timer) return null;
 
   const timerLabel =
-    timer.type === 'BREAST'
+    timer.type === 'CUSTOM'
+      ? `${timer.emoji ?? '⭐️'} ${timer.label ?? t('card.other')}`
+      : timer.type === 'BREAST'
       ? t('action.breast')
       : timer.type === 'BOTTLE'
         ? t('action.bottle')
@@ -232,6 +268,10 @@ const QUICK_ACTION_DEFINITIONS: QuickActionButtonDefinition[] = [
 ];
 
 const QUICK_ACTION_ORDER = QUICK_ACTION_DEFINITIONS.map(({ action }) => action);
+const toCustomQuickActionId = (id: string): CustomQuickActionId => `custom:${id}`;
+const isCustomQuickActionId = (action: QuickActionId): action is CustomQuickActionId =>
+  action.startsWith('custom:');
+const getCustomActivityIdFromAction = (action: CustomQuickActionId) => action.slice('custom:'.length);
 
 const getEntryTimelineTimestamp = (entry: Partial<DailyEntry>): number | null => {
   const rawValue = entry.start_time ?? entry.entry_date ?? null;
@@ -488,21 +528,26 @@ const normalizeHiddenQuickActions = (value: unknown): QuickActionType[] => {
   return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, QUICK_ACTION_DEFINITIONS.length - 1);
 };
 
-const normalizeQuickActionOrder = (value: unknown): QuickActionType[] => {
-  if (!Array.isArray(value)) return [...QUICK_ACTION_ORDER];
+const normalizeQuickActionOrder = (
+  value: unknown,
+  availableActions: QuickActionId[] = [...QUICK_ACTION_ORDER],
+): QuickActionId[] => {
+  if (!Array.isArray(value)) return [...availableActions];
 
-  const seen = new Set<QuickActionType>();
-  const normalized: QuickActionType[] = [];
+  const availableSet = new Set<QuickActionId>(availableActions);
+  const seen = new Set<QuickActionId>();
+  const normalized: QuickActionId[] = [];
 
   for (const entry of value) {
     if (typeof entry !== 'string') continue;
-    if (!QUICK_ACTION_ORDER.includes(entry as QuickActionType)) continue;
-    if (seen.has(entry as QuickActionType)) continue;
-    seen.add(entry as QuickActionType);
-    normalized.push(entry as QuickActionType);
+    const action = entry as QuickActionId;
+    if (!availableSet.has(action)) continue;
+    if (seen.has(action)) continue;
+    seen.add(action);
+    normalized.push(action);
   }
 
-  for (const action of QUICK_ACTION_ORDER) {
+  for (const action of availableActions) {
     if (!seen.has(action)) {
       normalized.push(action);
     }
@@ -518,18 +563,24 @@ const buildQuickActionOrderStorageKey = (userId?: string | null, babyId?: string
   `${QUICK_ACTION_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
 
 const QuickActionRow: React.FC<{
-  onPressAction: (action: QuickActionType) => void;
+  onPressAction: (action: QuickActionId) => void;
   onHideAction: (action: QuickActionType) => void;
   onRestoreAction: (action: QuickActionType) => void;
-  onReorderActions: (actions: QuickActionType[]) => void;
+  onReorderActions: (actions: QuickActionId[]) => void;
+  onAddCustom: () => void;
+  onEditCustom: (activity: CustomActivityType) => void;
+  customActivities: CustomActivityType[];
   hiddenActions: QuickActionType[];
-  actionOrder: QuickActionType[];
+  actionOrder: QuickActionId[];
   disabled?: boolean;
 }> = ({
   onPressAction,
   onHideAction,
   onRestoreAction,
   onReorderActions,
+  onAddCustom,
+  onEditCustom,
+  customActivities,
   hiddenActions,
   actionOrder,
   disabled = false,
@@ -542,12 +593,19 @@ const QuickActionRow: React.FC<{
   const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const quickBtns = useMemo<QuickActionButtonConfig[]>(
-    () =>
-      QUICK_ACTION_DEFINITIONS.map(({ labelKey, ...button }) => ({
+    () => [
+      ...QUICK_ACTION_DEFINITIONS.map(({ labelKey, ...button }) => ({
         ...button,
         label: translateDailyText(locale, labelKey),
       })),
-    [locale],
+      ...customActivities.map((activity) => ({
+        action: toCustomQuickActionId(activity.id),
+        icon: activity.emoji,
+        label: activity.name,
+        customActivity: activity,
+      })),
+    ],
+    [customActivities, locale],
   );
   const hiddenActionSet = useMemo(() => new Set(hiddenActions), [hiddenActions]);
   const orderedQuickBtns = useMemo(
@@ -555,16 +613,18 @@ const QuickActionRow: React.FC<{
     [actionOrder, quickBtns],
   );
   const visibleQuickBtns = useMemo(
-    () => orderedQuickBtns.filter(({ action }) => !hiddenActionSet.has(action)),
+    () => orderedQuickBtns.filter(({ action }) => isCustomQuickActionId(action) || !hiddenActionSet.has(action)),
     [hiddenActionSet, orderedQuickBtns],
   );
   const hiddenQuickBtns = useMemo(
-    () => orderedQuickBtns.filter(({ action }) => hiddenActionSet.has(action)),
+    () => orderedQuickBtns.filter(
+      ({ action }) => !isCustomQuickActionId(action) && hiddenActionSet.has(action),
+    ),
     [hiddenActionSet, orderedQuickBtns],
   );
   const [isEditMode, setIsEditMode] = useState(false);
 
-  const itemWidth = 100 + 16; // Wrapper width + separator
+  const itemWidth = QUICK_BUTTON_SIZE + QUICK_BUTTON_GAP; // Wrapper width + separator
 
   const quickActionItems = useMemo<QuickActionRowItem[]>(
     () =>
@@ -597,12 +657,38 @@ const QuickActionRow: React.FC<{
       [
         ...hiddenQuickBtns.map((hiddenBtn) => ({
           text: `${hiddenBtn.icon} ${hiddenBtn.label}`,
-          onPress: () => onRestoreAction(hiddenBtn.action),
+          onPress: () => onRestoreAction(hiddenBtn.action as QuickActionType),
         })),
         { text: t('common.cancel'), style: 'cancel' as const },
       ],
     );
   }, [hiddenQuickBtns, onRestoreAction]);
+
+  const renderAddButton = () => (
+    <View style={s.circleButtonWrap}>
+      <GlassCard
+        style={[s.circleButton, s.circleButtonRestore]}
+        intensity={30}
+        overlayColor="rgba(255,255,255,0.32)"
+        borderColor="rgba(255,255,255,0.70)"
+      >
+        <TouchableOpacity
+          style={[s.circleInner, disabled && s.actionDisabled]}
+          onPress={() => {
+            if (!disabled) onAddCustom();
+          }}
+          activeOpacity={0.9}
+        >
+          <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#A26BFF' : PRIMARY }]}>
+            <Text style={s.quickActionPlusBadgeText}>+</Text>
+          </View>
+          <Text style={[s.quickActionPlusLabel, { color: textPrimary }]} numberOfLines={2}>
+            {t('custom.add')}
+          </Text>
+        </TouchableOpacity>
+      </GlassCard>
+    </View>
+  );
 
   const renderQuickButton = ({ item, drag }: { item: QuickActionRowItem; drag?: () => void }) => {
     if (item.type === 'restore-toggle') {
@@ -622,8 +708,10 @@ const QuickActionRow: React.FC<{
               <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#44C38A' : '#1F9D55' }]}>
                 <Text style={s.quickActionPlusBadgeText}>+</Text>
               </View>
-              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]}>{t('common.back')}</Text>
-              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]}>
+              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]} numberOfLines={1}>
+                {t('common.back')}
+              </Text>
+              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]} numberOfLines={1}>
                 {translateDailyText(locale, 'quick.hiddenCount', { count: hiddenQuickBtns.length })}
               </Text>
             </TouchableOpacity>
@@ -657,17 +745,28 @@ const QuickActionRow: React.FC<{
             delayLongPress={250}
             activeOpacity={isEditMode ? 1 : 0.9}
           >
-            <Text style={s.circleEmoji}>{item.item.icon}</Text>
-            <Text style={[s.circleLabel, { color: textSecondary }]}>{item.item.label}</Text>
+            <Text style={s.circleEmoji} numberOfLines={1}>{item.item.icon}</Text>
+            <Text style={[s.circleLabel, { color: textSecondary }]} numberOfLines={2}>
+              {item.item.label}
+            </Text>
           </TouchableOpacity>
         </GlassCard>
         {isEditMode ? (
           <TouchableOpacity
-            style={s.quickActionHideBadge}
-            onPress={() => handleHidePress(item.item.action)}
+            style={[
+              s.quickActionHideBadge,
+              item.item.customActivity && { backgroundColor: isDark ? '#A26BFF' : PRIMARY },
+            ]}
+            onPress={() => {
+              if (item.item.customActivity) {
+                onEditCustom(item.item.customActivity);
+                return;
+              }
+              handleHidePress(item.item.action as QuickActionType);
+            }}
             activeOpacity={0.85}
           >
-            <Text style={s.quickActionHideBadgeText}>−</Text>
+            <Text style={s.quickActionHideBadgeText}>{item.item.customActivity ? '✎' : '−'}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
@@ -710,7 +809,7 @@ const QuickActionRow: React.FC<{
             );
           }}
           renderItem={({ item, drag }: RenderItemParams<QuickActionRowItem>) => renderQuickButton({ item, drag })}
-          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          ItemSeparatorComponent={() => <View style={{ width: QUICK_BUTTON_GAP }} />}
           ListFooterComponent={
             hiddenQuickBtns.length > 0 ? (
               <View style={s.quickActionFooterWrap}>{renderQuickButton({ item: { key: 'restore-toggle', type: 'restore-toggle' } })}</View>
@@ -722,17 +821,19 @@ const QuickActionRow: React.FC<{
         <FlatList
           data={quickActionItems}
           horizontal
+          style={s.quickListBleed}
           showsHorizontalScrollIndicator={false}
           renderItem={({ item }) => renderQuickButton({ item })}
           keyExtractor={(item) => item.key}
           contentContainerStyle={s.quickScrollContainer}
-          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+          ItemSeparatorComponent={() => <View style={{ width: QUICK_BUTTON_GAP }} />}
           decelerationRate="normal"
           getItemLayout={(_, index) => ({
             length: itemWidth,
             offset: itemWidth * index,
             index,
           })}
+          ListFooterComponent={<View style={s.quickActionFooterWrap}>{renderAddButton()}</View>}
         />
       )}
     </View>
@@ -821,17 +922,15 @@ export default function DailyScreen() {
     return date;
   }, [monthOffset]);
   const [showInputModal, setShowInputModal] = useState(false);
+  const [showCustomDefinitionModal, setShowCustomDefinitionModal] = useState(false);
+  const [showCustomEntryModal, setShowCustomEntryModal] = useState(false);
   const [showFeedingOverviewModal, setShowFeedingOverviewModal] = useState(false);
   const [showDateNav, setShowDateNav] = useState(true);
   const fadeNavAnim = React.useState(() => new Animated.Value(1))[0];
   const hideNavTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const quickActionHandledRef = useRef<string | null>(null);
 
-  const [activeTimer, setActiveTimer] = useState<{
-    id: string;
-    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'WATER' | 'DIAPER';
-    start: number;
-  } | null>(null);
+  const [activeTimer, setActiveTimer] = useState<ActiveCareTimer | null>(null);
   const [hydratedTimerBabyId, setHydratedTimerBabyId] = useState<string | null>(null);
   const isTimerHydrated = hydratedTimerBabyId === activeBabyId;
   const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
@@ -841,6 +940,10 @@ export default function DailyScreen() {
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
   const [editingEntry, setEditingEntry] = useState<DailyEntry | null>(null);
+  const [customActivities, setCustomActivities] = useState<CustomActivityType[]>([]);
+  const [editingCustomActivity, setEditingCustomActivity] = useState<CustomActivityType | null>(null);
+  const [selectedCustomActivity, setSelectedCustomActivity] = useState<CustomActivityType | null>(null);
+  const [editingCustomEntry, setEditingCustomEntry] = useState<DailyEntry | null>(null);
   const [splashVisible, setSplashVisible] = useState(false);
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
   const [splashEmoji, setSplashEmoji] = useState<string>('✅');
@@ -856,7 +959,18 @@ export default function DailyScreen() {
   const [vitaminDChecks, setVitaminDChecks] = useState<VitaminDChecks>({});
   const [vitaminDBusy, setVitaminDBusy] = useState(false);
   const [hiddenQuickActions, setHiddenQuickActions] = useState<QuickActionType[]>([]);
-  const [quickActionOrder, setQuickActionOrder] = useState<QuickActionType[]>([...QUICK_ACTION_ORDER]);
+  const [quickActionOrder, setQuickActionOrder] = useState<QuickActionId[]>([...QUICK_ACTION_ORDER]);
+  const activeCustomActivities = useMemo(
+    () => customActivities.filter((activity) => !activity.is_archived),
+    [customActivities],
+  );
+  const availableQuickActionIds = useMemo<QuickActionId[]>(
+    () => [
+      ...QUICK_ACTION_ORDER,
+      ...activeCustomActivities.map((activity) => toCustomQuickActionId(activity.id)),
+    ],
+    [activeCustomActivities],
+  );
   const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
   const hiddenQuickActionsStorageKey = useMemo(
     () => buildHiddenQuickActionsStorageKey(user?.id, activeBabyId),
@@ -874,6 +988,25 @@ export default function DailyScreen() {
     showReadOnlyPreviewAlert();
     return false;
   }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
+
+  const loadCustomActivities = useCallback(async () => {
+    if (!activeBabyId || !isReady) {
+      setCustomActivities([]);
+      return;
+    }
+
+    const { data, error } = await getCustomActivityTypes(activeBabyId, { includeArchived: true });
+    if (error) {
+      console.error('Daily: failed to load custom activities', error);
+      return;
+    }
+    setCustomActivities(data ?? []);
+  }, [activeBabyId, isReady]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => void loadCustomActivities(), 0);
+    return () => clearTimeout(timeoutId);
+  }, [loadCustomActivities]);
 
   // Notification hooks
   const { requestPermissions } = useNotifications();
@@ -945,13 +1078,15 @@ export default function DailyScreen() {
           storedHiddenActions ? normalizeHiddenQuickActions(JSON.parse(storedHiddenActions)) : [],
         );
         setQuickActionOrder(
-          storedOrder ? normalizeQuickActionOrder(JSON.parse(storedOrder)) : [...QUICK_ACTION_ORDER],
+          storedOrder
+            ? normalizeQuickActionOrder(JSON.parse(storedOrder), availableQuickActionIds)
+            : [...availableQuickActionIds],
         );
       } catch (error) {
         console.error('Daily: failed to load quick action preferences', error);
         if (isActive) {
           setHiddenQuickActions([]);
-          setQuickActionOrder([...QUICK_ACTION_ORDER]);
+          setQuickActionOrder([...availableQuickActionIds]);
         }
       }
     })();
@@ -959,7 +1094,7 @@ export default function DailyScreen() {
     return () => {
       isActive = false;
     };
-  }, [hiddenQuickActionsStorageKey, quickActionOrderStorageKey]);
+  }, [availableQuickActionIds, hiddenQuickActionsStorageKey, quickActionOrderStorageKey]);
 
   const persistHiddenQuickActions = useCallback(
     async (nextActions: QuickActionType[]) => {
@@ -989,11 +1124,14 @@ export default function DailyScreen() {
   );
 
   const persistQuickActionOrder = useCallback(
-    async (nextOrder: QuickActionType[]) => {
+    async (nextOrder: QuickActionId[]) => {
       try {
-        const normalized = normalizeQuickActionOrder(nextOrder);
+        const normalized = normalizeQuickActionOrder(nextOrder, availableQuickActionIds);
 
-        if (normalized.every((action, index) => action === QUICK_ACTION_ORDER[index])) {
+        if (
+          normalized.length === availableQuickActionIds.length
+          && normalized.every((action, index) => action === availableQuickActionIds[index])
+        ) {
           await AsyncStorage.removeItem(quickActionOrderStorageKey);
           return;
         }
@@ -1003,20 +1141,26 @@ export default function DailyScreen() {
         console.error('Daily: failed to save quick action order', error);
       }
     },
-    [quickActionOrderStorageKey],
+    [availableQuickActionIds, quickActionOrderStorageKey],
   );
 
   const handleReorderQuickActions = useCallback(
-    (visibleActions: QuickActionType[]) => {
+    (visibleActions: QuickActionId[]) => {
       setQuickActionOrder((current) => {
-        const normalizedCurrent = normalizeQuickActionOrder(current);
-        const hiddenActions = normalizedCurrent.filter((action) => hiddenQuickActions.includes(action));
-        const nextOrder = normalizeQuickActionOrder([...visibleActions, ...hiddenActions]);
+        const normalizedCurrent = normalizeQuickActionOrder(current, availableQuickActionIds);
+        const hiddenActions = normalizedCurrent.filter(
+          (action): action is QuickActionType =>
+            !isCustomQuickActionId(action) && hiddenQuickActions.includes(action),
+        );
+        const nextOrder = normalizeQuickActionOrder(
+          [...visibleActions, ...hiddenActions],
+          availableQuickActionIds,
+        );
         void persistQuickActionOrder(nextOrder);
         return nextOrder;
       });
     },
-    [hiddenQuickActions, persistQuickActionOrder],
+    [availableQuickActionIds, hiddenQuickActions, persistQuickActionOrder],
   );
 
   const handleHideQuickAction = useCallback(
@@ -1225,11 +1369,7 @@ export default function DailyScreen() {
     }
   }, []);
 
-  const endBreastfeedingLiveActivity = useCallback(async (timer: {
-    id: string;
-    type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'WATER' | 'DIAPER';
-    start: number;
-  } | null) => {
+  const endBreastfeedingLiveActivity = useCallback(async (timer: ActiveCareTimer | null) => {
     if (!timer || timer.type !== 'BREAST') {
       return;
     }
@@ -1364,9 +1504,9 @@ export default function DailyScreen() {
     try {
       const { data, error } = await supabase
         .from('baby_care_entries')
-        .select('id,feeding_type,start_time')
+        .select('id,entry_type,feeding_type,start_time,custom_name,custom_emoji,custom_color,custom_tracking_mode')
         .eq('baby_id', activeBabyId)
-        .eq('entry_type', 'feeding')
+        .in('entry_type', ['feeding', 'diaper', 'custom'])
         .is('end_time', null)
         .order('start_time', { ascending: false })
         .limit(50);
@@ -1378,13 +1518,14 @@ export default function DailyScreen() {
 
       const openTimers = data ?? [];
       const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS', 'PUMP', 'WATER']);
-      const validOpenTimers = openTimers.filter(
-        (
-          row,
-        ): row is { id: string; feeding_type: 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER'; start_time: string } =>
-          !!row?.id && !!row?.start_time && typeof row.feeding_type === 'string' && validTypeSet.has(row.feeding_type),
-      );
-      const current = validOpenTimers[0];
+      const current = openTimers.find((row) => {
+        if (!row?.id || !row?.start_time) return false;
+        if (row.entry_type === 'feeding') {
+          return typeof row.feeding_type === 'string' && validTypeSet.has(row.feeding_type);
+        }
+        if (row.entry_type === 'diaper') return true;
+        return row.entry_type === 'custom' && row.custom_tracking_mode === 'duration';
+      });
 
       // Data hygiene: only one timer can be active. Close stale open timers automatically.
       const staleOpenTimers = openTimers.filter((row) => !!row?.id && (!current || row.id !== current.id));
@@ -1415,18 +1556,29 @@ export default function DailyScreen() {
         return;
       }
 
-      const nextType = current.feeding_type;
+      const nextTimer: ActiveCareTimer = current.entry_type === 'custom'
+        ? {
+            id: current.id,
+            type: 'CUSTOM',
+            start: startMs,
+            label: current.custom_name ?? t('card.other'),
+            emoji: current.custom_emoji ?? '⭐️',
+            color: current.custom_color ?? '#5E3DB3',
+          }
+        : current.entry_type === 'diaper'
+          ? { id: current.id, type: 'DIAPER', start: startMs }
+          : {
+              id: current.id,
+              type: current.feeding_type as ActiveCareTimer['type'],
+              start: startMs,
+            };
 
       setActiveTimer((prev) => {
-        if (prev && prev.id === current.id && prev.type === nextType && prev.start === startMs) {
+        if (prev && prev.id === nextTimer.id && prev.type === nextTimer.type && prev.start === nextTimer.start) {
           return prev;
         }
 
-        return {
-          id: current.id,
-          type: nextType,
-          start: startMs,
-        };
+        return nextTimer;
       });
     } catch (error) {
       console.error('Failed to resolve active timer:', error);
@@ -1565,7 +1717,7 @@ export default function DailyScreen() {
     setRefreshing(true);
 
     // Start loading entries
-    const loadPromise = loadEntries();
+    const loadPromise = Promise.all([loadEntries(), loadCustomActivities()]);
 
     // Set maximum refresh time to 2 seconds
     const timeoutPromise = new Promise<void>((resolve) => {
@@ -1593,8 +1745,17 @@ export default function DailyScreen() {
     setSelectedDate(next);
   };
 
-  const handleQuickActionPress = (action: QuickActionType) => {
+  const handleQuickActionPress = (action: QuickActionId) => {
     if (!ensureWritableInCurrentMode()) return;
+    if (isCustomQuickActionId(action)) {
+      const activityId = getCustomActivityIdFromAction(action);
+      const activity = customActivities.find((item) => item.id === activityId && !item.is_archived);
+      if (!activity) return;
+      setSelectedCustomActivity(activity);
+      setEditingCustomEntry(null);
+      setShowCustomEntryModal(true);
+      return;
+    }
     if (action.startsWith('feeding')) setSelectedActivityType('feeding');
     else if (action.startsWith('diaper')) setSelectedActivityType('diaper');
     else setSelectedActivityType('other');
@@ -1607,6 +1768,152 @@ export default function DailyScreen() {
     if (action === 'feeding_water') setEditingEntry({} as any);
     if (action === 'diaper_wet' || action === 'diaper_dirty' || action === 'diaper_both') setEditingEntry({} as any);
     setShowInputModal(true);
+  };
+
+  const openNewCustomActivity = () => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (!activeBabyId) {
+      Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
+      return;
+    }
+    setEditingCustomActivity(null);
+    setShowCustomDefinitionModal(true);
+  };
+
+  const openCustomActivityEditor = (activity: CustomActivityType) => {
+    if (!ensureWritableInCurrentMode()) return;
+    setEditingCustomActivity(activity);
+    setShowCustomDefinitionModal(true);
+  };
+
+  const handleSaveCustomActivityDefinition = async (draft: CustomActivityTypeDraft) => {
+    if (!activeBabyId) return false;
+    const result = editingCustomActivity
+      ? await updateCustomActivityType(editingCustomActivity.id, activeBabyId, draft)
+      : await createCustomActivityType(activeBabyId, draft);
+
+    if (result.error || !result.data) {
+      const errorCode = (result.error as { code?: string } | null)?.code;
+      Alert.alert(
+        t('common.error'),
+        errorCode === '23505'
+          ? t('custom.duplicate')
+          : String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    setCustomActivities((current) => {
+      const withoutSaved = current.filter((activity) => activity.id !== result.data!.id);
+      return [...withoutSaved, result.data!].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+    if (!editingCustomActivity) {
+      setQuickActionOrder((current) => [...current, toCustomQuickActionId(result.data!.id)]);
+    }
+    setEditingCustomActivity(null);
+    return true;
+  };
+
+  const handleArchiveCustomActivity = async () => {
+    if (!activeBabyId || !editingCustomActivity) return false;
+    const result = await archiveCustomActivityType(editingCustomActivity.id, activeBabyId);
+    if (result.error || !result.data) {
+      Alert.alert(
+        t('common.error'),
+        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    const archivedAction = toCustomQuickActionId(editingCustomActivity.id);
+    setCustomActivities((current) =>
+      current.map((activity) => (activity.id === result.data!.id ? result.data! : activity)),
+    );
+    setQuickActionOrder((current) => current.filter((action) => action !== archivedAction));
+    setEditingCustomActivity(null);
+    return true;
+  };
+
+  const resolveCustomActivityForEntry = (entry: DailyEntry): CustomActivityType | null => {
+    const stored = entry.custom_activity_type_id
+      ? customActivities.find((activity) => activity.id === entry.custom_activity_type_id)
+      : null;
+    if (!entry.custom_name || !entry.custom_emoji || !entry.custom_tracking_mode) {
+      return stored ?? null;
+    }
+
+    return {
+      id: entry.custom_activity_type_id ?? `snapshot:${entry.id ?? entry.entry_date}`,
+      baby_id: entry.baby_id ?? activeBabyId ?? '',
+      created_by: stored?.created_by ?? null,
+      name: entry.custom_name,
+      emoji: entry.custom_emoji,
+      color: entry.custom_color ?? '#5E3DB3',
+      tracking_mode: entry.custom_tracking_mode,
+      unit: entry.custom_unit ?? null,
+      default_quantity: null,
+      is_archived: stored?.is_archived ?? true,
+      created_at: stored?.created_at ?? entry.entry_date,
+      updated_at: stored?.updated_at ?? entry.entry_date,
+    };
+  };
+
+  const handleSaveCustomEntry = async (
+    payload: CustomActivityEntryPayload,
+    options: { startTimer: boolean },
+  ) => {
+    if (!ensureWritableInCurrentMode() || !activeBabyId || !selectedCustomActivity) return false;
+    const customPayload = {
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+      notes: payload.notes,
+      custom_activity_type_id: selectedCustomActivity.id.startsWith('snapshot:')
+        ? null
+        : selectedCustomActivity.id,
+      custom_name: selectedCustomActivity.name,
+      custom_emoji: selectedCustomActivity.emoji,
+      custom_color: selectedCustomActivity.color,
+      custom_tracking_mode: selectedCustomActivity.tracking_mode,
+      custom_quantity: payload.custom_quantity,
+      custom_unit: selectedCustomActivity.unit,
+    };
+
+    const result = editingCustomEntry?.id
+      ? await updateBabyCareEntry(editingCustomEntry.id, customPayload, activeBabyId)
+      : await addBabyCareEntry({ entry_type: 'custom', ...customPayload }, activeBabyId);
+
+    if (result.error || !result.data) {
+      Alert.alert(
+        t('common.error'),
+        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    if (options.startTimer) {
+      setActiveTimer({
+        id: result.data.id,
+        type: 'CUSTOM',
+        start: new Date(payload.start_time).getTime(),
+        label: selectedCustomActivity.name,
+        emoji: selectedCustomActivity.emoji,
+        color: selectedCustomActivity.color,
+      });
+    }
+
+    showSuccessSplash(
+      selectedCustomActivity.color,
+      selectedCustomActivity.emoji,
+      'custom',
+      options.startTimer,
+      selectedCustomActivity.name,
+    );
+    setEditingCustomEntry(null);
+    await invalidateDailyCache(activeBabyId);
+    if (visibleTab === 'week') await loadWeekEntries();
+    else if (visibleTab === 'month') await loadMonthEntries();
+    else await loadEntries();
+    return true;
   };
 
   useEffect(() => {
@@ -1822,7 +2129,13 @@ export default function DailyScreen() {
     }
   };
 
-  const showSuccessSplash = (hex: string, emoji: string, kind: string, timerStarted = false) => {
+  const showSuccessSplash = (
+    hex: string,
+    emoji: string,
+    kind: string,
+    timerStarted = false,
+    customName?: string,
+  ) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -1867,6 +2180,13 @@ export default function DailyScreen() {
       setSplashStatus('');
       setSplashHint(t('daily.waterHint'));
       setSplashHintEmoji('🚰');
+      setSplashText('');
+    } else if (kind === 'custom') {
+      setSplashTitle(t(timerStarted ? 'custom.running' : 'custom.saved', { name: customName ?? t('card.other') }));
+      setSplashSubtitle(timerStarted ? t('custom.timerHint') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint('');
+      setSplashHintEmoji('');
       setSplashText('');
     } else {
       setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('summary.diaper') }));
@@ -2019,7 +2339,7 @@ export default function DailyScreen() {
     return () => clearTimeout(timeoutId);
   }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isReadOnlyPreviewMode, isTimerHydrated, liveStopRequestId]);
 
-  const handleDeleteEntry = async (id: string) => {
+  const handleDeleteEntry = async (id: string, afterDelete?: () => void) => {
     if (!ensureWritableInCurrentMode()) return;
     Alert.alert(t('alert.deleteTitle'), t('alert.deleteQuestion'), [
       { text: t('common.cancel'), style: 'cancel' },
@@ -2049,6 +2369,7 @@ export default function DailyScreen() {
             loadEntries();
           }
 
+          afterDelete?.();
           Alert.alert(t('common.success'), t('alert.deleted'));
         },
       },
@@ -2766,6 +3087,9 @@ export default function DailyScreen() {
                 onHideAction={handleHideQuickAction}
                 onRestoreAction={handleRestoreQuickAction}
                 onReorderActions={handleReorderQuickActions}
+                onAddCustom={openNewCustomActivity}
+                onEditCustom={openCustomActivityEditor}
+                customActivities={activeCustomActivities}
                 hiddenActions={hiddenQuickActions}
                 actionOrder={quickActionOrder}
                 disabled={isReadOnlyPreviewMode}
@@ -2983,6 +3307,14 @@ export default function DailyScreen() {
                       onDelete={handleDeleteEntry}
                       onEdit={(entry) => {
                         if (!ensureWritableInCurrentMode()) return;
+                        if (entry.entry_type === 'custom') {
+                          const definition = resolveCustomActivityForEntry(entry);
+                          if (!definition) return;
+                          setSelectedCustomActivity(definition);
+                          setEditingCustomEntry(entry);
+                          setShowCustomEntryModal(true);
+                          return;
+                        }
                         setEditingEntry(entry);
                         if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
                         else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
@@ -3170,6 +3502,38 @@ export default function DailyScreen() {
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
+        />
+
+        <CustomActivityDefinitionModal
+          visible={showCustomDefinitionModal}
+          initialValue={editingCustomActivity}
+          onClose={() => {
+            setShowCustomDefinitionModal(false);
+            setEditingCustomActivity(null);
+          }}
+          onSave={handleSaveCustomActivityDefinition}
+          onArchive={editingCustomActivity ? handleArchiveCustomActivity : undefined}
+        />
+
+        <CustomActivityEntryModal
+          visible={showCustomEntryModal}
+          definition={selectedCustomActivity}
+          date={selectedDate}
+          initialData={editingCustomEntry}
+          onClose={() => {
+            setShowCustomEntryModal(false);
+            setSelectedCustomActivity(null);
+            setEditingCustomEntry(null);
+          }}
+          onSave={handleSaveCustomEntry}
+          onDelete={editingCustomEntry?.id ? () => {
+            const entryId = editingCustomEntry.id!;
+            void handleDeleteEntry(entryId, () => {
+              setShowCustomEntryModal(false);
+              setSelectedCustomActivity(null);
+              setEditingCustomEntry(null);
+            });
+          } : undefined}
         />
 
         <NightWakePrompt
@@ -3499,8 +3863,17 @@ const s = StyleSheet.create({
 
   // Quick actions as round glass buttons
   quickActionSection: { marginTop: SECTION_GAP_TOP },
-  quickScrollContainer: { paddingHorizontal: 4, paddingTop: 2 },
+  // Nur die Kreis-Reihe laeuft bis an den Bildschirmrand, damit angeschnittene
+  // Kreise nicht mitten im Inhalt haengen
+  quickListBleed: { marginHorizontal: -LAYOUT_PAD },
+  quickScrollContainer: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 6,
+    paddingBottom: 4,
+    alignItems: 'center',
+  },
   quickDragList: {
+    marginHorizontal: -LAYOUT_PAD,
     overflow: 'visible',
   },
   quickActionEditBar: {
@@ -3522,32 +3895,45 @@ const s = StyleSheet.create({
     fontWeight: '800',
   },
   circleButtonWrap: {
-    width: 100,
-    height: 100,
-    paddingTop: 4,
-    paddingLeft: 4,
+    width: QUICK_BUTTON_SIZE,
+    height: QUICK_BUTTON_SIZE,
     overflow: 'visible',
   },
   quickActionFooterWrap: {
-    marginLeft: 16,
+    marginLeft: QUICK_BUTTON_GAP,
   },
   circleButton: {
-    width: 96,
-    height: 96,
-    borderRadius: 48, // fully round
+    width: QUICK_BUTTON_SIZE,
+    height: QUICK_BUTTON_SIZE,
+    borderRadius: QUICK_BUTTON_SIZE / 2, // fully round
     borderWidth: 1,
     overflow: 'hidden',
   },
   circleButtonRestore: {
     justifyContent: 'center',
   },
-  circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  circleEmoji: { fontSize: 26 },
-  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  circleInner: {
+    flex: 1,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  circleEmoji: { fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  circleLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
   quickActionHideBadge: {
     position: 'absolute',
-    top: 0,
-    left: 0,
+    top: -4,
+    left: -4,
     width: 26,
     height: 26,
     borderRadius: 13,
@@ -3565,29 +3951,33 @@ const s = StyleSheet.create({
     marginTop: -1,
   },
   quickActionPlusBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   quickActionPlusBadgeText: {
     color: '#FFFFFF',
-    fontSize: 24,
+    fontSize: 22,
     lineHeight: 24,
     fontWeight: '800',
   },
   quickActionPlusLabel: {
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 14,
     fontWeight: '800',
+    textAlign: 'center',
+    alignSelf: 'stretch',
   },
   quickActionPlusMeta: {
-    marginTop: 4,
-    fontSize: 11,
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: '600',
     textAlign: 'center',
-    paddingHorizontal: 8,
+    alignSelf: 'stretch',
   },
 
   // KPI glass cards

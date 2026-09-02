@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -20,7 +19,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
-import ViewShot, { ViewShotRef } from 'react-native-view-shot';
+import ViewShot, { CaptureOptions, ViewShotRef } from 'react-native-view-shot';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedBackground } from '@/components/ThemedBackground';
@@ -41,7 +40,6 @@ import {
   MilestoneCategory,
   updateMilestoneEntry,
 } from '@/lib/milestones';
-import { generateMilestonePhotobookPdf } from '@/lib/milestonePhotobookPdf';
 import {
   DEFAULT_MILESTONE_LOCALE,
   formatBabyAgeAtMilestone,
@@ -66,12 +64,29 @@ const CATEGORY_ORDER: MilestoneCategory[] = [
 ];
 const PRIMARY_FILTERS: CategoryFilter[] = ['all', 'motorik', 'ernaehrung', 'sprache', 'zahn'];
 const MIN_VALID_MILESTONE_DATE = new Date(2000, 0, 1);
+const SHARE_CAPTURE_OPTIONS: CaptureOptions = Platform.select({
+  ios: {
+    format: 'jpg',
+    quality: 0.92,
+    result: 'tmpfile',
+    useRenderInContext: true,
+  },
+  default: {
+    format: 'jpg',
+    quality: 0.92,
+    result: 'tmpfile',
+    width: 1080,
+    height: 1350,
+  },
+});
 let ACTIVE_MILESTONE_LOCALE = DEFAULT_MILESTONE_LOCALE;
 let MILESTONE_DATE_LOCALE = getMilestoneLocaleTag(ACTIVE_MILESTONE_LOCALE);
 const t = (key: string, params?: Record<string, string | number>) =>
   translateMilestoneText(ACTIVE_MILESTONE_LOCALE, key, params);
 const categoryLabel = (category: MilestoneCategory) =>
   getMilestoneCategoryLabel(ACTIVE_MILESTONE_LOCALE, category);
+
+const toLocalFileUrl = (uri: string) => (uri.startsWith('file://') ? uri : `file://${uri}`);
 
 const toDateOnly = (date: Date) => {
   const y = date.getFullYear();
@@ -125,8 +140,6 @@ export default function MilestonesScreen() {
   const [sharePhotoAreaSize, setSharePhotoAreaSize] = useState({ width: 0, height: 0 });
   const [shareImageReady, setShareImageReady] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [exportingPhotobook, setExportingPhotobook] = useState(false);
-
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<MilestoneCategory>('motorik');
   const [eventDate, setEventDate] = useState(new Date());
@@ -357,6 +370,7 @@ export default function MilestonesScreen() {
     if (!shareEntry || !shareImageReady || sharing) return;
 
     setSharing(true);
+    let capturedUri: string | null = null;
     try {
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (!sharingAvailable) {
@@ -364,10 +378,10 @@ export default function MilestonesScreen() {
         return;
       }
 
-      const uri = await shareCardRef.current?.capture?.();
-      if (!uri) throw new Error(t('share.captureFailed'));
+      capturedUri = (await shareCardRef.current?.capture?.()) ?? null;
+      if (!capturedUri) throw new Error(t('share.captureFailed'));
 
-      await Sharing.shareAsync(uri, {
+      await Sharing.shareAsync(toLocalFileUrl(capturedUri), {
         dialogTitle: t('share.dialogTitle'),
         mimeType: 'image/jpeg',
         UTI: 'public.jpeg',
@@ -378,54 +392,8 @@ export default function MilestonesScreen() {
       console.error('Failed to share milestone:', error);
       Alert.alert(t('share.failedTitle'), t('share.failedBody'));
     } finally {
+      if (capturedUri) ViewShot.releaseCapture(capturedUri);
       setSharing(false);
-    }
-  };
-
-  const handleExportPhotobook = async () => {
-    if (!activeBabyId || exportingPhotobook) return;
-
-    setExportingPhotobook(true);
-    try {
-      const { data, error } = await getMilestoneEntries(activeBabyId);
-      if (error) throw error;
-      if (!data || data.length === 0) {
-        Alert.alert(t('photobook.emptyTitle'), t('photobook.emptyBody'));
-        return;
-      }
-
-      const result = await generateMilestonePhotobookPdf({
-        entries: data,
-        babyName: activeBaby?.name,
-        birthDate: activeBaby?.birth_date,
-        locale: ACTIVE_MILESTONE_LOCALE,
-      });
-
-      if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert(t('share.unavailableTitle'), t('photobook.pdfUnavailableBody'));
-        return;
-      }
-
-      await Sharing.shareAsync(result.uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: t('photobook.shareDialogTitle'),
-        UTI: 'com.adobe.pdf',
-      });
-
-      if (result.warnings.length > 0) {
-        Alert.alert(
-          t('photobook.createdTitle'),
-          t(`photobook.warning.${result.warnings.length === 1 ? 'one' : 'other'}`, {
-            pages: result.pageCount,
-            warnings: result.warnings.length,
-          })
-        );
-      }
-    } catch (error) {
-      console.error('Failed to export milestone photobook:', error);
-      Alert.alert(t('photobook.failedTitle'), t('photobook.failedBody'));
-    } finally {
-      setExportingPhotobook(false);
     }
   };
 
@@ -495,38 +463,6 @@ export default function MilestonesScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          <TouchableOpacity
-            style={[
-              styles.pdfExportButton,
-              { backgroundColor: chipBg, borderColor: cardBorder },
-              exportingPhotobook && styles.actionDisabled,
-            ]}
-            onPress={handleExportPhotobook}
-            disabled={exportingPhotobook || !activeBabyId}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel={t('photobook.exportAccessibility')}
-          >
-            <View style={[styles.pdfExportIcon, { backgroundColor: selectedChipBg }]}>
-              {exportingPhotobook ? (
-                <ActivityIndicator size="small" color={textPrimary} />
-              ) : (
-                <IconSymbol name="arrow.down.doc" size={19} color={textPrimary} />
-              )}
-            </View>
-            <View style={styles.pdfExportCopy}>
-              <ThemedText style={[styles.pdfExportTitle, { color: textPrimary }]}>
-                {exportingPhotobook ? t('photobook.exporting') : t('photobook.exportTitle')}
-              </ThemedText>
-              <ThemedText style={[styles.pdfExportSubtitle, { color: textSecondary }]}>
-                {t('photobook.exportSubtitle')}
-              </ThemedText>
-            </View>
-            {!exportingPhotobook ? (
-              <IconSymbol name="chevron.right" size={18} color={textSecondary} />
-            ) : null}
-          </TouchableOpacity>
 
           <FlatList
             data={entries}
@@ -744,7 +680,7 @@ export default function MilestonesScreen() {
               <ViewShot
                 ref={shareCardRef}
                 style={styles.shareCard}
-                options={{ format: 'jpg', quality: 0.96, result: 'tmpfile', width: 1080, height: 1350 }}
+                options={SHARE_CAPTURE_OPTIONS}
               >
                 <View style={styles.shareDecorationTop} />
                 <View style={styles.shareDecorationBottom} />
@@ -1077,9 +1013,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 28,
   },
-  actionDisabled: {
-    opacity: 0.45,
-  },
   readOnlyPreviewBanner: {
     marginHorizontal: 20,
     marginTop: 8,
@@ -1120,40 +1053,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
-  },
-  pdfExportButton: {
-    minHeight: 58,
-    marginTop: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 17,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-  },
-  pdfExportIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pdfExportCopy: {
-    flex: 1,
-    gap: 1,
-  },
-  pdfExportTitle: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontWeight: '800',
-  },
-  pdfExportSubtitle: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '500',
   },
   listContent: {
     paddingTop: 14,

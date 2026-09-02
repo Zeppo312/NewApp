@@ -43,6 +43,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'circle': 'radio-button-unchecked',
   'circle.fill': 'circle',
   'cart': 'shopping-cart',
+  'cart.fill': 'shopping-cart',
   'creditcard.fill': 'credit-card',
   'wallet.pass.fill': 'account-balance-wallet',
   'shippingbox': 'inventory-2',

@@ -33,6 +33,8 @@ type Props = {
   showLeadingCheckbox?: boolean; // default true for todo
   trailingCheckbox?: boolean; // when true, render checkbox at right instead of left
   isRecurring?: boolean;
+  /** Eigene Farbe des Eintrags; ohne Wert gilt der App-Akzent. */
+  accentColor?: string;
   style?: StyleProp<ViewStyle>;
   titleStyle?: StyleProp<TextStyle>;
   subtitleStyle?: StyleProp<TextStyle>;
@@ -52,6 +54,7 @@ export const SwipeableListItem: React.FC<Props> = ({
   showLeadingCheckbox = true,
   trailingCheckbox = false,
   isRecurring = false,
+  accentColor: accentColorOverride,
   style,
   titleStyle,
   subtitleStyle,
@@ -66,7 +69,8 @@ export const SwipeableListItem: React.FC<Props> = ({
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
     adaptiveColors.isDarkBackground;
-  const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
+  const accentColor =
+    accentColorOverride ?? (isDark ? adaptiveColors.accent : PRIMARY);
   const textPrimary = isDark ? Colors.dark.textPrimary : TEXT_PRIMARY;
   const textSecondary = isDark ? Colors.dark.textSecondary : TEXT_PRIMARY;
 

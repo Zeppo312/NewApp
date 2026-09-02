@@ -246,6 +246,7 @@ CREATE TABLE IF NOT EXISTS public.planner_items (
   start_at TIMESTAMPTZ,
   end_at TIMESTAMPTZ,
   reminder_minutes INTEGER,
+  color TEXT CHECK (color IS NULL OR color ~ '^#[0-9a-fA-F]{6}$'),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT planner_items_event_times CHECK (

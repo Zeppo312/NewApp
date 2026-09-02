@@ -33,4 +33,29 @@ describe('milestone translations', () => {
       'At 1 year, 1 month, and 2 days',
     );
   });
+
+  it('formats milestone ages when Intl.ListFormat is unavailable in Hermes', () => {
+    const originalListFormat = Intl.ListFormat;
+    Object.defineProperty(Intl, 'ListFormat', {
+      configurable: true,
+      value: undefined,
+    });
+
+    try {
+      expect(formatBabyAgeAtMilestone('2024-01-01', '2025-02-03', 'de')).toBe(
+        'Mit 1 Jahr, 1 Monat und 2 Tagen',
+      );
+      expect(formatBabyAgeAtMilestone('2024-01-01', '2025-02-03', 'en')).toBe(
+        'At 1 year, 1 month, and 2 days',
+      );
+      expect(formatBabyAgeAtMilestone('2024-01-01', '2025-02-03', 'es')).toBe(
+        'Con 1 año, 1 mes y 2 días',
+      );
+    } finally {
+      Object.defineProperty(Intl, 'ListFormat', {
+        configurable: true,
+        value: originalListFormat,
+      });
+    }
+  });
 });

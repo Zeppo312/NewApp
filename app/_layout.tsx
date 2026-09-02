@@ -56,11 +56,19 @@ import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import { clearSleepWidget, syncSleepWidget } from '@/lib/sleepWidget';
+import { loadNightWindowSettings } from '@/lib/nightWindowSettings';
+import { COMMUNITY_FALLBACK_ROUTE, isBlockedCommunityPath } from '@/lib/communityAccess';
 import {
   clearShoppingWidget,
   drainShoppingWidgetToggles,
   isShoppingWidgetSupported,
 } from '@/lib/shoppingWidget';
+import {
+  clearPlannerWidget,
+  drainPlannerWidgetToggles,
+  isPlannerWidgetSupported,
+} from '@/lib/plannerWidget';
 import {
   acknowledgeStartupMessage,
   getPendingStartupMessage,
@@ -238,7 +246,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!isShoppingWidgetSupported()) return undefined;
 
-    if (!userId || !activeBabyId) {
+    if (!userId) {
       void clearShoppingWidget();
       return undefined;
     }
@@ -248,7 +256,7 @@ function RootLayoutNav() {
       if (inFlight) return;
       inFlight = true;
       try {
-        await drainShoppingWidgetToggles(activeBabyId, { locale });
+        await drainShoppingWidgetToggles({ locale });
       } catch (error) {
         console.warn('Failed to sync shopping widget toggles:', error);
       } finally {
@@ -264,7 +272,41 @@ function RootLayoutNav() {
     return () => {
       sub.remove();
     };
-  }, [activeBabyId, locale, userId]);
+  }, [locale, userId]);
+
+  // Im Planer-Widget abgehakte Aufgaben nach Supabase nachziehen und den
+  // Tages-Snapshot auffrischen — auch wenn der Planer nie geöffnet wird und
+  // der gespeicherte Stand noch von gestern ist.
+  useEffect(() => {
+    if (!isPlannerWidgetSupported()) return undefined;
+
+    if (!userId) {
+      void clearPlannerWidget();
+      return undefined;
+    }
+
+    let inFlight = false;
+    const drain = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        await drainPlannerWidgetToggles({ userId, locale });
+      } catch (error) {
+        console.warn('Failed to sync planner widget toggles:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void drain();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void drain();
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [locale, userId]);
 
   useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
@@ -473,11 +515,21 @@ function RootLayoutNav() {
     }
   }, [userId, notificationSettingsLoaded, notificationsEnabled, requestPermissions]);
 
-  // Sleep Window Prediction für Benachrichtigungen berechnen
+  // Sperre für die nutzergenerierten Bereiche. Sitzt bewusst hier und nicht in
+  // den einzelnen Screens: so greift sie auch bei Deep Links, alten Push-Zielen
+  // und Verlaufseinträgen, ohne dass eine Route vergessen werden kann.
+  useEffect(() => {
+    if (!isBlockedCommunityPath(pathname)) return;
+    router.replace(COMMUNITY_FALLBACK_ROUTE as never);
+  }, [pathname, router]);
+
+  // Sleep Window Prediction für Benachrichtigungen berechnen — und, weil hier
+  // ohnehin Einträge und Vorhersage vorliegen, gleich das Schlaf-Widget füttern.
   useEffect(() => {
     if (!userId || !activeBabyId || !sleepEntriesService) {
       setSleepPrediction(null);
       setHasActiveSleepEntry(false);
+      void clearSleepWidget();
       return;
     }
 
@@ -493,6 +545,10 @@ function RootLayoutNav() {
         // Sichtbare Einträge (inkl. Partner) über denselben Service wie im Sleep Tracker laden
         const { data: entries, error } = await sleepEntriesService.getEntries(activeBabyId ?? undefined);
 
+        // Nur ein AsyncStorage-Lesevorgang; entscheidet im Widget darüber, was
+        // als Schläfchen und was als Nachtschlaf zählt.
+        const nightWindowSettings = await loadNightWindowSettings(userId);
+
         if (error) {
           console.error('Fehler beim Laden der Schlafeinträge für Prediction:', error);
           setSleepPrediction(null);
@@ -504,6 +560,12 @@ function RootLayoutNav() {
         if (hasActiveEntry) {
           // Während ein Sleep-Timer läuft, keine Schlafenszeit-Erinnerung planen.
           setSleepPrediction(null);
+          // Das Widget zeigt in diesem Fall die laufende Dauer, keine Vorhersage.
+          void syncSleepWidget((entries || []) as SleepEntry[], {
+            locale,
+            babyName: babyInfo?.name ?? null,
+            nightWindowSettings,
+          });
           return;
         }
 
@@ -526,6 +588,13 @@ function RootLayoutNav() {
         } else {
           setSleepPrediction(null);
         }
+
+        void syncSleepWidget((entries || []) as SleepEntry[], {
+          prediction,
+          locale,
+          babyName: babyInfo?.name ?? null,
+          nightWindowSettings,
+        });
       } catch (error) {
         console.error('Fehler beim Berechnen der Sleep Prediction:', error);
         setSleepPrediction(null);
@@ -537,7 +606,7 @@ function RootLayoutNav() {
     // Alle 5 Minuten aktualisieren
     const interval = setInterval(loadSleepPrediction, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [userId, activeBabyId, sleepEntriesService]);
+  }, [userId, activeBabyId, locale, sleepEntriesService]);
 
   // Feeding Prediction für Benachrichtigungen berechnen
   useEffect(() => {
@@ -808,7 +877,6 @@ function RootLayoutNav() {
         <Stack.Screen name="startup-message-admin" />
         <Stack.Screen name="pregnancy-stats" />
         <Stack.Screen name="pregnancy-briefing" />
-        <Stack.Screen name="shopping-list" />
         <Stack.Screen name="loyalty-cards" />
         <Stack.Screen name="prints-shop" />
         <Stack.Screen name="pregnancy-setup" />
