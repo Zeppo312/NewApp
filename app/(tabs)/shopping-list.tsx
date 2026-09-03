@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -35,41 +36,32 @@ import {
   RADIUS,
 } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { useNotifications } from '@/hooks/useNotifications';
 import {
   DEFAULT_SHOPPING_LOCALE,
   formatShoppingDate,
   formatShoppingQuantity,
   getShoppingCategoryLabel,
-  getShoppingLevelLabel,
   getShoppingLocaleTag,
-  getShoppingUnitLabel,
   translateShoppingText,
 } from '@/lib/shoppingTranslations';
 import {
-  adjustInventoryQuantity,
-  adjustSealedPackages,
   applyPurchaseToInventory,
-  computeDaysLeft,
-  computeTotalQuantity,
+  computeInventoryCount,
   deleteInventoryItem,
   deleteShoppingItem,
   deleteShoppingItems,
-  fetchInventoryUsageSummaries,
+  fetchProductDetails,
   fetchShoppingState,
   findInventoryItemByBarcode,
-  getInventoryLevelOption,
-  INVENTORY_LEVEL_OPTIONS,
   InventoryItem,
-  InventoryUsageSummary,
   isLowStock,
-  markInventoryReminded,
   normalizeItemName,
+  ProductDetails,
   refillInventoryFromProduct,
   resolveBarcodeProduct,
   ResolvedBarcodeProduct,
   saveProductToCatalog,
-  setInventoryStockLevel,
+  setInventoryCount,
   ShoppingListItem,
   toggleShoppingItemPurchased,
   upsertInventoryItem,
@@ -83,7 +75,7 @@ type SectionKey = 'shopping' | 'inventory' | 'scanner';
 type ShoppingNavigationKey = SectionKey | 'cards';
 type CategoryFilterKey = 'all' | string;
 type ShoppingSortKey = 'newest' | 'category' | 'name';
-type InventorySortKey = 'low_stock' | 'name' | 'category' | 'days_left';
+type InventorySortKey = 'low_stock' | 'name' | 'category';
 type ShoppingViewMode = 'list' | 'tiles';
 
 let ACTIVE_SHOPPING_LOCALE = DEFAULT_SHOPPING_LOCALE;
@@ -97,8 +89,6 @@ const DEFAULT_PACKAGE_UNIT = t('unit.package');
 
 const SECTIONS: { key: ShoppingNavigationKey; labelKey: string; icon: string }[] = [
   { key: 'shopping', labelKey: 'section.shopping', icon: 'cart' },
-  { key: 'inventory', labelKey: 'section.inventory', icon: 'shippingbox' },
-  { key: 'scanner', labelKey: 'section.scanner', icon: 'barcode.viewfinder' },
   { key: 'cards', labelKey: 'section.cards', icon: 'wallet.pass.fill' },
 ];
 
@@ -119,7 +109,6 @@ const INVENTORY_SORT_OPTIONS: { id: InventorySortKey; labelKey: string }[] = [
   { id: 'low_stock', labelKey: 'sort.lowStock' },
   { id: 'name', labelKey: 'sort.name' },
   { id: 'category', labelKey: 'sort.category' },
-  { id: 'days_left', labelKey: 'sort.daysLeft' },
 ];
 
 const categoryLabel = (id: string) =>
@@ -184,14 +173,34 @@ const matchesInventorySearch = (item: InventoryItem, query: string) => {
     .includes(query);
 };
 
-const isLevelTracked = (item: Partial<InventoryItem>) => item.tracking_mode === 'level';
+/** Packungsgröße als Info-Zeile, z. B. „800 g“ — null, wenn nichts bekannt ist. */
+const inventoryPackageLabel = (item: Pick<InventoryItem, 'package_quantity' | 'unit'>) => {
+  if (!item.package_quantity || item.package_quantity <= 0) return null;
+  if (!item.unit || item.unit === DEFAULT_PIECE_UNIT) return null;
+  return formatQuantity(item.package_quantity, item.unit);
+};
 
-const inventoryRemainingLabel = (item: InventoryItem) => {
-  if (isLevelTracked(item)) {
-    const level = getInventoryLevelOption(item.stock_level_percent);
-    return `${getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, level.percent)} (${level.percent} %)`;
-  }
-  return formatQuantity(computeTotalQuantity(item), item.unit);
+type ProductInfoState = {
+  item: InventoryItem;
+  details: ProductDetails | null;
+  loading: boolean;
+};
+
+const NUTRIENT_LABEL_KEYS: Record<string, string> = {
+  energy: 'info.nutrient.energy',
+  fat: 'info.nutrient.fat',
+  saturatedFat: 'info.nutrient.saturatedFat',
+  carbohydrates: 'info.nutrient.carbohydrates',
+  sugars: 'info.nutrient.sugars',
+  fiber: 'info.nutrient.fiber',
+  proteins: 'info.nutrient.proteins',
+  salt: 'info.nutrient.salt',
+};
+
+const formatNutrientValue = (value: number, unit: string) => {
+  const rounded = Math.round(value * 10) / 10;
+  const text = rounded.toLocaleString(SHOPPING_LOCALE_TAG, { maximumFractionDigits: 1 });
+  return `${text} ${unit}`;
 };
 
 const SCAN_DEBOUNCE_MS = 2500;
@@ -217,11 +226,6 @@ const buildZoomSteps = (lenses: string[]): ZoomStep[] => {
   steps.push({ label: '3x', lens: 'builtInWideAngleCamera', zoom: 0.3 });
   return steps;
 };
-const REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-
-const formatShortDate = (value: string) =>
-  formatShoppingDate(ACTIVE_SHOPPING_LOCALE, value, { day: '2-digit', month: '2-digit' });
-
 type ScanSheetState =
   | { mode: 'known'; product: Extract<ResolvedBarcodeProduct, { status: 'known' }>['product']; source: string }
   | { mode: 'unknown'; barcode: string }
@@ -230,18 +234,24 @@ type ScanSheetState =
 // Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
 
 /**
- * Wischbare Hülle für eine Vorratskarte: nach links wischen zeigt einen
- * Löschen-Button, der den bestehenden Bestätigungsdialog auslöst.
+ * Wischbare Hülle für eine Vorratskarte: nach links wischen zeigt Löschen,
+ * nach rechts wischen setzt den Posten auf die Einkaufsliste.
  */
 function InventorySwipeRow({
   children,
   onDelete,
+  onAddToList,
   deleteLabel,
+  addLabel,
+  isOnList,
   accessibilityLabel,
 }: {
   children: React.ReactNode;
   onDelete: () => void;
+  onAddToList: () => void;
   deleteLabel: string;
+  addLabel: string;
+  isOnList: boolean;
   accessibilityLabel: string;
 }) {
   const ref = useRef<Swipeable | null>(null);
@@ -249,12 +259,32 @@ function InventorySwipeRow({
     ref.current?.close();
     onDelete();
   };
+  const triggerAdd = () => {
+    ref.current?.close();
+    onAddToList();
+  };
   return (
     <Swipeable
       ref={ref}
       friction={2}
+      leftThreshold={48}
       rightThreshold={48}
+      overshootLeft={false}
       overshootRight={false}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'left') triggerAdd();
+      }}
+      renderLeftActions={() => (
+        <TouchableOpacity
+          style={[styles.inventorySwipeAdd, isOnList && styles.inventorySwipeAddDone]}
+          onPress={triggerAdd}
+          accessibilityRole="button"
+          accessibilityLabel={addLabel}
+        >
+          <IconSymbol name={isOnList ? 'checkmark' : 'cart'} size={22} color="#FFFFFF" />
+          <ThemedText style={styles.inventorySwipeDeleteText}>{addLabel}</ThemedText>
+        </TouchableOpacity>
+      )}
       renderRightActions={() => (
         <TouchableOpacity
           style={styles.inventorySwipeDelete}
@@ -293,7 +323,6 @@ function ShoppingListScreenContent() {
   const requestedReturnTarget = Array.isArray(returnTo) ? returnTo[0] : returnTo;
   const requestedReturnTargetRef = useRef(requestedReturnTarget);
   const backTargetRef = useRef<'home' | 'recipes'>('home');
-  const { hasPermission, scheduleNotification } = useNotifications();
 
   const [section, setSection] = useState<SectionKey>('shopping');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilterKey>('all');
@@ -307,12 +336,11 @@ function ShoppingListScreenContent() {
   const [isShoppingSearchVisible, setIsShoppingSearchVisible] = useState(false);
   const [collapsedInventoryCategories, setCollapsedInventoryCategories] = useState<string[]>([]);
   const [isAddShoppingExpanded, setIsAddShoppingExpanded] = useState(false);
-  const [expandedInventoryIds, setExpandedInventoryIds] = useState<Set<string>>(() => new Set());
   const [isPurchasedExpanded, setIsPurchasedExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [shoppingItems, setShoppingItems] = useState<ShoppingListItem[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [usageSummaries, setUsageSummaries] = useState<Record<string, InventoryUsageSummary>>({});
+  const [productInfo, setProductInfo] = useState<ProductInfoState | null>(null);
 
   const [newItemTitle, setNewItemTitle] = useState('');
   const [isAddingItem, setIsAddingItem] = useState(false);
@@ -369,8 +397,6 @@ function ShoppingListScreenContent() {
 
   const [unknownName, setUnknownName] = useState('');
   const [unknownCategory, setUnknownCategory] = useState('diapers');
-  const [unknownPackage, setUnknownPackage] = useState('');
-  const [unknownUnit, setUnknownUnit] = useState(DEFAULT_PIECE_UNIT);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -385,20 +411,12 @@ function ShoppingListScreenContent() {
   }, []);
 
   const loadState = useCallback(async () => {
-    const [{ data, error }, usageResult] = await Promise.all([
-      fetchShoppingState(),
-      fetchInventoryUsageSummaries(),
-    ]);
+    const { data, error } = await fetchShoppingState();
     if (error) {
       console.error('Failed to load shopping state:', error);
     } else if (data) {
       setShoppingItems(data.shoppingItems);
       setInventoryItems(data.inventoryItems);
-    }
-    if (usageResult.error) {
-      console.error('Failed to load inventory usage summaries:', usageResult.error);
-    } else if (usageResult.data) {
-      setUsageSummaries(usageResult.data);
     }
     setIsLoading(false);
   }, []);
@@ -481,18 +499,6 @@ function ShoppingListScreenContent() {
     return counts;
   }, [section, searchedInventoryItems, searchedShoppingItems]);
 
-  const lowStockShoppingSuggestions = useMemo(
-    () =>
-      lowStockItems.filter(
-        (inventoryItem) =>
-          !shoppingItems.some(
-            (shoppingItem) =>
-              !shoppingItem.is_purchased && shoppingItem.inventory_item_id === inventoryItem.id
-          )
-      ),
-    [lowStockItems, shoppingItems]
-  );
-
   const filteredShoppingItems = useMemo(() => {
     const filtered =
       selectedCategory === 'all'
@@ -527,39 +533,11 @@ function ShoppingListScreenContent() {
         if (byCategory !== 0) return byCategory;
         return a.name.localeCompare(b.name, SHOPPING_LOCALE_TAG);
       }
-      if (inventorySort === 'days_left') {
-        const aDays = computeDaysLeft(a) ?? Number.POSITIVE_INFINITY;
-        const bDays = computeDaysLeft(b) ?? Number.POSITIVE_INFINITY;
-        if (aDays !== bDays) return aDays - bDays;
-        return a.name.localeCompare(b.name, SHOPPING_LOCALE_TAG);
-      }
       const byLowStock = Number(isLowStock(b)) - Number(isLowStock(a));
       if (byLowStock !== 0) return byLowStock;
       return a.name.localeCompare(b.name, SHOPPING_LOCALE_TAG);
     });
   }, [selectedCategory, searchedInventoryItems, inventorySort]);
-
-  // Low-Stock: On-Page-Hinweis sofort, lokale Notification höchstens alle 24h je Posten.
-  useEffect(() => {
-    if (!hasPermission) return;
-    const now = Date.now();
-    for (const item of lowStockItems) {
-      if (!item.reminder_enabled) continue;
-      const lastReminded = item.last_reminded_at ? new Date(item.last_reminded_at).getTime() : 0;
-      if (now - lastReminded < REMINDER_COOLDOWN_MS) continue;
-      scheduleNotification(
-        t('inventory.lowNotificationTitle'),
-        t('inventory.lowNotificationBody', {
-          name: item.name,
-          remaining: inventoryRemainingLabel(item),
-        }),
-        { type: 'inventory_low', referenceId: item.id },
-        null,
-        `inventory_low_${item.id}`
-      );
-      markInventoryReminded(item.id);
-    }
-  }, [lowStockItems, hasPermission, scheduleNotification]);
 
   const applyInventoryUpdate = useCallback((updated: InventoryItem) => {
     setInventoryItems((items) =>
@@ -741,44 +719,30 @@ function ShoppingListScreenContent() {
   // --- Vorrat ---------------------------------------------------------------
 
   const handleAdjustQuantity = useCallback(
-    async (item: InventoryItem, delta: number, type: 'usage' | 'refill') => {
-      const { data, error } = await adjustInventoryQuantity(item, delta, type);
+    async (item: InventoryItem, delta: number) => {
+      const next = computeInventoryCount(item) + delta;
+      if (next < 0) return;
+      const { data, error } = await setInventoryCount(item, next);
       if (error || !data) {
         Alert.alert(t('common.error'), t('inventory.adjustFailed'));
         return;
       }
       applyInventoryUpdate(data);
-      setUsageSummaries((summaries) => ({
-        ...summaries,
-        [item.id]: {
-          inventory_item_id: item.id,
-          usedLast7Days:
-            (summaries[item.id]?.usedLast7Days ?? 0) + (delta < 0 ? Math.abs(delta) : 0),
-          lastTransactionAt: new Date().toISOString(),
-          lastQuantityChange: delta,
-        },
-      }));
     },
     [applyInventoryUpdate]
   );
 
-  // "+ Packung": bucht eine ganze versiegelte Packung zu (statt loser Menge).
-  const handleAddPackage = useCallback(
-    async (item: InventoryItem) => {
-      const { data, error } = await adjustSealedPackages(
-        item,
-        1,
-        'refill',
-        t('inventory.packageAddedNote')
-      );
-      if (error || !data) {
-        Alert.alert(t('common.error'), t('inventory.packageFailed'));
-        return;
-      }
-      applyInventoryUpdate(data);
-    },
-    [applyInventoryUpdate]
-  );
+  const openProductInfo = useCallback(async (item: InventoryItem) => {
+    if (!item.barcode) {
+      setProductInfo({ item, details: null, loading: false });
+      return;
+    }
+    setProductInfo({ item, details: null, loading: true });
+    const details = await fetchProductDetails(item.barcode);
+    setProductInfo((current) =>
+      current && current.item.id === item.id ? { item, details, loading: false } : current
+    );
+  }, []);
 
   const handleInventoryToShoppingList = useCallback(
     async (item: InventoryItem, showConfirmation = true) => {
@@ -795,13 +759,12 @@ function ShoppingListScreenContent() {
         }
         return;
       }
-      // Packungsartikel landen als "1 Packung" auf der Liste, lose Artikel als Menge.
-      const hasPackage = (item.package_quantity ?? 0) > 0;
+      // Vorratsposten landen als "1 Packung" auf der Liste.
       const { data, error } = await upsertShoppingItem({
         title: item.name,
         category: item.category,
-        quantity_value: isLevelTracked(item) ? null : hasPackage ? 1 : item.package_quantity,
-        quantity_unit: isLevelTracked(item) ? null : hasPackage ? DEFAULT_PACKAGE_UNIT : item.unit,
+        quantity_value: 1,
+        quantity_unit: DEFAULT_PACKAGE_UNIT,
         source_type: 'inventory',
         inventory_item_id: item.id,
       });
@@ -817,21 +780,6 @@ function ShoppingListScreenContent() {
     [shoppingItems]
   );
 
-  const handleSetStockLevel = useCallback(
-    async (item: InventoryItem, percent: number) => {
-      const { data, error } = await setInventoryStockLevel(item.id, percent);
-      if (error || !data) {
-        Alert.alert(t('common.error'), t('inventory.levelSaveFailed'));
-        return;
-      }
-      applyInventoryUpdate(data);
-      if (percent === 0) {
-        await handleInventoryToShoppingList(data, false);
-      }
-    },
-    [applyInventoryUpdate, handleInventoryToShoppingList]
-  );
-
   const handleSaveInventoryForm = useCallback(async () => {
     if (!editingInventory) return;
     const name = editingInventory.name?.trim() ?? '';
@@ -844,16 +792,16 @@ function ShoppingListScreenContent() {
       name,
       category: editingInventory.category ?? 'other',
       barcode: editingInventory.barcode ?? null,
-      current_quantity: editingInventory.current_quantity ?? 0,
-      packages_sealed: editingInventory.packages_sealed ?? 0,
+      current_quantity: Math.max(0, Math.round(editingInventory.current_quantity ?? 0)),
+      packages_sealed: 0,
       unit: editingInventory.unit ?? DEFAULT_PIECE_UNIT,
       package_quantity: editingInventory.package_quantity ?? null,
-      reorder_threshold: editingInventory.reorder_threshold ?? 0,
-      daily_usage_estimate: editingInventory.daily_usage_estimate ?? null,
+      reorder_threshold: 0,
+      daily_usage_estimate: null,
       dosage_grams_per_100ml: editingInventory.dosage_grams_per_100ml ?? null,
-      tracking_mode: editingInventory.tracking_mode ?? 'quantity',
-      stock_level_percent: editingInventory.stock_level_percent ?? 100,
-      reorder_level_percent: editingInventory.reorder_level_percent ?? 20,
+      tracking_mode: 'quantity',
+      stock_level_percent: 100,
+      reorder_level_percent: 0,
     });
     if (error || !data) {
       Alert.alert(t('common.error'), t('inventory.saveFailed'));
@@ -861,14 +809,7 @@ function ShoppingListScreenContent() {
     }
     applyInventoryUpdate(data);
     setEditingInventory(null);
-    if (isLevelTracked(data) && getInventoryLevelOption(data.stock_level_percent).percent === 0) {
-      await handleInventoryToShoppingList(data, false);
-    }
-  }, [
-    editingInventory,
-    applyInventoryUpdate,
-    handleInventoryToShoppingList,
-  ]);
+  }, [editingInventory, applyInventoryUpdate]);
 
   const handleDeleteInventory = useCallback((item: InventoryItem) => {
     Alert.alert(t('inventory.deleteTitle'), t('inventory.deleteQuestion', { name: item.name }), [
@@ -910,8 +851,6 @@ function ShoppingListScreenContent() {
       } else {
         setUnknownName('');
         setUnknownCategory('diapers');
-        setUnknownPackage('');
-        setUnknownUnit(DEFAULT_PIECE_UNIT);
         setScanSheet({ mode: 'unknown', barcode: data.barcode });
       }
     },
@@ -921,13 +860,12 @@ function ShoppingListScreenContent() {
   const handleRefillFromScan = useCallback(async () => {
     if (!scanSheet || scanSheet.mode !== 'known') return;
     const { product } = scanSheet;
-    const packageQuantity = product.packageQuantity ?? 1;
     const { data, error } = await refillInventoryFromProduct({
       barcode: product.barcode,
       name: product.name,
       category: product.category,
-      packageQuantity,
-      unit: product.unit ?? DEFAULT_PIECE_UNIT,
+      packageQuantity: product.packageQuantity,
+      unit: product.unit,
     });
     if (error || !data) {
       Alert.alert(t('common.error'), t('inventory.refillFailed'));
@@ -949,36 +887,25 @@ function ShoppingListScreenContent() {
     setScanSheet(null);
     Alert.alert(
       t('inventory.refilledTitle'),
-      isLevelTracked(data)
-        ? t('inventory.refilledLevel', { name: product.name })
-        : t('inventory.refilledPackage', {
-            name: product.name,
-            quantity: formatQuantity(packageQuantity, product.unit ?? DEFAULT_PIECE_UNIT),
-          })
+      t('inventory.refilledCount', { name: product.name, count: computeInventoryCount(data) })
     );
   }, [scanSheet, applyInventoryUpdate]);
 
   const handleConfirmUnknownProduct = useCallback(async () => {
     if (!scanSheet || scanSheet.mode !== 'unknown') return;
     const name = unknownName.trim();
-    const packageQuantity = parseFloat(unknownPackage.replace(',', '.'));
-    if (name.length === 0 || !Number.isFinite(packageQuantity) || packageQuantity <= 0) {
-      Alert.alert(t('common.error'), t('inventory.invalidProduct'));
+    if (name.length === 0) {
+      Alert.alert(t('common.error'), t('inventory.nameRequired'));
       return;
     }
     const product = {
       barcode: scanSheet.barcode,
       name,
       category: unknownCategory,
-      packageQuantity,
-      unit: unknownUnit.trim() || DEFAULT_PIECE_UNIT,
+      packageQuantity: null,
+      unit: null,
     };
-    const { error: catalogError } = await saveProductToCatalog({
-      ...product,
-      packageQuantity,
-      unit: product.unit,
-      provider: 'manual',
-    });
+    const { error: catalogError } = await saveProductToCatalog({ ...product, provider: 'manual' });
     if (catalogError) {
       console.error('Failed to save product to catalog:', catalogError);
     }
@@ -990,22 +917,9 @@ function ShoppingListScreenContent() {
     applyInventoryUpdate(data);
     setScanSheet(null);
     Alert.alert(t('inventory.savedTitle'), t('inventory.savedBody', { name }));
-  }, [scanSheet, unknownName, unknownCategory, unknownPackage, unknownUnit, applyInventoryUpdate]);
+  }, [scanSheet, unknownName, unknownCategory, applyInventoryUpdate]);
 
   // --- Rendering ----------------------------------------------------------------
-
-  const toggleInventoryExpanded = useCallback((itemId: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setExpandedInventoryIds((current) => {
-      const next = new Set(current);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
-      }
-      return next;
-    });
-  }, []);
 
   const togglePurchasedExpanded = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1687,28 +1601,22 @@ function ShoppingListScreenContent() {
   };
 
   const renderInventoryCard = (item: InventoryItem) => {
-    const levelTracked = isLevelTracked(item);
-    const levelOption = getInventoryLevelOption(item.stock_level_percent);
-    const daysLeft = computeDaysLeft(item);
+    const count = computeInventoryCount(item);
     const low = isLowStock(item);
-    const usageSummary = usageSummaries[item.id];
-    const totalQuantity = computeTotalQuantity(item);
-    const packageQuantity = item.package_quantity ?? 0;
-    const hasPackages = packageQuantity > 0;
-    const sealedPackages = item.packages_sealed ?? 0;
-    const openRatio = hasPackages
-      ? Math.max(0, Math.min(1, item.current_quantity / packageQuantity))
-      : 0;
-    const isExpanded = expandedInventoryIds.has(item.id);
     const isOnShoppingList = shoppingItems.some(
       (shoppingItem) =>
         !shoppingItem.is_purchased && shoppingItem.inventory_item_id === item.id
     );
+    const packageLabel = inventoryPackageLabel(item);
+    const iconColor = isDark ? '#C496F0' : PRIMARY;
     return (
       <InventorySwipeRow
         key={item.id}
         onDelete={() => handleDeleteInventory(item)}
+        onAddToList={() => handleInventoryToShoppingList(item, false)}
         deleteLabel={t('common.delete')}
+        addLabel={isOnShoppingList ? t('inventory.onList') : t('inventory.shoppingList')}
+        isOnList={isOnShoppingList}
         accessibilityLabel={t('inventory.deleteTitle')}
       >
       <LiquidGlassCard
@@ -1717,8 +1625,6 @@ function ShoppingListScreenContent() {
           isDark && styles.inventoryCardDark,
           low && styles.inventoryCardLow,
           low && isDark && styles.inventoryCardLowDark,
-          isExpanded && styles.inventoryCardExpanded,
-          isExpanded && isDark && styles.inventoryCardExpandedDark,
         ]}
         radius={INVENTORY_CARD_RADIUS}
         intensity={18}
@@ -1733,18 +1639,15 @@ function ShoppingListScreenContent() {
             : 'rgba(125,90,80,0.14)'
         }
       >
-        <TouchableOpacity
-          style={styles.inventoryCompactRow}
-          onPress={() => toggleInventoryExpanded(item.id)}
-          activeOpacity={0.82}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: isExpanded }}
-          accessibilityLabel={t(isExpanded ? 'inventory.collapse' : 'inventory.expand', {
-            name: item.name,
-          })}
-        >
+        <View style={styles.inventoryCompactRow}>
           <View style={[styles.inventoryStatusDot, low && styles.inventoryStatusDotLow]} />
-          <View style={styles.inventoryCompactText}>
+          <TouchableOpacity
+            style={styles.inventoryCompactText}
+            onPress={() => setEditingInventory(item)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel={t('inventory.editAccessibility', { name: item.name })}
+          >
             <View style={styles.inventoryNameRow}>
               <ThemedText
                 style={[styles.inventoryName, isDark && styles.inventoryNameDark]}
@@ -1756,282 +1659,49 @@ function ShoppingListScreenContent() {
                 <View style={styles.lowStockBadge}>
                   <IconSymbol name="exclamationmark.triangle.fill" size={12} color="#FFFFFF" />
                   <ThemedText style={styles.lowStockBadgeText}>
-                    {levelTracked && levelOption.percent === 0
-                      ? t('inventory.emptyLevel')
-                      : t('inventory.low')}
+                    {count === 0 ? t('inventory.emptyLevel') : t('inventory.low')}
                   </ThemedText>
                 </View>
               ) : null}
             </View>
             <ThemedText style={styles.inventoryCategory} numberOfLines={1}>
               {categoryLabel(item.category)}
-              {levelTracked
-                ? ` · ${t('inventory.simpleLevel')}`
-                : item.reorder_threshold > 0
-                ? ` · ${t('inventory.reorderAt', {
-                    quantity: formatQuantity(item.reorder_threshold, item.unit),
-                  })}`
-                : ''}
+              {packageLabel ? ` · ${packageLabel}` : ''}
+              {isOnShoppingList ? ` · ${t('inventory.onList')}` : ''}
             </ThemedText>
-          </View>
-          <View style={styles.inventoryCompactMetric}>
-            <ThemedText
-              style={[styles.inventoryCompactQuantity, low && styles.inventoryCompactQuantityLow]}
-              numberOfLines={1}
+          </TouchableOpacity>
+          <View style={[styles.quantityStepper, isDark && styles.quantityStepperDark]}>
+            <TouchableOpacity
+              style={[styles.stepperButton, count <= 0 && styles.stepperButtonDisabled]}
+              onPress={() => handleAdjustQuantity(item, -1)}
+              disabled={count <= 0}
+              accessibilityLabel={t('inventory.decreaseAccessibility', { name: item.name })}
             >
-              {levelTracked
-                ? getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, levelOption.percent)
-                : formatQuantity(totalQuantity, item.unit)}
-            </ThemedText>
-            <ThemedText
-              style={[styles.inventoryCompactMeta, isDark && styles.inventoryCompactMetaDark]}
-              numberOfLines={1}
+              <IconSymbol name="minus" size={18} color={count <= 0 ? 'rgba(125,90,80,0.35)' : iconColor} />
+            </TouchableOpacity>
+            <View style={[styles.stepperValue, isDark && styles.stepperValueDark]}>
+              <ThemedText style={[styles.stepperValueText, low && styles.inventoryCompactQuantityLow]}>
+                {count}
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              style={styles.stepperButton}
+              onPress={() => handleAdjustQuantity(item, 1)}
+              accessibilityLabel={t('inventory.increaseAccessibility', { name: item.name })}
             >
-              {levelTracked
-                ? t('inventory.levelPercent', { percent: levelOption.percent })
-                : daysLeft !== null
-                  ? t(`inventory.days.${daysLeft === 1 ? 'one' : 'other'}`, { count: daysLeft })
-                  : t('inventory.stock')}
-            </ThemedText>
+              <IconSymbol name="plus" size={18} color={iconColor} />
+            </TouchableOpacity>
           </View>
-          <IconSymbol
-            name={isExpanded ? 'chevron.up' : 'chevron.down'}
-            size={20}
-            color="rgba(125,90,80,0.65)"
-          />
-        </TouchableOpacity>
-
-        {isExpanded ? (
-          <View style={[styles.inventoryDetails, isDark && styles.inventoryDetailsDark]}>
-            <View style={styles.inventoryHero}>
-              <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
-                <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
-                  {levelTracked
-                    ? `${levelOption.percent} %`
-                    : formatQuantity(totalQuantity, item.unit)}
-                </ThemedText>
-                <ThemedText style={styles.inventoryHeroLabel}>
-                  {levelTracked ? t('inventory.level') : t('inventory.total')}
-                </ThemedText>
-              </View>
-              {levelTracked ? (
-                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
-                  <ThemedText style={[styles.inventoryHeroValue, low && styles.inventoryHeroValueLow]}>
-                    {getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, levelOption.percent)}
-                  </ThemedText>
-                  <ThemedText style={styles.inventoryHeroLabel}>{t('common.status')}</ThemedText>
-                </View>
-              ) : hasPackages ? (
-                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
-                  <ThemedText style={styles.inventoryHeroValue}>{sealedPackages}</ThemedText>
-                  <ThemedText style={styles.inventoryHeroLabel}>
-                    {t(`inventory.fullPackage.${sealedPackages === 1 ? 'one' : 'other'}`)}
-                  </ThemedText>
-                </View>
-              ) : null}
-              {!levelTracked && daysLeft !== null ? (
-                <View style={[styles.inventoryHeroTile, isDark && styles.inventoryHeroTileDark]}>
-                  <ThemedText style={styles.inventoryHeroValue}>~{daysLeft}</ThemedText>
-                  <ThemedText style={styles.inventoryHeroLabel}>{t('inventory.daysReach')}</ThemedText>
-                </View>
-              ) : null}
-            </View>
-
-            {levelTracked ? (
-              <View style={styles.packageProgressBlock}>
-                <View style={[styles.packageProgressTrack, isDark && styles.packageProgressTrackDark]}>
-                  <View
-                    style={[
-                      styles.packageProgressFill,
-                      { width: `${levelOption.percent}%` },
-                      low && styles.packageProgressFillLow,
-                    ]}
-                  />
-                </View>
-                <ThemedText style={styles.packageProgressLabel}>
-                  {t('inventory.levelHint')}
-                </ThemedText>
-              </View>
-            ) : hasPackages ? (
-              <View style={styles.packageProgressBlock}>
-                <View style={[styles.packageProgressTrack, isDark && styles.packageProgressTrackDark]}>
-                  <View
-                    style={[
-                      styles.packageProgressFill,
-                      { width: `${Math.round(openRatio * 100)}%` },
-                      low && styles.packageProgressFillLow,
-                    ]}
-                  />
-                </View>
-                <ThemedText style={styles.packageProgressLabel}>
-                  {t('inventory.openPackage', {
-                    current: formatQuantity(item.current_quantity, item.unit),
-                    total: formatQuantity(packageQuantity, item.unit),
-                  })}
-                </ThemedText>
-              </View>
-            ) : null}
-
-            {levelTracked ? (
-              <View style={styles.levelControlBlock}>
-                <ThemedText style={styles.inventoryControlLabel}>{t('inventory.setLevel')}</ThemedText>
-                <View style={styles.levelOptionsRow}>
-                  {INVENTORY_LEVEL_OPTIONS.map((option) => {
-                    const active = levelOption.percent === option.percent;
-                    return (
-                      <TouchableOpacity
-                        key={option.percent}
-                        style={[
-                          styles.levelOptionButton,
-                          isDark && styles.levelOptionButtonDark,
-                          active && styles.levelOptionButtonActive,
-                          option.percent === 0 && active && styles.levelOptionButtonEmpty,
-                        ]}
-                        onPress={() => handleSetStockLevel(item, option.percent)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={`${item.name}: ${getShoppingLevelLabel(
-                          ACTIVE_SHOPPING_LOCALE,
-                          option.percent
-                        )}`}
-                      >
-                        <ThemedText
-                          style={[
-                            styles.levelOptionValue,
-                            isDark && styles.levelOptionValueDark,
-                            active && styles.levelOptionValueActive,
-                          ]}
-                        >
-                          {option.percent} %
-                        </ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.levelOptionLabel,
-                            isDark && styles.levelOptionLabelDark,
-                            active && styles.levelOptionValueActive,
-                          ]}
-                        >
-                          {getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, option.percent)}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                {levelOption.percent === 0 ? (
-                  <View style={styles.levelEmptyHint}>
-                    <IconSymbol name="cart" size={14} color={PRIMARY} />
-                    <ThemedText style={styles.levelEmptyHintText}>
-                      {isOnShoppingList
-                        ? t('inventory.emptyOnList')
-                        : t('inventory.emptyWillAdd')}
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </View>
-            ) : (
-              <>
-                <View style={styles.usageSummaryRow}>
-                  <IconSymbol name="chart.line.uptrend.xyaxis" size={15} color={PRIMARY} />
-                  <ThemedText style={styles.usageSummaryText}>
-                    {t('inventory.usageSummary', {
-                      quantity: formatQuantity(usageSummary?.usedLast7Days ?? 0, item.unit),
-                    })}
-                    {usageSummary?.lastTransactionAt
-                      ? ` · ${t('inventory.lastBooking', {
-                          date: formatShortDate(usageSummary.lastTransactionAt),
-                        })}`
-                      : ''}
-                  </ThemedText>
-                </View>
-
-                <View style={styles.inventoryDetailControls}>
-                  <ThemedText style={styles.inventoryControlLabel}>{t('inventory.adjust')}</ThemedText>
-                  <View style={[styles.quantityStepper, isDark && styles.quantityStepperDark]}>
-                    <TouchableOpacity
-                      style={[styles.stepperButton, totalQuantity <= 0 && styles.stepperButtonDisabled]}
-                      onPress={() => handleAdjustQuantity(item, -1, 'usage')}
-                      disabled={totalQuantity <= 0}
-                      accessibilityLabel={t('inventory.decreaseAccessibility', { name: item.name })}
-                    >
-                      <IconSymbol
-                        name="minus"
-                        size={18}
-                        color={totalQuantity <= 0 ? 'rgba(125,90,80,0.35)' : PRIMARY}
-                      />
-                    </TouchableOpacity>
-                    <View style={[styles.stepperValue, isDark && styles.stepperValueDark]}>
-                      <ThemedText style={styles.stepperValueText}>
-                        {formatQuantity(totalQuantity, item.unit)}
-                      </ThemedText>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => handleAdjustQuantity(item, 1, 'refill')}
-                      accessibilityLabel={t('inventory.increaseAccessibility', { name: item.name })}
-                    >
-                      <IconSymbol name="plus" size={18} color={PRIMARY} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            )}
-
-            <View style={styles.inventoryActions}>
-              {!levelTracked && hasPackages ? (
-                <TouchableOpacity
-                  style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
-                  onPress={() => handleAddPackage(item)}
-                >
-                  <IconSymbol name="plus" size={15} color={isDark ? '#C496F0' : PRIMARY} />
-                  <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.package')}</ThemedText>
-                </TouchableOpacity>
-              ) : null}
-              {!levelTracked ? (
-                <TouchableOpacity
-                  style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
-                  onPress={() =>
-                    handleAdjustQuantity(item, -(item.daily_usage_estimate || 1), 'usage')
-                  }
-                >
-                  <IconSymbol name="minus" size={15} color={isDark ? '#C496F0' : PRIMARY} />
-                  <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.usage')}</ThemedText>
-                </TouchableOpacity>
-              ) : null}
-              <TouchableOpacity
-                style={[styles.inventoryActionButton, isDark && styles.inventoryActionButtonDark]}
-                onPress={() => setEditingInventory(item)}
-                accessibilityLabel={t('inventory.editAccessibility', { name: item.name })}
-              >
-                <IconSymbol name="pencil" size={15} color={isDark ? '#C496F0' : PRIMARY} />
-                <ThemedText style={[styles.inventoryActionText, isDark && styles.inventoryActionTextDark]}>{t('inventory.edit')}</ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.inventoryActionButton,
-                  isDark && styles.inventoryActionButtonDark,
-                  !isOnShoppingList && styles.inventoryActionPrimary,
-                  isOnShoppingList && styles.inventoryActionOnList,
-                ]}
-                onPress={() => handleInventoryToShoppingList(item)}
-              >
-                <IconSymbol
-                  name={isOnShoppingList ? 'checkmark' : 'cart'}
-                  size={15}
-                  color={isOnShoppingList ? (isDark ? '#C496F0' : PRIMARY) : '#FFFFFF'}
-                />
-                <ThemedText
-                  style={[
-                    styles.inventoryActionText,
-                    isDark && styles.inventoryActionTextDark,
-                    !isOnShoppingList && styles.inventoryActionPrimaryText,
-                  ]}
-                >
-                  {isOnShoppingList ? t('inventory.onList') : t('inventory.shoppingList')}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
+          <TouchableOpacity
+            style={styles.inventoryInfoButton}
+            onPress={() => openProductInfo(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={t('info.accessibility', { name: item.name })}
+          >
+            <IconSymbol name="info.circle" size={22} color={iconColor} />
+          </TouchableOpacity>
+        </View>
       </LiquidGlassCard>
       </InventorySwipeRow>
     );
@@ -2091,6 +1761,102 @@ function ShoppingListScreenContent() {
           </View>
         );
       });
+  };
+
+  const renderInfoRow = (label: string, value: string | null | undefined) =>
+    value ? (
+      <View style={styles.infoRow} key={label}>
+        <ThemedText style={styles.infoRowLabel}>{label}</ThemedText>
+        <ThemedText style={[styles.infoRowValue, isDark && styles.infoRowValueDark]}>{value}</ThemedText>
+      </View>
+    ) : null;
+
+  const renderInfoSection = (title: string, children: React.ReactNode) => (
+    <View style={styles.formSection}>
+      <ThemedText style={styles.formSectionTitle}>{title}</ThemedText>
+      <View style={[styles.infoSectionBody, isDark && styles.infoSectionBodyDark]}>{children}</View>
+    </View>
+  );
+
+  const renderProductInfo = ({ item, details }: ProductInfoState) => {
+    const basics = [
+      renderInfoRow(t('info.barcode'), item.barcode ?? t('form.noBarcode')),
+      renderInfoRow(t('info.category'), categoryLabel(item.category)),
+      renderInfoRow(t('info.count'), String(computeInventoryCount(item))),
+      renderInfoRow(t('info.package'), details?.quantity ?? inventoryPackageLabel(item)),
+    ];
+
+    if (!details) {
+      return (
+        <>
+          {renderInfoSection(t('info.basics'), basics)}
+          <ThemedText style={styles.helperText}>
+            {item.barcode ? t('info.notFound') : t('info.noBarcode')}
+          </ThemedText>
+        </>
+      );
+    }
+
+    const scores = [
+      renderInfoRow(t('info.nutriScore'), details.nutriScore),
+      renderInfoRow(t('info.novaGroup'), details.novaGroup ? String(details.novaGroup) : null),
+      renderInfoRow(t('info.ecoScore'), details.ecoScore),
+    ].filter(Boolean);
+    const origin = [
+      renderInfoRow(t('info.brand'), details.brand),
+      renderInfoRow(t('info.servingSize'), details.servingSize),
+      renderInfoRow(t('info.categories'), details.categories.join(', ') || null),
+      renderInfoRow(t('info.labels'), details.labels.join(', ') || null),
+      renderInfoRow(t('info.origins'), details.origins),
+      renderInfoRow(t('info.manufacturingPlaces'), details.manufacturingPlaces),
+      renderInfoRow(t('info.countries'), details.countries.join(', ') || null),
+      renderInfoRow(t('info.stores'), details.stores.join(', ') || null),
+      renderInfoRow(t('info.packaging'), details.packaging),
+    ].filter(Boolean);
+
+    return (
+      <>
+        {details.imageUrl ? (
+          <Image
+            source={{ uri: details.imageUrl }}
+            style={styles.infoImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
+        ) : null}
+        {renderInfoSection(t('info.basics'), basics)}
+        {scores.length > 0 ? renderInfoSection(t('info.scores'), scores) : null}
+        {origin.length > 0 ? renderInfoSection(t('info.origin'), origin) : null}
+        {details.ingredientsText
+          ? renderInfoSection(
+              t('info.ingredients'),
+              <ThemedText style={[styles.infoParagraph, isDark && styles.infoRowValueDark]}>
+                {details.ingredientsText}
+              </ThemedText>
+            )
+          : null}
+        {details.allergens.length > 0 || details.traces.length > 0
+          ? renderInfoSection(t('info.allergens'), [
+              renderInfoRow(t('info.contains'), details.allergens.join(', ') || null),
+              renderInfoRow(t('info.traces'), details.traces.join(', ') || null),
+            ])
+          : null}
+        {details.nutrients.length > 0
+          ? renderInfoSection(
+              t('info.nutrients'),
+              details.nutrients.map((nutrient) =>
+                renderInfoRow(
+                  t(NUTRIENT_LABEL_KEYS[nutrient.key] ?? nutrient.key),
+                  formatNutrientValue(nutrient.value, nutrient.unit)
+                )
+              )
+            )
+          : null}
+        <ThemedText style={styles.fieldFootnote}>
+          {t(`info.source.${details.source}`)}
+        </ThemedText>
+      </>
+    );
   };
 
   const renderScanner = () => {
@@ -2220,49 +1986,6 @@ function ShoppingListScreenContent() {
             contentContainerStyle={styles.contentContainer}
             contentInsetAdjustmentBehavior="automatic"
           >
-            {lowStockItems.length > 0 ? (
-              <LiquidGlassCard style={styles.card}>
-                <View style={styles.cardInner}>
-                  <View style={styles.lowStockHintRow}>
-                    <IconSymbol name="exclamationmark.triangle.fill" size={18} color="#D08945" />
-                    <ThemedText style={styles.lowStockHintText}>
-                      {lowStockItems.length === 1
-                        ? t('inventory.lowSingle', { name: lowStockItems[0].name })
-                        : t('inventory.lowMultiple', { count: lowStockItems.length })}
-                    </ThemedText>
-                  </View>
-                  {lowStockShoppingSuggestions.length > 0 ? (
-                    <View style={styles.suggestionList}>
-                      {lowStockShoppingSuggestions.slice(0, 3).map((item) => (
-                        <View
-                          key={item.id}
-                          style={[styles.suggestionRow, isDark && styles.suggestionRowDark]}
-                        >
-                          <View style={styles.suggestionTextBlock}>
-                            <ThemedText style={styles.suggestionTitle}>{item.name}</ThemedText>
-                            <ThemedText style={styles.suggestionMeta}>
-                              {t('inventory.remaining', {
-                                quantity: inventoryRemainingLabel(item),
-                              })}
-                            </ThemedText>
-                          </View>
-                          <TouchableOpacity
-                            style={styles.suggestionButton}
-                            onPress={() => handleInventoryToShoppingList(item)}
-                          >
-                            <IconSymbol name="plus" size={15} color="#FFFFFF" />
-                            <ThemedText style={styles.suggestionButtonText}>
-                              {t('inventory.listButton')}
-                            </ThemedText>
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              </LiquidGlassCard>
-            ) : null}
-
             {section === 'shopping' ? (
               <>
                 <View style={styles.shoppingSectionHeader}>
@@ -2348,9 +2071,7 @@ function ShoppingListScreenContent() {
                       setEditingInventory({
                         category: 'diapers',
                         unit: DEFAULT_PIECE_UNIT,
-                        tracking_mode: 'quantity',
-                        stock_level_percent: 100,
-                        reorder_level_percent: 20,
+                        current_quantity: 1,
                         reminder_enabled: true,
                       })
                     }
@@ -2469,23 +2190,6 @@ function ShoppingListScreenContent() {
                       </TouchableOpacity>
                     ))}
                   </View>
-                  <View style={styles.modalInputRow}>
-                    <TextInput
-                      style={[styles.modalInput, styles.modalInputHalf]}
-                      placeholder={t('scan.packageSize')}
-                      placeholderTextColor="rgba(125,90,80,0.5)"
-                      keyboardType="decimal-pad"
-                      value={unknownPackage}
-                      onChangeText={setUnknownPackage}
-                    />
-                    <TextInput
-                      style={[styles.modalInput, styles.modalInputHalf]}
-                      placeholder={t('scan.unit')}
-                      placeholderTextColor="rgba(125,90,80,0.5)"
-                      value={unknownUnit}
-                      onChangeText={setUnknownUnit}
-                    />
-                  </View>
                   <TouchableOpacity style={styles.primaryButton} onPress={handleConfirmUnknownProduct}>
                     <ThemedText style={styles.primaryButtonText}>{t('scan.saveAndRefill')}</ThemedText>
                   </TouchableOpacity>
@@ -2574,14 +2278,7 @@ function ShoppingListScreenContent() {
                             editingInventory?.category === categoryId && styles.categoryChipActive,
                           ]}
                           onPress={() =>
-                            setEditingInventory((prev) => ({
-                              ...prev,
-                              category: categoryId,
-                              tracking_mode:
-                                !prev?.id && categoryId === 'care'
-                                  ? 'level'
-                                  : prev?.tracking_mode ?? 'quantity',
-                            }))
+                            setEditingInventory((prev) => ({ ...prev, category: categoryId }))
                           }
                         >
                           <ThemedText
@@ -2601,303 +2298,49 @@ function ShoppingListScreenContent() {
 
                 <View style={styles.formSection}>
                   <ThemedText style={styles.formSectionTitle}>{t('form.stock')}</ThemedText>
-                  <View style={styles.trackingModeRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.trackingModeButton,
-                        !isLevelTracked(editingInventory ?? {}) && styles.trackingModeButtonActive,
-                      ]}
-                      onPress={() =>
-                        setEditingInventory((prev) => ({ ...prev, tracking_mode: 'quantity' }))
-                      }
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: !isLevelTracked(editingInventory ?? {}) }}
-                    >
-                      <IconSymbol
-                        name="number"
-                        size={17}
-                        color={!isLevelTracked(editingInventory ?? {}) ? '#FFFFFF' : PRIMARY}
-                      />
-                      <View style={styles.trackingModeTextBlock}>
-                        <ThemedText
-                          style={[
-                            styles.trackingModeTitle,
-                            !isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
-                          ]}
-                        >
-                          {t('form.exactQuantity')}
-                        </ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.trackingModeSubtitle,
-                            !isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
-                          ]}
-                        >
-                          {t('form.exactQuantityHint')}
-                        </ThemedText>
-                      </View>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.trackingModeButton,
-                        isLevelTracked(editingInventory ?? {}) && styles.trackingModeButtonActive,
-                      ]}
-                      onPress={() =>
-                        setEditingInventory((prev) => ({
-                          ...prev,
-                          tracking_mode: 'level',
-                          stock_level_percent: prev?.stock_level_percent ?? 100,
-                          reorder_level_percent: prev?.reorder_level_percent ?? 20,
-                        }))
-                      }
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isLevelTracked(editingInventory ?? {}) }}
-                    >
-                      <IconSymbol
-                        name="chart.bar.fill"
-                        size={17}
-                        color={isLevelTracked(editingInventory ?? {}) ? '#FFFFFF' : PRIMARY}
-                      />
-                      <View style={styles.trackingModeTextBlock}>
-                        <ThemedText
-                          style={[
-                            styles.trackingModeTitle,
-                            isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
-                          ]}
-                        >
-                          {t('form.level')}
-                        </ThemedText>
-                        <ThemedText
-                          style={[
-                            styles.trackingModeSubtitle,
-                            isLevelTracked(editingInventory ?? {}) && styles.trackingModeTextActive,
-                          ]}
-                        >
-                          {t('form.levelHint')}
-                        </ThemedText>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-
-                  {isLevelTracked(editingInventory ?? {}) ? (
-                    <>
-                      <ThemedText style={styles.fieldLabel}>{t('form.currentLevel')}</ThemedText>
-                      <View style={styles.levelOptionsRow}>
-                        {INVENTORY_LEVEL_OPTIONS.map((option) => {
-                          const active =
-                            getInventoryLevelOption(editingInventory?.stock_level_percent).percent ===
-                            option.percent;
-                          return (
-                            <TouchableOpacity
-                              key={option.percent}
-                              style={[
-                                styles.levelOptionButton,
-                                isDark && styles.levelOptionButtonDark,
-                                active && styles.levelOptionButtonActive,
-                                option.percent === 0 && active && styles.levelOptionButtonEmpty,
-                              ]}
-                              onPress={() =>
-                                setEditingInventory((prev) => ({
-                                  ...prev,
-                                  stock_level_percent: option.percent,
-                                }))
-                              }
-                              accessibilityRole="button"
-                              accessibilityState={{ selected: active }}
-                            >
-                              <ThemedText
-                                style={[
-                                  styles.levelOptionValue,
-                                  isDark && styles.levelOptionValueDark,
-                                  active && styles.levelOptionValueActive,
-                                ]}
-                              >
-                                {option.percent} %
-                              </ThemedText>
-                              <ThemedText
-                                style={[
-                                  styles.levelOptionLabel,
-                                  isDark && styles.levelOptionLabelDark,
-                                  active && styles.levelOptionValueActive,
-                                ]}
-                              >
-                                {getShoppingLevelLabel(ACTIVE_SHOPPING_LOCALE, option.percent)}
-                              </ThemedText>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      <ThemedText style={styles.fieldFootnote}>
-                        {t('form.levelFootnote')}
-                      </ThemedText>
-                    </>
-                  ) : (
-                    <>
-                  <View style={styles.modalInputRow}>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.openPackage')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="0"
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        keyboardType="decimal-pad"
-                        value={
-                          editingInventory?.current_quantity !== undefined
-                            ? String(editingInventory.current_quantity)
-                            : ''
-                        }
-                        onChangeText={(value) =>
+                  <View style={styles.fieldBlock}>
+                    <ThemedText style={styles.fieldLabel}>{t('form.count')}</ThemedText>
+                    <View style={[styles.quantityStepper, styles.formStepper, isDark && styles.quantityStepperDark]}>
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() =>
                           setEditingInventory((prev) => ({
                             ...prev,
-                            current_quantity: parseFloat(value.replace(',', '.')) || 0,
+                            current_quantity: Math.max(0, Math.round(prev?.current_quantity ?? 0) - 1),
                           }))
                         }
-                      />
-                    </View>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.unit')}</ThemedText>
+                        accessibilityLabel={t('form.countDecrease')}
+                      >
+                        <IconSymbol name="minus" size={18} color={isDark ? '#C496F0' : PRIMARY} />
+                      </TouchableOpacity>
                       <TextInput
-                        style={styles.modalInput}
-                        placeholder={t('form.unitPlaceholder')}
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        value={
-                          editingInventory?.unit
-                            ? getShoppingUnitLabel(ACTIVE_SHOPPING_LOCALE, editingInventory.unit)
-                            : ''
-                        }
-                        onChangeText={(unit) => setEditingInventory((prev) => ({ ...prev, unit }))}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.modalInputRow}>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.packageSize')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder={t('form.packageSizePlaceholder')}
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        keyboardType="decimal-pad"
-                        value={
-                          editingInventory?.package_quantity != null
-                            ? String(editingInventory.package_quantity)
-                            : ''
-                        }
-                        onChangeText={(value) =>
-                          setEditingInventory((prev) => ({
-                            ...prev,
-                            package_quantity: parseFloat(value.replace(',', '.')) || null,
-                          }))
-                        }
-                      />
-                    </View>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.fullPackages')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="0"
-                        placeholderTextColor="rgba(125,90,80,0.5)"
+                        style={[styles.modalInput, styles.formStepperInput]}
                         keyboardType="number-pad"
-                        value={
-                          editingInventory?.packages_sealed != null
-                            ? String(editingInventory.packages_sealed)
-                            : ''
-                        }
+                        value={String(Math.max(0, Math.round(editingInventory?.current_quantity ?? 0)))}
                         onChangeText={(value) =>
                           setEditingInventory((prev) => ({
                             ...prev,
-                            packages_sealed: parseInt(value, 10) || 0,
+                            current_quantity: Math.max(0, parseInt(value.replace(/[^0-9]/g, ''), 10) || 0),
                           }))
                         }
+                        selectTextOnFocus
                       />
+                      <TouchableOpacity
+                        style={styles.stepperButton}
+                        onPress={() =>
+                          setEditingInventory((prev) => ({
+                            ...prev,
+                            current_quantity: Math.round(prev?.current_quantity ?? 0) + 1,
+                          }))
+                        }
+                        accessibilityLabel={t('form.countIncrease')}
+                      >
+                        <IconSymbol name="plus" size={18} color={isDark ? '#C496F0' : PRIMARY} />
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <ThemedText style={styles.fieldFootnote}>
-                    {t('form.totalFootnote')}
-                  </ThemedText>
-                    </>
-                  )}
+                  <ThemedText style={styles.fieldFootnote}>{t('form.countFootnote')}</ThemedText>
                 </View>
-
-                {!isLevelTracked(editingInventory ?? {}) ? (
-                  <View style={styles.formSection}>
-                  <ThemedText style={styles.formSectionTitle}>{t('form.reorderAndUsage')}</ThemedText>
-                  <View style={styles.modalInputRow}>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.reorderAt')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder={t('form.reorderPlaceholder')}
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        keyboardType="decimal-pad"
-                        value={
-                          editingInventory?.reorder_threshold !== undefined
-                            ? String(editingInventory.reorder_threshold)
-                            : ''
-                        }
-                        onChangeText={(value) =>
-                          setEditingInventory((prev) => ({
-                            ...prev,
-                            reorder_threshold: parseFloat(value.replace(',', '.')) || 0,
-                          }))
-                        }
-                      />
-                    </View>
-                    <View style={[styles.fieldBlock, styles.modalInputHalf]}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.dailyUsage')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder={t('form.dailyUsagePlaceholder')}
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        keyboardType="decimal-pad"
-                        value={
-                          editingInventory?.daily_usage_estimate != null
-                            ? String(editingInventory.daily_usage_estimate)
-                            : ''
-                        }
-                        onChangeText={(value) =>
-                          setEditingInventory((prev) => ({
-                            ...prev,
-                            daily_usage_estimate: parseFloat(value.replace(',', '.')) || null,
-                          }))
-                        }
-                      />
-                    </View>
-                  </View>
-                  <ThemedText style={styles.fieldFootnote}>
-                    {t('form.reorderFootnote')}
-                  </ThemedText>
-                  </View>
-                ) : null}
-
-                {editingInventory?.category === 'formula' &&
-                !isLevelTracked(editingInventory ?? {}) ? (
-                  <View style={styles.formSection}>
-                    <ThemedText style={styles.formSectionTitle}>{t('form.dosage')}</ThemedText>
-                    <View style={styles.fieldBlock}>
-                      <ThemedText style={styles.fieldLabel}>{t('form.dosageLabel')}</ThemedText>
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder={t('form.dosagePlaceholder')}
-                        placeholderTextColor="rgba(125,90,80,0.5)"
-                        keyboardType="decimal-pad"
-                        value={
-                          editingInventory?.dosage_grams_per_100ml != null
-                            ? String(editingInventory.dosage_grams_per_100ml).replace('.', ',')
-                            : ''
-                        }
-                        onChangeText={(value) =>
-                          setEditingInventory((prev) => ({
-                            ...prev,
-                            dosage_grams_per_100ml: parseFloat(value.replace(',', '.')) || null,
-                          }))
-                        }
-                      />
-                    </View>
-                    <ThemedText style={styles.fieldFootnote}>
-                      {t('form.dosageFootnote')}
-                    </ThemedText>
-                  </View>
-                ) : null}
               </ScrollView>
               <View style={styles.formFooter}>
                 <TouchableOpacity style={styles.primaryButton} onPress={handleSaveInventoryForm}>
@@ -2920,6 +2363,51 @@ function ShoppingListScreenContent() {
               </View>
             </View>
           </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Produkt-Info */}
+        <Modal
+          visible={productInfo !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setProductInfo(null)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <View style={styles.formHeaderRow}>
+                <View style={styles.formHeaderText}>
+                  <ThemedText style={styles.modalTitle}>
+                    {productInfo?.details?.name ?? productInfo?.item.name ?? ''}
+                  </ThemedText>
+                  <ThemedText style={styles.formHeaderSubtitle}>
+                    {productInfo?.details?.brand ??
+                      (productInfo?.item ? categoryLabel(productInfo.item.category) : '')}
+                  </ThemedText>
+                </View>
+                <TouchableOpacity
+                  style={styles.formCloseButton}
+                  onPress={() => setProductInfo(null)}
+                  accessibilityLabel={t('common.close')}
+                >
+                  <IconSymbol name="xmark" size={15} color={PRIMARY} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                style={styles.formScroll}
+                contentContainerStyle={styles.formScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {productInfo?.loading ? (
+                  <View style={styles.infoLoading}>
+                    <ActivityIndicator color={PRIMARY} />
+                    <ThemedText style={styles.helperText}>{t('info.loading')}</ThemedText>
+                  </View>
+                ) : productInfo ? (
+                  renderProductInfo(productInfo)
+                ) : null}
+              </ScrollView>
+            </View>
+          </View>
         </Modal>
 
         {/* Einkauf per Barcode abhaken */}
@@ -3368,6 +2856,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  inventorySwipeAdd: {
+    width: 104,
+    marginRight: 8,
+    borderRadius: INVENTORY_CARD_RADIUS,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  inventorySwipeAddDone: { backgroundColor: '#5E9E6B' },
+  inventoryInfoButton: { paddingLeft: 4, paddingVertical: 4 },
+  formStepper: { alignSelf: 'flex-start' },
+  formStepperInput: {
+    width: 72,
+    textAlign: 'center',
+    paddingVertical: 6,
+    fontVariant: ['tabular-nums'],
+  },
+  infoLoading: { alignItems: 'center', gap: 10, paddingVertical: 24 },
+  infoImage: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  infoSectionBody: {
+    borderRadius: 12,
+    backgroundColor: 'rgba(125,90,80,0.06)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  infoSectionBodyDark: { backgroundColor: 'rgba(255,255,255,0.08)' },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 7,
+  },
+  infoRowLabel: { fontSize: 13, opacity: 0.65, flexShrink: 0 },
+  infoRowValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3A2E20',
+    flex: 1,
+    textAlign: 'right',
+  },
+  infoRowValueDark: { color: '#F5EFEA' },
+  infoParagraph: { fontSize: 13, lineHeight: 19, paddingVertical: 8, color: '#3A2E20' },
   inventoryCardDark: {
     backgroundColor: 'rgba(18,15,22,0.52)',
   },

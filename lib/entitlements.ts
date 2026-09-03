@@ -110,12 +110,12 @@ export const LOCKED_FEATURE_COPY: Record<AppFeature, LockedFeatureCopy> = {
     requiredTier: "standard",
   },
   shoppingList: {
-    title: "Einkaufslisten",
-    subtitle: "Windeln fast leer? Einmal eintragen, beide sehen es.",
+    title: "Einkauf",
+    subtitle: "Einkaufslisten und Kundenkarten an einem Ort.",
     bullets: [
       "Geteilte Listen für euch beide",
-      "Vorrats-Erinnerungen bei niedrigem Bestand",
-      "Vorlagen für Baby-Erstausstattung",
+      "Kundenkarten schnell griffbereit",
+      "Gemeinsame Aktualisierung in Echtzeit",
     ],
     requiredTier: "standard",
   },

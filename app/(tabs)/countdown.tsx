@@ -23,7 +23,7 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import CountdownTimer from '@/components/CountdownTimer';
+import PregnancyHeroCarousel from '@/components/PregnancyHeroCarousel';
 import { supabase, hasGeburtsplan, getDueDateWithLinkedUsers, updateDueDateAndSync } from '@/lib/supabase';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -36,12 +36,11 @@ import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
 import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/constants/BirthPreparationMeasures';
-import { babySizeData } from '@/lib/baby-size-data';
+import BabySizeDetail from '@/components/BabySizeDetail';
 import Header from '@/components/Header';
 import {
   CountdownTranslationKey,
   DEFAULT_COUNTDOWN_LOCALE,
-  getCountdownFruitComparison,
   getCountdownLocaleTag,
   getLocalizedOverdueInfo,
   getLocalizedPregnancyInfo,
@@ -64,36 +63,6 @@ let ACTIVE_COUNTDOWN_LOCALE = DEFAULT_COUNTDOWN_LOCALE;
 let COUNTDOWN_LOCALE_TAG = getCountdownLocaleTag(ACTIVE_COUNTDOWN_LOCALE);
 const t = (key: CountdownTranslationKey, params?: Record<string, string | number>) =>
   translateCountdownText(ACTIVE_COUNTDOWN_LOCALE, key, params);
-
-const fruitEmoji: Record<string, string> = {
-  'Mohnkorn': '🌱',
-  'Apfelkern': '🍎',
-  'Erbse': '🟢',
-  'Heidelbeere': '🫐',
-  'Himbeere': '🍇',
-  'Erdbeere': '🍓',
-  'Aprikose': '🍑',
-  'Limette': '🍈',
-  'Zwetschge': '🟣',
-  'Pfirsich': '🍑',
-  'Zitrone': '🍋',
-  'Orange': '🍊',
-  'Avocado': '🥑',
-  'Süßkartoffel': '🍠',
-  'Mango': '🥭',
-  'Papaya': '🍈',
-  'Aubergine': '🍆',
-  'Kürbis': '🎃',
-  'Honigmelone': '🍈',
-  'Wassermelone': '🍉',
-};
-
-const getFruitEmoji = (comparison: string): string => {
-  for (const [key, emoji] of Object.entries(fruitEmoji)) {
-    if (comparison.includes(key)) return emoji;
-  }
-  return '🍼';
-};
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace('#', '');
@@ -271,6 +240,7 @@ export default function CountdownScreen() {
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [linkedUsers, setLinkedUsers] = useState<LinkedUser[]>([]);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
+  const [selectedBabySizeWeek, setSelectedBabySizeWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
   const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
@@ -529,7 +499,7 @@ export default function CountdownScreen() {
     }
     setIsGeneratingPDF(true);
     try {
-      await generateAndDownloadPDF(babyIconBase64 || '', setIsGeneratingPDF);
+      await generateAndDownloadPDF(babyIconBase64 || '', setIsGeneratingPDF, ACTIVE_COUNTDOWN_LOCALE);
     } catch (error) {
       console.error('Error generating PDF:', error);
       Alert.alert(t('common.error'), t('alert.pdfFailed'));
@@ -619,60 +589,27 @@ export default function CountdownScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* Countdown im Glas-Card */}
-          <LiquidGlassCard style={styles.sectionCard} intensity={30} overlayColor={glassOverlay}>
-            <View style={styles.heroHeader}>
-              <View style={styles.heroCopy}>
-                <ThemedText style={[styles.heroEyebrow, { color: accentPurple }]}>
-                  {t('hero.eyebrow')}
-                </ThemedText>
-                <ThemedText style={[styles.heroTitle, { color: textPrimary }]}>
-                  {currentWeek !== null && currentDay !== null
-                    ? t('hero.week', { week: Math.max(0, currentWeek - 1), day: currentDay })
-                    : t('hero.waiting')}
-                </ThemedText>
-              </View>
-              <View style={[styles.heroIcon, { backgroundColor: toRgba(accentPurple, isDark ? 0.24 : 0.12) }]}>
-                <IconSymbol name="heart.fill" size={20} color={accentPurple} />
-              </View>
-            </View>
-            <CountdownTimer dueDate={dueDate} variant="embedded" locale={ACTIVE_COUNTDOWN_LOCALE} />
-          </LiquidGlassCard>
+          {/* Countdown, Fortschritt & Teilen als Karussell */}
+          <PregnancyHeroCarousel
+            dueDate={dueDate}
+            locale={ACTIVE_COUNTDOWN_LOCALE}
+            isDark={isDark}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            accent={accentPurple}
+            glassOverlay={glassOverlay}
+            cardStyle={styles.sectionCard}
+            disabled={isReadOnlyPreviewMode}
+          />
 
-          {/* Babygröße Highlight */}
-          {currentWeek && currentWeek >= 4 && !isOverdue && (() => {
-            const sizeData = babySizeData.find((d) => d.week === currentWeek);
-            if (!sizeData) return null;
-            const emoji = getFruitEmoji(sizeData.fruitComparison);
-            return (
-              <TouchableOpacity
-                onPress={() => router.push({ pathname: '/baby-size', params: { week: String(currentWeek) } })}
-                activeOpacity={0.9}
-                style={styles.babySizeTouchTarget}
-                accessibilityRole="button"
-                accessibilityLabel={t('babySize.accessibility', { week: currentWeek })}
-              >
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
-                  <View style={styles.babySizeRow}>
-                    <View style={[styles.babySizeEmojiWrap, { backgroundColor: isDark ? toRgba(accentPurple, 0.2) : 'rgba(142,78,198,0.12)', borderColor: pillPrimaryBorder }]}>
-                      <ThemedText style={styles.babySizeEmoji}>{emoji}</ThemedText>
-                    </View>
-                    <View style={styles.babySizeTextWrap}>
-                      <ThemedText style={[styles.babySizeFruit, { color: textPrimary }]}>
-                        {t('babySize.title', {
-                          comparison: getCountdownFruitComparison(ACTIVE_COUNTDOWN_LOCALE, sizeData.fruitComparison),
-                        })}
-                      </ThemedText>
-                      <ThemedText style={[styles.babySizeMeta, { color: textSecondary }]}>
-                        {t('babySize.meta', { length: sizeData.length, weight: sizeData.weight })}
-                      </ThemedText>
-                    </View>
-                    <IconSymbol name="chevron.right" size={16} color={textSecondary} />
-                  </View>
-                </LiquidGlassCard>
-              </TouchableOpacity>
-            );
-          })()}
+          {/* Babygröße */}
+          {currentWeek && currentWeek >= 4 && !isOverdue && (
+            <BabySizeDetail
+              week={selectedBabySizeWeek ?? currentWeek}
+              onWeekChange={setSelectedBabySizeWeek}
+              cardStyle={styles.babySizeCard}
+            />
+          )}
 
           {/* Entbindungstermin */}
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
@@ -1043,34 +980,6 @@ const styles = StyleSheet.create({
   },
   readOnlyPreviewTextDark: { color: '#FFD889' },
 
-  heroHeader: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    gap: 12,
-  },
-  heroCopy: { flex: 1 },
-  heroEyebrow: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-    marginBottom: 4,
-  },
-  heroTitle: {
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '800',
-  },
-  heroIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   // Typo
   sectionTitle: {
@@ -1179,27 +1088,12 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 13, fontWeight: '700', color: PRIMARY_TEXT },
 
-  // Babygröße Highlight
-  babySizeTouchTarget: {
-    width: '100%',
-    alignSelf: 'center',
+  // Babygröße
+  babySizeCard: {
+    maxWidth: undefined,
+    marginBottom: SECTION_GAP_BOTTOM,
+    borderRadius: 26,
   },
-  babySizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-  },
-  babySizeEmojiWrap: {
-    width: 68, height: 68, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5,
-  },
-  babySizeEmoji: { fontSize: 34, lineHeight: 40 },
-  babySizeTextWrap: { flex: 1 },
-  babySizeFruit: { fontSize: 18, fontWeight: '800' },
-  babySizeMeta: { fontSize: 14, marginTop: 5, opacity: 0.85 },
 
   // Overdue
   overdueBorder: { borderLeftWidth: 4, borderLeftColor: WARN },

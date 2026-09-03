@@ -23,7 +23,6 @@ import VoiceLogModal from '@/components/VoiceLogModal';
 import PremiumHighlights, {
   type PremiumHighlightItem,
 } from '@/components/PremiumHighlights';
-import { fetchLowStockCount } from '@/lib/shopping';
 import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import NightWakePrompt from '@/components/NightWakePrompt';
@@ -717,7 +716,6 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
-  const [lowStockCount, setLowStockCount] = useState(0);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
@@ -1068,11 +1066,6 @@ export default function HomeScreen() {
     scheduleOverviewRotationResume();
   };
 
-  const loadLowStockCount = useCallback(async () => {
-    const { count } = await fetchLowStockCount();
-    setLowStockCount(count);
-  }, []);
-
   useEffect(() => {
     const syncNow = () => setActiveHomeTimerNow(Date.now());
     const interval = setInterval(syncNow, 1000);
@@ -1179,8 +1172,7 @@ export default function HomeScreen() {
       }
 
       void loadData();
-      void loadLowStockCount();
-    }, [user, activeBabyId, isActiveBabyReady, refreshing, loadLowStockCount])
+    }, [user, activeBabyId, isActiveBabyReady, refreshing])
   );
 
   // Formatiere das aktuelle Datum
@@ -1447,13 +1439,6 @@ export default function HomeScreen() {
       });
     }
 
-    if (entryType === 'diaper') {
-      // Die Vorratsabbuchung läuft fire-and-forget im Hintergrund —
-      // kurz warten, bevor das Low-Stock-Badge neu geladen wird.
-      setTimeout(() => {
-        void loadLowStockCount();
-      }, 1500);
-    }
   };
 
   const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
@@ -2011,13 +1996,6 @@ export default function HomeScreen() {
               isEditing ? styles.quickAccessEditorCard : null,
             ]}
           >
-            {item.id === 'shopping-list' && !isEditing && lowStockCount > 0 ? (
-              <View style={styles.quickAccessAlertBadge}>
-                <Text style={styles.quickAccessAlertBadgeText}>
-                  {lowStockCount > 9 ? '9+' : lowStockCount}
-                </Text>
-              </View>
-            ) : null}
             {canHideCard ? (
               <TouchableOpacity
                 style={styles.quickAccessHideBadge}
@@ -2957,26 +2935,6 @@ const styles = StyleSheet.create({
   },
   quickAccessEditorCard: {
     minHeight: 132,
-  },
-  quickAccessAlertBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
-    backgroundColor: '#E25C4A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  quickAccessAlertBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   quickAccessHideBadge: {
     position: 'absolute',

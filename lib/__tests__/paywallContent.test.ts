@@ -32,7 +32,7 @@ describe("paywall feature comparison", () => {
         "Meilensteine & Zahn-Tracker",
         "Babywetter & Kleidungsempfehlungen",
         "Community, Gruppen & private Chats",
-        "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",
+        "Einkaufslisten & Kundenkarten",
         "Rezepte, Generator, eigene Rezepte & Beikost-Videos",
         "Schlaftracker: Monatsansicht & Schlafkalender",
         "Unser Tag: Monatsansicht & Aktivitätskalender",

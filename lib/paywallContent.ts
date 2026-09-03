@@ -368,7 +368,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       premium: true,
     },
     {
-      label: "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",
+      label: "Einkaufslisten & Kundenkarten",
       featureKey: "shoppingList",
       lite: false,
       standard: true,
@@ -453,7 +453,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       bullets: [
         "Alle Basis-Tracker mit vollständigem Schlaf- & Tagesverlauf",
         "Partner-Verknüpfung, Planer & gemeinsamer Kalender",
-        "Einkaufslisten, Vorräte, Warnungen & Kundenkarten",
+        "Einkaufslisten & Kundenkarten",
         "Wochenmomente, Rezepte, Auswertungen & Datenexport",
       ],
     },

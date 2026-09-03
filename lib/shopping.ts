@@ -240,8 +240,12 @@ export const isLowStock = (item: StockStatusItem): boolean => {
       clampStockLevel(item.reorder_level_percent ?? 20)
     );
   }
-  return item.reorder_threshold > 0 && computeTotalQuantity(item) <= item.reorder_threshold;
+  return computeTotalQuantity(item) <= Math.max(0, item.reorder_threshold ?? 0);
 };
+
+/** Vereinfachte Sicht: Bestand als ganze Zahl (angebrochen + versiegelte Packungen). */
+export const computeInventoryCount = (item: PackagedQuantity): number =>
+  Math.max(0, Math.round(computeTotalQuantity(item)));
 
 /** Geschätzte Reichweite in ganzen Tagen; null ohne Verbrauchsschätzung. */
 export const computeDaysLeft = (
@@ -639,6 +643,49 @@ export const adjustInventoryQuantity = async (
 };
 
 /**
+ * Setzt den Bestand auf eine ganze Zahl. Versiegelte Packungen werden dabei
+ * aufgelöst, sodass current_quantity allein die Menge trägt. Die Differenz
+ * landet als Audit-Eintrag (Verbrauch bzw. Auffüllen).
+ */
+export const setInventoryCount = async (
+  item: Pick<InventoryItem, 'id' | 'baby_id' | 'current_quantity' | 'packages_sealed' | 'package_quantity'>,
+  count: number,
+  note?: string
+): Promise<DataResult<InventoryItem>> => {
+  const { userId, error: userError } = await getUserId();
+  if (!userId) return { data: null, error: userError };
+
+  const target = Math.max(0, Math.round(count));
+  const before = computeTotalQuantity(item);
+  const change = round2(target - before);
+
+  const { data, error } = await supabase
+    .from('inventory_items')
+    .update({ current_quantity: target, packages_sealed: 0 })
+    .eq('id', item.id)
+    .select()
+    .single();
+  if (error) return { data: null, error };
+
+  if (change !== 0) {
+    const { error: txError } = await supabase.from('inventory_transactions').insert({
+      inventory_item_id: item.id,
+      baby_id: null,
+      created_by: userId,
+      transaction_type: change < 0 ? 'usage' : 'refill',
+      quantity_change: change,
+      quantity_after: target,
+      note: note ?? null,
+    });
+    if (txError) {
+      console.error('Failed to log inventory transaction:', txError);
+    }
+  }
+
+  return { data: (data as InventoryItem) ?? null, error: null };
+};
+
+/**
  * Bucht ganze (versiegelte) Packungen zu oder ab — z. B. +1 nach dem Einkauf
  * oder dem Scan. Der Audit-Eintrag hält die Änderung in der Basiseinheit fest
  * (Packungen × Packungsgröße). packages_sealed fällt nie unter 0.
@@ -682,17 +729,17 @@ export const adjustSealedPackages = async (
 };
 
 /**
- * Füllt den Vorrat nach einem Barcode-Scan auf: existiert ein Vorratsposten
- * mit diesem Barcode, wird eine Packungsmenge addiert; sonst wird ein neuer
- * Posten mit der Packungsmenge als Startbestand angelegt.
+ * Legt nach einem Barcode-Scan ein Stück in den Vorrat: existiert ein Posten
+ * mit diesem Barcode, zählt die Menge um 1 hoch; sonst entsteht ein neuer
+ * Posten mit Menge 1. Packungsgröße und Einheit werden nur als Info gemerkt.
  */
 export const refillInventoryFromProduct = async (
   product: {
     barcode: string;
     name: string;
     category: string;
-    packageQuantity: number;
-    unit: string;
+    packageQuantity: number | null;
+    unit: string | null;
   }
 ): Promise<DataResult<InventoryItem>> => {
   const { data: existingItems, error: lookupError } = await supabase
@@ -704,19 +751,16 @@ export const refillInventoryFromProduct = async (
 
   const existing = (existingItems?.[0] as InventoryItem | undefined) ?? null;
   if (existing) {
-    if (existing.tracking_mode === 'level') {
-      return setInventoryStockLevel(existing.id, 100);
-    }
-    return adjustSealedPackages(existing, 1, 'scan_refill', product.name);
+    return setInventoryCount(existing, computeInventoryCount(existing) + 1, product.name);
   }
 
   const created = await upsertInventoryItem({
     name: product.name,
     category: product.category,
     barcode: product.barcode,
-    current_quantity: 0,
-    packages_sealed: 1,
-    unit: product.unit,
+    current_quantity: 1,
+    packages_sealed: 0,
+    unit: product.unit ?? 'Stück',
     package_quantity: product.packageQuantity,
   });
   if (created.error || !created.data) return created;
@@ -728,8 +772,8 @@ export const refillInventoryFromProduct = async (
       baby_id: null,
       created_by: userId,
       transaction_type: 'scan_refill',
-      quantity_change: product.packageQuantity,
-      quantity_after: computeTotalQuantity(created.data),
+      quantity_change: 1,
+      quantity_after: 1,
       note: product.name,
     });
     if (txError) {
@@ -1004,4 +1048,183 @@ export const saveProductToCatalog = async (product: {
     .single();
 
   return { data: (data as ProductCatalogEntry) ?? null, error };
+};
+
+// --- Produktdetails (Open Facts) --------------------------------------------------
+
+export interface ProductNutrient {
+  key: string;
+  value: number;
+  unit: string;
+}
+
+/** Alles, was die Open-Facts-Datenbanken zu einem Barcode hergeben (lückenhaft, freiwillig gepflegt). */
+export interface ProductDetails {
+  barcode: string;
+  name: string | null;
+  brand: string | null;
+  quantity: string | null;
+  servingSize: string | null;
+  imageUrl: string | null;
+  categories: string[];
+  labels: string[];
+  countries: string[];
+  origins: string | null;
+  manufacturingPlaces: string | null;
+  stores: string[];
+  packaging: string | null;
+  ingredientsText: string | null;
+  allergens: string[];
+  traces: string[];
+  nutriScore: string | null;
+  novaGroup: number | null;
+  ecoScore: string | null;
+  nutrients: ProductNutrient[];
+  source: 'open_food_facts' | 'open_beauty_facts' | 'open_products_facts' | 'catalog';
+}
+
+const PRODUCT_DETAIL_FIELDS = [
+  'product_name',
+  'brands',
+  'quantity',
+  'serving_size',
+  'image_front_url',
+  'categories',
+  'labels',
+  'countries',
+  'origins',
+  'manufacturing_places',
+  'stores',
+  'packaging',
+  'ingredients_text_de',
+  'ingredients_text',
+  'allergens_tags',
+  'traces_tags',
+  'nutriscore_grade',
+  'nova_group',
+  'ecoscore_grade',
+  'nutriments',
+].join(',');
+
+const NUTRIENT_KEYS: { key: string; field: string; unit: string }[] = [
+  { key: 'energy', field: 'energy-kcal_100g', unit: 'kcal' },
+  { key: 'fat', field: 'fat_100g', unit: 'g' },
+  { key: 'saturatedFat', field: 'saturated-fat_100g', unit: 'g' },
+  { key: 'carbohydrates', field: 'carbohydrates_100g', unit: 'g' },
+  { key: 'sugars', field: 'sugars_100g', unit: 'g' },
+  { key: 'fiber', field: 'fiber_100g', unit: 'g' },
+  { key: 'proteins', field: 'proteins_100g', unit: 'g' },
+  { key: 'salt', field: 'salt_100g', unit: 'g' },
+];
+
+const splitList = (value: unknown): string[] =>
+  typeof value === 'string'
+    ? value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    : [];
+
+/** "en:milk" -> "milk", "de:weizen" -> "weizen" */
+const cleanTags = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.replace(/^[a-z]{2}:/, '').replace(/-/g, ' ').trim())
+        .filter((entry) => entry.length > 0)
+    : [];
+
+const optionalString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+export const parseProductDetails = (
+  barcode: string,
+  raw: Record<string, any>,
+  source: ProductDetails['source']
+): ProductDetails => {
+  const nutriments = (raw?.nutriments ?? {}) as Record<string, unknown>;
+  const nutrients: ProductNutrient[] = [];
+  for (const entry of NUTRIENT_KEYS) {
+    const value = Number(nutriments[entry.field]);
+    if (Number.isFinite(value)) nutrients.push({ key: entry.key, value, unit: entry.unit });
+  }
+  const novaRaw = Number(raw?.nova_group);
+  const grade = (value: unknown) => {
+    const text = optionalString(value)?.toLowerCase() ?? null;
+    return text && /^[a-e]$/.test(text) ? text.toUpperCase() : null;
+  };
+  return {
+    barcode,
+    name: optionalString(raw?.product_name),
+    brand: optionalString(raw?.brands),
+    quantity: optionalString(raw?.quantity),
+    servingSize: optionalString(raw?.serving_size),
+    imageUrl: optionalString(raw?.image_front_url),
+    categories: splitList(raw?.categories),
+    labels: splitList(raw?.labels),
+    countries: splitList(raw?.countries),
+    origins: optionalString(raw?.origins),
+    manufacturingPlaces: optionalString(raw?.manufacturing_places),
+    stores: splitList(raw?.stores),
+    packaging: optionalString(raw?.packaging),
+    ingredientsText: optionalString(raw?.ingredients_text_de) ?? optionalString(raw?.ingredients_text),
+    allergens: cleanTags(raw?.allergens_tags),
+    traces: cleanTags(raw?.traces_tags),
+    nutriScore: grade(raw?.nutriscore_grade),
+    novaGroup: Number.isFinite(novaRaw) && novaRaw > 0 ? novaRaw : null,
+    ecoScore: grade(raw?.ecoscore_grade),
+    nutrients,
+    source,
+  };
+};
+
+const sourceForUrl = (baseUrl: string): ProductDetails['source'] =>
+  baseUrl.includes('openbeautyfacts')
+    ? 'open_beauty_facts'
+    : baseUrl.includes('openproductsfacts')
+    ? 'open_products_facts'
+    : 'open_food_facts';
+
+/**
+ * Holt alle verfügbaren Produktdaten zu einem Barcode. Erst live aus den
+ * Open-Facts-Datenbanken; schlägt das fehl, aus dem lokal gespeicherten
+ * provider_payload im Katalog. Null, wenn nirgends etwas bekannt ist.
+ */
+export const fetchProductDetails = async (barcode: string): Promise<ProductDetails | null> => {
+  for (const baseUrl of OPEN_FACTS_PRODUCT_URLS) {
+    try {
+      const response = await fetch(
+        `${baseUrl}/${encodeURIComponent(barcode)}.json?fields=${PRODUCT_DETAIL_FIELDS}`
+      );
+      if (!response.ok) continue;
+      const body = await response.json();
+      if (body?.status === 1 && body?.product) {
+        const details = parseProductDetails(barcode, body.product, sourceForUrl(baseUrl));
+        // Rohdaten lokal merken, damit die Info auch offline erreichbar bleibt.
+        void supabase
+          .from('product_catalog')
+          .update({ provider_payload: body.product })
+          .eq('barcode', barcode)
+          .then(() => undefined);
+        return details;
+      }
+    } catch (error) {
+      console.warn('Open Facts details lookup failed:', error);
+    }
+  }
+
+  const { data } = await supabase
+    .from('product_catalog')
+    .select('*')
+    .eq('barcode', barcode)
+    .limit(1);
+  const entry = (data?.[0] as ProductCatalogEntry | undefined) ?? null;
+  if (!entry) return null;
+  const payload = (entry.provider_payload ?? {}) as Record<string, any>;
+  const details = parseProductDetails(barcode, payload, 'catalog');
+  return {
+    ...details,
+    name: details.name ?? entry.name,
+    brand: details.brand ?? entry.brand,
+  };
 };

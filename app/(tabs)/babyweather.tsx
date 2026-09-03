@@ -52,6 +52,8 @@ const getClothingImage = (imageName: string | null) => {
       return require('@/assets/images/Muetze.png');
     case 'Socken.png':
       return require('@/assets/images/Socken.png');
+    case 'Schuhe.png':
+      return require('@/assets/images/Schuhe.png');
     case 'Strumpfhose.png':
       return require('@/assets/images/Strumpfhose.png');
     case 'Shorts.png':
@@ -177,7 +179,7 @@ const clothingCatalogue: Record<ClothingCategory, ClothingItem[]> = {
     { id: '20', name: 'Sonnenhut', image: null, recommended: false, category: 'accessory', tempRange: { min: 20, max: 40 } },
     { id: '21', name: 'Halstuch', image: 'Halstuch.png', recommended: false, category: 'accessory', tempRange: { min: 8, max: 20 } },
     { id: '22', name: 'Schal', image: 'Schal.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 10 } },
-    { id: '23', name: 'Schuhe', image: null, recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
+    { id: '23', name: 'Schuhe', image: 'Schuhe.png', recommended: false, category: 'accessory', tempRange: { min: -10, max: 20 } },
     { id: '24', name: 'Kinderwagen-Decke', image: 'Kinderwagendecke.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
     { id: '27', name: 'Füßlinge', image: 'Fuesslinge.png', recommended: false, category: 'accessory', tempRange: { min: -20, max: 15 } },
   ],

@@ -148,7 +148,8 @@ describe('Mengenlogik', () => {
     expect(isLowStock({ ...stock(4), reorder_threshold: 5 })).toBe(true);
     expect(isLowStock({ ...stock(5), reorder_threshold: 5 })).toBe(true);
     expect(isLowStock({ ...stock(6), reorder_threshold: 5 })).toBe(false);
-    expect(isLowStock({ ...stock(0), reorder_threshold: 0 })).toBe(false);
+    expect(isLowStock({ ...stock(0), reorder_threshold: 0 })).toBe(true);
+    expect(isLowStock({ ...stock(1), reorder_threshold: 0 })).toBe(false);
     // 100 g angebrochen, aber noch eine volle 800-g-Packung -> nicht knapp
     expect(isLowStock({ ...stock(100, 1, 800), reorder_threshold: 200 })).toBe(false);
   });
@@ -563,6 +564,7 @@ describe('fetchLowStockCount', () => {
           { current_quantity: 10, reorder_threshold: 5 },
           { current_quantity: 5, reorder_threshold: 5 },
           { current_quantity: 0, reorder_threshold: 0 },
+          { current_quantity: 2, reorder_threshold: 0 },
           {
             current_quantity: 0,
             reorder_threshold: 0,
@@ -578,7 +580,7 @@ describe('fetchLowStockCount', () => {
     const { count, error } = await fetchLowStockCount('baby-1');
 
     expect(error).toBeNull();
-    expect(count).toBe(3);
+    expect(count).toBe(4);
   });
 
   it('liefert 0 bei Fehler', async () => {
