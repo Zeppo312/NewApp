@@ -18,7 +18,12 @@ import {
   type AdvisorCategory,
   type RuleSignals,
 } from './advisorRules.ts';
-import { generateAiText } from './advisorAi.ts';
+import { generateAiText, generatePregnancyAiText } from './advisorAi.ts';
+import {
+  evaluatePregnancyRules,
+  selectPregnancyCandidate,
+  type PregnancyRuleSignals,
+} from './pregnancyRules.ts';
 import { localizeAdvisorCandidate } from '../_shared/advisorLocalization.ts';
 import { normalizeLocale } from '../_shared/localization.ts';
 import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
@@ -41,11 +46,13 @@ const json = (body: unknown, status = 200) =>
   });
 
 interface GenerateRequest {
-  babyId: string;
+  /** 'pregnancy' = noch kein Baby; Hinweis wird mit baby_id = NULL gespeichert. */
+  mode?: 'baby' | 'pregnancy';
+  babyId?: string;
   locale?: string;
   /** Lokales Datum des Geräts (YYYY-MM-DD) — maßgeblich für den Tages-Upsert. */
   localDate: string;
-  signals: RuleSignals;
+  signals: RuleSignals | PregnancyRuleSignals;
 }
 
 serve(async (req: Request) => {
@@ -69,7 +76,10 @@ serve(async (req: Request) => {
     if (!user) return json({ error: 'Unauthorized' }, 401);
 
     const body = (await req.json()) as GenerateRequest;
-    if (!body?.babyId || !body?.signals || !body?.localDate) {
+    const isPregnancy = body?.mode === 'pregnancy';
+    // Schwangerschaft: kein Baby → Zeilen laufen über baby_id IS NULL.
+    const babyId: string | null = isPregnancy ? null : (body?.babyId ?? null);
+    if ((!isPregnancy && !babyId) || !body?.signals || !body?.localDate) {
       return json({ error: 'babyId, localDate and signals are required' }, 400);
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(body.localDate)) {
@@ -110,24 +120,28 @@ serve(async (req: Request) => {
     threeDaysAgo.setUTCDate(threeDaysAgo.getUTCDate() - 3);
     const cooldownStart = threeDaysAgo.toISOString().slice(0, 10);
 
+    const scopeBaby = (query: any) =>
+      babyId ? query.eq('baby_id', babyId) : query.is('baby_id', null);
     const [settingsRes, recentRes, todayRes] = await Promise.all([
       admin
         .from('advisor_settings')
         .select('themes, ai_enabled, frequency, enabled')
         .eq('user_id', user.id)
         .maybeSingle(),
-      admin
-        .from('advisor_messages')
-        .select('rule_id, local_date')
-        .eq('user_id', user.id)
-        .eq('baby_id', body.babyId)
+      scopeBaby(
+        admin
+          .from('advisor_messages')
+          .select('rule_id, local_date')
+          .eq('user_id', user.id),
+      )
         .gte('local_date', cooldownStart)
         .lt('local_date', body.localDate),
-      admin
-        .from('advisor_messages')
-        .select('id, rule_id, title, headline, body, emoji, tone, source, facts')
-        .eq('user_id', user.id)
-        .eq('baby_id', body.babyId)
+      scopeBaby(
+        admin
+          .from('advisor_messages')
+          .select('id, rule_id, title, headline, body, emoji, tone, source, facts')
+          .eq('user_id', user.id),
+      )
         .eq('local_date', body.localDate)
         .maybeSingle(),
     ]);
@@ -140,12 +154,21 @@ serve(async (req: Request) => {
     const todayRow = todayRes.data;
     const isAdmin = profile?.is_admin === true;
 
-    const candidates = evaluateRules(body.signals);
-    const candidate = localizeAdvisorCandidate(
-      selectCandidate(candidates, { themes, recentRuleIds }),
-      body.signals,
-      locale,
-    );
+    // Baby: Regeln + nachträgliche Lokalisierung. Schwangerschaft: Regeln
+    // liefern bereits lokalisierte Texte (gemeinsame Quelle mit der App).
+    const candidate = isPregnancy
+      ? selectPregnancyCandidate(
+          evaluatePregnancyRules(body.signals as PregnancyRuleSignals, locale),
+          { themes, recentRuleIds },
+        )
+      : localizeAdvisorCandidate(
+          selectCandidate(evaluateRules(body.signals as RuleSignals), {
+            themes,
+            recentRuleIds,
+          }),
+          body.signals as RuleSignals,
+          locale,
+        );
 
     // Kostenbremse: Hat sich die Regel seit dem letzten Speichern nicht
     // geändert, den bereits formulierten KI-Text wiederverwenden — kein
@@ -182,7 +205,13 @@ serve(async (req: Request) => {
     let text = candidate.body;
     let source = 'rules';
     if (settings?.ai_enabled !== false && underCap) {
-      const ai = await generateAiText(candidate, body.signals, locale);
+      const ai = isPregnancy
+        ? await generatePregnancyAiText(
+            candidate as any,
+            body.signals as PregnancyRuleSignals,
+            locale,
+          )
+        : await generateAiText(candidate as any, body.signals as RuleSignals, locale);
       if (ai) {
         headline = ai.headline;
         text = ai.body;
@@ -192,28 +221,55 @@ serve(async (req: Request) => {
     }
 
     // Heutigen Hinweis upserten — read_at/acted_at bleiben erhalten.
-    const { data: saved, error: saveError } = await admin
-      .from('advisor_messages')
-      .upsert(
-        {
-          user_id: user.id,
-          baby_id: body.babyId,
-          local_date: body.localDate,
-          rule_id: candidate.ruleId,
-          title: candidate.title,
-          headline,
-          body: text,
-          emoji: candidate.emoji,
-          tone: candidate.tone,
-          category: candidate.category,
-          priority: candidate.priority,
-          facts: { ...candidate.facts, reasons: candidate.reasons, ai_runs: aiRuns, locale },
-          source,
-        },
-        { onConflict: 'user_id,baby_id,local_date' },
-      )
-      .select('id')
-      .maybeSingle();
+    const row = {
+      user_id: user.id,
+      baby_id: babyId,
+      local_date: body.localDate,
+      rule_id: candidate.ruleId,
+      title: candidate.title,
+      headline,
+      body: text,
+      emoji: candidate.emoji,
+      tone: candidate.tone,
+      category: candidate.category,
+      priority: candidate.priority,
+      facts: {
+        ...(candidate.facts as Record<string, unknown>),
+        reasons: candidate.reasons,
+        ai_runs: aiRuns,
+        locale,
+      },
+      source,
+    };
+    let saved: { id: string } | null = null;
+    let saveError: unknown = null;
+    if (babyId) {
+      const result = await admin
+        .from('advisor_messages')
+        .upsert(row, { onConflict: 'user_id,baby_id,local_date' })
+        .select('id')
+        .maybeSingle();
+      saved = result.data;
+      saveError = result.error;
+    } else if (todayRow?.id) {
+      // Upsert greift bei NULL im Konflikt-Ziel nicht → Update der Tageszeile.
+      const result = await admin
+        .from('advisor_messages')
+        .update(row)
+        .eq('id', todayRow.id)
+        .select('id')
+        .maybeSingle();
+      saved = result.data;
+      saveError = result.error;
+    } else {
+      const result = await admin
+        .from('advisor_messages')
+        .insert(row)
+        .select('id')
+        .maybeSingle();
+      saved = result.data;
+      saveError = result.error;
+    }
     if (saveError) console.error('advisor_messages upsert failed:', saveError);
 
     return json({

@@ -417,7 +417,11 @@ export default function SelfcareScreen() {
         Alert.alert(t('save.errorTitle'), t('save.error'));
       } else {
         Alert.alert(t('save.successTitle'), t('save.success'));
-        await loadEntryForDate(targetDate); // Lade den aktualisierten Eintrag
+        await Promise.all([
+          loadEntryForDate(targetDate),
+          loadWeekEntries(),
+          loadMonthEntries(),
+        ]);
       }
     } catch (err) {
       console.error('Failed to save entry:', err);
@@ -507,8 +511,20 @@ export default function SelfcareScreen() {
   const goToNextDay = () => goToAdjacentDay(1);
   const handleSelectTab = (tab: 'day' | 'week' | 'month') => {
     setSelectedTab(tab);
-    if (tab === 'week') setWeekOffset(0);
-    if (tab === 'month') setMonthOffset(0);
+    if (tab === 'week') {
+      if (weekOffset === 0) {
+        void loadWeekEntries();
+      } else {
+        setWeekOffset(0);
+      }
+    }
+    if (tab === 'month') {
+      if (monthOffset === 0) {
+        void loadMonthEntries();
+      } else {
+        setMonthOffset(0);
+      }
+    }
   };
 
   const TopTabs = () => (

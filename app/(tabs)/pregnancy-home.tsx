@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { PregnancyProgressRing } from '@/components/PregnancyProgressRing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
 import { useFocusEffect, usePathname, useRouter } from 'expo-router';
@@ -26,15 +27,11 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
-import PregnancyBriefingCard from '@/components/pregnancy-briefing-card';
-import {
-  buildPregnancyBriefing,
-  EMPTY_PREGNANCY_BRIEFING_SIGNALS,
-  type PregnancyBriefingItem,
-  type PregnancyBriefingSignals,
-} from '@/lib/pregnancy-briefing';
-import { loadPregnancyBriefingSignals } from '@/lib/pregnancy-briefing-data';
-import { useFeatureAccess } from '@/lib/entitlements';
+import VoiceLogModal from '@/components/VoiceLogModal';
+import PremiumHighlights, { type PremiumHighlightItem } from '@/components/PremiumHighlights';
+import { useAdvisorAccess } from '@/lib/advisor/access';
+import { useVoiceLogAccess } from '@/lib/voiceLog/access';
+import { useAskLottiAccess } from '@/lib/askLotti/access';
 import {
   DEFAULT_PREGNANCY_HOME_LOCALE,
   getPregnancyHomeLocaleTag,
@@ -475,7 +472,11 @@ export default function PregnancyHomeScreen() {
   const { user } = useAuth();
   const userId = user?.id;
   const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
-  const pregnancyBriefingAccess = useFeatureAccess('pregnancyBriefing');
+  // Premium-Bereich (wie auf der Baby-Home): Fürsorge, Sprach-Logging, Frag Lotti.
+  const advisorAccess = useAdvisorAccess();
+  const voiceLogAccess = useVoiceLogAccess();
+  const askLottiAccess = useAskLottiAccess();
+  const [showVoiceLogModal, setShowVoiceLogModal] = useState(false);
   const DEFAULT_OVERVIEW_HEIGHT = 230;
   const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
   const OVERVIEW_SLIDE_COUNT = 2;
@@ -483,7 +484,6 @@ export default function PregnancyHomeScreen() {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [userName, setUserName] = useState('');
-  const [profileAvatarUrl, setProfileAvatarUrl] = useState<string | null>(null);
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -494,11 +494,6 @@ export default function PregnancyHomeScreen() {
   const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<PregnancyQuickAccessCardId[]>([]);
   const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
   const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
-  const [briefingSignals, setBriefingSignals] = useState<PregnancyBriefingSignals>(() => ({
-    ...EMPTY_PREGNANCY_BRIEFING_SIGNALS,
-    checklist: { ...EMPTY_PREGNANCY_BRIEFING_SIGNALS.checklist },
-  }));
-  const [isBriefingLoading, setIsBriefingLoading] = useState(false);
   // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
   // Beschreibung bei großer Schrift nicht abgeschnitten werden.
   const tileMetrics = useTileGridMetrics();
@@ -533,18 +528,6 @@ export default function PregnancyHomeScreen() {
     contentHeight: 0,
   });
   const overviewScrollRef = useRef<ScrollView | null>(null);
-  const [isBabySwitcherOpen, setIsBabySwitcherOpen] = useState(false);
-
-  const pregnancyBriefing = useMemo(
-    () => buildPregnancyBriefing({
-      locale,
-      currentWeek,
-      currentDay,
-      signals: briefingSignals,
-    }),
-    [briefingSignals, currentDay, currentWeek, locale],
-  );
-
   // Animation für Erfolgsmeldung
   const fadeAnim = React.useState(() => new Animated.Value(0))[0];
   const [updateSuccess, setUpdateSuccess] = useState(false);
@@ -581,7 +564,9 @@ export default function PregnancyHomeScreen() {
       quickAccessOrder
         .map((id) => quickAccessCardById.get(id))
         .filter(
-          (card): card is PregnancyQuickAccessCardConfig => !!card && !hiddenQuickAccessIdSet.has(card.id),
+          (card): card is PregnancyQuickAccessCardConfig =>
+            !!card &&
+            !hiddenQuickAccessIdSet.has(card.id),
         ),
     [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
@@ -589,7 +574,11 @@ export default function PregnancyHomeScreen() {
     () =>
       quickAccessOrder
         .map((id) => quickAccessCardById.get(id))
-        .filter((card): card is PregnancyQuickAccessCardConfig => !!card && hiddenQuickAccessIdSet.has(card.id)),
+        .filter(
+          (card): card is PregnancyQuickAccessCardConfig =>
+            !!card &&
+            hiddenQuickAccessIdSet.has(card.id),
+        ),
     [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
 
@@ -900,23 +889,6 @@ export default function PregnancyHomeScreen() {
     }
   };
 
-  const loadBriefingData = useCallback(async () => {
-    if (!userId || pregnancyBriefingAccess.hasAccess !== true) {
-      setIsBriefingLoading(false);
-      return;
-    }
-
-    setIsBriefingLoading(true);
-    try {
-      const signals = await loadPregnancyBriefingSignals(userId);
-      setBriefingSignals(signals);
-    } catch (error) {
-      console.error('Pregnancy Home: failed to prepare pregnancy briefing', error);
-    } finally {
-      setIsBriefingLoading(false);
-    }
-  }, [pregnancyBriefingAccess.hasAccess, userId]);
-
   // Lädt Benutzerinformationen und aktualisiert die Anzeige
   const loadUserData = async () => {
     if (!user?.id) {
@@ -933,7 +905,6 @@ export default function PregnancyHomeScreen() {
 
       // Show cached data immediately
       setUserName(profile.firstName);
-      setProfileAvatarUrl(profile.avatarUrl);
       setDueDate(dueDateData.date);
       setCurrentWeek(dueDateData.currentWeek);
       setCurrentDay(dueDateData.currentDay);
@@ -955,16 +926,6 @@ export default function PregnancyHomeScreen() {
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [user]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (pregnancyBriefingAccess.hasAccess !== true) return undefined;
-      const timeoutId = setTimeout(() => {
-        void loadBriefingData();
-      }, 0);
-      return () => clearTimeout(timeoutId);
-    }, [loadBriefingData, pregnancyBriefingAccess.hasAccess]),
-  );
 
   // Zeigt eine Erfolgsmeldung an, die nach einigen Sekunden ausblendet
   const showUpdateSuccess = () => {
@@ -1001,12 +962,7 @@ export default function PregnancyHomeScreen() {
         await invalidatePregnancyCache(user.id);
       }
 
-      await Promise.all([
-        loadUserData(),
-        pregnancyBriefingAccess.hasAccess === true
-          ? loadBriefingData()
-          : Promise.resolve(),
-      ]);
+      await loadUserData();
 
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {
@@ -1057,27 +1013,6 @@ export default function PregnancyHomeScreen() {
   const handleFocusRecommendation = () => {
     router.push('/prints-shop' as any);
   };
-
-  const handleBriefingItemPress = useCallback((item: PregnancyBriefingItem) => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-    router.push(item.destination as any);
-  }, [router]);
-
-  const handleUnlockPregnancyBriefing = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    }
-    router.push('/paywall?origin=pregnancy_briefing' as any);
-  }, [router]);
-
-  const handleOpenPregnancyBriefing = useCallback(() => {
-    if (Platform.OS === 'ios') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    }
-    router.push('/pregnancy-briefing' as any);
-  }, [router]);
 
   const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
     <TouchableOpacity
@@ -1514,6 +1449,41 @@ export default function PregnancyHomeScreen() {
     );
   };
 
+  const renderPremiumSection = () => {
+    const items: PremiumHighlightItem[] = [];
+    if (advisorAccess === true) {
+      items.push({
+        key: 'advisor',
+        emoji: '🌿',
+        title: t('premium.advisor'),
+        subtitle: t('premium.advisorDescription'),
+        onPress: () => router.push('/lottis-fuersorge'),
+      });
+    }
+    if (voiceLogAccess === true) {
+      items.push({
+        key: 'voice-log',
+        emoji: '🎙️',
+        title: t('premium.voice'),
+        subtitle: t('premium.voiceDescription'),
+        onPress: () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          setShowVoiceLogModal(true);
+        },
+      });
+    }
+    if (askLottiAccess === true) {
+      items.push({
+        key: 'ask-lotti',
+        emoji: '✨',
+        title: t('premium.askLotti'),
+        subtitle: t('premium.askLottiDescription'),
+        onPress: () => router.push('/frag-lotti'),
+      });
+    }
+    return <PremiumHighlights items={items} />;
+  };
+
   const renderQuickAccessSection = () => (
     <View style={styles.cardsSection}>
       <ThemedText adaptive={false} style={[styles.cardsSectionTitle, { color: textSecondary, fontSize: 22 }]}>
@@ -1541,7 +1511,9 @@ export default function PregnancyHomeScreen() {
       <SortableTileGrid
         items={orderedQuickAccessCards}
         isEditing={isQuickAccessEditMode}
-        onPressItem={(item) => router.push(item.destination)}
+        onPressItem={(item) => {
+          router.push(item.destination);
+        }}
         onRequestEditMode={openQuickAccessEditor}
         onOrderChange={(data) => handleReorderQuickAccess(data.map(({ id }) => id))}
         onDragStateChange={setIsQuickAccessDragging}
@@ -1645,7 +1617,7 @@ export default function PregnancyHomeScreen() {
                 />
 
                 <View style={styles.greetingHeader}>
-                  <View>
+                  <View style={styles.greetingTextBlock}>
                     <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
                       {t('greeting.hello', { name: userName || t('greeting.fallbackName') })}
                     </ThemedText>
@@ -1655,27 +1627,9 @@ export default function PregnancyHomeScreen() {
                   </View>
 
                   <View style={styles.profileBadge}>
-                    <TouchableOpacity
-                      onPress={() => setIsBabySwitcherOpen(true)}
-                      activeOpacity={0.85}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      {profileAvatarUrl ? (
-                        <View style={styles.profileImageWrapper}>
-                          <Image source={{ uri: profileAvatarUrl }} style={styles.profileImage} />
-                        </View>
-                      ) : (
-                        <View style={styles.profilePlaceholder}>
-                          <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                    <BabySwitcherButton
-                      showTrigger={false}
-                      isOpen={isBabySwitcherOpen}
-                      onOpenChange={setIsBabySwitcherOpen}
-                    />
-                    <View style={styles.profileStatusDot} />
+                    <PregnancyProgressRing percent={pregnancyProgressPercent} contentSize={68} inset={4} ringStroke={4.5}>
+                      <BabySwitcherButton size={68} showSwitchHint />
+                    </PregnancyProgressRing>
                   </View>
                 </View>
 
@@ -1716,23 +1670,22 @@ export default function PregnancyHomeScreen() {
             <GlassBorderGlint radius={30} />
           </View>
 
-          <PregnancyBriefingCard
-            locale={locale}
-            briefing={pregnancyBriefing}
-            hasAccess={pregnancyBriefingAccess.hasAccess}
-            isLoading={isBriefingLoading}
-            isDark={isDark}
-            variant="compact"
-            onItemPress={handleBriefingItemPress}
-            onOpenBriefing={handleOpenPregnancyBriefing}
-            onUnlock={handleUnlockPregnancyBriefing}
-          />
-
           {renderOverviewSection()}
+
+          {renderPremiumSection()}
 
           {renderQuickAccessSection()}
         </ScrollView>
       </SafeAreaView>
+      <VoiceLogModal
+        visible={showVoiceLogModal}
+        userId={user?.id}
+        babyId={null}
+        babyName={null}
+        mode="pregnancy"
+        onClose={() => setShowVoiceLogModal(false)}
+        onSaved={() => {}}
+      />
     </ThemedBackground>
   );
 }
@@ -1946,7 +1899,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 16,
+  },
+  greetingTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   greeting: {
     fontSize: 30,
@@ -1965,48 +1923,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-  },
-  profileImageWrapper: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.75)',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 34,
-  },
-  profilePlaceholder: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(125, 90, 80, 0.65)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileStatusDot: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#5E3DB3',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 3,
-    elevation: 6,
+    flexShrink: 0,
   },
   greetingGloss: {
     ...StyleSheet.absoluteFill,

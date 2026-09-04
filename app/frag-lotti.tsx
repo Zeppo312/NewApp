@@ -30,6 +30,7 @@ import { LockedFeatureScreen } from "@/components/LockedFeatureScreen";
 import { ThemedBackground } from "@/components/ThemedBackground";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { useActiveBaby } from "@/contexts/ActiveBabyContext";
+import { useBabyStatus } from "@/contexts/BabyStatusContext";
 import { useLocale } from "@/contexts/LocaleContext";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { useAskLottiAccess } from "@/lib/askLotti/access";
@@ -66,6 +67,11 @@ type ChatMessage = StoredChatMessage;
 export default function AskLottiScreen() {
   const { locale } = useLocale();
   const { activeBabyId } = useActiveBaby();
+  // Vor der Geburt gibt es keine Baby-Einträge: Lotti antwortet dann aus der
+  // Schwangerschaftsseite der App (SSW, Check-ins, Termine, Vorbereitung).
+  const { isBabyBorn } = useBabyStatus();
+  const isPregnancy = !isBabyBorn;
+  const contextMode = isPregnancy ? ("pregnancy" as const) : ("baby" as const);
   const access = useAskLottiAccess();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
@@ -89,16 +95,23 @@ export default function AskLottiScreen() {
     key: Parameters<typeof translateAskLotti>[1],
     params?: Record<string, string | number>,
   ) => translateAskLotti(locale, key, params);
-  const suggestions = useMemo(() => askLottiSuggestions(locale), [locale]);
+  const suggestions = useMemo(
+    () => askLottiSuggestions(locale, contextMode),
+    [contextMode, locale],
+  );
   const [question, setQuestion] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [remainingToday, setRemainingToday] = useState<number | null>(null);
   // The intro is rendered, never stored: it is locale-dependent and would
   // otherwise freeze the language a chat was started in.
   const introMessage = useMemo<ChatMessage>(
-    () => ({ id: "intro", role: "lotti", text: t("intro") }),
+    () => ({
+      id: "intro",
+      role: "lotti",
+      text: t(isPregnancy ? "introPregnancy" : "intro"),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale],
+    [locale, isPregnancy],
   );
   const [messages, setMessages] = useState<ChatMessage[]>([introMessage]);
   const [conversations, setConversations] = useState<AskLottiConversation[]>(
@@ -245,7 +258,7 @@ export default function AskLottiScreen() {
     if (Platform.OS === "ios")
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const localReply = isAskLottiGreeting(value)
-      ? t("greeting")
+      ? t(isPregnancy ? "greetingPregnancy" : "greeting")
       : isAskLottiThanks(value)
         ? t("thanks")
         : null;
@@ -258,7 +271,7 @@ export default function AskLottiScreen() {
       setQuestion("");
       return;
     }
-    if (!activeBabyId) {
+    if (!isPregnancy && !activeBabyId) {
       setMessages((current) => [
         ...current,
         userMessage,
@@ -285,7 +298,8 @@ export default function AskLottiScreen() {
           text: message.text.slice(0, 200),
         }));
       const response = await askLotti({
-        babyId: activeBabyId,
+        babyId: isPregnancy ? null : activeBabyId,
+        mode: contextMode,
         question: value,
         locale,
         history,
@@ -353,9 +367,9 @@ export default function AskLottiScreen() {
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <Header
           title={t("title")}
-          subtitle={t("subtitle")}
+          subtitle={t(isPregnancy ? "subtitlePregnancy" : "subtitle")}
           showBackButton
-          showBabySwitcher
+          showBabySwitcher={!isPregnancy}
           rightContent={
             <Pressable
               accessibilityRole="button"
@@ -427,7 +441,7 @@ export default function AskLottiScreen() {
                         weight="semibold"
                       />
                       <Text style={styles.capabilityText}>
-                        {t("personalHelp")}
+                        {t(isPregnancy ? "personalHelpPregnancy" : "personalHelp")}
                       </Text>
                     </View>
                   </View>
@@ -469,7 +483,7 @@ export default function AskLottiScreen() {
                             ? t("grounded")
                             : message.isGeneral
                               ? t("general")
-                              : t("assistant")}
+                              : t(isPregnancy ? "assistantPregnancy" : "assistant")}
                         </Text>
                       </View>
                     </View>
@@ -481,7 +495,7 @@ export default function AskLottiScreen() {
                       message.role === "user" && styles.userText,
                     ]}
                   >
-                    {message.id === "intro" ? t("intro") : message.text}
+                    {message.id === "intro" ? introMessage.text : message.text}
                   </Text>
                   {message.retryQuestion ? (
                     <Pressable
@@ -624,7 +638,7 @@ export default function AskLottiScreen() {
               <TextInput
                 value={question}
                 onChangeText={setQuestion}
-                placeholder={t("placeholder")}
+                placeholder={t(isPregnancy ? "placeholderPregnancy" : "placeholder")}
                 placeholderTextColor={palette.placeholder}
                 style={styles.input}
                 multiline

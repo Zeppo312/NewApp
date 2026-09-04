@@ -17,8 +17,18 @@ export default function Index() {
   const backgroundColor = isDark ? Colors.dark.background : '#FFFFFF';
   const textColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false);
-  const [isOnboardingComplete, setIsOnboardingComplete] = useState(false);
+  const userId = session?.user?.id ?? null;
+  const canCheckOnboarding = !loading && isBabyStatusResolved && userId !== null;
+  const [onboardingResult, setOnboardingResult] = useState<{
+    userId: string | null;
+    complete: boolean;
+  }>({ userId: null, complete: false });
+  const isCheckingOnboarding =
+    canCheckOnboarding && onboardingResult.userId !== userId;
+  const isOnboardingComplete =
+    canCheckOnboarding &&
+    onboardingResult.userId === userId &&
+    onboardingResult.complete;
   const hasTriedRecoveryRef = useRef(false);
 
   // Debug-Ausgabe
@@ -56,37 +66,29 @@ export default function Index() {
   }, [loading, refreshSession, session]);
 
   useEffect(() => {
-    if (loading || !session?.user || !isBabyStatusResolved) {
-      setIsCheckingOnboarding(false);
-      setIsOnboardingComplete(false);
+    if (!canCheckOnboarding || !userId) {
       return;
     }
 
     let cancelled = false;
-    setIsCheckingOnboarding(true);
 
     getOnboardingCompletionState()
       .then((complete) => {
         if (!cancelled) {
-          setIsOnboardingComplete(complete);
+          setOnboardingResult({ userId, complete });
         }
       })
       .catch((error) => {
         console.error('Failed to check onboarding completion:', error);
         if (!cancelled) {
-          setIsOnboardingComplete(false);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsCheckingOnboarding(false);
+          setOnboardingResult({ userId, complete: false });
         }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [isBabyStatusResolved, loading, session?.user]);
+  }, [canCheckOnboarding, userId]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
   if (loading || isBabyStatusLoading || !isBabyStatusResolved || isRecoveringSession || isCheckingOnboarding) {

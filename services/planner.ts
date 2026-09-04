@@ -407,6 +407,59 @@ async function ensurePlannerDayForUser(userId: string, date: Date): Promise<stri
   return dayId;
 }
 
+/**
+ * Aufgabe ohne Hook anlegen (z. B. aus dem Sprach-Logging). Nutzt denselben
+ * Tages-/Insert-Pfad wie usePlannerDay().addTodo, nur ohne lokalen State.
+ */
+export async function createPlannerTodoForUser(
+  userId: string,
+  input: { title: string; dueAt: string | null; notes?: string | null },
+): Promise<void> {
+  const dueDate = input.dueAt ? parseISO(input.dueAt) : null;
+  const dayId = await ensurePlannerDayForUser(userId, dueDate ?? new Date());
+  const { error } = await supabase.from('planner_items').insert({
+    user_id: userId,
+    day_id: dayId,
+    block_id: null,
+    entry_type: 'todo' as const,
+    title: input.title,
+    completed: false,
+    assignee: 'me',
+    baby_id: null,
+    notes: input.notes ?? null,
+    due_at: dueDate ? dueDate.toISOString() : null,
+    color: null,
+  });
+  if (error) throw error;
+}
+
+/** Termin ohne Hook anlegen (z. B. aus dem Sprach-Logging). */
+export async function createPlannerEventForUser(
+  userId: string,
+  input: { title: string; start: string; end: string | null; location?: string | null; isAllDay?: boolean },
+): Promise<void> {
+  const start = parseISO(input.start);
+  if (!start) throw new Error('Ungültige Startzeit');
+  const end = (input.end ? parseISO(input.end) : null) ?? new Date(start.getTime() + 30 * 60000);
+  const dayId = await ensurePlannerDayForUser(userId, start);
+  const { error } = await supabase.from('planner_items').insert({
+    user_id: userId,
+    day_id: dayId,
+    block_id: null,
+    entry_type: 'event' as const,
+    title: input.title,
+    start_at: start.toISOString(),
+    end_at: end.toISOString(),
+    location: input.location ?? null,
+    assignee: 'me',
+    baby_id: null,
+    is_all_day: input.isAllDay ?? false,
+    reminder_minutes: 15,
+    color: null,
+  });
+  if (error) throw error;
+}
+
 function buildRecurringPlannerItemRow(
   series: RecurringItemRow,
   date: Date,

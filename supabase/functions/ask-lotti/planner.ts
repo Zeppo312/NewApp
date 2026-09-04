@@ -33,22 +33,30 @@ export type AskLottiMetric = (typeof PLAN_METRICS)[number];
 export type AskLottiClarifyTopic = (typeof CLARIFY_TOPICS)[number];
 export type AskLottiPlannerRoute = "regex_direct" | "model" | "fallback";
 
-export type AskLottiPlan = {
+// The baby and the pregnancy assistant share one plan shape and differ only in
+// the domain and clarify-topic vocabularies, so the validation, schema and
+// clarify resolution below are written once against this generic shape.
+export type PlanShape<D extends string, C extends string> = {
   mode: AskLottiPlanMode;
-  domains: AskLottiDomain[];
+  domains: D[];
   metric: AskLottiMetric;
   timeframe_days: number;
   compare_previous: boolean;
-  clarify_topics: AskLottiClarifyTopic[];
+  clarify_topics: C[];
   answer_language: AskLottiLocale;
 };
+
+export type AskLottiPlan = PlanShape<AskLottiDomain, AskLottiClarifyTopic>;
 
 export type AskLottiHistoryItem = {
   role: "user" | "assistant";
   text: string;
 };
 
-export const ASK_LOTTI_PLAN_SCHEMA: Record<string, unknown> = {
+export const buildPlanSchema = (
+  domains: readonly string[],
+  clarifyTopics: readonly string[],
+): Record<string, unknown> => ({
   type: "object",
   additionalProperties: false,
   required: [
@@ -64,20 +72,25 @@ export const ASK_LOTTI_PLAN_SCHEMA: Record<string, unknown> = {
     mode: { type: "string", enum: PLAN_MODES },
     domains: {
       type: "array",
-      maxItems: PLAN_DOMAINS.length,
-      items: { type: "string", enum: PLAN_DOMAINS },
+      maxItems: domains.length,
+      items: { type: "string", enum: domains },
     },
     metric: { type: "string", enum: PLAN_METRICS },
     timeframe_days: { type: "integer", minimum: 1, maximum: 30 },
     compare_previous: { type: "boolean" },
     clarify_topics: {
       type: "array",
-      maxItems: CLARIFY_TOPICS.length,
-      items: { type: "string", enum: CLARIFY_TOPICS },
+      maxItems: clarifyTopics.length,
+      items: { type: "string", enum: clarifyTopics },
     },
     answer_language: { type: "string", enum: ["de", "en", "es"] },
   },
-};
+});
+
+export const ASK_LOTTI_PLAN_SCHEMA: Record<string, unknown> = buildPlanSchema(
+  PLAN_DOMAINS,
+  CLARIFY_TOPICS,
+);
 
 const isOneOf = <T extends readonly string[]>(
   values: T,
@@ -85,9 +98,13 @@ const isOneOf = <T extends readonly string[]>(
 ): value is T[number] =>
   typeof value === "string" && values.includes(value as T[number]);
 
-export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null => {
+export const validatePlanShape = <D extends string, C extends string>(
+  value: unknown,
+  allowedDomains: readonly D[],
+  allowedClarifyTopics: readonly C[],
+): PlanShape<D, C> | null => {
   if (!value || typeof value !== "object") return null;
-  const plan = value as Partial<AskLottiPlan>;
+  const plan = value as Partial<PlanShape<D, C>>;
   if (!isOneOf(PLAN_MODES, plan.mode)) return null;
   if (!isOneOf(PLAN_METRICS, plan.metric)) return null;
   if (!isOneOf(["de", "en", "es"] as const, plan.answer_language)) return null;
@@ -100,12 +117,14 @@ export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null => {
   if (typeof plan.compare_previous !== "boolean") return null;
   if (
     !Array.isArray(plan.domains) ||
-    !plan.domains.every((domain) => isOneOf(PLAN_DOMAINS, domain))
+    !plan.domains.every((domain) => isOneOf(allowedDomains, domain))
   )
     return null;
   if (
     !Array.isArray(plan.clarify_topics) ||
-    !plan.clarify_topics.every((topic) => isOneOf(CLARIFY_TOPICS, topic))
+    !plan.clarify_topics.every((topic) =>
+      isOneOf(allowedClarifyTopics, topic),
+    )
   )
     return null;
 
@@ -126,9 +145,17 @@ export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null => {
   };
 };
 
-const CLARIFY_TOPIC_PLANS: Record<
-  AskLottiClarifyTopic,
-  Pick<AskLottiPlan, "domains" | "metric" | "timeframe_days">
+export const validateAskLottiPlan = (value: unknown): AskLottiPlan | null =>
+  validatePlanShape(value, PLAN_DOMAINS, CLARIFY_TOPICS);
+
+export type ClarifyTopicPlans<D extends string, C extends string> = Record<
+  C,
+  Pick<PlanShape<D, C>, "domains" | "metric" | "timeframe_days">
+>;
+
+const CLARIFY_TOPIC_PLANS: ClarifyTopicPlans<
+  AskLottiDomain,
+  AskLottiClarifyTopic
 > = {
   sleep: { domains: ["sleep"], metric: "average_per_day", timeframe_days: 14 },
   feeding: { domains: ["feeding"], metric: "total", timeframe_days: 7 },
@@ -148,9 +175,10 @@ const CLARIFY_TOPIC_PLANS: Record<
 // Only a request that stayed genuinely wide open still asks.
 export const MAX_RESOLVABLE_CLARIFY_TOPICS = 2;
 
-export const resolveClarifyPlan = (
-  plan: AskLottiPlan,
-): { plan: AskLottiPlan; followUpTopics: AskLottiClarifyTopic[] } => {
+export const resolveClarifyPlanWith = <D extends string, C extends string>(
+  plan: PlanShape<D, C>,
+  topicPlans: ClarifyTopicPlans<D, C>,
+): { plan: PlanShape<D, C>; followUpTopics: C[] } => {
   if (
     plan.mode !== "clarify" ||
     plan.clarify_topics.length === 0 ||
@@ -161,15 +189,13 @@ export const resolveClarifyPlan = (
   const [primary, ...rest] = plan.clarify_topics;
   const domains = Array.from(
     new Set(
-      plan.clarify_topics.flatMap(
-        (topic) => CLARIFY_TOPIC_PLANS[topic].domains,
-      ),
+      plan.clarify_topics.flatMap((topic) => topicPlans[topic].domains),
     ),
   );
   return {
     plan: {
       ...plan,
-      ...CLARIFY_TOPIC_PLANS[primary],
+      ...topicPlans[primary],
       domains,
       mode: "mixed",
       clarify_topics: [],
@@ -177,6 +203,11 @@ export const resolveClarifyPlan = (
     followUpTopics: rest,
   };
 };
+
+export const resolveClarifyPlan = (
+  plan: AskLottiPlan,
+): { plan: AskLottiPlan; followUpTopics: AskLottiClarifyTopic[] } =>
+  resolveClarifyPlanWith(plan, CLARIFY_TOPIC_PLANS);
 
 const normalizeHistoryText = (value: unknown) => {
   if (typeof value !== "string") return null;

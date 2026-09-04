@@ -112,7 +112,8 @@ export interface DailySignals {
 
 /** Eine kleine Analyse-Karte (Schlaf / Ernährung / Windeln / Wetter). */
 export interface AnalysisCard {
-  key: 'sleep' | 'feeding' | 'diaper' | 'weather';
+  /** Baby: sleep/feeding/diaper/weather · Schwangerschaft: week/selfcare/hydration/weight (+ weather). */
+  key: 'sleep' | 'feeding' | 'diaper' | 'weather' | 'week' | 'selfcare' | 'hydration' | 'weight';
   emoji: string;
   label: string;
   value: string;

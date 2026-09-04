@@ -56,5 +56,20 @@ describe('buildPlannerWidgetSnapshot', () => {
     expect(snapshot.doneTodoCount).toBe(1);
     expect(snapshot.todos[0]).toMatchObject({ isRecurring: true, seriesId: 's1', occurrenceDate: '2026-09-01' });
     expect(snapshot.todos[2].dueAt).toBeNull();
+    expect(snapshot.todos.every((todo) => todo.color === '#5e3db3')).toBe(true);
+  });
+
+  it('keeps resolved todo colors and normalises them for the widget', () => {
+    const snapshot = buildPlannerWidgetSnapshot({
+      now,
+      locale: 'de',
+      events: [],
+      todos: [
+        { id: 'family', title: 'Familienaufgabe', completed: false, color: '#5E3DB3' },
+        { id: 'custom', title: 'Eigene Farbe', completed: false, color: '#3E7BC4' },
+      ],
+    });
+
+    expect(snapshot.todos.map((todo) => todo.color)).toEqual(['#5e3db3', '#3e7bc4']);
   });
 });

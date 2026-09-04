@@ -188,7 +188,7 @@ type LinkedUser = {
 type MonthSummaryDay = {
   tasks: number;
   events: number;
-  eventColors: string[];
+  itemColors: string[];
 };
 
 function displayNameForLinkedUser(linkedUser: LinkedUser, index: number) {
@@ -423,12 +423,10 @@ function PlannerScreenContent() {
     [getEventColorByPersonKey, getEventPersonKey, isDark],
   );
 
-  /** Aufgaben bleiben neutral, solange sie keine eigene Farbe haben. */
+  /** Aufgaben nutzen dieselbe eigene-oder-Personenfarbe wie Termine. */
   const getTodoColor = useCallback(
     (todo: { assignee?: string; babyId?: string; userId?: string; color?: string }) =>
-      todo.color
-        ? getEventColor(todo.assignee, todo.babyId, todo.userId, todo.color)
-        : undefined,
+      getEventColor(todo.assignee, todo.babyId, todo.userId, todo.color),
     [getEventColor],
   );
 
@@ -705,24 +703,19 @@ function PlannerScreenContent() {
             : plannerDay?.day;
           if (!dayIso) return;
           if (!monthAgg[dayIso]) {
-            monthAgg[dayIso] = { tasks: 0, events: 0, eventColors: [] };
+            monthAgg[dayIso] = { tasks: 0, events: 0, itemColors: [] };
           }
           if (item.entry_type === "event") monthAgg[dayIso].events += 1;
           else monthAgg[dayIso].tasks += 1;
 
-          if (item.entry_type === "event") {
-            const eventColor = getEventColor(
-              item.assignee,
-              item.baby_id,
-              item.user_id,
-              item.color,
-            );
-            if (
-              eventColor &&
-              !monthAgg[dayIso].eventColors.includes(eventColor)
-            ) {
-              monthAgg[dayIso].eventColors.push(eventColor);
-            }
+          const itemColor = getEventColor(
+            item.assignee,
+            item.baby_id,
+            item.user_id,
+            item.color,
+          );
+          if (!monthAgg[dayIso].itemColors.includes(itemColor)) {
+            monthAgg[dayIso].itemColors.push(itemColor);
           }
 
           if (item.entry_type === "event") {
@@ -1148,7 +1141,7 @@ function PlannerScreenContent() {
         title: todo.title,
         completed: todo.completed,
         dueAt: todo.dueAt ?? null,
-        color: todo.color ?? null,
+        color: widgetColor(todo),
         person: getDisplayAssigneeLabel(todo.assignee, todo.babyId, todo.userId) ?? null,
         isRecurring: todo.isRecurring,
         seriesId: todo.seriesId ?? null,
@@ -1968,14 +1961,12 @@ function PlannerScreenContent() {
                         ownerId: todo.user_id,
                         assignee: todo.assignee,
                         babyId: todo.baby_id,
-                        todoColor: todo.color
-                          ? getEventColor(
-                              todo.assignee,
-                              todo.baby_id,
-                              todo.user_id,
-                              todo.color,
-                            )
-                          : undefined,
+                        todoColor: getEventColor(
+                          todo.assignee,
+                          todo.baby_id,
+                          todo.user_id,
+                          todo.color,
+                        ),
                         type: "todo" as const,
                       })),
                     ].sort((a, b) => {
@@ -2086,10 +2077,7 @@ function PlannerScreenContent() {
                             const eventColor =
                               item.type === "event"
                                 ? item.eventColor
-                                : (item.todoColor ?? accentColor);
-                            // Termine sind immer farbig, Aufgaben nur mit eigener Farbe.
-                            const hasColorAccent =
-                              item.type === "event" || !!item.todoColor;
+                                : item.todoColor;
                             const safeTime = parseSafeDate(item.time);
                             const timeLabel = safeTime
                               ? new Intl.DateTimeFormat(PLANNER_LOCALE_TAG, {
@@ -2149,22 +2137,14 @@ function PlannerScreenContent() {
                                             style={[
                                               styles.ownerPill,
                                               {
-                                                backgroundColor: hasColorAccent
-                                                  ? toRgba(
-                                                      eventColor,
-                                                      isDark ? 0.26 : 0.18,
-                                                    )
-                                                  : isDark
-                                                    ? "rgba(255,255,255,0.08)"
-                                                    : "rgba(255,255,255,0.24)",
-                                                borderColor: hasColorAccent
-                                                  ? toRgba(
-                                                      eventColor,
-                                                      isDark ? 0.58 : 0.4,
-                                                    )
-                                                  : isDark
-                                                    ? "rgba(255,255,255,0.18)"
-                                                    : "rgba(255,255,255,0.5)",
+                                                backgroundColor: toRgba(
+                                                  eventColor,
+                                                  isDark ? 0.26 : 0.18,
+                                                ),
+                                                borderColor: toRgba(
+                                                  eventColor,
+                                                  isDark ? 0.58 : 0.4,
+                                                ),
                                               },
                                             ]}
                                           >
@@ -2172,9 +2152,7 @@ function PlannerScreenContent() {
                                               style={[
                                                 styles.ownerPillText,
                                                 {
-                                                  color: hasColorAccent
-                                                    ? eventColor
-                                                    : textSecondary,
+                                                  color: eventColor,
                                                 },
                                               ]}
                                             >
@@ -2208,22 +2186,14 @@ function PlannerScreenContent() {
                                             style={[
                                               styles.ownerPill,
                                               {
-                                                backgroundColor: hasColorAccent
-                                                  ? toRgba(
-                                                      eventColor,
-                                                      isDark ? 0.26 : 0.18,
-                                                    )
-                                                  : isDark
-                                                    ? "rgba(255,255,255,0.08)"
-                                                    : "rgba(255,255,255,0.24)",
-                                                borderColor: hasColorAccent
-                                                  ? toRgba(
-                                                      eventColor,
-                                                      isDark ? 0.58 : 0.4,
-                                                    )
-                                                  : isDark
-                                                    ? "rgba(255,255,255,0.18)"
-                                                    : "rgba(255,255,255,0.5)",
+                                                backgroundColor: toRgba(
+                                                  eventColor,
+                                                  isDark ? 0.26 : 0.18,
+                                                ),
+                                                borderColor: toRgba(
+                                                  eventColor,
+                                                  isDark ? 0.58 : 0.4,
+                                                ),
                                               },
                                             ]}
                                           >
@@ -2231,9 +2201,7 @@ function PlannerScreenContent() {
                                               style={[
                                                 styles.ownerPillText,
                                                 {
-                                                  color: hasColorAccent
-                                                    ? eventColor
-                                                    : textSecondary,
+                                                  color: eventColor,
                                                 },
                                               ]}
                                             >
@@ -2308,10 +2276,10 @@ function PlannerScreenContent() {
                       const stats = monthSummary[toDateKey(date)] ?? {
                         tasks: 0,
                         events: 0,
-                        eventColors: [],
+                        itemColors: [],
                       };
                       const hasData = stats.tasks > 0 || stats.events > 0;
-                      const monthEventDots = stats.eventColors.slice(0, 3);
+                      const monthItemDots = stats.itemColors.slice(0, 3);
                       return (
                         <TouchableOpacity
                           key={date.toISOString()}
@@ -2368,7 +2336,7 @@ function PlannerScreenContent() {
                               />
                             )}
                             {isCurrentMonth &&
-                              monthEventDots.map((color, index) => (
+                              monthItemDots.map((color, index) => (
                                 <View
                                   key={`${toDateKey(date)}-${color}-${index}`}
                                   style={[
@@ -2381,7 +2349,7 @@ function PlannerScreenContent() {
                                 />
                               ))}
                             {isCurrentMonth &&
-                              monthEventDots.length === 0 &&
+                              monthItemDots.length === 0 &&
                               hasData && (
                                 <View
                                   style={[

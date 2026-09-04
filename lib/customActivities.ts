@@ -1,4 +1,5 @@
 import { getCachedUser, supabase } from '@/lib/supabase';
+import { normalizeCustomActivityEmoji } from '@/lib/customActivityEmoji';
 
 export type CustomTrackingMode = 'event' | 'quantity' | 'duration';
 
@@ -26,7 +27,7 @@ const normalizeDraft = (draft: CustomActivityTypeDraft): CustomActivityTypeDraft
   const isQuantity = draft.tracking_mode === 'quantity';
   return {
     name: draft.name.trim(),
-    emoji: draft.emoji.trim() || '⭐️',
+    emoji: normalizeCustomActivityEmoji(draft.emoji, draft.name),
     color: draft.color,
     tracking_mode: draft.tracking_mode,
     unit: isQuantity ? draft.unit?.trim() || null : null,

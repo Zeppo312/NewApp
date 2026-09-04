@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, ActivityIndicator, Alert, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import FloatingVoiceButton from '@/components/FloatingVoiceButton';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 
@@ -155,7 +156,7 @@ function RootLayoutNav() {
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
   const { isResolved: isBabyStatusResolved } = useBabyStatus();
   const { requestPermissions, expoPushToken } = useNotifications();
-  const { activeBabyId } = useActiveBaby();
+  const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const { activeBackend } = useBackend();
   const { convexClient } = useConvex();
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
@@ -808,16 +809,23 @@ function RootLayoutNav() {
     }
   }, [loading]);
 
-  // Splash-Screen erst ausblenden, wenn Auth UND Baby-Status aufgelöst sind.
-  // Verhindert das kurze Aufblitzen des Schwangerschafts-Modus beim App-Start.
+  // Splash-Screen erst ausblenden, wenn Auth, aktives Kind und dessen Status
+  // zum aktuellen Benutzer passen. So gelangt kein veralteter Zwischenzustand
+  // in den Navigator.
   useEffect(() => {
-    if (!loading && isBabyStatusResolved && isLocaleReady) {
+    if (!loading && isActiveBabyReady && isBabyStatusResolved && isLocaleReady) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loading, isBabyStatusResolved, isLocaleReady]);
+  }, [isActiveBabyReady, isBabyStatusResolved, isLocaleReady, loading]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || !initialRoute || !isLocaleReady) {
+  if (
+    loading ||
+    !initialRoute ||
+    !isLocaleReady ||
+    !isActiveBabyReady ||
+    !isBabyStatusResolved
+  ) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
@@ -915,6 +923,7 @@ function RootLayoutNav() {
         }}
       />
       <LottiMomentToast />
+      <FloatingVoiceButton />
       <ImageCacheMaintenance />
       <StatusBar hidden={true} />
     </ThemeProvider>

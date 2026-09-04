@@ -66,6 +66,7 @@ export const askLotti = async (
     {
       body: {
         babyId: request.babyId,
+        mode: request.mode ?? "baby",
         question,
         locale: request.locale,
         history: (request.history ?? []).slice(-4).map((item) => ({

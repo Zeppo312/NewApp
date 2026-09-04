@@ -95,6 +95,13 @@ export const localDateString = (date = new Date()): string => {
 
 /** Kategorie-Zuordnung der Regel-Ids (siehe mockInsights.ts / Konzept §4). */
 export const categoryForRule = (ruleId: string): AdvisorCategory => {
+  // Schwangerschaftsregeln (supabase/functions/advisor-generate/pregnancyRules.ts)
+  if (ruleId.startsWith('preg_')) {
+    if (/hot|uv|cold|rain/.test(ruleId)) return 'weather';
+    if (ruleId.includes('water')) return 'feeding';
+    if (ruleId.includes('sleep')) return 'sleep';
+    return 'motivation';
+  }
   if (ruleId.includes('feeding')) return 'feeding';
   if (ruleId.includes('sleep')) return 'sleep';
   if (
@@ -110,6 +117,12 @@ export const categoryForRule = (ruleId: string): AdvisorCategory => {
 
 /** Priorität wie im Konzept: Kombi-Regeln schlagen Einzel-Regeln. */
 export const priorityForRule = (ruleId: string): number => {
+  if (ruleId.startsWith('preg_')) {
+    if (ruleId === 'preg_contractions_regular' || ruleId === 'preg_hot_low_water') return 1;
+    if (ruleId === 'preg_all_good') return 4;
+    if (ruleId === 'preg_learning') return 5;
+    return /high_uv|preg_hot$|low_water|low_sleep|low_mood|appointment|hospital/.test(ruleId) ? 2 : 3;
+  }
   if (ruleId === 'hot_low_feeding' || ruleId === 'hot_low_sleep') return 1;
   if (ruleId === 'hot' || ruleId === 'cold' || ruleId === 'high_uv') return 2;
   if (ruleId === 'low_sleep') return 3;
@@ -145,35 +158,67 @@ const rowToHistoryItem = (row: any): AdvisorHistoryItem => ({
  * Wird die Analyse im Tagesverlauf neu berechnet, aktualisiert sich der
  * Inhalt – read_at/acted_at bleiben dabei erhalten.
  */
+/**
+ * `babyId = null` = Schwangerschaftsmodus: ein Hinweis pro Nutzer/Tag ohne
+ * Baby-Bezug (partieller Unique-Index, siehe Migration 20260903120000).
+ */
+export type AdvisorScope = string | null;
+
+/** Filtert auf ein Baby bzw. auf die Schwangerschaftszeilen (baby_id IS NULL). */
+const scopeBaby = <T extends { eq: any; is: any }>(query: T, babyId: AdvisorScope): T =>
+  babyId ? query.eq('baby_id', babyId) : query.is('baby_id', null);
+
 export const saveTodayInsight = async (
-  babyId: string,
+  babyId: AdvisorScope,
   analysis: AdvisorAnalysis,
 ): Promise<string | null> => {
   const userId = await getUserId();
   if (!userId) return null;
 
   const main = analysis.main;
+  const row = {
+    user_id: userId,
+    baby_id: babyId,
+    local_date: localDateString(),
+    rule_id: main.id,
+    title: main.title,
+    headline: main.headline ?? null,
+    body: main.body,
+    emoji: main.emoji,
+    tone: main.tone,
+    category: categoryForRule(main.id),
+    priority: priorityForRule(main.id),
+    facts: { reasons: analysis.reasons },
+    source: 'rules',
+  };
   try {
+    if (!babyId) {
+      // Upsert greift bei NULL-Spalten im Konflikt-Ziel nicht → von Hand.
+      const { data: existing } = await supabase
+        .from('advisor_messages')
+        .select('id')
+        .eq('user_id', userId)
+        .is('baby_id', null)
+        .eq('local_date', row.local_date)
+        .maybeSingle();
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('advisor_messages')
+          .update(row)
+          .eq('id', existing.id);
+        return error ? null : existing.id;
+      }
+      const { data, error } = await supabase
+        .from('advisor_messages')
+        .insert(row)
+        .select('id')
+        .maybeSingle();
+      if (error) return null;
+      return data?.id ?? null;
+    }
     const { data, error } = await supabase
       .from('advisor_messages')
-      .upsert(
-        {
-          user_id: userId,
-          baby_id: babyId,
-          local_date: localDateString(),
-          rule_id: main.id,
-          title: main.title,
-          headline: main.headline ?? null,
-          body: main.body,
-          emoji: main.emoji,
-          tone: main.tone,
-          category: categoryForRule(main.id),
-          priority: priorityForRule(main.id),
-          facts: { reasons: analysis.reasons },
-          source: 'rules',
-        },
-        { onConflict: 'user_id,baby_id,local_date' },
-      )
+      .upsert(row, { onConflict: 'user_id,baby_id,local_date' })
       .select('id')
       .maybeSingle();
     if (error) return null;
@@ -185,16 +230,18 @@ export const saveTodayInsight = async (
 };
 
 export const fetchTodayState = async (
-  babyId: string,
+  babyId: AdvisorScope,
 ): Promise<AdvisorTodayState | null> => {
   const userId = await getUserId();
   if (!userId) return null;
   try {
-    const { data, error } = await supabase
-      .from('advisor_messages')
-      .select('id, acted_at, remind_at, reminder_notification_id, shared_at')
-      .eq('user_id', userId)
-      .eq('baby_id', babyId)
+    const { data, error } = await scopeBaby(
+      supabase
+        .from('advisor_messages')
+        .select('id, acted_at, remind_at, reminder_notification_id, shared_at')
+        .eq('user_id', userId),
+      babyId,
+    )
       .eq('local_date', localDateString())
       .maybeSingle();
     if (error || !data) return null;
@@ -212,20 +259,22 @@ export const fetchTodayState = async (
 
 /** Verlauf der letzten Tage (ohne heute, ohne verworfene Hinweise). */
 export const fetchHistory = async (
-  babyId: string,
+  babyId: AdvisorScope,
   limit = 14,
 ): Promise<AdvisorHistoryItem[] | null> => {
   const userId = await getUserId();
   if (!userId) return null;
 
   try {
-    const { data, error } = await supabase
-      .from('advisor_messages')
-      .select(
-        'id, rule_id, emoji, tone, title, headline, body, category, local_date, created_at, acted_at',
-      )
-      .eq('user_id', userId)
-      .eq('baby_id', babyId)
+    const { data, error } = await scopeBaby(
+      supabase
+        .from('advisor_messages')
+        .select(
+          'id, rule_id, emoji, tone, title, headline, body, category, local_date, created_at, acted_at',
+        )
+        .eq('user_id', userId),
+      babyId,
+    )
       .lt('local_date', localDateString())
       .is('dismissed_at', null)
       .order('local_date', { ascending: false })
@@ -238,15 +287,17 @@ export const fetchHistory = async (
 };
 
 /** Heutigen Hinweis als gelesen markieren (fürs Ungelesen-Badge). */
-export const markTodayRead = async (babyId: string): Promise<void> => {
+export const markTodayRead = async (babyId: AdvisorScope): Promise<void> => {
   const userId = await getUserId();
   if (!userId) return;
   try {
-    await supabase
-      .from('advisor_messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('baby_id', babyId)
+    await scopeBaby(
+      supabase
+        .from('advisor_messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('user_id', userId),
+      babyId,
+    )
       .eq('local_date', localDateString())
       .is('read_at', null);
   } catch {

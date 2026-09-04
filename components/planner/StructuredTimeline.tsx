@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  Dimensions,
+  type LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -57,8 +57,6 @@ type TimelineEvent = {
   isRecurring?: boolean;
   minute: number;
   endMinute: number;
-  column?: number;
-  totalColumns?: number;
 };
 
 type TimelineTodo = {
@@ -70,19 +68,36 @@ type TimelineTodo = {
   endMinute: number;
   timeLabel: string;
   assignee: PlannerAssignee;
-  /** Eigene Farbe der Aufgabe; ohne Wert bleibt die neutrale Glaskarte. */
-  todoColor?: string;
+  /** Aufgelöste Farbe: eigene Farbe oder automatisch nach Person/Familie. */
+  todoColor: string;
   isRecurring?: boolean;
-  column?: number;
-  totalColumns?: number;
 };
 
 type TimelineItem = TimelineEvent | TimelineTodo;
 
+type TimelineRow = {
+  id: string;
+  startMinute: number;
+  endMinute: number;
+  /** Zeitlicher Abstand zur vorherigen Zeile in Minuten. */
+  gapMinutes: number;
+  items: TimelineItem[];
+};
+
 const LINE_X = LAYOUT_PAD + 36;
 const CARD_LEFT = LINE_X + 28;
-const PX_PER_MIN = 1.35;
-const CARD_VERTICAL_OFFSET = 30;
+/** Mehr als zwei Karten nebeneinander werden auf dem Handy unlesbar. */
+const MAX_COLUMNS = 2;
+const ROW_GAP = 12;
+/** Label sitzt auf Höhe der Kartenmitte der ersten Zeile. */
+const ROW_LABEL_OFFSET = 26;
+
+const formatMinute = (minute: number) =>
+  `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+
+/** Größere Zeitlücken bekommen etwas mehr Luft, aber keine leeren Stunden. */
+const rowGapPx = (gapMinutes: number) =>
+  ROW_GAP + Math.min(36, Math.round((gapMinutes / 60) * 10));
 
 const toRgba = (hex: string, opacity = 1) => {
   const cleanHex = hex.replace("#", "");
@@ -157,7 +172,6 @@ export const StructuredTimeline: React.FC<Props> = ({
 
   const timeline = useMemo(() => {
     const entries: TimelineItem[] = [];
-    const minutesSet = new Set<number>();
     const fallbackBase = 13 * 60;
     let floatingIndex = 0;
 
@@ -203,8 +217,6 @@ export const StructuredTimeline: React.FC<Props> = ({
         minute: startMinute,
         endMinute: endMinute,
       });
-      minutesSet.add(startMinute);
-      minutesSet.add(endMinute);
     });
 
     todos.forEach((todo) => {
@@ -238,234 +250,118 @@ export const StructuredTimeline: React.FC<Props> = ({
         endMinute: endMinute,
         timeLabel,
         assignee: todo.assignee ?? "me",
-        todoColor: todo.color
-          ? getEventColor?.(
-              todo.assignee,
-              todo.babyId,
-              todo.userId,
-              todo.color,
-            )
-          : undefined,
+        todoColor:
+          getEventColor?.(
+            todo.assignee,
+            todo.babyId,
+            todo.userId,
+            todo.color,
+          ) ?? accentColor,
         isRecurring: recurring,
       });
-      minutesSet.add(dueMinute);
-      minutesSet.add(endMinute);
     });
 
-    entries.sort((a, b) => a.minute - b.minute);
+    entries.sort((a, b) => a.minute - b.minute || a.endMinute - b.endMinute);
 
     if (entries.length === 0) {
-      return {
-        items: [] as TimelineItem[],
-        positionFor: (minute: number) => minute * PX_PER_MIN,
-        contentHeight: 200,
-        hourLabels: [] as { label: string; top: number }[],
-        showNowLine: false,
-        nowTop: 0,
-      };
+      return { rows: [] as TimelineRow[] };
     }
 
-    // Apple Calendar-style overlap detection for all items (events and todos)
-    // Helper function to check if two items overlap
-    const itemsOverlap = (
-      item1: TimelineItem,
-      item2: TimelineItem,
-    ): boolean => {
-      return item1.minute < item2.endMinute && item2.minute < item1.endMinute;
-    };
-
-    // Group overlapping items
-    const itemGroups: TimelineItem[][] = [];
+    // Zeilen-Layout: Einträge stehen grundsätzlich untereinander.
+    // Nur bei exakt gleicher Startzeit teilen sich zwei Einträge eine Zeile
+    // (nebeneinander, max. MAX_COLUMNS). Nichts überlagert sich.
+    const rows: TimelineRow[] = [];
     entries.forEach((item) => {
-      let addedToGroup = false;
-
-      for (const group of itemGroups) {
-        // Check if this item overlaps with ANY item in the group
-        if (group.some((groupItem) => itemsOverlap(item, groupItem))) {
-          group.push(item);
-          addedToGroup = true;
-          break;
-        }
-      }
-
-      if (!addedToGroup) {
-        itemGroups.push([item]);
-      }
-    });
-
-    // Assign columns within each group (Apple Calendar style)
-    // Maximum 2 columns allowed
-    const MAX_COLUMNS = 2;
-    const itemsWithLayout: TimelineItem[] = [];
-
-    itemGroups.forEach((group) => {
-      if (group.length === 1) {
-        itemsWithLayout.push({ ...group[0], column: 0, totalColumns: 1 });
-      } else {
-        // Sort group by start time, then end time
-        group.sort((a, b) => a.minute - b.minute || a.endMinute - b.endMinute);
-
-        // Assign columns to avoid overlap (max 2 columns)
-        const columns: TimelineItem[][] = [];
-        const itemColumns: Map<string, number> = new Map();
-
-        group.forEach((item) => {
-          let assignedColumn = -1;
-
-          // Find first column where this item doesn't overlap with any existing item
-          for (
-            let colIdx = 0;
-            colIdx < Math.min(columns.length, MAX_COLUMNS);
-            colIdx++
-          ) {
-            const itemsInColumn = columns[colIdx];
-            const overlapsInColumn = itemsInColumn.some((i) =>
-              itemsOverlap(item, i),
-            );
-
-            if (!overlapsInColumn) {
-              columns[colIdx].push(item);
-              assignedColumn = colIdx;
-              break;
-            }
-          }
-
-          // If no suitable column found and we haven't reached max columns, create new one
-          if (assignedColumn === -1 && columns.length < MAX_COLUMNS) {
-            columns.push([item]);
-            assignedColumn = columns.length - 1;
-          } else if (assignedColumn === -1) {
-            // If we've reached max columns, add to the column with least items
-            const leastBusyColumn = columns.reduce(
-              (minIdx, col, idx, arr) =>
-                col.length < arr[minIdx].length ? idx : minIdx,
-              0,
-            );
-            columns[leastBusyColumn].push(item);
-            assignedColumn = leastBusyColumn;
-          }
-
-          itemColumns.set(item.id, assignedColumn);
-        });
-
-        // Now add all items with correct totalColumns (capped at MAX_COLUMNS)
-        const totalColumns = Math.min(columns.length, MAX_COLUMNS);
-        group.forEach((item) => {
-          itemsWithLayout.push({
-            ...item,
-            column: itemColumns.get(item.id) ?? 0,
-            totalColumns,
-          });
-        });
-      }
-    });
-
-    const minutes = Array.from(minutesSet).sort((a, b) => a - b);
-    const positions = new Map<number, number>();
-    let currentY = 0;
-    let previousMinute = minutes[0];
-    positions.set(previousMinute, currentY);
-
-    minutes.slice(1).forEach((minute) => {
-      const deltaMinutes = minute - previousMinute;
-
-      let deltaPx: number;
-
-      if (deltaMinutes === 0) {
-        // Same time: stack vertically with card height spacing
-        deltaPx = 110;
-      } else if (deltaMinutes < 30) {
-        // Close together (< 30 min): granular spacing
-        deltaPx = Math.max(deltaMinutes * 2.5, 90);
-      } else if (deltaMinutes < 120) {
-        // Medium distance (30-120 min): normal spacing
-        deltaPx = Math.min(deltaMinutes * 1.2, 140);
-      } else {
-        // Far apart (> 120 min): compact spacing
-        deltaPx = Math.min(deltaMinutes * 0.7, 100);
-      }
-
-      currentY += deltaPx;
-      positions.set(minute, currentY);
-      previousMinute = minute;
-    });
-
-    const positionFor = (minute: number) => {
-      if (positions.has(minute)) return positions.get(minute)!;
-      const sorted = minutes;
-      if (minute <= sorted[0])
-        return positions.get(sorted[0])! - (sorted[0] - minute) * PX_PER_MIN;
-      if (minute >= sorted[sorted.length - 1])
-        return (
-          positions.get(sorted[sorted.length - 1])! +
-          (minute - sorted[sorted.length - 1]) * PX_PER_MIN
-        );
-
-      let lowerIndex = 0;
-      while (lowerIndex + 1 < sorted.length && sorted[lowerIndex + 1] < minute)
-        lowerIndex += 1;
-      const lowerMinute = sorted[lowerIndex];
-      const upperMinute = sorted[lowerIndex + 1];
-      const lowerPos = positions.get(lowerMinute)!;
-      const upperPos = positions.get(upperMinute)!;
-      const ratio = (minute - lowerMinute) / (upperMinute - lowerMinute || 1);
-      return lowerPos + (upperPos - lowerPos) * ratio;
-    };
-
-    const contentHeight =
-      positionFor(minutes[minutes.length - 1]) + CARD_VERTICAL_OFFSET + 80;
-
-    // Generate hour and half-hour labels for granular timeline
-    const hourLabels: { label: string; top: number }[] = [];
-    const startHour = Math.floor(minutes[0] / 60);
-    const endHour = Math.ceil(minutes[minutes.length - 1] / 60);
-
-    for (let hour = startHour; hour <= endHour; hour += 1) {
-      // Full hour
-      const hourMinute = hour * 60;
-      const hourTopRaw = positionFor(hourMinute) - 10;
-      hourLabels.push({
-        label: `${String(hour).padStart(2, "0")}:00`,
-        top: Math.max(0, hourTopRaw),
-      });
-
-      // Half hour (only if within range and with enough spacing)
-      const halfHourMinute = hour * 60 + 30;
+      const current = rows[rows.length - 1];
       if (
-        halfHourMinute >= minutes[0] &&
-        halfHourMinute <= minutes[minutes.length - 1]
+        current &&
+        current.items.length < MAX_COLUMNS &&
+        current.startMinute === item.minute
       ) {
-        const halfHourTop = positionFor(halfHourMinute) - 10;
-        // Only add half-hour if it's at least 40px away from the full hour
-        if (Math.abs(hourTopRaw - halfHourTop) > 40) {
-          hourLabels.push({
-            label: `${String(hour).padStart(2, "0")}:30`,
-            top: Math.max(0, halfHourTop),
-          });
-        }
+        current.items.push(item);
+        current.endMinute = Math.max(current.endMinute, item.endMinute);
+        return;
       }
-    }
+      rows.push({
+        id: item.id,
+        startMinute: item.minute,
+        endMinute: item.endMinute,
+        gapMinutes: current ? Math.max(0, item.minute - current.endMinute) : 0,
+        items: [item],
+      });
+    });
+
+    return { rows };
+  }, [accentColor, c.flexible, c.me, getAssigneeLabel, getEventColor, getOwnerLabel, localeTag, timedEvents, todos]);
+
+  const { rows } = timeline;
+
+  // Gemessene Zeilenpositionen (relativ zum Timeline-Container) für
+  // Stundenlabels und die Jetzt-Linie.
+  const [rowTops, setRowTops] = useState<Record<string, number>>({});
+  const [rowHeights, setRowHeights] = useState<Record<string, number>>({});
+  const [timelineHeight, setTimelineHeight] = useState(0);
+  const onRowLayout = useCallback(
+    (rowId: string) => (e: LayoutChangeEvent) => {
+      const { y, height } = e.nativeEvent.layout;
+      setRowTops((prev) => (prev[rowId] === y ? prev : { ...prev, [rowId]: y }));
+      setRowHeights((prev) =>
+        prev[rowId] === height ? prev : { ...prev, [rowId]: height },
+      );
+    },
+    [],
+  );
+
+  const { hourLabels, showNowLine, nowTop } = useMemo(() => {
+    const labels: { key: string; label: string; top: number }[] = [];
+    let lastLabel = "";
+    rows.forEach((row) => {
+      const top = rowTops[row.id];
+      if (top === undefined) return;
+      const label = formatMinute(row.startMinute);
+      if (label === lastLabel) return;
+      lastLabel = label;
+      labels.push({ key: row.id, label, top: top + ROW_LABEL_OFFSET });
+    });
 
     const isToday = new Date().toDateString() === date.toDateString();
     const nowMinute = minutesFromMidnight(new Date());
-    const showNowLine =
-      isToday &&
-      nowMinute >= minutes[0] &&
-      nowMinute <= minutes[minutes.length - 1];
-    const nowTop = positionFor(nowMinute);
-
+    let nowY: number | null = null;
+    if (isToday && rows.length > 0) {
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const top = rowTops[row.id];
+        const height = rowHeights[row.id];
+        if (top === undefined || height === undefined) continue;
+        const next = rows[i + 1];
+        const nextTop = next ? rowTops[next.id] : undefined;
+        if (nowMinute >= row.startMinute && nowMinute < row.endMinute) {
+          const ratio =
+            (nowMinute - row.startMinute) /
+            Math.max(1, row.endMinute - row.startMinute);
+          nowY = top + height * ratio;
+          break;
+        }
+        if (
+          next &&
+          nextTop !== undefined &&
+          nowMinute >= row.endMinute &&
+          nowMinute < next.startMinute
+        ) {
+          const ratio =
+            (nowMinute - row.endMinute) /
+            Math.max(1, next.startMinute - row.endMinute);
+          nowY = top + height + (nextTop - top - height) * ratio;
+          break;
+        }
+      }
+    }
     return {
-      items: itemsWithLayout,
-      positionFor,
-      contentHeight,
-      hourLabels,
-      showNowLine,
-      nowTop,
+      hourLabels: labels,
+      showNowLine: nowY !== null,
+      nowTop: nowY ?? 0,
     };
-  }, [accentColor, c.flexible, c.me, date, getAssigneeLabel, getEventColor, getOwnerLabel, localeTag, timedEvents, todos]);
-
-  const { items, positionFor, contentHeight, hourLabels, showNowLine, nowTop } =
-    timeline;
+  }, [date, rowHeights, rowTops, rows]);
 
   return (
     <ScrollView
@@ -602,10 +498,13 @@ export const StructuredTimeline: React.FC<Props> = ({
           </View>
         </View>
       )}
-      <View style={[styles.timeline, { minHeight: contentHeight }]}>
+      <View
+        style={styles.timeline}
+        onLayout={(e) => setTimelineHeight(e.nativeEvent.layout.height)}
+      >
         {hourLabels.map((label) => (
           <View
-            key={label.label}
+            key={label.key}
             style={[styles.hourLabel, { top: label.top }]}
           >
             <ThemedText
@@ -624,18 +523,20 @@ export const StructuredTimeline: React.FC<Props> = ({
           </View>
         ))}
 
-        <View
-          style={[
-            styles.line,
-            {
-              left: LINE_X,
-              height: contentHeight,
-              borderColor: isDark
-                ? toRgba(accentColor, 0.36)
-                : "rgba(94,61,179,0.2)",
-            },
-          ]}
-        />
+        {rows.length > 0 && (
+          <View
+            style={[
+              styles.line,
+              {
+                left: LINE_X,
+                height: Math.max(0, timelineHeight - 20),
+                borderColor: isDark
+                  ? toRgba(accentColor, 0.36)
+                  : "rgba(94,61,179,0.2)",
+              },
+            ]}
+          />
+        )}
 
         {showNowLine && (
           <View
@@ -646,287 +547,244 @@ export const StructuredTimeline: React.FC<Props> = ({
           />
         )}
 
-        {items.map((item) => {
-          if (item.kind === "event") {
-            const top = Math.max(
-              0,
-              positionFor(item.minute) - CARD_VERTICAL_OFFSET,
-            );
-            const totalColumns = item.totalColumns ?? 1;
-            const column = item.column ?? 0;
-
-            // Calculate available width for events
-            const screenWidth = Dimensions.get("window").width;
-            const availableWidth = screenWidth - CARD_LEFT - LAYOUT_PAD;
-            const columnGap = 6;
-
-            // Calculate width and left position for Apple Calendar style
-            const columnWidth =
-              (availableWidth - (totalColumns - 1) * columnGap) / totalColumns;
-            const leftPosition = CARD_LEFT + column * (columnWidth + columnGap);
-
-            const customStyle =
-              totalColumns > 1
-                ? {
-                    left: leftPosition,
-                    right: undefined,
-                    width: columnWidth,
-                  }
-                : {};
-
+        <View style={styles.rows}>
+          {rows.map((row) => {
+            const totalColumns = row.items.length;
+            const compact = totalColumns > 1;
             return (
               <View
-                key={item.id}
-                style={[styles.itemWrap, { top }, customStyle]}
+                key={row.id}
+                onLayout={onRowLayout(row.id)}
+                style={[styles.row, { marginTop: rowGapPx(row.gapMinutes) }]}
               >
-                <View style={styles.node} />
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  onPress={readOnly ? undefined : () => onEditEvent?.(item.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${c.event} ${item.title}${item.isRecurring ? `, ${c.recurring}` : ""}`}
-                  style={[
-                    styles.eventCard,
-                    totalColumns > 1 && { paddingHorizontal: 10 },
-                  ]}
-                >
-                  <BlurView
-                    intensity={20}
-                    tint={blurTint}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View
-                    style={[
-                      StyleSheet.absoluteFill,
-                      styles.cardOverlay,
-                      {
-                        backgroundColor: isDark
-                          ? toRgba(item.eventColor, 0.22)
-                          : toRgba(item.eventColor, 0.14),
-                        borderColor: isDark
-                          ? toRgba(item.eventColor, 0.5)
-                          : toRgba(item.eventColor, 0.34),
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[styles.cardRow, totalColumns > 1 && { gap: 8 }]}
-                  >
-                    <View
-                      style={[
-                        styles.cardIcon,
-                        styles.cardIconEvent,
-                        totalColumns > 1 && { width: 30, height: 30 },
-                        {
-                          backgroundColor: isDark
-                            ? toRgba(item.eventColor, 0.22)
-                            : toRgba(item.eventColor, 0.14),
-                          borderColor: isDark
-                            ? toRgba(item.eventColor, 0.6)
-                            : toRgba(item.eventColor, 0.5),
-                        },
-                      ]}
-                    >
-                      <IconSymbol
-                        name="calendar"
-                        size={totalColumns > 1 ? 12 : 14}
-                        color={(isDark ? "#fff" : textPrimary) as any}
-                      />
-                    </View>
-                    <View style={styles.cardBody}>
-                      <View style={styles.recurringTitleRow}>
-                        <ThemedText
+                {row.items.map((item) => {
+                  if (item.kind === "event") {
+                    return (
+                      <View key={item.id} style={styles.itemWrap}>
+                        <TouchableOpacity
+                          activeOpacity={0.9}
+                          onPress={
+                            readOnly ? undefined : () => onEditEvent?.(item.id)
+                          }
+                          accessibilityRole="button"
+                          accessibilityLabel={`${c.event} ${item.title}${item.isRecurring ? `, ${c.recurring}` : ""}`}
                           style={[
-                            styles.itemTitle,
-                            styles.recurringTitleText,
-                            { color: textPrimary },
-                            totalColumns > 1 && { fontSize: 14 },
+                            styles.eventCard,
+                            compact && { paddingHorizontal: 10 },
                           ]}
-                          numberOfLines={1}
                         >
-                          {item.title}
-                        </ThemedText>
-                        {item.isRecurring && (
+                          <BlurView
+                            intensity={20}
+                            tint={blurTint}
+                            style={StyleSheet.absoluteFill}
+                          />
                           <View
-                            accessible={false}
-                            importantForAccessibility="no-hide-descendants"
-                          >
-                            <IconSymbol
-                              name="arrow.triangle.2.circlepath"
-                              size={10}
-                              color={textMuted as any}
-                              style={styles.recurringIcon}
+                            style={[
+                              StyleSheet.absoluteFill,
+                              styles.cardOverlay,
+                              {
+                                backgroundColor: isDark
+                                  ? toRgba(item.eventColor, 0.22)
+                                  : toRgba(item.eventColor, 0.14),
+                                borderColor: isDark
+                                  ? toRgba(item.eventColor, 0.5)
+                                  : toRgba(item.eventColor, 0.34),
+                              },
+                            ]}
+                          />
+                          <View style={[styles.cardRow, compact && { gap: 8 }]}>
+                            <View
+                              style={[
+                                styles.cardIcon,
+                                styles.cardIconEvent,
+                                compact && { width: 30, height: 30 },
+                                {
+                                  backgroundColor: isDark
+                                    ? toRgba(item.eventColor, 0.22)
+                                    : toRgba(item.eventColor, 0.14),
+                                  borderColor: isDark
+                                    ? toRgba(item.eventColor, 0.6)
+                                    : toRgba(item.eventColor, 0.5),
+                                },
+                              ]}
+                            >
+                              <IconSymbol
+                                name="calendar"
+                                size={compact ? 12 : 14}
+                                color={(isDark ? "#fff" : textPrimary) as any}
+                              />
+                            </View>
+                            <View style={styles.cardBody}>
+                              <View style={styles.recurringTitleRow}>
+                                <ThemedText
+                                  style={[
+                                    styles.itemTitle,
+                                    styles.recurringTitleText,
+                                    { color: textPrimary },
+                                    compact && { fontSize: 14 },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {item.title}
+                                </ThemedText>
+                                {item.isRecurring && (
+                                  <View
+                                    accessible={false}
+                                    importantForAccessibility="no-hide-descendants"
+                                  >
+                                    <IconSymbol
+                                      name="arrow.triangle.2.circlepath"
+                                      size={10}
+                                      color={textMuted as any}
+                                      style={styles.recurringIcon}
+                                    />
+                                  </View>
+                                )}
+                              </View>
+                              <ThemedText
+                                style={[
+                                  styles.eventTime,
+                                  { color: textMuted },
+                                  compact && { fontSize: 10 },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {item.subtitle}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+
+                  const iconName: IconSymbolName = item.completed
+                    ? "checklist"
+                    : item.assignee === "partner"
+                      ? "person.2.fill"
+                      : item.assignee === "family"
+                        ? "house.fill"
+                        : item.assignee === "child"
+                          ? "heart.fill"
+                          : "person.fill";
+                  const todoAccent = item.todoColor;
+                  const iconColor =
+                    item.completed || item.assignee === "partner"
+                      ? "#fff"
+                      : todoAccent;
+                  const iconWrapperStyle = item.completed
+                    ? styles.cardIconDone
+                    : item.assignee === "partner"
+                      ? styles.cardIconPartner
+                      : styles.cardIconMe;
+                  const iconWrapperDynamic = item.completed
+                    ? { backgroundColor: todoAccent, borderColor: todoAccent }
+                    : item.assignee === "partner"
+                      ? {
+                          backgroundColor: toRgba(todoAccent, isDark ? 0.24 : 0.2),
+                          borderColor: toRgba(todoAccent, isDark ? 0.48 : 0.55),
+                        }
+                      : {
+                          backgroundColor: isDark
+                            ? "rgba(255,255,255,0.12)"
+                            : "#fff",
+                          borderColor: toRgba(todoAccent, isDark ? 0.4 : 0.45),
+                        };
+
+                  // Nebeneinander wird das Icon ausgeblendet, damit Platz bleibt.
+                  const showIcon = !compact;
+
+                  return (
+                    <View key={item.id} style={styles.itemWrap}>
+                      <View style={styles.todoCard}>
+                        <BlurView
+                          intensity={18}
+                          tint={blurTint}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <View
+                          style={[
+                            StyleSheet.absoluteFill,
+                            styles.cardOverlay,
+                            {
+                              backgroundColor: toRgba(
+                                item.todoColor,
+                                isDark ? 0.22 : 0.14,
+                              ),
+                              borderColor: toRgba(
+                                item.todoColor,
+                                isDark ? 0.5 : 0.34,
+                              ),
+                            },
+                          ]}
+                        />
+                        <View style={[styles.cardRow, !showIcon && { gap: 0 }]}>
+                          {showIcon && (
+                            <View
+                              style={[
+                                styles.cardIcon,
+                                iconWrapperStyle,
+                                iconWrapperDynamic,
+                              ]}
+                            >
+                              <IconSymbol
+                                name={iconName}
+                                size={14}
+                                color={iconColor as any}
+                              />
+                            </View>
+                          )}
+                          <View style={styles.cardBody}>
+                            <SwipeableListItem
+                              id={item.id}
+                              title={item.title}
+                              type="todo"
+                              completed={item.completed}
+                              isRecurring={isRecurringId(item.id)}
+                              accentColor={item.todoColor}
+                              onComplete={
+                                readOnly ? undefined : () => onToggleTodo(item.id)
+                              }
+                              onMoveTomorrow={
+                                readOnly
+                                  ? undefined
+                                  : () => onMoveTomorrow(item.id)
+                              }
+                              onDelete={readOnly ? undefined : onDelete}
+                              onPress={
+                                readOnly ? undefined : () => onEditTodo?.(item.id)
+                              }
+                              onLongPress={readOnly ? () => {} : undefined}
+                              showLeadingCheckbox={false}
+                              trailingCheckbox
+                              style={[
+                                styles.todoContent,
+                                !showIcon && { paddingLeft: 4, paddingRight: 0 },
+                              ]}
+                              subtitle={item.timeLabel}
+                              titleStyle={
+                                !showIcon
+                                  ? { fontSize: 13, color: textPrimary }
+                                  : { color: textPrimary }
+                              }
+                              subtitleStyle={
+                                !showIcon
+                                  ? { fontSize: 10, color: textSecondary }
+                                  : { color: textSecondary }
+                              }
                             />
                           </View>
-                        )}
+                        </View>
                       </View>
-                      <ThemedText
-                        style={[
-                          styles.eventTime,
-                          { color: textMuted },
-                          totalColumns > 1 && { fontSize: 10 },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {item.subtitle}
-                      </ThemedText>
                     </View>
-                  </View>
-                </TouchableOpacity>
+                  );
+                })}
               </View>
             );
-          }
-
-          const top = Math.max(
-            0,
-            positionFor(item.minute) - CARD_VERTICAL_OFFSET,
-          );
-          const totalColumns = item.totalColumns ?? 1;
-          const column = item.column ?? 0;
-
-          // Calculate available width for todos (same as events)
-          const screenWidth = Dimensions.get("window").width;
-          const availableWidth = screenWidth - CARD_LEFT - LAYOUT_PAD;
-          const columnGap = 6;
-
-          // Calculate width and left position for Apple Calendar style
-          const columnWidth =
-            (availableWidth - (totalColumns - 1) * columnGap) / totalColumns;
-          const leftPosition = CARD_LEFT + column * (columnWidth + columnGap);
-
-          const customStyle =
-            totalColumns > 1
-              ? {
-                  left: leftPosition,
-                  right: undefined,
-                  width: columnWidth,
-                }
-              : {};
-
-          const iconName: IconSymbolName = item.completed
-            ? "checklist"
-            : item.assignee === "partner"
-              ? "person.2.fill"
-              : item.assignee === "family"
-                ? "house.fill"
-                : item.assignee === "child"
-                  ? "heart.fill"
-                  : "person.fill";
-          // Ohne eigene Farbe bleibt der bisherige Akzent erhalten.
-          const todoAccent = item.todoColor ?? accentColor;
-          const iconColor =
-            item.completed || item.assignee === "partner"
-              ? "#fff"
-              : todoAccent;
-          const iconWrapperStyle = item.completed
-            ? styles.cardIconDone
-            : item.assignee === "partner"
-              ? styles.cardIconPartner
-              : styles.cardIconMe;
-          const iconWrapperDynamic = item.completed
-            ? { backgroundColor: todoAccent, borderColor: todoAccent }
-            : item.assignee === "partner"
-              ? {
-                  backgroundColor: toRgba(todoAccent, isDark ? 0.24 : 0.2),
-                  borderColor: toRgba(todoAccent, isDark ? 0.48 : 0.55),
-                }
-              : {
-                  backgroundColor: isDark ? "rgba(255,255,255,0.12)" : "#fff",
-                  borderColor: toRgba(todoAccent, isDark ? 0.4 : 0.45),
-                };
-
-          // Hide icon when todos are side-by-side
-          const showIcon = totalColumns === 1;
-
-          return (
-            <View key={item.id} style={[styles.itemWrap, { top }, customStyle]}>
-              <View style={styles.node} />
-              <View style={styles.todoCard}>
-                <BlurView
-                  intensity={18}
-                  tint={blurTint}
-                  style={StyleSheet.absoluteFill}
-                />
-                <View
-                  style={[
-                    StyleSheet.absoluteFill,
-                    styles.cardOverlay,
-                    item.todoColor
-                      ? {
-                          backgroundColor: toRgba(
-                            item.todoColor,
-                            isDark ? 0.22 : 0.14,
-                          ),
-                          borderColor: toRgba(
-                            item.todoColor,
-                            isDark ? 0.5 : 0.34,
-                          ),
-                        }
-                      : { backgroundColor: glassOverlay, borderColor: glassBorder },
-                  ]}
-                />
-                <View style={[styles.cardRow, !showIcon && { gap: 0 }]}>
-                  {showIcon && (
-                    <View
-                      style={[
-                        styles.cardIcon,
-                        iconWrapperStyle,
-                        iconWrapperDynamic,
-                      ]}
-                    >
-                      <IconSymbol
-                        name={iconName}
-                        size={14}
-                        color={iconColor as any}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.cardBody}>
-                    <SwipeableListItem
-                      id={item.id}
-                      title={item.title}
-                      type="todo"
-                      completed={item.completed}
-                      isRecurring={isRecurringId(item.id)}
-                      accentColor={item.todoColor}
-                      onComplete={
-                        readOnly ? undefined : () => onToggleTodo(item.id)
-                      }
-                      onMoveTomorrow={
-                        readOnly ? undefined : () => onMoveTomorrow(item.id)
-                      }
-                      onDelete={readOnly ? undefined : onDelete}
-                      onPress={
-                        readOnly ? undefined : () => onEditTodo?.(item.id)
-                      }
-                      onLongPress={readOnly ? () => {} : undefined}
-                      showLeadingCheckbox={false}
-                      trailingCheckbox
-                      style={[
-                        styles.todoContent,
-                        !showIcon && { paddingLeft: 4, paddingRight: 0 },
-                      ]}
-                      subtitle={item.timeLabel}
-                      titleStyle={
-                        !showIcon
-                          ? { fontSize: 13, color: textPrimary }
-                          : { color: textPrimary }
-                      }
-                      subtitleStyle={
-                        !showIcon
-                          ? { fontSize: 10, color: textSecondary }
-                          : { color: textSecondary }
-                      }
-                    />
-                  </View>
-                </View>
-              </View>
-            </View>
-          );
-        })}
-
-        {items.length === 0 && (
-          <View style={[styles.emptyState, { top: 0 }]}>
+          })}
+        </View>
+        {rows.length === 0 && (
+          <View style={styles.emptyState}>
             <BlurView
               intensity={18}
               tint={blurTint}
@@ -1023,7 +881,6 @@ const styles = StyleSheet.create({
     position: "relative",
     paddingLeft: LAYOUT_PAD,
     paddingRight: LAYOUT_PAD,
-    paddingTop: 16,
   },
   hourLabel: {
     position: "absolute",
@@ -1061,19 +918,19 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     borderRadius: 1,
   },
-  itemWrap: {
-    position: "absolute",
-    left: CARD_LEFT,
-    right: LAYOUT_PAD,
+  rows: {
+    paddingTop: 16,
+    marginLeft: CARD_LEFT - LAYOUT_PAD,
     zIndex: 3,
   },
-  node: {
-    position: "absolute",
-    left: LINE_X - 1,
-    top: CARD_VERTICAL_OFFSET - 1,
-    width: 2,
-    height: 2,
-    backgroundColor: "transparent",
+  row: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 6,
+  },
+  itemWrap: {
+    flex: 1,
+    minWidth: 0,
   },
   cardRow: {
     flexDirection: "row",
@@ -1115,6 +972,8 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   eventCard: {
+    flex: 1,
+    justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 18,
     borderRadius: 20,
@@ -1142,6 +1001,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   todoCard: {
+    flex: 1,
+    justifyContent: "center",
     paddingVertical: 12,
     paddingHorizontal: 18,
     borderRadius: 20,
@@ -1163,9 +1024,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   emptyState: {
-    position: "absolute",
-    left: CARD_LEFT,
-    right: LAYOUT_PAD,
+    marginLeft: CARD_LEFT - LAYOUT_PAD,
     borderRadius: 20,
     overflow: "hidden",
     paddingVertical: 18,

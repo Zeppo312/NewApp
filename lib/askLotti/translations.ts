@@ -55,6 +55,20 @@ const de = {
   close: "Schließen",
   today: "Heute",
   yesterday: "Gestern",
+  subtitlePregnancy: "Begleitung in der Schwangerschaft – persönlich, wenn Daten passen",
+  introPregnancy:
+    "Frag mich alles rund um deine Schwangerschaft. Ich gebe dir eine klare allgemeine Orientierung für deine Woche und beziehe deine Check-ins, Termine und Vorbereitung automatisch mit ein.",
+  placeholderPregnancy: "Frag zu deiner Woche, Selfcare, Terminen oder der Geburt …",
+  greetingPregnancy:
+    "Hallo! Frag mich einfach, was du rund um deine Schwangerschaft wissen möchtest. Wenn passende Einträge vorhanden sind, beziehe ich sie automatisch mit ein.",
+  personalHelpPregnancy: "Deine Einträge, wenn passend",
+  assistantPregnancy: "Deine Schwangerschaftsbegleiterin",
+  p1: "In welcher Woche bin ich und was passiert gerade mit meinem Baby?",
+  p2: "Wie sahen meine Selfcare-Check-ins diese Woche aus?",
+  p3: "Ist meine Gewichtszunahme für meine Woche üblich?",
+  p4: "Was sollte ich beim nächsten Vorsorgetermin ansprechen?",
+  p5: "Wie weit bin ich mit Kliniktasche und Geburtsplan?",
+  p6: "Wie kann ich in dieser Woche besser schlafen?",
 };
 type Key = keyof typeof de;
 const en: Record<Key, string> = {
@@ -112,6 +126,20 @@ const en: Record<Key, string> = {
   close: "Close",
   today: "Today",
   yesterday: "Yesterday",
+  subtitlePregnancy: "Pregnancy companion, personalized when it helps",
+  introPregnancy:
+    "Ask me anything about your pregnancy. I’ll give you clear general guidance for your week and automatically include your check-ins, appointments and preparation when they fit.",
+  placeholderPregnancy: "Ask about your week, self-care, appointments, or birth …",
+  greetingPregnancy:
+    "Hello! Just ask me whatever you’d like to know about your pregnancy. If matching entries exist, I’ll include them automatically.",
+  personalHelpPregnancy: "Your entries when relevant",
+  assistantPregnancy: "Your pregnancy companion",
+  p1: "Which week am I in and what is happening with my baby right now?",
+  p2: "What did my self-care check-ins look like this week?",
+  p3: "Is my weight gain typical for my week?",
+  p4: "What should I bring up at my next checkup?",
+  p5: "How far along am I with my hospital bag and birth plan?",
+  p6: "How can I sleep better this week?",
 };
 const es: Record<Key, string> = {
   title: "Pregunta a Lotti",
@@ -166,6 +194,20 @@ const es: Record<Key, string> = {
   close: "Cerrar",
   today: "Hoy",
   yesterday: "Ayer",
+  subtitlePregnancy: "Acompañamiento en el embarazo, personalizado cuando ayuda",
+  introPregnancy:
+    "Pregúntame lo que quieras sobre tu embarazo. Te doy orientación general clara para tu semana e incluyo automáticamente tus check-ins, citas y preparación cuando encajan.",
+  placeholderPregnancy: "Pregunta por tu semana, autocuidado, citas o el parto …",
+  greetingPregnancy:
+    "¡Hola! Pregúntame lo que quieras saber sobre tu embarazo. Si hay registros que encajan, los incluyo automáticamente.",
+  personalHelpPregnancy: "Tus registros, cuando encajan",
+  assistantPregnancy: "Tu acompañante en el embarazo",
+  p1: "¿En qué semana estoy y qué le pasa a mi bebé ahora mismo?",
+  p2: "¿Cómo fueron mis check-ins de autocuidado esta semana?",
+  p3: "¿Mi aumento de peso es habitual para mi semana?",
+  p4: "¿Qué debería comentar en mi próxima revisión?",
+  p5: "¿Cómo voy con la bolsa del hospital y el plan de parto?",
+  p6: "¿Cómo puedo dormir mejor esta semana?",
 };
 
 const catalogs: Record<AppLocale, Record<Key, string>> = { de, en, es };
@@ -178,7 +220,11 @@ export const translateAskLotti = (
     /\{\{(\w+)\}\}/g,
     (_, token: string) => String(params[token] ?? `{{${token}}}`),
   );
-export const askLottiSuggestions = (locale: AppLocale) =>
-  (["q1", "q2", "q3", "q4", "q5", "q6"] as const).map((key) =>
-    translateAskLotti(locale, key),
-  );
+export const askLottiSuggestions = (
+  locale: AppLocale,
+  mode: "baby" | "pregnancy" = "baby",
+) =>
+  (mode === "pregnancy"
+    ? (["p1", "p2", "p3", "p4", "p5", "p6"] as const)
+    : (["q1", "q2", "q3", "q4", "q5", "q6"] as const)
+  ).map((key) => translateAskLotti(locale, key));

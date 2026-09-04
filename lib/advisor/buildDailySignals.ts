@@ -86,7 +86,7 @@ const formatSleepMinutes = (minutes: number): string => {
  * Lädt aktuelles Wetter (Beschreibung) UND den Tagesforecast (Tmax, UV-Index,
  * Regenwahrscheinlichkeit) parallel; jede Quelle darf einzeln ausfallen.
  */
-const tryLoadWeather = async (): Promise<{
+export const tryLoadWeather = async (): Promise<{
   current: WeatherData | null;
   forecast: DailyForecast | null;
 } | null> => {

@@ -182,11 +182,12 @@ export default function CustomActivityDefinitionModal({
             <TextInput
               value={emoji}
               onChangeText={setEmoji}
-              maxLength={16}
+              maxLength={32}
               placeholder="⭐️"
               placeholderTextColor={textSecondary}
               style={[styles.input, styles.emojiInput, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
             />
+            <Text style={[styles.fieldHint, { color: textSecondary }]}>{t('custom.emojiHint')}</Text>
             <View style={styles.emojiRow}>
               {EMOJI_SUGGESTIONS.map((suggestion) => (
                 <TouchableOpacity
@@ -327,6 +328,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '800', marginTop: 7 },
   input: { minHeight: 48, borderRadius: 15, borderWidth: 1, paddingHorizontal: 14, fontSize: 16 },
   emojiInput: { fontSize: 24 },
+  fieldHint: { fontSize: 12, lineHeight: 17 },
   emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   emojiChip: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   emojiChipText: { fontSize: 22 },

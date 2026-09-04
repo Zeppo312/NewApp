@@ -10,6 +10,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BabyInfo, createBaby, listBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
+import {
+  getActiveBabyResolutionScope,
+  isResolutionCurrent,
+} from '@/lib/startupResolution';
 
 type ActiveBabyContextType = {
   babies: BabyInfo[];
@@ -37,7 +41,11 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   const [activeBabyId, setActiveBabyIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [resolvedScope, setResolvedScope] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const currentScope = getActiveBabyResolutionScope(user?.id);
+  const isReadyForCurrentUser =
+    isReady && isResolutionCurrent(resolvedScope, currentScope);
 
   const getActiveBabyStorageKey = useCallback((userId: string) => {
     return `${ACTIVE_BABY_STORAGE_KEY_PREFIX}:${userId}`;
@@ -149,6 +157,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
       setActiveBabyIdState(null);
       setIsLoading(false);
       setIsReady(true);
+      setResolvedScope(getActiveBabyResolutionScope(null));
       setLoadError(null);
       return;
     }
@@ -163,6 +172,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
       setActiveBabyIdState(null);
       setIsLoading(false);
       setIsReady(true);
+      setResolvedScope(getActiveBabyResolutionScope(user.id));
       setLoadError(formatLoadError(error));
       return;
     }
@@ -194,6 +204,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
             setActiveBabyIdState(null);
             setIsLoading(false);
             setIsReady(true);
+            setResolvedScope(getActiveBabyResolutionScope(user.id));
             setLoadError(null);
             return;
           }
@@ -204,6 +215,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
           setActiveBabyIdState(null);
           setIsLoading(false);
           setIsReady(true);
+          setResolvedScope(getActiveBabyResolutionScope(user.id));
           setLoadError(null);
           console.error('Error loading profile during baby sync:', profileError);
           return;
@@ -230,6 +242,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
         setActiveBabyIdState(null);
         setIsLoading(false);
         setIsReady(true);
+        setResolvedScope(getActiveBabyResolutionScope(user.id));
         setLoadError(null);
         return;
       }
@@ -255,6 +268,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setIsLoading(false);
     setIsReady(true);
+    setResolvedScope(getActiveBabyResolutionScope(user.id));
   }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, user]);
 
   /**
@@ -279,6 +293,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
     await AsyncStorage.setItem(getActiveBabyStorageKey(user.id), babyId);
 
     setIsReady(true);
+    setResolvedScope(getActiveBabyResolutionScope(user.id));
   }, [getActiveBabyStorageKey, user?.id]);
 
   const activeBaby = useMemo(
@@ -297,7 +312,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
         activeBabyId,
         activeBaby,
         isLoading,
-        isReady,
+        isReady: isReadyForCurrentUser,
         loadError,
         setActiveBabyId,
         refreshBabies: refreshBabiesForced,

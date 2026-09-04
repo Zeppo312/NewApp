@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   AlertButton,
+  Animated,
+  Easing,
   InteractionManager,
   Modal,
   Pressable,
@@ -25,6 +27,8 @@ import { useLocale } from '@/contexts/LocaleContext';
 type BabySwitcherButtonProps = {
   size?: number;
   showTrigger?: boolean;
+  /** Zeigt unten rechts ein kleines Badge, das den Wechsel zu anderen Kindern andeutet */
+  showSwitchHint?: boolean;
   isOpen?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
 };
@@ -32,6 +36,7 @@ type BabySwitcherButtonProps = {
 const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   size = 36,
   showTrigger = true,
+  showSwitchHint = false,
   isOpen,
   onOpenChange,
 }) => {
@@ -114,10 +119,6 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     if (name) return name.charAt(0).toUpperCase();
     return 'B';
   }, [activeBaby?.name]);
-
-  if (!user) {
-    return null;
-  }
 
   const getHomeRouteForBaby = async (babyId: string): Promise<'/(tabs)/home' | '/(tabs)/pregnancy-home'> => {
     const knownBaby = babies.find((baby) => baby.id === babyId);
@@ -369,27 +370,82 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     }
   };
 
+  const otherBabies = useMemo(
+    () => babies.filter((baby) => baby.id && baby.id !== activeBabyId),
+    [babies, activeBabyId],
+  );
+  const otherBabyCount = otherBabies.length;
+  const previewBabies = otherBabies.slice(0, 2);
+  const overflowCount = otherBabyCount - previewBabies.length;
+  const miniSize = Math.max(16, Math.round(size * 0.3));
+  const hintSize = miniSize + 6;
+  const hintBgColor = isDark ? 'rgba(52, 40, 78, 0.96)' : 'rgba(255, 255, 255, 0.98)';
+  const hintBorderColor = isDark ? 'rgba(30, 24, 40, 0.9)' : 'rgba(255, 255, 255, 0.95)';
+  const miniBorderColor = isDark ? 'rgba(52, 40, 78, 1)' : '#FFFFFF';
+  const miniFallbackBg = isDark ? 'rgba(142, 104, 220, 0.5)' : 'rgba(94, 61, 179, 0.14)';
+  const miniTextColor = isDark ? '#FFFFFF' : '#5E3DB3';
+  const initialOf = (name?: string | null) => (name?.trim()?.charAt(0) || '?').toUpperCase();
+
+  // Dezentes „Atmen“ des Badges + Ping-Ring, damit der Avatar als Button lesbar ist.
+  const [pressScale] = useState(() => new Animated.Value(1));
+  const [hintScale] = useState(() => new Animated.Value(1));
+
+  useEffect(() => {
+    if (!showSwitchHint || !showTrigger) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(2600),
+        Animated.timing(hintScale, { toValue: 1.14, duration: 240, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(hintScale, { toValue: 1, duration: 480, easing: Easing.out(Easing.back(2.5)), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      hintScale.setValue(1);
+    };
+  }, [showSwitchHint, showTrigger, hintScale]);
+
+  const animatePress = (pressed: boolean) => {
+    Animated.spring(pressScale, {
+      toValue: pressed ? 0.92 : 1,
+      useNativeDriver: true,
+      speed: 30,
+      bounciness: 6,
+    }).start();
+  };
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <>
       {showTrigger && (
         <TouchableOpacity
-          style={[
-            styles.avatarButton,
-            {
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              backgroundColor: triggerBgColor,
-            },
-          ]}
+          activeOpacity={0.9}
           onPress={() => setModalOpen(true)}
+          onPressIn={() => animatePress(true)}
+          onPressOut={() => animatePress(false)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           disabled={isLoading}
         >
+         <Animated.View style={[styles.avatarButton, { width: size, height: size, transform: [{ scale: pressScale }] }]}>
+          <View
+            style={[
+              styles.avatarClip,
+              {
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+                backgroundColor: triggerBgColor,
+              },
+            ]}
+          >
           {activeBaby?.photo_url ? (
             <CachedImage
               uri={activeBaby.photo_url}
-              style={styles.avatarImage}
+              style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]}
               showLoader={false}
             />
           ) : (
@@ -397,16 +453,87 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
               style={[
                 styles.avatarFallback,
                 {
+                  width: size,
+                  height: size,
                   borderRadius: size / 2,
                   borderColor: theme.text,
                 },
               ]}
             >
-              <ThemedText style={[styles.avatarInitial, { color: theme.text }]}>
+              <ThemedText
+                style={[
+                  styles.avatarInitial,
+                  {
+                    color: theme.text,
+                    fontSize: Math.round(size * 0.34),
+                    lineHeight: Math.round(size * 0.4),
+                  },
+                ]}
+              >
                 {displayInitial}
               </ThemedText>
             </View>
           )}
+          </View>
+          {showSwitchHint && (
+            <Animated.View
+              style={[
+                styles.switchHint,
+                {
+                  height: hintSize,
+                  borderRadius: hintSize / 2,
+                  backgroundColor: hintBgColor,
+                  borderColor: hintBorderColor,
+                  transform: [{ scale: hintScale }],
+                },
+              ]}
+            >
+              {previewBabies.length > 0 ? (
+                <View style={styles.miniStack}>
+                  {previewBabies.map((baby, index) => (
+                    <View
+                      key={baby.id ?? `mini-${index}`}
+                      style={[
+                        styles.miniAvatar,
+                        {
+                          width: miniSize,
+                          height: miniSize,
+                          borderRadius: miniSize / 2,
+                          borderColor: miniBorderColor,
+                          backgroundColor: miniFallbackBg,
+                          marginLeft: index === 0 ? 0 : -Math.round(miniSize * 0.35),
+                          zIndex: 10 - index,
+                        },
+                      ]}
+                    >
+                      {baby.photo_url ? (
+                        <CachedImage
+                          uri={baby.photo_url}
+                          style={[styles.miniAvatarImage, { width: miniSize, height: miniSize }]}
+                          showLoader={false}
+                        />
+                      ) : (
+                        <ThemedText style={[styles.miniInitial, { color: miniTextColor, fontSize: Math.round(miniSize * 0.5) }]}>
+                          {initialOf(baby.name)}
+                        </ThemedText>
+                      )}
+                    </View>
+                  ))}
+                  {overflowCount > 0 && (
+                    <ThemedText style={[styles.miniOverflow, { color: miniTextColor, fontSize: Math.round(miniSize * 0.55) }]}>
+                      +{overflowCount}
+                    </ThemedText>
+                  )}
+                  <IconSymbol name="chevron.down" size={Math.round(miniSize * 0.7)} color={miniTextColor} style={styles.miniChevron} />
+                </View>
+              ) : (
+                <View style={[styles.miniSolo, { width: miniSize, height: miniSize, borderRadius: miniSize / 2 }]}>
+                  <IconSymbol name="arrow.left.arrow.right" size={Math.round(miniSize * 0.62)} color="#FFFFFF" />
+                </View>
+              )}
+            </Animated.View>
+          )}
+         </Animated.View>
         </TouchableOpacity>
       )}
 
@@ -561,7 +688,11 @@ const styles = StyleSheet.create({
   avatarButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  avatarClip: {
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -572,16 +703,58 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   avatarFallback: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
+  },
+  avatarInitial: {
+    fontWeight: '700',
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  switchHint: {
+    position: 'absolute',
+    right: -6,
+    bottom: -4,
+    paddingHorizontal: 3,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3A2470',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  miniStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  miniAvatar: {
+    overflow: 'hidden',
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarInitial: {
-    fontSize: 14,
-    fontWeight: '700',
+  miniAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  miniInitial: {
+    fontWeight: '800',
+  },
+  miniOverflow: {
+    fontWeight: '800',
+    marginLeft: 2,
+  },
+  miniChevron: {
+    marginLeft: 1,
+    marginRight: -1,
+  },
+  miniSolo: {
+    backgroundColor: '#5E3DB3',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalBackdrop: {
     flex: 1,

@@ -12,6 +12,8 @@ export type AskLottiIntent =
   | "caregiver_handoff"
   | "tomorrow_planning"
   | "general_parenting"
+  | "pregnancy_overview"
+  | "pregnancy_guidance"
   | "unsupported"
   | "medical_escalation";
 
@@ -29,8 +31,19 @@ export type AskLottiMode =
   | "medical"
   | "refuse";
 
+/** 'baby' = born baby with tracking records; 'pregnancy' = due date only. */
+export type AskLottiContextMode = "baby" | "pregnancy";
+
 export type AskLottiFollowUp = {
-  id: "sleep" | "feeding" | "today" | "growth";
+  id:
+    | "sleep"
+    | "feeding"
+    | "today"
+    | "growth"
+    | "week"
+    | "selfcare"
+    | "weight"
+    | "preparation";
   label: string;
   question: string;
 };
@@ -51,7 +64,9 @@ export type AskLottiResponse = {
 };
 
 export type AskLottiRequest = {
-  babyId: string;
+  /** Required in baby mode; null while the baby is not born yet. */
+  babyId: string | null;
+  mode?: AskLottiContextMode;
   question: string;
   locale: AppLocale;
   history?: AskLottiHistoryItem[];

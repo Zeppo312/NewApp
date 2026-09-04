@@ -24,6 +24,7 @@ export interface PremiumHighlightItem {
   key: string;
   emoji: string;
   title: string;
+  /** Wird aktuell nicht gerendert (Panel bewusst kompakt), bleibt für Accessibility. */
   subtitle: string;
   onPress: () => void;
 }
@@ -139,6 +140,9 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
       onPress={item.onPress}
       onPressIn={() => animatePress(0.96)}
       onPressOut={() => animatePress(1)}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      accessibilityHint={item.subtitle}
       style={styles.featureTouchable}
     >
       <Animated.View style={[styles.featureButton, { transform: [{ scale: pressScale }] }]}>
@@ -159,7 +163,6 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
           </Text>
         </View>
         <Text style={styles.featureTitle}>{item.title}</Text>
-        <Text style={styles.featureSubtitle}>{item.subtitle}</Text>
       </Animated.View>
     </TouchableOpacity>
   );
@@ -345,13 +348,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     textAlign: 'center',
-  },
-  featureSubtitle: {
-    fontSize: 11,
-    lineHeight: 15,
-    color: 'rgba(255,255,255,0.72)',
-    textAlign: 'center',
-    marginTop: 4,
   },
 });
 

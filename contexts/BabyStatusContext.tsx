@@ -6,6 +6,10 @@ import { useAuth } from './AuthContext';
 import { getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { parseSafeDate } from '@/lib/safeDate';
 import { useActiveBaby } from './ActiveBabyContext';
+import {
+  getBabyStatusResolutionScope,
+  isResolutionCurrent,
+} from '@/lib/startupResolution';
 
 type BabyStatusSource = 'cache' | 'baby_info' | 'user_settings' | 'default' | 'error' | 'local_action';
 type SetBabyBornOptions = {
@@ -43,12 +47,15 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isBabyBorn, setIsBabyBornState] = useState(false);
   const [temporaryViewMode, setTemporaryViewModeState] = useState<TemporaryViewMode | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isResolved, setIsResolved] = useState(false);
+  const [resolvedScope, setResolvedScope] = useState<string | null>(null);
   const [source, setSource] = useState<BabyStatusSource>('default');
   const [babyAgeMonths, setBabyAgeMonths] = useState(0); // Standardwert: 0 Monate
   const [babyWeightPercentile, setBabyWeightPercentile] = useState(50); // Standardwert: 50. Perzentile
   const { user } = useAuth();
   const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
+  const currentScope = getBabyStatusResolutionScope(user?.id, activeBabyId);
+  const isResolved =
+    isActiveBabyReady && isResolutionCurrent(resolvedScope, currentScope);
   const latestRequestIdRef = useRef(0);
   const temporaryViewModeResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,7 +98,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const applyResolvedState = useCallback(
-    (status: { isBabyBorn: boolean; birthDate: string | null; source: BabyStatusSource }) => {
+    (
+      status: { isBabyBorn: boolean; birthDate: string | null; source: BabyStatusSource },
+      scope: string,
+    ) => {
       setIsBabyBornState(status.isBabyBorn);
       setSource(status.source);
       if (status.birthDate) {
@@ -106,7 +116,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setBabyAgeMonths(0);
       }
       setBabyWeightPercentile(50);
-      setIsResolved(true);
+      setResolvedScope(scope);
     },
     [parseValidDate],
   );
@@ -147,6 +157,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     async (options?: { showLoading?: boolean; preferCache?: boolean }) => {
       const showLoading = options?.showLoading ?? false;
       const preferCache = options?.preferCache ?? true;
+      const resolutionScope = getBabyStatusResolutionScope(user?.id, activeBabyId);
 
       if (!user) {
         latestRequestIdRef.current += 1;
@@ -154,7 +165,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setSource('default');
         setBabyAgeMonths(0);
         setBabyWeightPercentile(50);
-        setIsResolved(true);
+        setResolvedScope(resolutionScope);
         setIsLoading(false);
         return;
       }
@@ -175,7 +186,7 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Nur isResolved zurücksetzen wenn kein Cache erwartet wird,
       // damit isBabyBorn nicht kurz auf false springt und ein falsches Routing auslöst.
       if (!preferCache) {
-        setIsResolved(false);
+        setResolvedScope(null);
       }
 
       let hasCachedValue = false;
@@ -187,7 +198,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             isBabyBorn: cached.isBabyBorn,
             birthDate: cached.birthDate,
             source: 'cache',
-          });
+          }, resolutionScope);
+          // Der persistierte Wert gehoert exakt zu Benutzer und aktivem Kind.
+          // Damit ist die UI startklar; der Server-Abgleich laeuft im Hintergrund.
+          setIsLoading(false);
         }
       }
 
@@ -215,7 +229,10 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (noReliableSources) {
           if (!hasCachedValue) {
-            applyResolvedState({ isBabyBorn: false, birthDate: null, source: 'error' });
+            applyResolvedState(
+              { isBabyBorn: false, birthDate: null, source: 'error' },
+              resolutionScope,
+            );
           }
           return;
         }
@@ -238,17 +255,20 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           source: resolvedSource,
         };
 
-        applyResolvedState(resolved);
+        applyResolvedState(resolved, resolutionScope);
         await writeCachedStatus(resolved);
       } catch (error) {
         console.error('Error loading baby details:', error);
         if (requestId === latestRequestIdRef.current && !hasCachedValue) {
-          applyResolvedState({ isBabyBorn: false, birthDate: null, source: 'error' });
+          applyResolvedState(
+            { isBabyBorn: false, birthDate: null, source: 'error' },
+            resolutionScope,
+          );
         }
       } finally {
         if (requestId === latestRequestIdRef.current) {
           setIsLoading(false);
-          setIsResolved(true);
+          setResolvedScope(resolutionScope);
         }
       }
     },

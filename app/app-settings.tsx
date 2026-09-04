@@ -41,6 +41,16 @@ import {
 } from '@/lib/subscriptionManagement';
 import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/sleepDebug';
 import { hasFeatureAccess } from '@/lib/entitlements';
+import { fetchVoiceLogAccess } from '@/lib/voiceLog/access';
+import {
+  DEFAULT_FLOATING_VOICE_BUTTON_COLOR,
+  FLOATING_VOICE_BUTTON_COLORS,
+  readFloatingVoiceButtonEnabled,
+  readFloatingVoiceButtonColor,
+  type FloatingVoiceButtonColor,
+  writeFloatingVoiceButtonColor,
+  writeFloatingVoiceButtonEnabled,
+} from '@/lib/voiceLog/floatingButton';
 import {
   AppSettingsTranslationKey,
   translateAppSettingsText,
@@ -68,6 +78,18 @@ const LANGUAGE_OPTIONS: Array<{
   { value: 'en', labelKey: 'language.english' },
   { value: 'es', labelKey: 'language.spanish' },
 ];
+
+const FLOATING_VOICE_COLOR_LABEL_KEYS: Record<
+  FloatingVoiceButtonColor,
+  AppSettingsTranslationKey
+> = {
+  purple: 'appearance.floatingVoiceColorPurple',
+  rose: 'appearance.floatingVoiceColorRose',
+  coral: 'appearance.floatingVoiceColorCoral',
+  amber: 'appearance.floatingVoiceColorAmber',
+  teal: 'appearance.floatingVoiceColorTeal',
+  blue: 'appearance.floatingVoiceColorBlue',
+};
 
 export default function AppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -104,6 +126,42 @@ export default function AppSettingsScreen() {
   const [isSavingLanguage, setIsSavingLanguage] = useState(false);
   const [isSavingAutoDark, setIsSavingAutoDark] = useState(false);
   const [isAutoDarkExpanded, setIsAutoDarkExpanded] = useState(false);
+  const [hasVoiceLogAccess, setHasVoiceLogAccess] = useState(false);
+  const [floatingVoiceEnabled, setFloatingVoiceEnabled] = useState(false);
+  const [isFloatingVoiceColorExpanded, setIsFloatingVoiceColorExpanded] = useState(false);
+  const [floatingVoiceColor, setFloatingVoiceColor] = useState<FloatingVoiceButtonColor>(
+    DEFAULT_FLOATING_VOICE_BUTTON_COLOR,
+  );
+  const floatingVoiceColorOption = FLOATING_VOICE_BUTTON_COLORS.find(
+    (option) => option.id === floatingVoiceColor,
+  ) ?? FLOATING_VOICE_BUTTON_COLORS[0];
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetchVoiceLogAccess(),
+      readFloatingVoiceButtonEnabled(),
+      readFloatingVoiceButtonColor(),
+    ]).then(([access, enabled, color]) => {
+      if (!active) return;
+      setHasVoiceLogAccess(access);
+      setFloatingVoiceEnabled(enabled);
+      setFloatingVoiceColor(color);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleToggleFloatingVoice = (value: boolean) => {
+    setFloatingVoiceEnabled(value);
+    void writeFloatingVoiceButtonEnabled(value);
+  };
+
+  const handleFloatingVoiceColorChange = (color: FloatingVoiceButtonColor) => {
+    setFloatingVoiceColor(color);
+    void writeFloatingVoiceButtonColor(color);
+  };
   const [showAutoDarkStartPicker, setShowAutoDarkStartPicker] = useState(false);
   const [showAutoDarkEndPicker, setShowAutoDarkEndPicker] = useState(false);
   const [nightWindowStartTime, setNightWindowStartTime] = useState(
@@ -1329,6 +1387,92 @@ export default function AppSettingsScreen() {
                       <ThemedText style={styles.sectionTitle}>{t('appearance.section')}</ThemedText>
                     </View>
 
+                    {hasVoiceLogAccess ? (
+                      <>
+                        <View style={styles.rowItem}>
+                          <View style={styles.rowIcon}>
+                            <ThemedText style={{ fontSize: 22 }}>🎙️</ThemedText>
+                          </View>
+                          <View style={styles.rowContent}>
+                            <ThemedText style={styles.rowTitle}>{t('appearance.floatingVoiceTitle')}</ThemedText>
+                            <ThemedText style={styles.rowDescription}>{t('appearance.floatingVoiceDescription')}</ThemedText>
+                          </View>
+                          <View style={styles.trailing}>
+                            <Switch
+                              value={floatingVoiceEnabled}
+                              onValueChange={handleToggleFloatingVoice}
+                              trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
+                              thumbColor={floatingVoiceEnabled ? '#FFFFFF' : '#F4F4F4'}
+                              ios_backgroundColor="#D1D1D6"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.floatingVoiceColorSection}>
+                          <TouchableOpacity
+                            style={styles.floatingVoiceColorHeader}
+                            onPress={() => setIsFloatingVoiceColorExpanded((current) => !current)}
+                            activeOpacity={0.8}
+                            accessibilityRole="button"
+                            accessibilityState={{ expanded: isFloatingVoiceColorExpanded }}
+                          >
+                            <ThemedText style={styles.floatingVoiceColorTitle}>
+                              {t('appearance.floatingVoiceColorTitle')}
+                            </ThemedText>
+                            <View style={styles.floatingVoiceColorHeaderTrailing}>
+                              <View
+                                style={[
+                                  styles.floatingVoiceColorPreview,
+                                  { backgroundColor: floatingVoiceColorOption.color },
+                                ]}
+                              />
+                              <IconSymbol
+                                name={isFloatingVoiceColorExpanded ? 'chevron.up' : 'chevron.down'}
+                                size={20}
+                                color={trailingIconColor}
+                              />
+                            </View>
+                          </TouchableOpacity>
+
+                          {isFloatingVoiceColorExpanded ? (
+                            <View style={styles.floatingVoiceColorExpandedContent}>
+                              <View
+                                style={styles.floatingVoiceColorOptions}
+                                accessibilityRole="radiogroup"
+                              >
+                                {FLOATING_VOICE_BUTTON_COLORS.map((option) => {
+                                  const selected = floatingVoiceColor === option.id;
+                                  return (
+                                    <TouchableOpacity
+                                      key={option.id}
+                                      style={styles.floatingVoiceColorTouchTarget}
+                                      onPress={() => handleFloatingVoiceColorChange(option.id)}
+                                      accessibilityRole="radio"
+                                      accessibilityState={{ selected }}
+                                      accessibilityLabel={t(FLOATING_VOICE_COLOR_LABEL_KEYS[option.id])}
+                                    >
+                                      <View
+                                        style={[
+                                          styles.floatingVoiceColorSwatch,
+                                          { backgroundColor: option.color },
+                                          selected && styles.floatingVoiceColorSwatchSelected,
+                                        ]}
+                                      >
+                                        {selected ? <IconSymbol name="checkmark" size={18} color="#FFFFFF" /> : null}
+                                      </View>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                              <ThemedText style={styles.floatingVoiceColorHint}>
+                                {t('appearance.floatingVoiceColorLocalHint')}
+                              </ThemedText>
+                            </View>
+                          ) : null}
+                        </View>
+                      </>
+                    ) : null}
+
                     <TouchableOpacity
                       style={styles.rowItem}
                       onPress={() => setIsAutoDarkExpanded((prev) => !prev)}
@@ -1982,6 +2126,70 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 16, lineHeight: 21, fontWeight: '700' },
   rowDescription: { fontSize: 13, lineHeight: 18, opacity: 0.72, marginTop: 2 },
   trailing: { marginLeft: 12, alignItems: 'center', justifyContent: 'center' },
+  floatingVoiceColorSection: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    paddingHorizontal: 16,
+  },
+  floatingVoiceColorHeader: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  floatingVoiceColorTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  floatingVoiceColorHeaderTrailing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  floatingVoiceColorPreview: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.72)',
+  },
+  floatingVoiceColorExpandedContent: {
+    paddingBottom: 15,
+  },
+  floatingVoiceColorOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    paddingTop: 7,
+  },
+  floatingVoiceColorTouchTarget: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingVoiceColorSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.72)',
+  },
+  floatingVoiceColorSwatchSelected: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    boxShadow: '0 0 0 2px rgba(52,40,36,0.42)',
+  },
+  floatingVoiceColorHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    opacity: 0.62,
+    paddingTop: 4,
+  },
   autoDarkTrailing: {
     marginLeft: 12,
     flexDirection: 'row',

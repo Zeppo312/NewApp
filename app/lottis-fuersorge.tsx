@@ -30,6 +30,8 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { CareAnalyticsSection } from '@/components/CareAnalyticsSection';
 import { CareDayTimeline } from '@/components/advisor/CareDayTimeline';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAdvisorAccess } from '@/lib/advisor/access';
@@ -56,6 +58,11 @@ import {
   savePushToken,
 } from '@/lib/notificationService';
 import { generateAdvisorInsight } from '@/lib/advisor/generateInsight';
+import { generatePregnancyInsight } from '@/lib/advisor/generatePregnancyInsight';
+import { buildPregnancyAnalysis } from '@/lib/advisor/pregnancyInsights';
+import { buildPregnancySignals, type PregnancySignals } from '@/lib/advisor/pregnancySignals';
+import { buildPregnancyBriefing } from '@/lib/pregnancy-briefing';
+import { getCachedUserProfile } from '@/lib/appCache';
 import { buildMockAnalysis } from '@/lib/advisor/mockInsights';
 import { buildCareHorizon } from '@/lib/advisor/care-horizon';
 import { buildCareDayTimeline } from '@/lib/advisor/day-timeline';
@@ -106,10 +113,22 @@ const TOPIC_CHIPS: Record<AnalysisCard['key'], { emoji: string; key: AdvisorTran
   feeding: { emoji: '🍼', key: 'feeding' },
   diaper: { emoji: '💧', key: 'diaper' },
   weather: { emoji: '🌤️', key: 'weather' },
+  week: { emoji: '🤰', key: 'week' },
+  selfcare: { emoji: '🌿', key: 'selfcare' },
+  hydration: { emoji: '💧', key: 'hydration' },
+  weight: { emoji: '⚖️', key: 'weightLabel' },
 };
 
 const chipsForInsight = (id: string, locale: 'de' | 'en' | 'es'): { emoji: string; label: string }[] => {
   const keys: AnalysisCard['key'][] = [];
+  if (id.startsWith('preg_')) {
+    // Schwangerschaftsregeln (pregnancyRules.ts): Thema aus der Regel-Id ableiten.
+    if (id.includes('water')) keys.push('hydration');
+    if (id.includes('sleep') || id.includes('mood') || id.includes('checkin')) keys.push('selfcare');
+    if (/hot|uv|cold|rain/.test(id)) keys.push('weather');
+    if (/appointment|hospital|birth_plan|questions|all_good|learning|contractions/.test(id)) keys.push('week');
+    return Array.from(new Set(keys)).slice(0, 2).map((k) => ({ emoji: TOPIC_CHIPS[k].emoji, label: translateAdvisor(locale, TOPIC_CHIPS[k].key) }));
+  }
   if (id.includes('feeding')) keys.push('feeding');
   if (id.includes('sleep')) keys.push('sleep');
   if (
@@ -154,7 +173,14 @@ const cardAccent = (key: AnalysisCard['key'], isDark: boolean): { color: string;
     case 'feeding':
       return { color: isDark ? '#F2A7C5' : '#DB6F9C', soft: 'rgba(219, 111, 156, 0.17)' };
     case 'diaper':
+    case 'hydration':
       return { color: isDark ? '#83D4C8' : '#3FA294', soft: 'rgba(63, 162, 148, 0.17)' };
+    case 'week':
+      return { color: isDark ? '#F2A7C5' : '#C85F8E', soft: 'rgba(200, 95, 142, 0.17)' };
+    case 'selfcare':
+      return { color: isDark ? '#B8ADFF' : '#6C5CE0', soft: 'rgba(108, 92, 224, 0.16)' };
+    case 'weight':
+      return { color: isDark ? '#A9D9A0' : '#5C9A52', soft: 'rgba(92, 154, 82, 0.16)' };
     default:
       return { color: isDark ? '#F1B778' : '#D88A3C', soft: 'rgba(216, 138, 60, 0.18)' };
   }
@@ -274,6 +300,11 @@ function FadeInUp({
 export default function LottisFuersorgeScreen() {
   const router = useRouter();
   const { activeBaby } = useActiveBaby();
+  const { user } = useAuth();
+  // Vor der Geburt: keine Baby-Einträge → Schwangerschaftsmodus (SSW,
+  // Selfcare-Check-ins, Gewicht, Wehen, Termine, Vorbereitung).
+  const { isBabyBorn } = useBabyStatus();
+  const isPregnancy = !isBabyBorn;
   const { locale, localeTag } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
@@ -333,6 +364,7 @@ export default function LottisFuersorgeScreen() {
 
   const [analysis, setAnalysis] = useState<AdvisorAnalysis | null>(null);
   const [dailySignals, setDailySignals] = useState<DailySignals | null>(null);
+  const [pregnancySignals, setPregnancySignals] = useState<PregnancySignals | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   /** Echter Verlauf aus Supabase; null = (noch) nicht verfügbar → Mock zeigen. */
   const [history, setHistory] = useState<AdvisorHistoryItem[] | null>(null);
@@ -381,6 +413,58 @@ export default function LottisFuersorgeScreen() {
     ],
   };
 
+  /**
+   * Schwangerschaftsmodus: Signale aus SSW, Selfcare, Gewicht, Wehen,
+   * Terminen und Vorbereitung → lokale Regel-Analyse sofort, Server-Hinweis
+   * (gleiche Regeln + KI) nachziehen, Persistenz ohne Baby (baby_id NULL).
+   */
+  const loadPregnancyAnalysis = useCallback(
+    async (alive: () => boolean) => {
+      let motherName: string | null = null;
+      try {
+        const profile = await getCachedUserProfile();
+        motherName = (profile as { first_name?: string | null } | null)?.first_name ?? null;
+      } catch {
+        // Name optional
+      }
+      const signals = await buildPregnancySignals({ userId: user?.id, motherName });
+      if (!alive()) return;
+      setPregnancySignals(signals);
+      setDailySignals(null);
+      let result = buildPregnancyAnalysis(signals, locale);
+      setAnalysis(result);
+
+      let persistedByServer = false;
+      let messageId: string | null = null;
+      const remote = await generatePregnancyInsight(signals, locale);
+      if (!alive()) return;
+      if (remote) {
+        result = { ...result, main: remote.main, reasons: remote.reasons };
+        persistedByServer = remote.persisted;
+        messageId = remote.messageId;
+        setAnalysis(result);
+      }
+
+      if (!persistedByServer) messageId = await saveTodayInsight(null, result);
+      const [dbHistory, dbSettings, dbTodayState] = await Promise.all([
+        fetchHistory(null),
+        fetchAdvisorSettings(),
+        fetchTodayState(null),
+      ]);
+      if (!alive()) return;
+      setHistory(dbHistory);
+      setSettings(dbSettings);
+      setTodayState(
+        dbTodayState ??
+          (messageId
+            ? { id: messageId, actedAt: null, remindAt: null, reminderNotificationId: null, sharedAt: null }
+            : null),
+      );
+      markTodayRead(null);
+    },
+    [locale, user?.id],
+  );
+
   // --- Datenquelle: Signale -> Edge Function (Regeln + KI),
   //     Fallback auf die lokale Mock-Analyse. ---
   const loadAnalysis = useCallback(async () => {
@@ -389,6 +473,11 @@ export default function LottisFuersorgeScreen() {
 
     // Kontext (Zeitzone/Standort) für den täglichen Push-Job mitpflegen.
     updateAdvisorContext();
+
+    if (isPregnancy) {
+      await loadPregnancyAnalysis(alive);
+      return;
+    }
 
     let signals;
     try {
@@ -451,7 +540,7 @@ export default function LottisFuersorgeScreen() {
       setSettings(dbSettings);
       setTodayState(null);
     }
-  }, [activeBaby, locale]);
+  }, [activeBaby, isPregnancy, locale, loadPregnancyAnalysis]);
 
   useFocusEffect(
     useCallback(() => {
@@ -637,7 +726,7 @@ export default function LottisFuersorgeScreen() {
             </ThemedText>
           </View>
           <ThemedText adaptive={false} style={styles.heroReason}>
-            {t('combined')}
+            {t(isPregnancy ? 'combinedPregnancy' : 'combined')}
           </ThemedText>
         </Animated.View>
       ) : (
@@ -810,18 +899,91 @@ export default function LottisFuersorgeScreen() {
     </GlassCard>
   );
 
+  // Schwangerschaft: „Heute: SSW X+Y" mit Entwicklungs-Fakt und den nächsten
+  // Schritten (ersetzt das frühere Briefing auf der Schwangerschafts-Home).
+  const pregnancyBriefing = useMemo(
+    () =>
+      pregnancySignals
+        ? buildPregnancyBriefing({
+            locale,
+            currentWeek: pregnancySignals.week,
+            currentDay: pregnancySignals.day,
+            signals: pregnancySignals.briefing,
+            now: clockNow,
+          })
+        : null,
+    [clockNow, locale, pregnancySignals],
+  );
+  const BRIEFING_ITEM_EMOJI: Record<string, string> = {
+    selfcare: '🌿',
+    appointment: '🩺',
+    questions: '❓',
+    partner: '🫶',
+    preparation: '🧳',
+  };
+  const renderPregnancyWeekCard = () => (
+    <GlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.weekContent}>
+      {pregnancyBriefing ? (
+        <>
+          <ThemedText adaptive={false} style={styles.weekTitle}>
+            {pregnancyBriefing.title}
+          </ThemedText>
+          <ThemedText adaptive={false} style={styles.weekIntro}>
+            {pregnancyBriefing.intro}
+          </ThemedText>
+          <View style={styles.briefingDivider} />
+          <View style={styles.weekItems}>
+            {pregnancyBriefing.items.map((item) => (
+              <TouchableOpacity
+                key={item.kind}
+                activeOpacity={0.8}
+                onPress={() => {
+                  haptic();
+                  router.push(item.destination as any);
+                }}
+                style={styles.weekItem}
+              >
+                <View style={styles.weekItemEmojiWrap}>
+                  <Text style={styles.weekItemEmoji}>{BRIEFING_ITEM_EMOJI[item.kind] ?? '•'}</Text>
+                </View>
+                <View style={styles.weekItemText}>
+                  <ThemedText adaptive={false} style={styles.weekItemTitle}>
+                    {item.title}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={styles.weekItemBody}>
+                    {item.body}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={styles.weekItemAction}>
+                    {item.actionLabel} ›
+                  </ThemedText>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      ) : (
+        <View style={styles.summarySkeleton}>
+          <Skeleton width="60%" height={26} color={theme.skeleton} />
+          <Skeleton width="100%" height={14} color={theme.skeleton} />
+          <Skeleton width="88%" height={14} color={theme.skeleton} />
+          <Skeleton width="100%" height={60} radius={14} color={theme.skeleton} style={{ marginTop: 8 }} />
+        </View>
+      )}
+    </GlassCard>
+  );
+
   const renderCopilotBriefing = () => (
     <View style={styles.copilotSection}>
       <View style={styles.copilotHeading}>
         <View style={styles.copilotIcon}>
-          <Text style={styles.copilotEmoji}>👶</Text>
+          <Text style={styles.copilotEmoji}>{isPregnancy ? '🤰' : '👶'}</Text>
         </View>
         <View style={styles.copilotHeadingText}>
           <ThemedText adaptive={false} style={styles.copilotTitle}>
-            {t('copilot')}
+            {t(isPregnancy ? 'copilotPregnancy' : 'copilot')}
           </ThemedText>
           <ThemedText adaptive={false} style={styles.copilotHint}>
-            {t('copilotHint')}
+            {t(isPregnancy ? 'copilotHintPregnancy' : 'copilotHint')}
           </ThemedText>
         </View>
       </View>
@@ -1144,10 +1306,10 @@ export default function LottisFuersorgeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {renderCareHorizon()}
-          {renderDayTimeline()}
+          {isPregnancy ? renderPregnancyWeekCard() : renderCareHorizon()}
+          {isPregnancy ? null : renderDayTimeline()}
           {renderCopilotBriefing()}
-          <CareAnalyticsSection babyId={activeBaby?.id} />
+          {isPregnancy ? null : <CareAnalyticsSection babyId={activeBaby?.id} />}
           {history && history.length > 0
             ? renderRealHistory(history)
             : analysis && analysis.history.length > 0
@@ -1158,7 +1320,7 @@ export default function LottisFuersorgeScreen() {
           <View style={styles.disclaimerWrap}>
             <IconSymbol name="info.circle" size={14} color={theme.textTertiary} />
             <ThemedText style={styles.disclaimerText}>
-              {t('disclaimer')}
+              {t(isPregnancy ? 'disclaimerPregnancy' : 'disclaimer')}
             </ThemedText>
           </View>
         </ScrollView>
@@ -1433,6 +1595,24 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
 
   /* Sichtbarer Eltern-Copilot: Orientierung und Tagesbriefing gehören zusammen. */
   copilotSection: { gap: 14 },
+  weekContent: { padding: 20, gap: 10 },
+  weekTitle: { fontSize: 24, fontWeight: '800', color: theme.textPrimary, lineHeight: 30 },
+  weekIntro: { fontSize: 14, lineHeight: 21, color: theme.textSecondary },
+  weekItems: { gap: 12 },
+  weekItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  weekItemEmojiWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.accentSoft,
+  },
+  weekItemEmoji: { fontSize: 17 },
+  weekItemText: { flex: 1, gap: 2 },
+  weekItemTitle: { fontSize: 13.5, fontWeight: '700', color: theme.textPrimary },
+  weekItemBody: { fontSize: 13, lineHeight: 18, color: theme.textSecondary },
+  weekItemAction: { fontSize: 12.5, fontWeight: '700', color: theme.accent, marginTop: 2 },
   copilotHeading: {
     flexDirection: 'row',
     alignItems: 'center',

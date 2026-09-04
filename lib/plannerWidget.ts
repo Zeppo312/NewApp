@@ -72,7 +72,7 @@ export type PlannerWidgetTodoInput = {
   title: string;
   completed: boolean;
   dueAt?: string | null;
-  /** Nur die eigene Eintragsfarbe – Aufgaben ohne Farbe bleiben neutral. */
+  /** Bereits aufgelöste Farbe; fehlt sie bei alten Aufrufern, gilt der Fallback. */
   color?: string | null;
   person?: string | null;
   isRecurring?: boolean;
@@ -201,7 +201,7 @@ export const buildPlannerWidgetSnapshot = (
     title: todo.title,
     completed: !!todo.completed,
     dueAt: seconds(todo.dueAt ?? null),
-    color: normalizePlannerColor(todo.color),
+    color: normalizePlannerColor(todo.color) ?? normalizePlannerColor(PRIMARY) ?? PRIMARY,
     person: todo.person?.trim() || null,
     isRecurring: !!todo.isRecurring,
     seriesId: todo.seriesId ?? null,
@@ -426,7 +426,7 @@ export const refreshPlannerWidget = async (
       title: row.title,
       completed: !!row.completed,
       dueAt: row.due_at,
-      color: row.color,
+      color: colorFor(row),
       person: personLabel(row),
       isRecurring: !!row.is_recurring,
       seriesId: row.recurring_series_id ?? null,

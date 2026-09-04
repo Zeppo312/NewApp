@@ -9,6 +9,10 @@
  */
 
 import type { RuleCandidate, RuleSignals } from './advisorRules.ts';
+import type {
+  PregnancyRuleCandidate,
+  PregnancyRuleSignals,
+} from './pregnancyRules.ts';
 import type { SupportedLocale } from '../_shared/localization.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
@@ -30,6 +34,20 @@ RULES:
 - Respond only as JSON: {"headline": "...", "body": "..."}`;
 };
 
+const pregnancySystemPrompt = (locale: SupportedLocale) => {
+  const language = locale === 'en' ? 'English' : locale === 'es' ? 'Spanish' : 'German';
+  return `You are "Lotti", a caring companion in a pregnancy app. Write ONE short message to a pregnant parent in ${language}.
+
+RULES:
+- Use ONLY the facts and core content from the input. Do not invent medical claims, numbers, or recommendations.
+- Warm, personal, respectful, never alarming. Address the parent directly ("du"/"you"); use her first name only if provided.
+- Mention the pregnancy week when available and make the message fit that week.
+- "headline": concise, at most 40 characters, no emoji.
+- "body": at most 2 sentences and 240 characters, no emoji.
+- Do not diagnose or give medical advice; refer to the midwife or doctor only when the core content requires it.
+- Respond only as JSON: {"headline": "...", "body": "..."}`;
+};
+
 export interface AiText {
   headline: string;
   body: string;
@@ -45,18 +63,38 @@ export const generateAiText = async (
   candidate: RuleCandidate,
   signals: RuleSignals,
   locale: SupportedLocale = 'de',
-): Promise<AiText | null> => {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) return null;
-
-  const payload = {
+): Promise<AiText | null> =>
+  callAi(systemPrompt(locale), {
     babyname: signals.babyName,
     alter: signals.ageText || null,
     ageMonths: signals.ageMonths,
     situation: candidate.ruleId,
     fakten: candidate.facts,
     kerninhalt: candidate.coreContent,
-  };
+  });
+
+/** Schwangerschaftsvariante: gleiche Absicherung, anderer Rahmen. */
+export const generatePregnancyAiText = async (
+  candidate: PregnancyRuleCandidate,
+  signals: PregnancyRuleSignals,
+  locale: SupportedLocale = 'de',
+): Promise<AiText | null> =>
+  callAi(pregnancySystemPrompt(locale), {
+    firstName: signals.motherName || null,
+    week: signals.week,
+    trimester: signals.trimester,
+    daysUntilDue: signals.daysUntilDue,
+    situation: candidate.ruleId,
+    fakten: candidate.facts,
+    kerninhalt: candidate.coreContent,
+  });
+
+const callAi = async (
+  system: string,
+  payload: Record<string, unknown>,
+): Promise<AiText | null> => {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) return null;
 
   try {
     const controller = new AbortController();
@@ -74,7 +112,7 @@ export const generateAiText = async (
         temperature: 0.7,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: systemPrompt(locale) },
+          { role: 'system', content: system },
           { role: 'user', content: JSON.stringify(payload) },
         ],
       }),

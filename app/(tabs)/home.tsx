@@ -18,6 +18,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import { useVoiceLogAccess } from '@/lib/voiceLog/access';
+import { useVoiceLogSavedListener } from '@/lib/voiceLog/floatingButton';
 import { useAskLottiAccess } from '@/lib/askLotti/access';
 import VoiceLogModal from '@/components/VoiceLogModal';
 import PremiumHighlights, {
@@ -36,6 +37,7 @@ import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import type { SleepEntry } from '@/lib/sleepData';
+import { getDailySleepTargetMinutes } from '@/lib/sleep-window';
 import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
 import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
 import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
@@ -56,6 +58,16 @@ import { useFontScale, useLineLimit, useTileGridMetrics } from '@/lib/fontScalin
 
 let ACTIVE_HOME_LOCALE = DEFAULT_HOME_LOCALE;
 let HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
+const LOTTI_SLEEPING_GIF = require('@/assets/images/lotti-sleeping.gif');
+
+function formatHoursCompact(minutes: number): string {
+  const safe = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safe / 60);
+  const mins = safe % 60;
+  if (hours === 0) return `${mins} min`;
+  if (mins === 0) return `${hours} h`;
+  return `${hours} h ${mins}`;
+}
 const t = (key: HomeTranslationKey, params?: Record<string, string | number>) =>
   translateHomeText(ACTIVE_HOME_LOCALE, key, params);
 
@@ -680,6 +692,179 @@ function ActiveTimerCard({
   );
 }
 
+const SLEEP_CARD_STARS: { left: number; top: number; size: number; delay: number }[] = [
+  { left: 0.06, top: 0.12, size: 4, delay: 0 },
+  { left: 0.3, top: 0.8, size: 3, delay: 900 },
+  { left: 0.46, top: 0.16, size: 3.5, delay: 1600 },
+  { left: 0.58, top: 0.9, size: 3, delay: 400 },
+  { left: 0.7, top: 0.08, size: 4, delay: 2200 },
+  { left: 0.93, top: 0.42, size: 3, delay: 1200 },
+  { left: 0.88, top: 0.86, size: 3.5, delay: 2800 },
+];
+
+function TwinkleStar({ left, top, size, delay, color }: { left: number; top: number; size: number; delay: number; color: string }) {
+  const twinkle = useState(() => new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(twinkle, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(twinkle, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [twinkle, delay]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: `${left * 100}%`,
+        top: `${top * 100}%`,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity: twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.95] }),
+        transform: [{ scale: twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.3] }) }],
+      }}
+    />
+  );
+}
+
+type SleepTimerCardProps = {
+  elapsedSeconds: number;
+  sinceLabel: string;
+  babyName: string | null;
+  todayMinutes: number;
+  targetMinutes: number;
+  isDark: boolean;
+  onPress: () => void;
+};
+
+function SleepTimerCard({ elapsedSeconds, sinceLabel, babyName, todayMinutes, targetMinutes, isDark, onPress }: SleepTimerCardProps) {
+  const breath = useState(() => new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breath, { toValue: 1, duration: 3800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(breath, { toValue: 0, duration: 3800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [breath]);
+
+  const formatted = formatDurationSeconds(elapsedSeconds);
+  const lastColon = formatted.lastIndexOf(':');
+  const mainTime = lastColon >= 0 ? formatted.slice(0, lastColon) : formatted;
+  const secondsPart = lastColon >= 0 ? formatted.slice(lastColon + 1) : null;
+
+  const trimmedName = babyName?.trim() ?? '';
+  const title = trimmedName ? t('timer.sleep.titleNamed', { name: trimmedName }) : t('timer.sleep.title');
+  const progress = targetMinutes > 0 ? Math.min(1, Math.max(0, todayMinutes / targetMinutes)) : 0;
+  const progressLabel = t('timer.sleep.progress', {
+    done: formatHoursCompact(todayMinutes),
+    target: formatHoursCompact(targetMinutes),
+  });
+
+  const gradient = (isDark ? ['#171C3B', '#252651', '#1B1F42'] : ['#E6ECFF', '#EFE9FF', '#E4EDFF']) as [string, string, string];
+  const border = isDark ? 'rgba(157, 176, 255, 0.35)' : 'rgba(120, 140, 230, 0.32)';
+  const textMain = isDark ? '#F3F1FF' : '#3A3766';
+  const textSoft = isDark ? 'rgba(220, 222, 255, 0.72)' : 'rgba(78, 76, 120, 0.8)';
+  const labelColor = isDark ? '#B9C4FF' : '#5E63C9';
+  const starColor = isDark ? '#F7DC9B' : '#F0B94B';
+  const glow = isDark ? 'rgba(250, 220, 150, 0.14)' : 'rgba(255, 214, 140, 0.2)';
+  const pillBg = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.55)';
+
+  const lottiStyle = {
+    transform: [{ translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }],
+  };
+  const glowStyle = {
+    opacity: breath.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+    transform: [{ scale: breath.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.sleepCard, { borderColor: border, shadowColor: isDark ? '#0B0E2A' : '#7C86D6' }]}
+      onPress={onPress}
+      activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${formatted}, ${sinceLabel}, ${progressLabel}`}
+      accessibilityHint={t('timer.sleep.hint')}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={gradient}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.activeTimerGradient}
+      />
+      {SLEEP_CARD_STARS.map((star, index) => (
+        <TwinkleStar key={index} {...star} color={starColor} />
+      ))}
+
+      <View style={styles.sleepCardBody}>
+        <View style={styles.sleepCardText}>
+          <View style={styles.activeTimerLabelRow}>
+            <IconSymbol name="moon.fill" size={11} color={labelColor} />
+            <ThemedText adaptive={false} style={[styles.activeTimerLabel, { color: labelColor }]}>
+              {t('timer.sleep.label').toUpperCase()}
+            </ThemedText>
+          </View>
+          <ThemedText adaptive={false} style={[styles.sleepCardTitle, { color: textMain }]} numberOfLines={2}>
+            {title}
+          </ThemedText>
+          <ThemedText adaptive={false} style={[styles.sleepCardSubtitle, { color: textSoft }]} numberOfLines={1}>
+            {t('timer.sleep.subtitle')}
+          </ThemedText>
+
+          <View style={styles.sleepCardElapsedRow}>
+            <ThemedText adaptive={false} style={[styles.sleepCardElapsed, { color: textMain }]}>
+              {mainTime}
+            </ThemedText>
+            {secondsPart ? (
+              <ThemedText adaptive={false} style={[styles.sleepCardElapsedSeconds, { color: labelColor }]}>
+                {`:${secondsPart}`}
+              </ThemedText>
+            ) : null}
+          </View>
+
+        </View>
+
+        <View style={styles.sleepCardLottiWrap}>
+          <Animated.View pointerEvents="none" style={[styles.sleepCardGlow, { backgroundColor: glow }, glowStyle]} />
+          <Animated.Image source={LOTTI_SLEEPING_GIF} style={[styles.sleepCardLotti, lottiStyle]} resizeMode="contain" />
+        </View>
+      </View>
+
+      <View style={styles.sleepCardFooter}>
+        <View style={styles.sleepCardFooterRow}>
+          <ThemedText adaptive={false} style={[styles.sleepCardFooterText, { color: textSoft }]} numberOfLines={1}>
+            {progressLabel}
+          </ThemedText>
+          <ThemedText adaptive={false} style={[styles.sleepCardFooterText, { color: textSoft }]}>
+            {sinceLabel}
+          </ThemedText>
+        </View>
+        <View style={[styles.sleepCardTrack, { backgroundColor: pillBg, borderColor: border }]}>
+          <View style={[styles.sleepCardTrackFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: labelColor }]} />
+        </View>
+      </View>
+
+      <View style={[styles.sleepCardChevron, { backgroundColor: pillBg, borderColor: border }]}>
+        <IconSymbol name="chevron.right" size={12} color={labelColor} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
   const { locale } = useLocale();
   ACTIVE_HOME_LOCALE = locale;
@@ -698,7 +883,7 @@ export default function HomeScreen() {
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
   const { user } = useAuth();
   const userId = user?.id;
-  const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
+  const { activeBabyId, activeBaby, isReady: isActiveBabyReady } = useActiveBaby();
   const { isBabyBorn } = useBabyStatus();
   const pathname = usePathname();
   const router = useRouter();
@@ -1080,7 +1265,7 @@ export default function HomeScreen() {
         return;
       }
       // Lade die Daten neu
-      await loadData();
+      await loadData({ isRefreshing: true });
     } catch (error) {
       console.error('Error during refresh:', error);
     } finally {
@@ -1088,7 +1273,8 @@ export default function HomeScreen() {
     }
   };
 
-  async function loadData() {
+  async function loadData(options?: { isRefreshing?: boolean }) {
+    const isRefreshing = options?.isRefreshing ?? false;
     try {
       if (!user?.id) {
         setDailyEntries([]);
@@ -1113,13 +1299,13 @@ export default function HomeScreen() {
         if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
 
         // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
-        if (isCacheFresh(cachedData.lastUpdate) && !refreshing) {
+        if (isCacheFresh(cachedData.lastUpdate) && !isRefreshing) {
           setIsLoading(false);
         }
       }
 
       // Lade trotzdem immer frische Daten von Supabase (parallel)
-      if (!refreshing && !cachedData) {
+      if (!isRefreshing && !cachedData) {
         setIsLoading(true);
       }
 
@@ -1156,15 +1342,6 @@ export default function HomeScreen() {
     }
   }
 
-  useEffect(() => {
-    if (user && isActiveBabyReady) {
-      const timeoutId = setTimeout(() => {
-        void loadData();
-      }, 0);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [user, activeBabyId, isActiveBabyReady]);
-
   useFocusEffect(
     useCallback(() => {
       if (!user || !isActiveBabyReady) {
@@ -1172,7 +1349,7 @@ export default function HomeScreen() {
       }
 
       void loadData();
-    }, [user, activeBabyId, isActiveBabyReady, refreshing])
+    }, [user, activeBabyId, isActiveBabyReady])
   );
 
   // Formatiere das aktuelle Datum
@@ -1490,6 +1667,10 @@ export default function HomeScreen() {
     endOfDay.setHours(23, 59, 59, 999);
     await fetchTodaySleepMinutes(startOfDay, endOfDay);
   };
+  // Einträge über den schwebenden Sprach-Button (globales Modal) nachladen.
+  useVoiceLogSavedListener(() => {
+    void handleVoiceLogSaved();
+  });
 
   const handleFocusRecommendation = () => {
     triggerHaptic();
@@ -1540,13 +1721,27 @@ export default function HomeScreen() {
 
               <View style={styles.profileBadge}>
                 <LottiWeekRing contentSize={68} inset={4} ringStroke={4.5}>
-                  <BabySwitcherButton size={68} />
+                  <BabySwitcherButton size={68} showSwitchHint />
                 </LottiWeekRing>
-                <View style={styles.profileStatusDot} />
               </View>
             </View>
 
-            {activeHomeTimer ? (
+            {activeHomeTimer?.source === 'sleep' ? (
+              <SleepTimerCard
+                elapsedSeconds={activeTimerElapsedSeconds}
+                sinceLabel={t('timer.since', {
+                  time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                })}
+                babyName={activeBaby?.name ?? null}
+                todayMinutes={todaySleepMinutes}
+                targetMinutes={getDailySleepTargetMinutes(activeBaby?.birth_date)}
+                isDark={isDark}
+                onPress={() => handleNavigate(activeHomeTimer.route)}
+              />
+            ) : activeHomeTimer ? (
               <ActiveTimerCard
                 timer={activeHomeTimer}
                 elapsedSeconds={activeTimerElapsedSeconds}
@@ -2396,22 +2591,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  profileStatusDot: {
-    position: 'absolute',
-    right: -2,
-    bottom: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#5E3DB3',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#5E3DB3',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 3,
-    elevation: 6,
-  },
   greetingGloss: {
     ...StyleSheet.absoluteFill,
     borderRadius: 30,
@@ -2541,6 +2720,114 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 2,
     width: '100%',
+  },
+  sleepCard: {
+    marginTop: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+  sleepCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sleepCardText: {
+    flex: 1,
+    marginRight: 8,
+  },
+  sleepCardTitle: {
+    marginTop: 1,
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  sleepCardSubtitle: {
+    marginTop: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '500',
+  },
+  sleepCardElapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 6,
+  },
+  sleepCardElapsed: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    fontVariant: ['tabular-nums'],
+  },
+  sleepCardElapsedSeconds: {
+    marginLeft: 1,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  sleepCardFooter: {
+    marginTop: 8,
+  },
+  sleepCardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 5,
+  },
+  sleepCardFooterText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+  },
+  sleepCardTrack: {
+    height: 5,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  sleepCardTrackFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  sleepCardLottiWrap: {
+    width: 92,
+    height: 82,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sleepCardGlow: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  sleepCardLotti: {
+    width: 92,
+    height: 82,
+  },
+  sleepCardChevron: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Overview Carousel
