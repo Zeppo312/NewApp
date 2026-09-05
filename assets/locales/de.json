@@ -1,0 +1,14 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Lotti Baby",
+    "NSMicrophoneUsageDescription": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten und Spracheinträge aufnehmen kannst.",
+    "NSCameraUsageDescription": "Lotti Baby benötigt Zugriff auf deine Kamera, damit du Produkt-Barcodes scannen kannst.",
+    "NSPhotoLibraryUsageDescription": "Lotti Baby benötigt Zugriff auf deine Fotomediathek, damit du Bilder für Profile, Meilensteine, Rezepte, Empfehlungen und Beiträge auswählen kannst.",
+    "NSLocationWhenInUseUsageDescription": "Lotti Baby verwendet deinen Standort nur während der Nutzung, um lokale Wetterdaten und passende Kleidungsempfehlungen anzuzeigen.",
+    "NSCalendarsUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine anlegen, aktualisieren und synchronisieren kannst.",
+    "NSCalendarsFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deinen Kalender, damit du Planer- und Arzttermine anlegen, aktualisieren und synchronisieren kannst.",
+    "NSRemindersUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Terminfunktionen zuverlässig arbeiten.",
+    "NSRemindersFullAccessUsageDescription": "Lotti Baby benötigt Zugriff auf deine Erinnerungen, damit kalenderbezogene Terminfunktionen zuverlässig arbeiten."
+  },
+  "android": { "app_name": "Lotti Baby" }
+}

@@ -1,4 +1,6 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, getCachedUser } from '@/lib/supabase';
+
+const WIKI_BUCKET = 'community-images';
 
 // Typdefinitionen
 export interface WikiCategory {
@@ -13,6 +15,7 @@ export interface WikiArticle {
   category_id: string;
   teaser: string;
   reading_time: string;
+  cover_image_url?: string | null;
   content?: {
     coreStatements: string[];
     sections: {
@@ -21,6 +24,15 @@ export interface WikiArticle {
     }[];
   };
   isFavorite?: boolean; // Wird clientseitig hinzugefügt
+}
+
+export interface WikiArticleInput {
+  title: string;
+  category_id: string;
+  teaser: string;
+  reading_time: string;
+  cover_image_url?: string | null;
+  content?: WikiArticle['content'];
 }
 
 // Funktion zum Abrufen aller Kategorien
@@ -39,10 +51,25 @@ export const getWikiCategories = async () => {
   }
 };
 
+export const getWikiArticleIndex = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .select('id, title')
+      .order('title');
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error fetching wiki article index:', error);
+    return { data: null, error };
+  }
+};
+
 // Funktion zum Abrufen aller Artikel
 export const getWikiArticles = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen aller Artikel
@@ -54,6 +81,7 @@ export const getWikiArticles = async () => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -90,7 +118,7 @@ export const getWikiArticles = async () => {
 // Funktion zum Abrufen eines einzelnen Artikels
 export const getWikiArticle = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen des Artikels
@@ -102,6 +130,7 @@ export const getWikiArticle = async (articleId: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -138,10 +167,98 @@ export const getWikiArticle = async (articleId: string) => {
   }
 };
 
+// Funktion zum Erstellen eines Artikels (Admin)
+export const createWikiArticle = async (input: WikiArticleInput) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .insert({
+        title: input.title,
+        category_id: input.category_id,
+        teaser: input.teaser,
+        reading_time: input.reading_time,
+        cover_image_url: input.cover_image_url ?? null,
+        content: input.content ?? null,
+      })
+      .select(`
+        id,
+        title,
+        category_id,
+        teaser,
+        reading_time,
+        cover_image_url,
+        content,
+        wiki_categories(name)
+      `)
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error creating wiki article:', error);
+    return { data: null, error };
+  }
+};
+
+// Funktion zum Aktualisieren eines Artikels (Admin)
+export const updateWikiArticle = async (
+  articleId: string,
+  updates: Partial<WikiArticleInput>
+) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .update({
+        title: updates.title,
+        category_id: updates.category_id,
+        teaser: updates.teaser,
+        reading_time: updates.reading_time,
+        cover_image_url: updates.cover_image_url ?? null,
+        content: updates.content ?? null,
+      })
+      .eq('id', articleId)
+      .select(`
+        id,
+        title,
+        category_id,
+        teaser,
+        reading_time,
+        cover_image_url,
+        content,
+        wiki_categories(name)
+      `)
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error updating wiki article:', error);
+    return { data: null, error };
+  }
+};
+
+// Funktion zum Löschen eines Artikels (Admin)
+export const deleteWikiArticle = async (articleId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('wiki_articles')
+      .delete()
+      .eq('id', articleId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    console.error('Error deleting wiki article:', error);
+    return { data: null, error };
+  }
+};
+
 // Funktion zum Abrufen von Artikeln nach Kategorie
 export const getWikiArticlesByCategory = async (categoryId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Abrufen der Artikel nach Kategorie
@@ -153,6 +270,7 @@ export const getWikiArticlesByCategory = async (categoryId: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -190,7 +308,7 @@ export const getWikiArticlesByCategory = async (categoryId: string) => {
 // Funktion zum Abrufen von Favoriten-Artikeln
 export const getFavoriteWikiArticles = async () => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -208,6 +326,7 @@ export const getFavoriteWikiArticles = async () => {
           category_id,
           teaser,
           reading_time,
+          cover_image_url,
           content,
           wiki_categories(name)
         )
@@ -232,7 +351,7 @@ export const getFavoriteWikiArticles = async () => {
 // Funktion zum Hinzufügen eines Artikels zu den Favoriten
 export const addWikiArticleToFavorites = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -259,7 +378,7 @@ export const addWikiArticleToFavorites = async (articleId: string) => {
 // Funktion zum Entfernen eines Artikels aus den Favoriten
 export const removeWikiArticleFromFavorites = async (articleId: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     if (!userId) {
@@ -285,7 +404,7 @@ export const removeWikiArticleFromFavorites = async (articleId: string) => {
 // Funktion zum Suchen von Artikeln
 export const searchWikiArticles = async (searchTerm: string) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     const userId = userData.user?.id;
 
     // Suchen nach Artikeln, die den Suchbegriff im Titel oder Teaser enthalten
@@ -297,6 +416,7 @@ export const searchWikiArticles = async (searchTerm: string) => {
         category_id,
         teaser,
         reading_time,
+        cover_image_url,
         content,
         wiki_categories(name)
       `)
@@ -328,5 +448,39 @@ export const searchWikiArticles = async (searchTerm: string) => {
   } catch (error) {
     console.error('Error searching wiki articles:', error);
     return { data: null, error };
+  }
+};
+
+export const uploadWikiCover = async (uri: string) => {
+  try {
+    const extMatch = uri.split('.').pop();
+    const ext = extMatch?.split('?')[0]?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const response = await fetch(uri);
+
+    if (!response.ok) {
+      return { data: null, error: new Error(`Bild konnte nicht geladen werden (${response.status})`) };
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const fileBuffer = new Uint8Array(arrayBuffer);
+    const { data: userData } = await getCachedUser();
+    const userId = userData.user?.id ?? 'anonymous';
+    const fileName = `wiki_${userId}_${Date.now()}.${ext}`;
+    const filePath = `wiki-covers/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(WIKI_BUCKET)
+      .upload(filePath, fileBuffer, { contentType: mimeType, upsert: false });
+
+    if (uploadError) {
+      return { data: null, error: uploadError };
+    }
+
+    const { data: publicUrlData } = supabase.storage.from(WIKI_BUCKET).getPublicUrl(filePath);
+    return { data: publicUrlData.publicUrl, error: null };
+  } catch (error) {
+    console.error('uploadWikiCover failed:', error);
+    return { data: null, error: error as Error };
   }
 };

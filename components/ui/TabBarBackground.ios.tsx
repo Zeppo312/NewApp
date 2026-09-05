@@ -1,17 +1,23 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from 'expo-router/js-tabs';
 import { BlurView } from 'expo-blur';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 
 export default function BlurTabBarBackground() {
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark';
+
+  // Der Blur muss dem App-Theme folgen. `systemChromeMaterial` richtet sich
+  // stattdessen nach dem iOS-Theme und kann dadurch im App-Nachtmodus hell sein.
   return (
-    <BlurView
-      // System chrome material automatically adapts to the system's theme
-      // and matches the native tab bar appearance on iOS.
-      tint="systemChromeMaterial"
-      intensity={100}
-      style={StyleSheet.absoluteFill}
-    />
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: adaptiveColors.tabBarBackground }]}>
+      <BlurView
+        tint={isDark ? 'dark' : 'light'}
+        intensity={isDark ? 80 : 100}
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
   );
 }
 

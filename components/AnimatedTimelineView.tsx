@@ -109,13 +109,13 @@ const AnimatedTimelineView: React.FC<AnimatedTimelineViewProps> = ({ entries, on
   const getActivityColor = (type: string) => {
     switch (type) {
       case 'feeding':
-        return ['#FF9800', '#FFA726'];
+        return ['#FF9800', '#FFA726'] as const;
       case 'sleep':
-        return ['#5C6BC0', '#7986CB'];
+        return ['#5C6BC0', '#7986CB'] as const;
       case 'diaper':
-        return ['#4CAF50', '#66BB6A'];
+        return ['#4CAF50', '#66BB6A'] as const;
       default:
-        return ['#9C27B0', '#AB47BC'];
+        return ['#9C27B0', '#AB47BC'] as const;
     }
   };
   

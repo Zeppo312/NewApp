@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, TouchableOpacity, View, TextInput, Alert, Keyboard, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,11 +11,24 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { verifyOTPToken, resendOTPToken } from '@/lib/supabase';
+import { invalidateAllCaches } from '@/lib/appCache';
+import { supabase, verifyOTPToken, resendOTPToken } from '@/lib/supabase';
+import { acceptTerms } from '@/lib/termsConsent';
+import {
+  AuthTranslationKey,
+  DEFAULT_AUTH_LOCALE,
+  translateAuthText,
+} from '@/lib/authTranslations';
+
+const OTP_LENGTH = 6;
+let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
+const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
+  translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
 
 export default function VerifyOTPScreen() {
-  const { email } = useLocalSearchParams<{ email: string }>();
-  const [otp, setOTP] = useState(['', '', '', '', '', '']);
+  ACTIVE_AUTH_LOCALE = useLocale().locale;
+  const { email, invitationCode } = useLocalSearchParams<{ email: string, invitationCode?: string }>();
+  const [otp, setOTP] = useState(Array.from({ length: OTP_LENGTH }, () => ''));
   const [isLoading, setIsLoading] = useState(false);
   const [canResend, setCanResend] = useState(true);
   const [countdown, setCountdown] = useState(0);
@@ -25,7 +40,7 @@ export default function VerifyOTPScreen() {
 
   useEffect(() => {
     // Countdown für erneutes Senden
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (countdown > 0) {
       interval = setInterval(() => {
         setCountdown(prev => {
@@ -40,16 +55,52 @@ export default function VerifyOTPScreen() {
     return () => clearInterval(interval);
   }, [countdown]);
 
+  const applyOTPDigits = (input: string, startIndex = 0) => {
+    const digits = input.replace(/\D/g, '');
+    if (!digits) return;
+
+    const nextOTP = [...otp];
+    let targetIndex = startIndex;
+
+    for (const digit of digits) {
+      if (targetIndex >= OTP_LENGTH) break;
+      nextOTP[targetIndex] = digit;
+      targetIndex += 1;
+    }
+
+    setOTP(nextOTP);
+
+    if (nextOTP.every((digit) => digit !== '') && !isLoading) {
+      Keyboard.dismiss();
+      handleVerifyOTP(nextOTP.join(''));
+      return;
+    }
+
+    if (targetIndex < OTP_LENGTH) {
+      inputRefs.current[targetIndex]?.focus();
+    } else {
+      inputRefs.current[OTP_LENGTH - 1]?.focus();
+    }
+  };
+
   const handleOTPChange = (value: string, index: number) => {
+    const digitsOnly = value.replace(/\D/g, '');
+
+    // Mehrstellige Eingabe (Paste/AutoFill) auf alle Felder verteilen
+    if (digitsOnly.length > 1) {
+      applyOTPDigits(digitsOnly, index);
+      return;
+    }
+
     // Nur Zahlen erlauben
-    if (!/^\d*$/.test(value)) return;
+    if (!/^\d*$/.test(digitsOnly)) return;
 
     const newOTP = [...otp];
-    newOTP[index] = value;
+    newOTP[index] = digitsOnly;
     setOTP(newOTP);
 
     // Automatisch zum nächsten Feld springen
-    if (value && index < 5) {
+    if (digitsOnly && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
 
@@ -69,53 +120,73 @@ export default function VerifyOTPScreen() {
   const handleVerifyOTP = async (otpCode?: string) => {
     const code = otpCode || otp.join('');
     
-    if (code.length !== 6) {
-      Alert.alert('Ungültiger Code', 'Bitte gib einen 6-stelligen Code ein');
+    if (code.length !== OTP_LENGTH) {
+      Alert.alert(t('otp.invalidTitle'), t('otp.enterCompleteCode', { length: OTP_LENGTH }));
       return;
     }
 
     if (!email) {
-      Alert.alert('Fehler', 'E-Mail-Adresse nicht gefunden');
+      Alert.alert(t('common.error'), t('otp.emailMissing'));
       return;
     }
 
     setIsLoading(true);
 
     try {
-      console.log('Verifying OTP:', code, 'for email:', email);
       const { data, error } = await verifyOTPToken(email, code);
       
       if (error) {
         console.error('OTP verification error:', error);
-        
+
         // Spezifische Fehlermeldungen
         if (error.message?.includes('invalid') || error.message?.includes('expired')) {
-          Alert.alert('Ungültiger Code', 'Der eingegebene Code ist ungültig oder abgelaufen');
-          setOTP(['', '', '', '', '', '']);
+          Alert.alert(t('otp.invalidTitle'), t('otp.invalidOrExpired'));
+          setOTP(Array.from({ length: OTP_LENGTH }, () => ''));
           inputRefs.current[0]?.focus();
+        } else if (error.message?.toLowerCase().includes('rate limit')) {
+          Alert.alert(t('otp.tooManyAttemptsTitle'), t('otp.tooManyAttemptsMessage'));
         } else {
-          Alert.alert('Verifikation fehlgeschlagen', error.message || 'Bitte versuche es erneut');
+          Alert.alert(t('otp.verificationFailedTitle'), t('otp.tryAgain'));
         }
         return;
       }
 
-      console.log('OTP verification successful:', data);
-      
       if (data.user) {
+        const consentResult = await acceptTerms('otp', data.user.id);
+        if (!consentResult.success) {
+          await supabase.auth.signOut();
+          Alert.alert(t('common.error'), t('otp.termsSaveFailed'));
+          return;
+        }
+
         Alert.alert(
-          'E-Mail bestätigt! 🎉',
-          'Deine E-Mail-Adresse wurde erfolgreich bestätigt.',
+          t('otp.confirmedTitle'),
+          t('otp.confirmedMessage'),
           [
             {
-              text: 'Weiter',
-              onPress: () => router.replace('../getUserInfo')
+              text: t('common.continue'),
+              onPress: () => {
+                void (async () => {
+                  try {
+                    await invalidateAllCaches();
+                  } catch (cacheError) {
+                    console.error('Failed to invalidate caches after OTP verification:', cacheError);
+                  }
+
+                  const nextParams = invitationCode ? { invitationCode: String(invitationCode) } : {};
+                  router.replace({
+                    pathname: '/(auth)/getUserInfo',
+                    params: nextParams
+                  });
+                })();
+              }
             }
           ]
         );
       }
     } catch (err) {
       console.error('OTP verification exception:', err);
-      Alert.alert('Fehler', 'Verifikation fehlgeschlagen');
+      Alert.alert(t('common.error'), t('otp.verificationFailedTitle'));
     } finally {
       setIsLoading(false);
     }
@@ -123,7 +194,7 @@ export default function VerifyOTPScreen() {
 
   const handleResendOTP = async () => {
     if (!email) {
-      Alert.alert('Fehler', 'E-Mail-Adresse nicht gefunden');
+      Alert.alert(t('common.error'), t('otp.emailMissing'));
       return;
     }
 
@@ -135,20 +206,24 @@ export default function VerifyOTPScreen() {
       
       if (error) {
         console.error('Resend OTP error:', error);
-        Alert.alert('Fehler', 'Code konnte nicht erneut gesendet werden');
+        if (error.message?.toLowerCase().includes('rate limit')) {
+          Alert.alert(t('otp.tooManyRequestsTitle'), t('otp.tooManyRequestsMessage'));
+        } else {
+          Alert.alert(t('common.error'), t('otp.resendFailed'));
+        }
         setCanResend(true);
       } else {
         Alert.alert(
-          'Code gesendet',
-          'Wir haben dir einen neuen 6-stelligen Code gesendet. Bitte prüfe deinen Posteingang.'
+          t('otp.sentTitle'),
+          t('otp.sentMessage', { length: OTP_LENGTH })
         );
         setCountdown(60); // 60 Sekunden warten
-        setOTP(['', '', '', '', '', '']);
+        setOTP(Array.from({ length: OTP_LENGTH }, () => ''));
         inputRefs.current[0]?.focus();
       }
     } catch (err) {
       console.error('Resend OTP exception:', err);
-      Alert.alert('Fehler', 'Code konnte nicht erneut gesendet werden');
+      Alert.alert(t('common.error'), t('otp.resendFailed'));
       setCanResend(true);
     } finally {
       setIsLoading(false);
@@ -157,12 +232,12 @@ export default function VerifyOTPScreen() {
 
   const handleGoBack = () => {
     Alert.alert(
-      'Zurück zum Login?',
-      'Die Registrierung wird abgebrochen und du musst dich erneut registrieren.',
+      t('otp.backTitle'),
+      t('otp.backMessage'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         { 
-          text: 'Zurück', 
+          text: t('common.back'),
           style: 'destructive',
           onPress: () => router.replace('./login')
         }
@@ -186,12 +261,12 @@ export default function VerifyOTPScreen() {
                   resizeMode="contain"
                 />
                 <ThemedText type="title" style={styles.title}>
-                  Code eingeben
+                  {t('otp.title')}
                 </ThemedText>
                 <ThemedText style={styles.description}>
-                  Wir haben dir einen 6-stelligen Code an{'\n'}
+                  {t('otp.descriptionBeforeEmail', { length: OTP_LENGTH })}{'\n'}
                   <ThemedText style={styles.emailText}>{email}</ThemedText>{'\n'}
-                  gesendet.
+                  {t('otp.descriptionAfterEmail')}
                 </ThemedText>
               </View>
 
@@ -201,7 +276,7 @@ export default function VerifyOTPScreen() {
                   {otp.map((digit, index) => (
                     <TextInput
                       key={index}
-                      ref={ref => inputRefs.current[index] = ref!}
+                      ref={ref => { inputRefs.current[index] = ref!; }}
                       style={[
                         styles.otpInput,
                         {
@@ -217,9 +292,10 @@ export default function VerifyOTPScreen() {
                       onChangeText={(value) => handleOTPChange(value, index)}
                       onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
                       keyboardType="numeric"
-                      maxLength={1}
+                      maxLength={OTP_LENGTH}
                       textAlign="center"
                       autoFocus={index === 0}
+                      selectTextOnFocus
                       editable={!isLoading}
                     />
                   ))}
@@ -229,13 +305,13 @@ export default function VerifyOTPScreen() {
                   style={[
                     styles.button, 
                     styles.verifyButton,
-                    (isLoading || otp.join('').length !== 6) && styles.buttonDisabled
+                    (isLoading || otp.join('').length !== OTP_LENGTH) && styles.buttonDisabled
                   ]}
                   onPress={() => handleVerifyOTP()}
-                  disabled={isLoading || otp.join('').length !== 6}
+                  disabled={isLoading || otp.join('').length !== OTP_LENGTH}
                 >
                   <ThemedText style={styles.buttonText}>
-                    {isLoading ? 'Überprüfe...' : 'Code bestätigen'}
+                    {isLoading ? t('otp.verifying') : t('otp.confirm')}
                   </ThemedText>
                 </TouchableOpacity>
 
@@ -250,8 +326,8 @@ export default function VerifyOTPScreen() {
                 >
                   <ThemedText style={[styles.buttonText, styles.resendButtonText]}>
                     {countdown > 0 
-                      ? `Code erneut senden (${countdown}s)` 
-                      : 'Code erneut senden'
+                      ? t('otp.resendCountdown', { seconds: countdown })
+                      : t('otp.resend')
                     }
                   </ThemedText>
                 </TouchableOpacity>
@@ -262,7 +338,7 @@ export default function VerifyOTPScreen() {
                   disabled={isLoading}
                 >
                   <ThemedText style={styles.backButtonText} lightColor={theme.text} darkColor={theme.text}>
-                    ← Zurück zum Login
+                    ← {t('common.backToLogin')}
                   </ThemedText>
                 </TouchableOpacity>
               </ThemedView>

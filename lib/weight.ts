@@ -1,30 +1,49 @@
 import { supabase } from './supabase';
+import { getCachedUser } from './supabase';
+
+export type WeightSubject = 'mom' | 'baby';
 
 export type WeightEntry = {
   id: string;
   user_id: string;
   date: string;
   weight: number;
+  subject: WeightSubject;
+  baby_id?: string | null;
   notes?: string;
   created_at: string;
   updated_at: string;
 };
 
 // Gewichtsdaten speichern
-export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+export const saveWeightEntry = async (
+  entry: Omit<WeightEntry, 'id' | 'user_id' | 'created_at' | 'updated_at'>
+) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
     const now = new Date().toISOString();
+    const subject = entry.subject ?? 'mom';
+    const babyId = entry.baby_id ?? null;
+
+    if (subject === 'baby' && !babyId) {
+      return { data: null, error: new Error('Kein Baby ausgewählt') };
+    }
 
     // Prüfen, ob bereits ein Eintrag für dieses Datum existiert
-    const { data: existingData, error: fetchError } = await supabase
+    let existingQuery = supabase
       .from('weight_entries')
       .select('id')
       .eq('user_id', userData.user.id)
-      .eq('date', entry.date)
-      .maybeSingle();
+      .eq('subject', subject)
+      .eq('date', entry.date);
+
+    if (subject === 'baby') {
+      existingQuery = existingQuery.eq('baby_id', babyId);
+    }
+
+    const { data: existingData, error: fetchError } = await existingQuery.maybeSingle();
 
     if (fetchError && fetchError.code !== 'PGRST116') {
       console.error('Error checking existing weight entry:', fetchError);
@@ -39,7 +58,9 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
         .from('weight_entries')
         .update({
           weight: entry.weight,
-          notes: entry.notes,
+          subject,
+          baby_id: babyId,
+          notes: entry.notes && entry.notes.trim().length > 0 ? entry.notes.trim() : null,
           updated_at: now
         })
         .eq('id', existingData.id)
@@ -53,6 +74,8 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
           user_id: userData.user.id,
           date: entry.date,
           weight: entry.weight,
+          subject,
+          baby_id: babyId,
           notes: entry.notes,
           created_at: now,
           updated_at: now
@@ -69,23 +92,49 @@ export const saveWeightEntry = async (entry: Omit<WeightEntry, 'id' | 'user_id' 
 };
 
 // Alle Gewichtsdaten abrufen
-export const getWeightEntries = async () => {
+export const getWeightEntries = async (subject?: WeightSubject, babyId?: string | null) => {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData, error: userErr } = await getCachedUser();
+    if (userErr) return { data: null, error: userErr };
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
-    const { data, error } = await supabase
+    const myId = userData.user.id;
+
+    let query = supabase
       .from('weight_entries')
       .select('*')
-      .eq('user_id', userData.user.id)
       .order('date', { ascending: true });
+
+    if (subject === 'baby') {
+      if (!babyId) {
+        return { data: [], error: null };
+      }
+      query = query.eq('subject', 'baby').eq('baby_id', babyId);
+    } else if (subject === 'mom') {
+      query = query.eq('user_id', myId).eq('subject', 'mom');
+    } else {
+      if (babyId) {
+        query = query.or(
+          `and(user_id.eq.${myId},subject.eq.mom),and(subject.eq.baby,baby_id.eq.${babyId})`
+        );
+      } else {
+        query = query.eq('user_id', myId);
+      }
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching weight entries:', error);
       return { data: null, error };
     }
 
-    return { data, error: null };
+    const normalized = (data ?? []).map((entry) => ({
+      ...entry,
+      subject: (entry as WeightEntry).subject ?? 'mom',
+    })) as WeightEntry[];
+
+    return { data: normalized, error: null };
   } catch (err) {
     console.error('Failed to get weight entries:', err);
     return { data: null, error: err };

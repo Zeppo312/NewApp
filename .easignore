@@ -1,0 +1,34 @@
+# Dependencies and local Expo state
+node_modules/
+.expo/
+.expo-shared/
+node_local/
+
+# Local environment files (provided by EAS environments in cloud builds)
+.env
+.env.*
+build.*.env
+
+# Generated app and web build artifacts
+dist*/
+web-build/
+
+# Native generated files
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+android/app/build/
+android/.gradle/
+android/build/
+
+# Local-only tooling, metadata, and reports
+.git/
+.git.backup-corrupt-*/
+.github/
+.vscode/
+.claude/
+venv/
+docs/
+backup/
+output/
+ownership-map-out/

@@ -1,90 +1,100 @@
-import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View } from 'react-native';
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { StyleSheet, TouchableOpacity, Alert, ActivityIndicator, View, SafeAreaView, StatusBar, ScrollView } from 'react-native';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 
-import { useRouter } from 'expo-router';
-
-import ParallaxScrollView from '@/components/ParallaxScrollView';
+import Header from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ChecklistCategory } from '@/components/ChecklistCategory';
 import { AddChecklistItem } from '@/components/AddChecklistItem';
 import { ProgressCircle } from '@/components/ProgressCircle';
 
-import { useAuth } from '@/contexts/AuthContext';
 import { ChecklistItem, getHospitalChecklist, addChecklistItem, toggleChecklistItem, deleteChecklistItem, supabaseUrl } from '@/lib/supabase';
+import { LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, PRIMARY, TEXT_PRIMARY, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  getHospitalChecklistCategories,
+  getHospitalChecklistDefaultItems,
+  translatePregnancyChecklistText,
+  type PregnancyChecklistTranslationKey,
+} from '@/lib/pregnancyChecklistTranslations';
+
+const ACCENT_PURPLE = '#A47AD4';
+const DEEP_TEXT = '#5C4033';
+const SOFT_CARD_BG = 'rgba(255, 246, 237, 0.88)';
+const SOFT_BORDER = 'rgba(255,255,255,0.65)';
+const TIP_ICON = '#B896FF';
+const BADGE_TINT = 'rgba(142, 78, 198, 0.14)';
+const BADGE_BORDER = 'rgba(142, 78, 198, 0.35)';
+
+const deduplicateChecklist = (items: ChecklistItem[]) => {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = `${item.position ?? ''}|${item.category ?? ''}|${(item.item_name || '').toLowerCase()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
 
 export default function TabTwoScreen() {
-  const { } = useAuth(); // signOut wurde zur Mehr-Seite verschoben
-  const router = useRouter();
+  const { locale } = useLocale();
+  const t = (key: PregnancyChecklistTranslationKey, params?: Record<string, string | number>) =>
+    translatePregnancyChecklistText(locale, key, params);
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : '#5C4033';
+  const textSecondary = isDark ? adaptiveColors.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const softCardBg = isDark ? 'rgba(0,0,0,0.35)' : SOFT_CARD_BG;
+  const softBorder = isDark ? 'rgba(255,255,255,0.18)' : SOFT_BORDER;
+  const deepText = isDark ? adaptiveColors.textPrimary : DEEP_TEXT;
+  const softText = isDark ? adaptiveColors.textSecondary : 'rgba(92,64,51,0.8)';
+  const badgeAccent = isDark ? adaptiveColors.accent : PRIMARY;
+  const tipIconColor = isDark ? adaptiveColors.accent : TIP_ICON;
+  const errorBorderColor = isDark ? 'rgba(255,122,122,0.55)' : '#EFB0B6';
+  const errorTextColor = isDark ? '#FFB4B4' : '#A8464C';
+  const retryButtonBg = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.75)';
+  const retryButtonBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)';
 
   // State für die Checkliste
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Vordefinierte Kategorien für die Checkliste
-  const categories = [
-    'Dokumente',
-    'Kleidung für Mama',
-    'Kleidung für Baby',
-    'Hygieneartikel',
-    'Sonstiges'
-  ];
+  const localizedCategories = getHospitalChecklistCategories(locale);
+  const categories = localizedCategories.map((category) => category.label);
+  const defaultItems = getHospitalChecklistDefaultItems(locale).map((item) => ({
+    item_name: item.name,
+    category: localizedCategories.find((category) => category.id === item.categoryId)?.label ?? categories.at(-1) ?? '',
+    notes: item.notes,
+  }));
+  const localizeStoredItems = (items: ChecklistItem[]) => {
+    const sourceLocales = ['de', 'en', 'es'] as const;
+    const sourceDefaults = sourceLocales.map(getHospitalChecklistDefaultItems);
+    const sourceCategories = sourceLocales.map(getHospitalChecklistCategories);
 
-  // Vordefinierte Einträge für die Checkliste
-  const defaultItems: Array<{
-    item_name: string;
-    category: string;
-    notes?: string | null;
-  }> = [
-    // Dokumente
-    { item_name: 'Mutterpass', category: 'Dokumente', notes: 'Unbedingt mitnehmen!' },
-    { item_name: 'Personalausweis', category: 'Dokumente', notes: null },
-    { item_name: 'Krankenversicherungskarte', category: 'Dokumente', notes: null },
-    { item_name: 'Familienstammbuch', category: 'Dokumente', notes: null },
-    { item_name: 'Geburtsplan (falls vorhanden)', category: 'Dokumente', notes: null },
+    return items.map((item) => {
+      const position = item.position ?? -1;
+      const targetDefault = defaultItems[position];
+      const isKnownDefault = position >= 0 && sourceDefaults.some((rows) => rows[position]?.name === item.item_name);
+      const categoryIndex = sourceCategories[0].findIndex((category, index) =>
+        sourceCategories.some((rows) => rows[index]?.label === item.category),
+      );
+      return {
+        ...item,
+        item_name: isKnownDefault && targetDefault ? targetDefault.item_name : item.item_name,
+        category: categoryIndex >= 0 ? localizedCategories[categoryIndex].label : item.category,
+        notes: isKnownDefault && targetDefault ? targetDefault.notes : item.notes,
+      };
+    });
+  };
 
-    // Kleidung für Mama
-    { item_name: 'Bequeme Nachthemden', category: 'Kleidung für Mama', notes: '2-3 Stück' },
-    { item_name: 'Warme Socken', category: 'Kleidung für Mama', notes: null },
-    { item_name: 'Bademantel', category: 'Kleidung für Mama', notes: null },
-    { item_name: 'Stillbustier/Still-BHs', category: 'Kleidung für Mama', notes: '2-3 Stück' },
-    { item_name: 'Bequeme Unterwäsche', category: 'Kleidung für Mama', notes: 'Mehrere Stück' },
-    { item_name: 'Hausschuhe', category: 'Kleidung für Mama', notes: null },
-    { item_name: 'Bequeme Kleidung für die Heimreise', category: 'Kleidung für Mama', notes: null },
-
-    // Kleidung für Baby
-    { item_name: 'Bodys', category: 'Kleidung für Baby', notes: '4-5 Stück, Größe 50/56' },
-    { item_name: 'Strampler', category: 'Kleidung für Baby', notes: '2-3 Stück, Größe 50/56' },
-    { item_name: 'Mützchen', category: 'Kleidung für Baby', notes: null },
-    { item_name: 'Söckchen', category: 'Kleidung für Baby', notes: '2-3 Paar' },
-    { item_name: 'Jäckchen', category: 'Kleidung für Baby', notes: 'Je nach Jahreszeit' },
-    { item_name: 'Heimfahrt-Outfit', category: 'Kleidung für Baby', notes: 'Wettergerecht' },
-
-    // Hygieneartikel
-    { item_name: 'Zahnbürste & Zahnpasta', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Haarbürste & Haargummis', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Duschgel & Shampoo', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Wochenbetteinlagen', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Brustwarzensalbe', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Lippenpflegestift', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Feuchttücher für Baby', category: 'Hygieneartikel', notes: null },
-    { item_name: 'Windeln für Neugeborene', category: 'Hygieneartikel', notes: 'Kleine Packung' },
-
-    // Sonstiges
-    { item_name: 'Handtücher', category: 'Sonstiges', notes: '2 Stück' },
-    { item_name: 'Waschlappen', category: 'Sonstiges', notes: '2-3 Stück' },
-    { item_name: 'Handy & Ladekabel', category: 'Sonstiges', notes: null },
-    { item_name: 'Snacks & Getränke', category: 'Sonstiges', notes: null },
-    { item_name: 'Kamera', category: 'Sonstiges', notes: null },
-    { item_name: 'Lektüre/Zeitschriften', category: 'Sonstiges', notes: null },
-    { item_name: 'Maxicar/Babyschale für Heimfahrt', category: 'Sonstiges', notes: null }
-  ];
-
-  // State für die Initialisierung der Checkliste
-  const [isInitialized, setIsInitialized] = useState(false);
+  const hasSeededDefaults = useRef(false);
 
   // Laden der Checkliste beim ersten Rendern und bei Fokus auf den Tab
   const loadChecklist = useCallback(async () => {
@@ -97,9 +107,9 @@ export default function TabTwoScreen() {
 
       // Wenn die Checkliste leer ist und noch nicht initialisiert wurde,
       // fügen wir die vordefinierten Einträge hinzu
-      if ((!data || data.length === 0) && !isInitialized) {
+      if ((!data || data.length === 0) && !hasSeededDefaults.current) {
         console.log('Initializing checklist with default items...');
-        setIsInitialized(true);
+        hasSeededDefaults.current = true;
 
         // Vorbereitete Einträge hinzufügen
         const initializedItems: ChecklistItem[] = [];
@@ -125,14 +135,14 @@ export default function TabTwoScreen() {
           }
         }
 
-        setChecklist(initializedItems);
+        setChecklist(deduplicateChecklist(localizeStoredItems(initializedItems)));
       } else {
         // Wenn bereits Daten vorhanden sind, verwenden wir diese
-        setChecklist(data || []);
+        setChecklist(deduplicateChecklist(localizeStoredItems(data || [])));
       }
     } catch (err) {
       console.error('Error loading checklist:', err);
-      setError('Die Checkliste konnte nicht geladen werden.');
+      setError(t('error.load'));
 
       // Im Fehlerfall zeigen wir die vordefinierten Einträge im Demo-Modus an
       if (supabaseUrl.includes('example.supabase.co')) {
@@ -152,7 +162,7 @@ export default function TabTwoScreen() {
     } finally {
       setLoading(false);
     }
-  }, [isInitialized]);
+  }, [locale]);
 
   useEffect(() => {
     loadChecklist();
@@ -178,11 +188,11 @@ export default function TabTwoScreen() {
       const { data, error } = await addChecklistItem(newItem);
       if (error) throw error;
       if (data) {
-        setChecklist([...checklist, data]);
+        setChecklist(prev => deduplicateChecklist([...prev, data]));
       }
     } catch (err) {
       console.error('Error adding checklist item:', err);
-      Alert.alert('Fehler', 'Der Eintrag konnte nicht hinzugefügt werden.');
+      Alert.alert(t('common.error'), t('error.add'));
     }
   };
 
@@ -196,19 +206,19 @@ export default function TabTwoScreen() {
       }
     } catch (err) {
       console.error('Error toggling checklist item:', err);
-      Alert.alert('Fehler', 'Der Status konnte nicht geändert werden.');
+      Alert.alert(t('common.error'), t('error.toggle'));
     }
   };
 
   // Löschen eines Eintrags
   const handleDeleteItem = async (id: string) => {
     Alert.alert(
-      'Eintrag löschen',
-      'Möchtest du diesen Eintrag wirklich löschen?',
+      t('delete.title'),
+      t('delete.confirm'),
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -217,7 +227,7 @@ export default function TabTwoScreen() {
               setChecklist(checklist.filter(item => item.id !== id));
             } catch (err) {
               console.error('Error deleting checklist item:', err);
-              Alert.alert('Fehler', 'Der Eintrag konnte nicht gelöscht werden.');
+              Alert.alert(t('common.error'), t('error.delete'));
             }
           }
         }
@@ -227,7 +237,7 @@ export default function TabTwoScreen() {
 
   // Gruppieren der Einträge nach Kategorien
   const groupedItems = checklist.reduce<Record<string, ChecklistItem[]>>((groups, item) => {
-    const category = item.category || 'Sonstiges';
+    const category = item.category || categories.at(-1) || '';
     if (!groups[category]) {
       groups[category] = [];
     }
@@ -244,178 +254,236 @@ export default function TabTwoScreen() {
     return Math.round((checkedItems / totalItems) * 100);
   }, [checklist]);
 
-  // Abmelden-Funktion wurde zur Mehr-Seite verschoben
+  const checkedItems = useMemo(() => checklist.filter(item => item.is_checked).length, [checklist]);
+  const totalItems = checklist.length;
+  const totalCategories = Object.keys(groupedItems).length || categories.length;
 
-  // Zurück-Button zur Pregnancy-Home-Seite
-  const backButton = (
-    <TouchableOpacity
-      style={styles.backButton}
-      onPress={() => router.push({ pathname: '/(tabs)/pregnancy-home' })}
-    >
-      <IconSymbol name="chevron.left" size={24} color="#E57373" />
-    </TouchableOpacity>
-  );
-
-  // Funktion für Swipe nach rechts
-  const handleSwipeRight = () => {
-    router.push({ pathname: '/(tabs)/pregnancy-home' });
-  };
+  const progressNote = useMemo(() => {
+    if (totalProgress === 0) {
+      return t('progress.start');
+    }
+    if (totalProgress < 50) {
+      return t('progress.middle');
+    }
+    if (totalProgress < 90) {
+      return t('progress.almost');
+    }
+    return t('progress.done');
+  }, [totalProgress, locale]);
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#F9F1EC', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#E9C9B6"
-          name="checklist"
-          style={styles.headerImage}
+    <ThemedBackground>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <Header
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
+          showBackButton
         />
-      }
-      backButton={backButton}
-      onSwipeRight={handleSwipeRight}>
-      <View style={styles.headerContainer}>
-        <View style={styles.progressCircleContainer}>
-          <ProgressCircle progress={totalProgress} size={50} />
-        </View>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="title">Krankenhaus-Checkliste</ThemedText>
-        </ThemedView>
-      </View>
 
-      <ThemedText style={styles.description}>
-        Hier kannst du alle wichtigen Dinge für deinen Krankenhausaufenthalt notieren.
-        Hake die Einträge ab, sobald du sie eingepackt hast.
-      </ThemedText>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#E9C9B6" />
-          <ThemedText style={styles.loadingText}>Checkliste wird geladen...</ThemedText>
-        </View>
-      ) : error ? (
-        <ThemedView style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={loadChecklist}>
-            <ThemedText style={styles.retryButtonText}>Erneut versuchen</ThemedText>
-          </TouchableOpacity>
-        </ThemedView>
-      ) : (
-        <>
-          {/* Kategorien mit Einträgen anzeigen */}
-          {Object.keys(groupedItems).length === 0 ? (
-            <ThemedView style={styles.emptyContainer}>
-              <ThemedText style={styles.emptyText}>
-                Deine Checkliste ist noch leer. Füge unten neue Einträge hinzu.
-              </ThemedText>
-            </ThemedView>
-          ) : (
-            Object.entries(groupedItems).map(([category, items]) => (
-              <ChecklistCategory
-                key={category}
-                title={category}
-                items={items}
-                onToggleItem={handleToggleItem}
-                onDeleteItem={handleDeleteItem}
+          <LiquidGlassCard style={[styles.cardBase, styles.summaryCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
+            <View style={styles.summaryHeader}>
+              <ProgressCircle
+                progress={totalProgress}
+                size={70}
+                progressColor={isDark ? adaptiveColors.accent : ACCENT_PURPLE}
+                backgroundColor={isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)'}
+                textColor={deepText}
               />
-            ))
+              <View style={styles.summaryTextBlock}>
+                <ThemedText style={[styles.summaryTitle, { color: deepText }]}>
+                  {t('summary.title')}
+                </ThemedText>
+                <ThemedText style={[styles.summaryLead, { color: softText }]}>
+                  {t('summary.description')}
+                </ThemedText>
+                <View style={styles.summaryBadges}>
+                  <View style={[styles.summaryBadge, { backgroundColor: isDark ? 'rgba(142,78,198,0.22)' : BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="doc.text" size={16} color={badgeAccent} />
+                    <ThemedText style={[styles.summaryBadgeText, { color: badgeAccent }]}>
+                      {t('summary.categories', { count: totalCategories })}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.summaryBadge, { backgroundColor: isDark ? 'rgba(142,78,198,0.22)' : BADGE_TINT, borderColor: BADGE_BORDER }]}>
+                    <IconSymbol name="checkmark.seal.fill" size={16} color={badgeAccent} />
+                    <ThemedText style={[styles.summaryBadgeText, { color: badgeAccent }]}>
+                      {t('summary.completed', { completed: checkedItems, total: totalItems || 0 })}
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+            </View>
+            <View style={[styles.summaryFooter, isDark && { borderTopColor: 'rgba(255,255,255,0.15)' }]}>
+              <ThemedText style={[styles.summaryFooterText, { color: softText }]}>
+                {progressNote}
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
+
+          {loading ? (
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
+              <ActivityIndicator size="small" color={ACCENT_PURPLE} />
+              <ThemedText style={[styles.stateText, { color: deepText }]}>
+                {t('state.loading')}
+              </ThemedText>
+            </LiquidGlassCard>
+          ) : error ? (
+            <LiquidGlassCard style={[styles.cardBase, styles.stateCard, styles.errorCard, { backgroundColor: softCardBg, borderColor: errorBorderColor }]}>
+              <ThemedText style={[styles.stateText, styles.errorText, { color: errorTextColor }]}>
+                {error}
+              </ThemedText>
+              <TouchableOpacity style={[styles.retryButton, { backgroundColor: retryButtonBg, borderColor: retryButtonBorder }]} onPress={loadChecklist}>
+                <ThemedText style={[styles.retryText, { color: deepText }]}>
+                  {t('action.retry')}
+                </ThemedText>
+              </TouchableOpacity>
+            </LiquidGlassCard>
+          ) : (
+            <>
+              <AddChecklistItem onAdd={handleAddItem} categories={categories} />
+
+              {Object.keys(groupedItems).length === 0 ? (
+                <LiquidGlassCard style={[styles.cardBase, styles.stateCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
+                  <ThemedText style={[styles.stateText, { color: deepText }]}>
+                    {t('state.empty')}
+                  </ThemedText>
+                </LiquidGlassCard>
+              ) : (
+                Object.entries(groupedItems).map(([category, items]) => (
+                  <ChecklistCategory
+                    key={category}
+                    title={category}
+                    items={items}
+                    onToggleItem={handleToggleItem}
+                    onDeleteItem={handleDeleteItem}
+                  />
+                ))
+              )}
+            </>
           )}
 
-          {/* Formular zum Hinzufügen neuer Einträge */}
-          <AddChecklistItem onAdd={handleAddItem} categories={categories} />
-        </>
-      )}
-
-      {/* Logout Section wurde zur Mehr-Seite verschoben */}
-    </ParallaxScrollView>
+          <LiquidGlassCard style={[styles.cardBase, styles.tipCard, { backgroundColor: softCardBg, borderColor: softBorder }]}>
+            <View style={styles.tipContent}>
+              <IconSymbol name="sparkles" size={20} color={tipIconColor} />
+              <ThemedText style={[styles.tipText, { color: deepText }]}>
+                {t('tip.review')}
+              </ThemedText>
+            </View>
+          </LiquidGlassCard>
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  headerImage: {
-    color: '#E9C9B6',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressCircleContainer: {
-    marginRight: 15,
-  },
-  titleContainer: {
+  safeArea: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingBottom: 120,
+    paddingTop: SECTION_GAP_TOP,
+    gap: SECTION_GAP_TOP,
+  },
+  cardBase: {
+    borderRadius: 26,
+    borderWidth: 1,
+  },
+  summaryCard: {
+    paddingHorizontal: 22,
+    paddingVertical: 26,
+    gap: 18,
+  },
+  summaryHeader: {
     flexDirection: 'row',
-    color:'black',
+    alignItems: 'flex-start',
+    gap: 18,
+  },
+  summaryTextBlock: {
+    flex: 1,
+    gap: 10,
+  },
+  summaryTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: TEXT_PRIMARY,
+    lineHeight: 28,
+  },
+  summaryLead: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  summaryBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  description: {
-    marginBottom: 20,
+  summaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+  },
+  summaryBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  summaryFooter: {
+    paddingTop: 8,
+    paddingBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.35)',
+  },
+  summaryFooterText: {
+    fontSize: 15,
     lineHeight: 22,
   },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tipCard: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    opacity: 0.7,
-  },
-  errorContainer: {
-    padding: 20,
-    marginVertical: 20,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
+  tipContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  stateCard: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 12,
+  },
+  stateText: {
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  errorCard: {
+    borderColor: 'rgba(230, 108, 119, 0.65)',
   },
   errorText: {
-    marginBottom: 16,
-    textAlign: 'center',
-    color: '#E9C9B6',
+    fontWeight: '600',
   },
   retryButton: {
-    backgroundColor: '#E9C9B6',
     paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-  },
-  retryButtonText: {
-    color: '#5C4033',
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    padding: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 22,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#E9E9E9',
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    marginBottom: 20,
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.75)',
   },
-  emptyText: {
-    textAlign: 'center',
-    opacity: 0.7,
-    lineHeight: 22,
+  retryText: {
+    fontWeight: '600',
   },
-  // Logout-Styles wurden zur Mehr-Seite verschoben
 });

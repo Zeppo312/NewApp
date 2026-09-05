@@ -1,5 +1,8 @@
 {
   "expo.jsEngine": "hermes",
   "EX_DEV_CLIENT_NETWORK_INSPECTOR": "true",
-  "newArchEnabled": "true"
+  "expo.inlineModules.watchedDirectories": "[]",
+  "expo.inlineModules.xcodeProjectTargets": "{\"mainTarget\":\"LottiBaby\",\"targets\":[]}",
+  "expo-image.disable-libdav1d": "false",
+  "MOTION_PERMISSION": "false"
 }

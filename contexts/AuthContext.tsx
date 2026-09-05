@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import {
   supabase,
@@ -10,17 +10,24 @@ import {
   checkEmailVerification,
   signOut,
   checkSupabaseConnection,
-  isSupabaseReady
+  isSupabaseReady,
+  invalidateUserCache
 } from '@/lib/supabase';
+import { invalidateAllCaches } from '@/lib/appCache';
 
 // Typdefinitionen für den Kontext
 type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  refreshSession: () => Promise<Session | null>;
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
-  signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => Promise<{ data?: any, error: any }>;
   // Apple Sign-In
   signInWithApple: () => Promise<{ data?: any, error: any }>;
   // OTP-Verifikation
@@ -39,64 +46,71 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
+
+  const applySession = useCallback((nextSession: Session | null) => {
+    const nextUserId = nextSession?.user?.id ?? null;
+    const previousUserId = lastSessionUserIdRef.current;
+
+    // Beim ersten Wiederherstellen derselben persistierten Sitzung bleiben die
+    // nutzerspezifischen Offline-Caches erhalten. Nur ein echter Wechsel nach
+    // initialer Auflösung darf sie verwerfen.
+    if (previousUserId !== undefined && previousUserId !== nextUserId) {
+      void invalidateAllCaches().catch((cacheError) => {
+        console.error('Error invalidating caches after auth user change:', cacheError);
+      });
+    }
+    lastSessionUserIdRef.current = nextUserId;
+
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+  }, []);
+
+  const refreshSession = useCallback(async () => {
+    if (!isSupabaseReady()) {
+      applySession(null);
+      return null;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      // Bewusst kein applySession(null): ein Fehler heisst hier meistens nur,
+      // dass der faellige Token-Refresh gerade nicht durchging (Funkloch,
+      // Timeout beim Kaltstart). Die persistierte Sitzung liegt dann noch im
+      // Storage und traegt beim naechsten Versuch wieder. Wuerden wir sie
+      // lokal verwerfen, schickte der Guard den Nutzer trotzdem auf den
+      // Login-Screen. Einen echten Abbruch meldet auth-js ohnehin selbst:
+      // `_removeSession()` feuert immer `SIGNED_OUT` an den Listener unten.
+      console.error('Error refreshing session:', error);
+      return null;
+    }
+
+    const nextSession = data.session ?? null;
+    applySession(nextSession);
+    return nextSession;
+  }, [applySession]);
 
   // Initialisierung und Überwachung des Authentifizierungsstatus
   useEffect(() => {
+    let isMounted = true;
+
+    const applySessionSafe = (nextSession: Session | null) => {
+      if (!isMounted) return;
+      applySession(nextSession);
+    };
+
     // Prüfen, ob wir im Browser sind und Supabase bereit ist
     if (!isSupabaseReady()) {
       console.log('Supabase is not ready yet (server-side rendering)');
-      // Wir setzen einen Timeout, um sicherzustellen, dass die App nicht hängen bleibt
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      if (isMounted) setLoading(false);
       return;
     }
 
-    const initAuth = async () => {
-      try {
-        // Simulierte Verzögerung für stabileres Laden auf mobilen Geräten
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Prüfen der Supabase-Verbindung
-        const connectionCheck = await checkSupabaseConnection();
-        console.log('Supabase connection check:', connectionCheck);
-
-        // Wenn die Supabase-Verbindung fehlschlägt, setzen wir den Benutzer auf null
-        if (!connectionCheck.success) {
-          console.log('Supabase connection failed, setting user to null');
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        // Abrufen der aktuellen Session beim Start
-        const { data } = await supabase.auth.getSession();
-        console.log('Got session:', data.session ? 'session exists' : 'no session');
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        // Bei einem Fehler setzen wir den Benutzer auf null
-        setSession(null);
-        setUser(null);
-      } finally {
-        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
-        setLoading(false);
-      }
-    };
-
-    // Initialisierung starten
-    initAuth();
-
-    // Überwachung von Authentifizierungsänderungen
+    // Überwachung von Authentifizierungsänderungen früh registrieren
     let subscription: { unsubscribe: () => void } | null = null;
-
     try {
-      const authListener = supabase.auth.onAuthStateChange((_event, session) => {
-        console.log('Auth state changed:', _event, session ? 'session exists' : 'no session');
-        setSession(session);
-        setUser(session?.user ?? null);
+      const authListener = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        applySessionSafe(nextSession);
       });
 
       subscription = authListener.data.subscription;
@@ -104,29 +118,106 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error setting up auth state change:', error);
     }
 
+    const initAuth = async () => {
+      try {
+        // Optionales Connectivity-Logging (darf Auth nicht blockieren)
+        checkSupabaseConnection()
+          .then((result) => {
+            if (!result.success) {
+              console.warn('Supabase connection check warning:', result.error);
+            }
+          })
+          .catch((connectionError) => {
+            console.warn('Supabase connection check exception:', connectionError);
+          });
+
+        // Abrufen der aktuellen Session beim Start
+        await refreshSession();
+      } catch (error) {
+        // Auch hier gilt: eine geworfene Ausnahme ist kein Beleg dafuer, dass
+        // die Sitzung ungueltig ist. Der Zustand bleibt, wie er ist - ein
+        // echter Logout kommt ueber den SIGNED_OUT-Listener.
+        console.error('Error initializing auth:', error);
+      } finally {
+        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Initialisierung starten
+    initAuth();
+
     // Cleanup-Funktion
     return () => {
+      isMounted = false;
       if (subscription) {
         subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [applySession, refreshSession]);
 
   // E-Mail-Authentifizierung
   const handleSignInWithEmail = async (email: string, password: string) => {
     const { data, error } = await signInWithEmail(email, password);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
-  const handleSignUpWithEmail = async (email: string, password: string) => {
-    const { data, error } = await signUpWithEmail(email, password);
+  const handleSignUpWithEmail = async (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => {
+    const { data, error } = await signUpWithEmail(email, password, termsConsent);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleSignInWithApple = async () => {
+    const { data, error } = await signInWithApple();
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleVerifyOTPToken = async (email: string, token: string) => {
+    const { data, error } = await verifyOTPToken(email, token);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
   // Abmeldung
   const handleSignOut = async () => {
-    const { error } = await signOut();
-    return { error };
+    // Lokalen Auth-State sofort leeren, damit geschützte Screens direkt unmounten.
+    applySession(null);
+
+    // Cleanup darf Logout nicht abbrechen.
+    invalidateUserCache();
+    try {
+      await invalidateAllCaches();
+    } catch (cacheError) {
+      console.error('Error invalidating caches during sign out:', cacheError);
+    }
+
+    try {
+      const { error } = await signOut();
+      if (error) {
+        console.error('Error signing out from Supabase:', error);
+      }
+      return { error };
+    } catch (error) {
+      console.error('Unexpected sign out error:', error);
+      return { error };
+    }
   };
 
   // Bereitstellung des Kontexts
@@ -136,11 +227,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         user,
         loading,
+        refreshSession,
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
-        signInWithApple,
+        signInWithApple: handleSignInWithApple,
         resendOTPToken,
-        verifyOTPToken,
+        verifyOTPToken: handleVerifyOTPToken,
         checkEmailVerification,
         signOut: handleSignOut,
       }}

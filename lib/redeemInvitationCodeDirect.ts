@@ -95,7 +95,7 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
 
       if (debugData && debugData.length > 0) {
         console.log(`Found ${debugData.length} matching invitation(s) with RPC:`);
-        debugData.forEach((inv, i) => {
+        debugData.forEach((inv: any, i: number) => {
           console.log(`${i + 1}. ID: ${inv.id}, Code: '${inv.invitation_code}', Status: ${inv.status}, Exact match: ${inv.exact_match}, Case-insensitive match: ${inv.case_insensitive_match}`);
         });
       } else {
@@ -183,9 +183,10 @@ export const redeemInvitationCodeDirect = async (userId: string, invitationCode:
     };
   } catch (error) {
     console.error('Unexpected error in redeemInvitationCodeDirect:', error);
+    const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
     return {
       success: false,
-      error: { message: `Ein unerwarteter Fehler ist aufgetreten: ${error.message || 'Unbekannter Fehler'}. Bitte versuche es später erneut.` }
+      error: { message: `Ein unerwarteter Fehler ist aufgetreten: ${message}. Bitte versuche es später erneut.` }
     };
   }
 };

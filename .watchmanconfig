@@ -1,0 +1,25 @@
+{
+  "ignore_dirs": [
+    ".git",
+    ".git.backup-corrupt-20260331-144354",
+    ".expo",
+    "backup",
+    "dist",
+    "dist 2",
+    "dist 3",
+    "dist 4",
+    "dist 5",
+    "dist 6",
+    "dist 7",
+    "dist-debug",
+    "dist-debug-android",
+    "dist-debug-android2",
+    "dist-debug2",
+    "dist-web-validate",
+    "dist_backup_20251123143223",
+    "hostinger-coming-soon",
+    "ios/build",
+    "ownership-map-out",
+    "venv"
+  ]
+}

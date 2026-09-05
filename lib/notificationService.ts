@@ -2,9 +2,11 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { supabase } from './supabase';
+import { getAppSettings, getCachedUser, supabase } from './supabase';
+import { getPersistedAppLocale } from './localization';
+import { translateNotificationsText } from './notificationsTranslations';
+import { COMMUNITY_FALLBACK_ROUTE } from './communityAccess';
 
-import * as TaskManager from 'expo-task-manager';
 import { router } from 'expo-router';
 
 // Konfiguriere das Verhalten von Benachrichtigungen
@@ -18,9 +20,6 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Definiere den Hintergrund-Task-Namen
-export const BACKGROUND_NOTIFICATION_TASK = 'background-notification-task';
-
 // Diese Funktion registriert das Gerät für Push-Benachrichtigungen
 export async function registerForPushNotificationsAsync() {
   let token;
@@ -28,17 +27,17 @@ export async function registerForPushNotificationsAsync() {
   // Prüfen, ob das Gerät ein physisches Gerät ist (kein Simulator)
   if (Device.isDevice) {
     // Berechtigungen prüfen
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+    const existingPermissions = await Notifications.getPermissionsAsync();
+    let granted = existingPermissions.granted;
     
     // Berechtigungen anfordern, wenn sie noch nicht erteilt wurden
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    if (!granted) {
+      const requestedPermissions = await Notifications.requestPermissionsAsync();
+      granted = requestedPermissions.granted;
     }
     
     // Wenn die Berechtigungen nicht erteilt wurden, abbrechen
-    if (finalStatus !== 'granted') {
+    if (!granted) {
       console.log('Keine Benachrichtigungserlaubnis erteilt!');
       return null;
     }
@@ -48,8 +47,8 @@ export async function registerForPushNotificationsAsync() {
       token = (await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig?.extra?.eas?.projectId,
       })).data;
-      
-      console.log('Push-Token:', token);
+
+      console.log('Push token retrieved successfully');
     } catch (error) {
       console.error('Fehler beim Abrufen des Push-Tokens:', error);
     }
@@ -74,7 +73,7 @@ export async function registerForPushNotificationsAsync() {
 export async function savePushToken(token: string) {
   try {
     // Aktuellen Benutzer abrufen
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) {
       console.error('Kein angemeldeter Benutzer');
       return false;
@@ -120,70 +119,101 @@ export async function savePushToken(token: string) {
 // Navigiere zur entsprechenden Ansicht basierend auf dem Benachrichtigungstyp
 export function navigateToNotificationTarget(type: string, referenceId: string) {
   console.log(`Navigiere zu: Typ=${type}, ID=${referenceId}`);
-  
+
   try {
     switch (type) {
-      case 'message':
-        // Öffne den Chat mit dieser Nachricht
-        router.push(`/chat/${referenceId}` as any);
+      // Partner notification types
+      case 'sleep_window_reminder':
+        // Navigate to sleep tracker when sleep window is starting
+        router.push('/(tabs)/sleep-tracker' as any);
         break;
-        
-      case 'like_post':
-      case 'comment':
-        // Navigiere zum Beitrag
+
+      case 'partner_sleep':
+        // Navigate to sleep tracker with optional entry ID
         router.push({
-          pathname: '/community',
-          params: { post: referenceId }
+          pathname: '/(tabs)/sleep-tracker',
+          params: referenceId ? { entryId: referenceId } : {}
         } as any);
         break;
-        
-      case 'follow':
-        // Bei Follow-Benachrichtigungen zum Profil des Followers navigieren
-        router.push(`/profile/${referenceId}` as any);
+
+      case 'partner_feeding':
+      case 'partner_diaper':
+        // Navigate to daily screen with optional entry ID
+        router.push({
+          pathname: '/(tabs)/daily_old',
+          params: referenceId ? { entryId: referenceId } : {}
+        } as any);
         break;
-        
+
+      // Community-Benachrichtigungen führen nirgendwo mehr hin: die
+      // nutzergenerierten Bereiche sind gesperrt (siehe lib/communityAccess.ts).
+      // Alte Push-Nachrichten aus der Zeit davor landen weiterhin auf dem
+      // Gerät — sie öffnen jetzt den Start statt einer gesperrten Route.
+      case 'message':
+      case 'group_message':
+      case 'like_post':
+      case 'comment':
+      case 'follow':
       case 'like_comment':
       case 'reply':
       case 'like_nested_comment':
-        // Bei Kommentar-Aktionen, erst den Eltern-Post finden
-        findParentPostAndNavigate(referenceId);
+        router.push(COMMUNITY_FALLBACK_ROUTE as any);
         break;
-        
+
+      // Planner notification types
+      case 'planner_item':
+        // Navigate to planner with the specific date and item
+        navigateToPlannerItem(referenceId);
+        break;
+
+      case 'vitamin_d_reminder':
+        router.push('/(tabs)/daily_old' as any);
+        break;
+
+      case 'advisor_reminder':
+        router.push('/lottis-fuersorge' as any);
+        break;
+
       default:
-        // Standardmäßig zur Community-Ansicht
-        router.push('/community' as any);
+        console.log('Unknown notification type:', type);
+        router.push(COMMUNITY_FALLBACK_ROUTE as any);
     }
   } catch (error) {
     console.error('Fehler bei der Navigation:', error);
-    // Fallback zur Community-Ansicht
-    router.push('/community' as any);
+    router.push(COMMUNITY_FALLBACK_ROUTE as any);
   }
 }
 
-// Findet den übergeordneten Beitrag eines Kommentars und navigiert dorthin
-async function findParentPostAndNavigate(commentId: string) {
+// Navigiert zum Planner mit dem spezifischen Item
+async function navigateToPlannerItem(plannerItemId: string) {
   try {
-    // Kommentar abrufen, um die Post-ID zu erhalten
-    const { data: comment, error } = await supabase
-      .from('community_comments')
-      .select('post_id')
-      .eq('id', commentId)
+    // Planner-Item abrufen, um das Datum zu bekommen
+    const { data: plannerItem, error } = await supabase
+      .from('planner_items')
+      .select('day_id, planner_days!inner(day)')
+      .eq('id', plannerItemId)
       .single();
-    
-    if (error || !comment) {
-      console.error('Fehler beim Abrufen des Kommentars:', error);
-      router.push('/community' as any);
+
+    if (error || !plannerItem) {
+      console.error('Fehler beim Abrufen des Planner-Items:', error);
+      router.push('/planner' as any);
       return;
     }
-    
-    // Navigiere zum Beitrag mit dem Fokus auf diesem Kommentar
+
+    // Extract day from the nested planner_days object
+    const plannerDays = plannerItem.planner_days as { day?: string | null } | { day?: string | null }[] | null;
+    const day = Array.isArray(plannerDays)
+      ? plannerDays[0]?.day ?? undefined
+      : plannerDays?.day ?? undefined;
+
+    // Navigiere zum Planner mit dem spezifischen Datum und Item
     router.push({
-      pathname: '/community',
-      params: { post: comment.post_id, comment: commentId }
+      pathname: '/planner',
+      params: { date: day, itemId: plannerItemId }
     } as any);
   } catch (error) {
-    console.error('Fehler beim Finden des übergeordneten Beitrags:', error);
-    router.push('/community' as any);
+    console.error('Fehler beim Navigieren zum Planner-Item:', error);
+    router.push('/planner' as any);
   }
 }
 
@@ -220,8 +250,8 @@ export function setupNotificationListeners(
 
   // Funktion zum Aufräumen der Listener
   return () => {
-    Notifications.removeNotificationSubscription(foregroundSubscription);
-    Notifications.removeNotificationSubscription(responseSubscription);
+    foregroundSubscription.remove();
+    responseSubscription.remove();
   };
 }
 
@@ -241,11 +271,17 @@ async function markNotificationAsRead(notificationId: string) {
   }
 }
 
-// Benachrichtigungen manuell im Hintergrund überprüfen
+// Benachrichtigungen per explizitem Polling prüfen
 export async function checkForNewNotifications() {
   try {
-    const { data: userData } = await supabase.auth.getUser();
+    const { data: userData } = await getCachedUser();
     if (!userData?.user) return;
+
+    const { data: appSettings } = await getAppSettings();
+    if (appSettings?.notifications_enabled === false) {
+      console.log('Notifications disabled in app settings. Skipping background notification check.');
+      return;
+    }
 
     console.log('Prüfe auf neue Benachrichtigungen im Hintergrund...');
 
@@ -266,7 +302,11 @@ export async function checkForNewNotifications() {
 
     // Lokale Benachrichtigungen für ungelesene Einträge anzeigen
     if (notifications && notifications.length > 0) {
-      notifications.forEach(async (notification) => {
+      const locale = await getPersistedAppLocale();
+      const nt = (key: Parameters<typeof translateNotificationsText>[1]) => translateNotificationsText(locale, key);
+      notifications
+        .filter((notification) => notification.type !== 'message')
+        .forEach(async (notification) => {
         // Absenderinformationen abrufen
         const { data: sender } = await supabase
           .from('profiles')
@@ -274,30 +314,30 @@ export async function checkForNewNotifications() {
           .eq('id', notification.sender_id)
           .single();
 
-        const senderName = sender?.first_name || 'Jemand';
+        const senderName = sender?.first_name || nt('common.someone');
         
         // Titel und Text basierend auf dem Benachrichtigungstyp
-        let title = 'Neue Benachrichtigung';
+        let title = nt('common.new');
         let body = notification.content;
         
         switch (notification.type) {
           case 'like_post':
-            title = `${senderName} hat deinen Beitrag geliked`;
+            title = `${senderName} ${nt('activity.likePost')}`;
             break;
           case 'like_comment':
-            title = `${senderName} hat deinen Kommentar geliked`;
+            title = `${senderName} ${nt('activity.likeComment')}`;
             break;
           case 'comment':
-            title = `${senderName} hat auf deinen Beitrag geantwortet`;
+            title = `${senderName} ${nt('activity.comment')}`;
             break;
           case 'reply':
-            title = `${senderName} hat auf deinen Kommentar geantwortet`;
+            title = `${senderName} ${nt('activity.reply')}`;
             break;
           case 'message':
-            title = `Neue Nachricht von ${senderName}`;
+            title = `${senderName} ${nt('activity.message')}`;
             break;
           case 'follow':
-            title = `${senderName} folgt dir jetzt`;
+            title = `${senderName} ${nt('activity.follow')}`;
             break;
         }
 
@@ -322,25 +362,3 @@ export async function checkForNewNotifications() {
     console.error('Fehler bei der Hintergrundaktualisierung:', error);
   }
 }
-
-// Background-Task für Benachrichtigungen registrieren
-export async function registerBackgroundNotificationTask() {
-  console.log('Registriere Hintergrundaufgabe für Benachrichtigungen...');
-  try {
-    // Registriere den Task für Background Fetch (jetzt nur noch TaskManager)
-    // Task muss mit TaskManager.defineTask definiert werden (sollte an anderer Stelle im Code sein)
-    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_NOTIFICATION_TASK);
-    if (!isRegistered) {
-      // Hier ggf. weitere Logik, falls Task nicht registriert ist
-      console.log('Task war noch nicht registriert.');
-    }
-    console.log('Hintergrundaufgabe erfolgreich geprüft/registriert');
-    return true;
-  } catch (error) {
-    console.error('Fehler beim Registrieren der Hintergrundaufgabe:', error);
-    return false;
-  }
-}
-
-// Prüfe, ob der Background-Task registriert ist
- 

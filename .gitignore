@@ -8,6 +8,8 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+dist 6/
+node_local/
 
 # Native
 *.orig.*
@@ -16,6 +18,12 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+android/.gradle/
+android/app/build/
+android/build/
 
 # Metro
 .metro-health-check*
@@ -31,6 +39,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+server/stripe/.env
 
 # typescript
 *.tsbuildinfo
@@ -40,3 +50,10 @@ app-example
 .env.local
 
 .env.local
+
+# accidental local git backups
+.git.backup-*/
+.git.backup-*
+
+# locally disabled features
+.local-disabled/

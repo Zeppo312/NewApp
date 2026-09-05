@@ -1,0 +1,9 @@
+"CFBundleDisplayName" = "Lotti Baby";
+"NSMicrophoneUsageDescription" = "Lotti Baby necesita acceso al micrófono para que puedas grabar mensajes y registros de voz.";
+"NSCameraUsageDescription" = "Lotti Baby necesita acceso a la cámara para que puedas escanear códigos de barras de productos.";
+"NSPhotoLibraryUsageDescription" = "Lotti Baby necesita acceso a tus fotos para que puedas elegir imágenes para perfiles, hitos, recetas, recomendaciones y publicaciones.";
+"NSLocationWhenInUseUsageDescription" = "Lotti Baby usa tu ubicación solo mientras utilizas la aplicación para mostrar el tiempo local y recomendaciones de ropa adecuadas.";
+"NSCalendarsUsageDescription" = "Lotti Baby necesita acceso al calendario para que puedas crear, actualizar y sincronizar citas del planificador y citas médicas.";
+"NSCalendarsFullAccessUsageDescription" = "Lotti Baby necesita acceso al calendario para que puedas crear, actualizar y sincronizar citas del planificador y citas médicas.";
+"NSRemindersUsageDescription" = "Lotti Baby necesita acceso a los recordatorios para que las funciones de citas del calendario funcionen correctamente.";
+"NSRemindersFullAccessUsageDescription" = "Lotti Baby necesita acceso a los recordatorios para que las funciones de citas del calendario funcionen correctamente.";

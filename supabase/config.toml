@@ -1,0 +1,27 @@
+project_id = "LottiBaby"
+
+# Authenticated app endpoint: keep the Supabase gateway JWT check enabled.
+[functions.ask-lotti]
+verify_jwt = true
+
+# External RevenueCat endpoint: no Supabase JWT exists. The function itself
+# requires both the configured Authorization value and RevenueCat's HMAC.
+[functions.revenuecat-webhook]
+verify_jwt = false
+
+# These functions validate the caller JWT inside the handler. Preserve the
+# production gateway setting during CLI deploys.
+[functions.advisor-generate]
+verify_jwt = false
+
+[functions.voice-log-parse]
+verify_jwt = false
+
+# Cron endpoint authenticated with ADVISOR_CRON_SECRET.
+[functions.advisor-daily]
+verify_jwt = false
+
+# Database webhook endpoint: the gateway cannot validate the custom shared
+# secret as a user JWT. The function itself requires MODERATION_WEBHOOK_SECRET.
+[functions.moderation-report-notify]
+verify_jwt = false

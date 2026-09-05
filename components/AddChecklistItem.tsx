@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, TextInput, TouchableOpacity, Modal, Alert, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, TextInput, TouchableOpacity, Modal, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
-import { ThemedView } from './ThemedView';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { LiquidGlassCard, GlassCard, TEXT_PRIMARY } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  translatePregnancyChecklistText,
+  type PregnancyChecklistTranslationKey,
+} from '@/lib/pregnancyChecklistTranslations';
+
+const CTA_ACCENT = '#9D7BD8';
+const LILAC_GLASS_OVERLAY = 'rgba(142, 78, 198, 0.25)';
+const LILAC_BORDER_COLOR = 'rgba(255,255,255,0.6)';
+const LILAC_ICON_BG = 'rgba(255,255,255,0.32)';
 
 interface AddChecklistItemProps {
   onAdd: (itemName: string, category: string, notes: string) => Promise<void>;
@@ -12,8 +23,25 @@ interface AddChecklistItemProps {
 }
 
 export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categories }) => {
+  const { locale } = useLocale();
+  const t = (key: PregnancyChecklistTranslationKey) => translatePregnancyChecklistText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
+  const textSecondary = isDark ? adaptiveColors.textSecondary : 'rgba(125,90,80,0.75)';
+  const inputTextColor = isDark ? adaptiveColors.textPrimary : theme.text;
+  const placeholderTextColor = isDark ? adaptiveColors.textTertiary : theme.tabIconDefault;
+  const addButtonOverlay = isDark ? 'rgba(142,78,198,0.35)' : LILAC_GLASS_OVERLAY;
+  const addButtonBorder = isDark ? 'rgba(255,255,255,0.22)' : LILAC_BORDER_COLOR;
+  const addIconBg = isDark ? 'rgba(255,255,255,0.16)' : LILAC_ICON_BG;
+  const addIconBorder = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.8)';
+  const modalInputBg = isDark ? 'rgba(10,10,12,0.6)' : 'rgba(255,255,255,0.85)';
+  const modalInputBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.45)';
+  const categoryButtonBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)';
+  const categoryButtonBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)';
+  const categoryButtonActiveBg = isDark ? 'rgba(157,123,216,0.32)' : 'rgba(157,123,216,0.12)';
 
   const [modalVisible, setModalVisible] = useState(false);
   const [itemName, setItemName] = useState('');
@@ -21,9 +49,13 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!categories.includes(category)) setCategory(categories[0] || '');
+  }, [categories, category]);
+
   const handleSubmit = async () => {
     if (!itemName.trim()) {
-      Alert.alert('Fehler', 'Bitte gib einen Namen für den Eintrag ein.');
+      Alert.alert(t('common.error'), t('error.nameRequired'));
       return;
     }
 
@@ -36,7 +68,7 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
       setModalVisible(false);
     } catch (error) {
       console.error('Error adding checklist item:', error);
-      Alert.alert('Fehler', 'Der Eintrag konnte nicht hinzugefügt werden.');
+      Alert.alert(t('common.error'), t('error.add'));
     } finally {
       setIsSubmitting(false);
     }
@@ -44,13 +76,28 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
 
   return (
     <>
-      <TouchableOpacity
-        style={styles.addButton}
+      <LiquidGlassCard
         onPress={() => setModalVisible(true)}
+        style={styles.addButton}
+        overlayColor={addButtonOverlay}
+        borderColor={addButtonBorder}
+        intensity={30}
+        activeOpacity={0.9}
       >
-        <Ionicons name="add-circle" size={24} color="#E9C9B6" />
-        <ThemedText style={styles.addButtonText}>Neuen Eintrag hinzufügen</ThemedText>
-      </TouchableOpacity>
+        <View style={styles.addButtonContent}>
+          <View style={[styles.addButtonIcon, { backgroundColor: addIconBg, borderColor: addIconBorder }]}>
+            <Ionicons name="add" size={22} color="#fff" />
+          </View>
+          <View>
+            <ThemedText style={[styles.addButtonLabel, { color: textPrimary }]}>
+              {t('add.title')}
+            </ThemedText>
+            <ThemedText style={[styles.addButtonHint, { color: textSecondary }]}>
+              {t('add.hint')}
+            </ThemedText>
+          </View>
+        </View>
+      </LiquidGlassCard>
 
       <Modal
         animationType="slide"
@@ -59,68 +106,74 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <ThemedView style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Neuer Eintrag</ThemedText>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={theme.text} />
+          <GlassCard style={styles.modalCard}>
+            <View style={styles.modalInner}>
+              <View style={styles.modalHeader}>
+                <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>
+                  {t('add.title')}
+                </ThemedText>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Ionicons name="close" size={22} color={textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.name')}</ThemedText>
+              <TextInput
+                style={[styles.input, { color: inputTextColor, backgroundColor: modalInputBg, borderColor: modalInputBorder }]}
+                value={itemName}
+                onChangeText={setItemName}
+                placeholder={t('add.namePlaceholder')}
+                placeholderTextColor={placeholderTextColor}
+              />
+
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.category')}</ThemedText>
+              <View style={styles.categoryContainer}>
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[
+                      styles.categoryButton,
+                      { backgroundColor: categoryButtonBg, borderColor: categoryButtonBorder },
+                      category === cat && [styles.categoryButtonSelected, { backgroundColor: categoryButtonActiveBg, borderColor: CTA_ACCENT }],
+                    ]}
+                    onPress={() => setCategory(cat)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.categoryButtonText,
+                        { color: textPrimary },
+                        category === cat && styles.categoryButtonTextSelected,
+                      ]}
+                    >
+                      {cat}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <ThemedText style={[styles.label, { color: textPrimary }]}>{t('add.notes')}</ThemedText>
+              <TextInput
+                style={[styles.input, styles.notesInput, { color: inputTextColor, backgroundColor: modalInputBg, borderColor: modalInputBorder }]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder={t('add.notesPlaceholder')}
+                placeholderTextColor={placeholderTextColor}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+                onPress={handleSubmit}
+                disabled={isSubmitting}
+              >
+                <ThemedText style={styles.submitButtonText}>
+                  {isSubmitting ? t('add.pending') : t('add.idle')}
+                </ThemedText>
               </TouchableOpacity>
             </View>
-
-            <ThemedText style={styles.label}>Name *</ThemedText>
-            <TextInput
-              style={[styles.input, { color: theme.text, borderColor: theme.border }]}
-              value={itemName}
-              onChangeText={setItemName}
-              placeholder="z.B. Mutterpass"
-              placeholderTextColor={theme.tabIconDefault}
-            />
-
-            <ThemedText style={styles.label}>Kategorie</ThemedText>
-            <View style={styles.categoryContainer}>
-              {categories.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryButton,
-                    category === cat && styles.categoryButtonSelected
-                  ]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.categoryButtonText,
-                      category === cat && styles.categoryButtonTextSelected
-                    ]}
-                  >
-                    {cat}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ThemedText style={styles.label}>Notizen</ThemedText>
-            <TextInput
-              style={[styles.input, styles.notesInput, { color: theme.text, borderColor: theme.border }]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Zusätzliche Informationen"
-              placeholderTextColor={theme.tabIconDefault}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={isSubmitting}
-            >
-              <ThemedText style={styles.submitButtonText}>
-                {isSubmitting ? 'Wird hinzugefügt...' : 'Hinzufügen'}
-              </ThemedText>
-            </TouchableOpacity>
-          </ThemedView>
+          </GlassCard>
         </View>
       </Modal>
     </>
@@ -129,36 +182,44 @@ export const AddChecklistItem: React.FC<AddChecklistItemProps> = ({ onAdd, categ
 
 const styles = StyleSheet.create({
   addButton: {
+    marginTop: 12,
+    padding: 18,
+  },
+  addButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    marginVertical: 16,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 8,
-    borderStyle: 'dashed',
+    gap: 14,
   },
-  addButtonText: {
-    marginLeft: 8,
+  addButtonIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  addButtonLabel: {
     fontSize: 16,
-    color: '#E9C9B6',
+    fontWeight: '700',
+  },
+  addButtonHint: {
+    fontSize: 13,
   },
   modalOverlay: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 24,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
-  modalContent: {
-    width: '90%',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+  modalCard: {
+    width: '100%',
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  modalInner: {
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -167,19 +228,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 22,
+    fontWeight: '700',
   },
   label: {
-    fontSize: 16,
-    marginBottom: 8,
+    fontSize: 15,
+    marginBottom: 6,
+    marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
+    borderColor: 'rgba(255,255,255,0.45)',
+    borderRadius: 14,
+    padding: 14,
+    fontSize: 15,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
   notesInput: {
     height: 100,
@@ -188,41 +252,42 @@ const styles = StyleSheet.create({
   categoryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 16,
-    marginTop: 8,
+    marginTop: 6,
+    marginBottom: 6,
+    gap: 8,
   },
   categoryButton: {
     borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 20,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 999,
     paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.55)',
   },
   categoryButtonSelected: {
-    backgroundColor: '#E9C9B6',
+    backgroundColor: 'rgba(157,123,216,0.12)',
+    borderColor: CTA_ACCENT,
   },
   categoryButtonText: {
     fontSize: 14,
+    color: TEXT_PRIMARY,
   },
   categoryButtonTextSelected: {
-    color: '#5C4033',
     fontWeight: 'bold',
   },
   submitButton: {
-    backgroundColor: '#E9C9B6',
+    backgroundColor: CTA_ACCENT,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 12,
   },
   submitButtonDisabled: {
     opacity: 0.7,
   },
   submitButtonText: {
-    color: '#5C4033',
+    color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

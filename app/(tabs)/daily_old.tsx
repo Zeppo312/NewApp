@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
   View,
   Text,
   TouchableOpacity,
+  Modal,
   StyleSheet,
   FlatList,
   RefreshControl,
@@ -13,11 +17,18 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+
+import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
+import { showHistoryLimitAlert } from '@/lib/historyLimit';
+import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
 
 import { DailyEntry } from '@/lib/baby';
 import {
@@ -27,23 +38,62 @@ import {
   getBabyCareEntriesForMonth,
   deleteBabyCareEntry,
   stopBabyCareEntryTimer,
+  supabase,
   updateBabyCareEntry,
 } from '@/lib/supabase';
+import {
+  loadDayEntriesWithCache,
+  loadWeekEntriesWithCache,
+  loadMonthEntriesWithCache,
+  invalidateDailyCache,
+  mapCareToDaily,
+} from '@/lib/dailyCache';
 
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import CustomActivityDefinitionModal from '@/components/CustomActivityDefinitionModal';
+import CustomActivityEntryModal, {
+  CustomActivityEntryPayload,
+} from '@/components/CustomActivityEntryModal';
+import NightWakePrompt from '@/components/NightWakePrompt';
+import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
 import WeekScroller from '@/components/WeekScroller';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Removed old managers; using unified baby_care_entries
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { DebugPanel } from '@/components/DebugPanel';
 
 import { BlurView } from 'expo-blur';
-import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY, GLASS_OVERLAY, GLASS_BORDER } from '@/constants/DesignGuide';
+import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY } from '@/constants/DesignGuide';
+import { useNotifications } from '@/hooks/useNotifications';
+import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
+import { buildFeedingOverview } from '@/lib/feedingOverview';
+import { sleepActivityService } from '@/lib/sleepActivityService';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
+import {
+  loadVitaminDReminderState,
+  saveVitaminDCompletion,
+  type VitaminDChecks,
+} from '@/lib/vitaminDReminder';
+import { DailyTranslationKey, DEFAULT_DAILY_LOCALE, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
+import {
+  archiveCustomActivityType,
+  createCustomActivityType,
+  CustomActivityType,
+  CustomActivityTypeDraft,
+  getCustomActivityTypes,
+  updateCustomActivityType,
+} from '@/lib/customActivities';
+
+let ACTIVE_DAILY_LOCALE = DEFAULT_DAILY_LOCALE;
+let DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
+const t = (key: DailyTranslationKey, params?: Record<string, string | number>) => translateDailyText(ACTIVE_DAILY_LOCALE, key, params);
 
 // Design Tokens now imported from DesignGuide
 
@@ -53,30 +103,87 @@ const TIMELINE_INSET = 8;
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 const COLS = 7;
 const GUTTER = 4;
+// Quick-Action-Kreise: eine Groesse fuer Wrapper, Styles und getItemLayout
+const QUICK_BUTTON_SIZE = 96;
+const QUICK_BUTTON_GAP = 16;
 const WEEK_CONTENT_WIDTH = contentWidth - TIMELINE_INSET * 2;
 const WEEK_COL_WIDTH = Math.floor((WEEK_CONTENT_WIDTH - (COLS - 1) * GUTTER) / COLS);
 const WEEK_COLS_WIDTH = COLS * WEEK_COL_WIDTH;
 const WEEK_LEFTOVER = WEEK_CONTENT_WIDTH - (WEEK_COLS_WIDTH + (COLS - 1) * GUTTER);
 const MAX_BAR_H = 140;
+const BABY_MODE_PREVIEW_READ_ONLY_MESSAGE =
+  t('preview.message');
+
+function toDateKey(d: Date) {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, '0')}-${String(copy.getDate()).padStart(2, '0')}`;
+}
+
+const formatDurationSeconds = (totalSeconds: number): string => {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+
+  return [hours, minutes, seconds]
+    .map((value) => value.toString().padStart(2, '0'))
+    .join(':');
+};
 
 type QuickActionType =
   | 'feeding_breast'
   | 'feeding_bottle'
   | 'feeding_solids'
+  | 'feeding_pump'
+  | 'feeding_water'
   | 'diaper_wet'
   | 'diaper_dirty'
   | 'diaper_both';
+
+type CustomQuickActionId = `custom:${string}`;
+type QuickActionId = QuickActionType | CustomQuickActionId;
+
+type QuickActionButtonConfig = {
+  icon: string;
+  label: string;
+  action: QuickActionId;
+  customActivity?: CustomActivityType;
+};
+type QuickActionButtonDefinition = {
+  action: QuickActionType;
+  icon: string;
+  labelKey: DailyTranslationKey;
+};
+type QuickActionRowItem =
+  | { key: string; type: 'action'; item: QuickActionButtonConfig }
+  | { key: string; type: 'restore-toggle' };
+
+type ActiveCareTimer = {
+  id: string;
+  type: 'BOTTLE' | 'BREAST' | 'SOLIDS' | 'PUMP' | 'WATER' | 'DIAPER' | 'CUSTOM';
+  start: number;
+  label?: string;
+  emoji?: string;
+  color?: string;
+};
 
 // GlassCard and LiquidGlassCard imported from DesignGuide
 
 // DateSpider as glass pill
 const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible }) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+
   if (!visible) return null;
   return (
     <View style={s.dateSpiderWrap}>
       <GlassCard style={s.dateSpiderCard} intensity={22} overlayColor="rgba(255,255,255,0.24)">
-        <Text style={s.dateSpiderText}>
-          {date.toLocaleDateString('de-DE', {
+        <Text style={[s.dateSpiderText, { color: textPrimary }]}>
+          {date.toLocaleDateString(DAILY_LOCALE_TAG, {
             weekday: 'long',
             day: '2-digit',
             month: 'long',
@@ -89,159 +196,1220 @@ const DateSpider: React.FC<{ date: Date; visible: boolean }> = ({ date, visible 
 
 // Timer Banner (glass)
 const TimerBanner: React.FC<{
-  timer: { id: string; type: string; start: number } | null;
+  timer: ActiveCareTimer | null;
   onStop: () => void;
   onCancel: () => void;
-}> = ({ timer, onStop, onCancel }) => {
+  disabled?: boolean;
+}> = ({ timer, onStop, onCancel, disabled = false }) => {
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (!timer) return;
-    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - timer.start) / 1000)), 1000);
+    const syncElapsed = () => setElapsed(Math.floor((Date.now() - timer.start) / 1000));
+    syncElapsed();
+    const interval = setInterval(syncElapsed, 1000);
     return () => clearInterval(interval);
   }, [timer]);
   if (!timer) return null;
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const timerLabel =
+    timer.type === 'CUSTOM'
+      ? `${timer.emoji ?? '⭐️'} ${timer.label ?? t('card.other')}`
+      : timer.type === 'BREAST'
+      ? t('action.breast')
+      : timer.type === 'BOTTLE'
+        ? t('action.bottle')
+      : timer.type === 'PUMP'
+          ? t('action.pump')
+      : timer.type === 'WATER'
+            ? t('action.water')
+      : timer.type === 'SOLIDS'
+              ? t('action.solids')
+              : t('action.diaper');
 
   return (
     <GlassCard style={[s.timerBanner, { paddingVertical: 12, paddingHorizontal: 16 }]} intensity={28}>
       <View style={{ flex: 1 }}>
-        <Text style={[s.timerType, { color: PRIMARY }]}>
-          {timer.type === 'BREAST' ? '🤱 Stillen' : '🍼 Fläschchen'} • läuft seit {new Date(timer.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+        <Text style={[s.timerType, { color: textPrimary }]}>
+          {timerLabel} {t('action.running')} {new Date(timer.start).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}
         </Text>
-        <Text style={[s.timerTime, { color: '#7D5A50' }]}>{formatTime(elapsed)}</Text>
+        <Text style={[s.timerTime, { color: textSecondary }]}>{formatDurationSeconds(elapsed)}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TouchableOpacity style={s.timerCancelButton} onPress={onCancel}>
-          <IconSymbol name="xmark.circle" size={26} color="#a3a3a3" />
+        <TouchableOpacity style={[s.timerCancelButton, disabled && s.actionDisabled]} onPress={onCancel} disabled={disabled}>
+          <IconSymbol name="xmark.circle" size={26} color={isDark ? '#888888' : '#a3a3a3'} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.timerStopButton} onPress={onStop}>
-          <IconSymbol name="stop.circle.fill" size={28} color={PRIMARY} />
+        <TouchableOpacity style={[s.timerStopButton, disabled && s.actionDisabled]} onPress={onStop} disabled={disabled}>
+          <IconSymbol name="stop.circle.fill" size={28} color={textPrimary} />
         </TouchableOpacity>
       </View>
     </GlassCard>
   );
 };
 
+const QUICK_ACTION_HIDDEN_STORAGE_PREFIX = 'daily_old_hidden_quick_actions';
+const QUICK_ACTION_ORDER_STORAGE_PREFIX = 'daily_old_quick_actions_order';
+
+const QUICK_ACTION_DEFINITIONS: QuickActionButtonDefinition[] = [
+  { action: 'feeding_breast', labelKey: 'feeding.breast', icon: '🤱' },
+  { action: 'feeding_bottle', labelKey: 'feeding.bottle', icon: '🍼' },
+  { action: 'feeding_solids', labelKey: 'feeding.solids', icon: '🥄' },
+  { action: 'feeding_pump', labelKey: 'feeding.pump', icon: '🥛' },
+  { action: 'feeding_water', labelKey: 'feeding.water', icon: '🚰' },
+  { action: 'diaper_wet', labelKey: 'diaper.wet', icon: '💧' },
+  { action: 'diaper_dirty', labelKey: 'diaper.dirty', icon: '💩' },
+  { action: 'diaper_both', labelKey: 'diaper.both', icon: '💧💩' },
+];
+
+const QUICK_ACTION_ORDER = QUICK_ACTION_DEFINITIONS.map(({ action }) => action);
+const toCustomQuickActionId = (id: string): CustomQuickActionId => `custom:${id}`;
+const isCustomQuickActionId = (action: QuickActionId): action is CustomQuickActionId =>
+  action.startsWith('custom:');
+const getCustomActivityIdFromAction = (action: CustomQuickActionId) => action.slice('custom:'.length);
+
+const getEntryTimelineTimestamp = (entry: Partial<DailyEntry>): number | null => {
+  const rawValue = entry.start_time ?? entry.entry_date ?? null;
+  if (!rawValue) return null;
+
+  const timestamp = new Date(rawValue).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const formatBottleGapLabel = (diffMinutes: number): string | null => {
+  if (!Number.isFinite(diffMinutes) || diffMinutes <= 0) return null;
+
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+
+  if (hours <= 0) {
+    return t('daily.lastBottleMinutes', { minutes });
+  }
+
+  if (minutes === 0) {
+    return t('daily.lastBottleHours', { hours });
+  }
+
+  return t('daily.lastBottleHoursMinutes', { hours, minutes });
+};
+
+type FeedingOverviewCategoryKey = 'BOTTLE' | 'WATER' | 'SOLIDS' | 'BREAST' | 'PUMP';
+
+type FeedingOverviewCategorySummary = {
+  key: FeedingOverviewCategoryKey;
+  label: string;
+  icon: string;
+  accent: string;
+  accentSoft: string;
+  count: number;
+  totalMl: number;
+  totalMinutes: number;
+  lastAt: number | null;
+  metric: string;
+  secondary: string;
+};
+
+const FEEDING_OVERVIEW_CARD_ORDER: FeedingOverviewCategoryKey[] = [
+  'BOTTLE',
+  'WATER',
+  'SOLIDS',
+  'BREAST',
+  'PUMP',
+];
+
+const FEEDING_OVERVIEW_CARD_META: Record<
+  FeedingOverviewCategoryKey,
+  Pick<FeedingOverviewCategorySummary, 'label' | 'icon' | 'accent' | 'accentSoft'>
+> = {
+  BOTTLE: {
+    label: 'Fläschchen',
+    icon: '🍼',
+    accent: '#4A90E2',
+    accentSoft: 'rgba(74, 144, 226, 0.16)',
+  },
+  WATER: {
+    label: 'Wasser',
+    icon: '🚰',
+    accent: '#2BA7C4',
+    accentSoft: 'rgba(43, 167, 196, 0.16)',
+  },
+  SOLIDS: {
+    label: 'Beikost',
+    icon: '🥄',
+    accent: '#F5A623',
+    accentSoft: 'rgba(245, 166, 35, 0.16)',
+  },
+  BREAST: {
+    label: 'Stillen',
+    icon: '🤱',
+    accent: '#C56DD8',
+    accentSoft: 'rgba(197, 109, 216, 0.16)',
+  },
+  PUMP: {
+    label: 'Abpumpen',
+    icon: '🥛',
+    accent: '#35B6B4',
+    accentSoft: 'rgba(53, 182, 180, 0.16)',
+  },
+};
+
+const resolveFeedingOverviewType = (entry: Partial<DailyEntry>): FeedingOverviewCategoryKey | null => {
+  const feedingType = entry.feeding_type?.toUpperCase();
+
+  if (feedingType === 'BOTTLE') return 'BOTTLE';
+  if (feedingType === 'WATER') return 'WATER';
+  if (feedingType === 'SOLIDS') return 'SOLIDS';
+  if (feedingType === 'BREAST') return 'BREAST';
+  if (feedingType === 'PUMP') return 'PUMP';
+
+  const subType = (entry as { sub_type?: string | null }).sub_type;
+  if (subType === 'feeding_bottle') return 'BOTTLE';
+  if (subType === 'feeding_water') return 'WATER';
+  if (subType === 'feeding_solids') return 'SOLIDS';
+  if (subType === 'feeding_breast') return 'BREAST';
+  if (subType === 'feeding_pump') return 'PUMP';
+
+  return null;
+};
+
+const normalizeTrackedMl = (value: number | null | undefined): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.round(value);
+};
+
+const getEntryDurationMinutes = (entry: Partial<DailyEntry>): number => {
+  if (!entry.start_time || !entry.end_time) return 0;
+
+  const start = new Date(entry.start_time).getTime();
+  const end = new Date(entry.end_time).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+
+  return Math.max(0, Math.round((end - start) / (1000 * 60)));
+};
+
+const formatDurationMinutesCompact = (minutes: number): string => {
+  const safe = Math.max(0, Math.round(minutes));
+  if (safe < 60) {
+    return `${safe} Min.`;
+  }
+
+  const hours = Math.floor(safe / 60);
+  const restMinutes = safe % 60;
+  if (restMinutes === 0) {
+    return `${hours} Std.`;
+  }
+
+  return `${hours} Std. ${restMinutes} Min.`;
+};
+
+const formatClockTime = (timestamp: number | null): string | null => {
+  if (!timestamp || !Number.isFinite(timestamp)) return null;
+  return new Date(timestamp).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' });
+};
+
+const buildFeedingOverviewCards = (entries: DailyEntry[]): FeedingOverviewCategorySummary[] => {
+  const buckets: Record<
+    FeedingOverviewCategoryKey,
+    {
+      count: number;
+      totalMl: number;
+      totalMinutes: number;
+      lastAt: number | null;
+      leftCount: number;
+      rightCount: number;
+      bothCount: number;
+    }
+  > = {
+    BOTTLE: { count: 0, totalMl: 0, totalMinutes: 0, lastAt: null, leftCount: 0, rightCount: 0, bothCount: 0 },
+    WATER: { count: 0, totalMl: 0, totalMinutes: 0, lastAt: null, leftCount: 0, rightCount: 0, bothCount: 0 },
+    SOLIDS: { count: 0, totalMl: 0, totalMinutes: 0, lastAt: null, leftCount: 0, rightCount: 0, bothCount: 0 },
+    BREAST: { count: 0, totalMl: 0, totalMinutes: 0, lastAt: null, leftCount: 0, rightCount: 0, bothCount: 0 },
+    PUMP: { count: 0, totalMl: 0, totalMinutes: 0, lastAt: null, leftCount: 0, rightCount: 0, bothCount: 0 },
+  };
+
+  for (const entry of entries) {
+    if (entry.entry_type !== 'feeding') continue;
+
+    const category = resolveFeedingOverviewType(entry);
+    if (!category) continue;
+
+    const bucket = buckets[category];
+    bucket.count += 1;
+
+    const timestamp = getEntryTimelineTimestamp(entry);
+    if (timestamp && (!bucket.lastAt || timestamp > bucket.lastAt)) {
+      bucket.lastAt = timestamp;
+    }
+
+    if (category === 'BOTTLE' || category === 'WATER' || category === 'PUMP') {
+      bucket.totalMl += normalizeTrackedMl(entry.feeding_volume_ml);
+    }
+
+    if (category === 'BREAST' || category === 'PUMP') {
+      if (entry.feeding_side === 'LEFT') bucket.leftCount += 1;
+      if (entry.feeding_side === 'RIGHT') bucket.rightCount += 1;
+      if (entry.feeding_side === 'BOTH') bucket.bothCount += 1;
+    }
+
+    if (category === 'BREAST') {
+      bucket.totalMinutes += getEntryDurationMinutes(entry);
+    }
+  }
+
+  return FEEDING_OVERVIEW_CARD_ORDER.map((key) => {
+    const bucket = buckets[key];
+    const lastTime = formatClockTime(bucket.lastAt);
+    const defaultSecondary = lastTime ? t('daily.lastAt', { time: lastTime }) : t('empty.today');
+
+    let metric = bucket.count > 0 ? t('daily.documented', { count: bucket.count }) : t('empty.entry');
+    let secondary = defaultSecondary;
+
+    if (key === 'BOTTLE') {
+      metric = bucket.totalMl > 0 ? t('daily.totalMl', { amount: bucket.totalMl }) : metric;
+    } else if (key === 'WATER') {
+      metric = bucket.totalMl > 0 ? t('daily.drunkMl', { amount: bucket.totalMl }) : metric;
+    } else if (key === 'SOLIDS') {
+      metric = bucket.count > 0 ? t('daily.offered', { count: bucket.count }) : t('empty.solids');
+    } else if (key === 'BREAST') {
+      metric = bucket.totalMinutes > 0 ? t('daily.total', { duration: formatDurationMinutesCompact(bucket.totalMinutes) }) : metric;
+
+      const sideSummary = [
+        bucket.leftCount > 0 ? `L ${bucket.leftCount}` : null,
+        bucket.rightCount > 0 ? `R ${bucket.rightCount}` : null,
+        bucket.bothCount > 0 ? `${t('input.both')} ${bucket.bothCount}` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ');
+
+      secondary = sideSummary || defaultSecondary;
+    } else if (key === 'PUMP') {
+      metric = bucket.totalMl > 0 ? t('daily.pumpedMl', { amount: bucket.totalMl }) : metric;
+
+      const sideSummary = [
+        bucket.leftCount > 0 ? `L ${bucket.leftCount}` : null,
+        bucket.rightCount > 0 ? `R ${bucket.rightCount}` : null,
+        bucket.bothCount > 0 ? `${t('input.both')} ${bucket.bothCount}` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ');
+
+      secondary = sideSummary || defaultSecondary;
+    }
+
+    return {
+      key,
+      ...FEEDING_OVERVIEW_CARD_META[key],
+      label: key === 'BOTTLE' ? t('feeding.bottle') : key === 'WATER' ? t('feeding.water') : key === 'SOLIDS' ? t('feeding.solids') : key === 'BREAST' ? t('feeding.breast') : t('feeding.pump'),
+      count: bucket.count,
+      totalMl: bucket.totalMl,
+      totalMinutes: bucket.totalMinutes,
+      lastAt: bucket.lastAt,
+      metric,
+      secondary,
+    };
+  });
+};
+
+const normalizeHiddenQuickActions = (value: unknown): QuickActionType[] => {
+  if (!Array.isArray(value)) return [];
+
+  const hiddenSet = new Set<QuickActionType>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!QUICK_ACTION_ORDER.includes(entry as QuickActionType)) continue;
+    hiddenSet.add(entry as QuickActionType);
+  }
+
+  return QUICK_ACTION_ORDER.filter((action) => hiddenSet.has(action)).slice(0, QUICK_ACTION_DEFINITIONS.length - 1);
+};
+
+const normalizeQuickActionOrder = (
+  value: unknown,
+  availableActions: QuickActionId[] = [...QUICK_ACTION_ORDER],
+): QuickActionId[] => {
+  if (!Array.isArray(value)) return [...availableActions];
+
+  const availableSet = new Set<QuickActionId>(availableActions);
+  const seen = new Set<QuickActionId>();
+  const normalized: QuickActionId[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    const action = entry as QuickActionId;
+    if (!availableSet.has(action)) continue;
+    if (seen.has(action)) continue;
+    seen.add(action);
+    normalized.push(action);
+  }
+
+  for (const action of availableActions) {
+    if (!seen.has(action)) {
+      normalized.push(action);
+    }
+  }
+
+  return normalized;
+};
+
+const buildHiddenQuickActionsStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${QUICK_ACTION_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const buildQuickActionOrderStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${QUICK_ACTION_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const QuickActionRow: React.FC<{
+  onPressAction: (action: QuickActionId) => void;
+  onHideAction: (action: QuickActionType) => void;
+  onRestoreAction: (action: QuickActionType) => void;
+  onReorderActions: (actions: QuickActionId[]) => void;
+  onAddCustom: () => void;
+  onEditCustom: (activity: CustomActivityType) => void;
+  customActivities: CustomActivityType[];
+  hiddenActions: QuickActionType[];
+  actionOrder: QuickActionId[];
+  disabled?: boolean;
+}> = ({
+  onPressAction,
+  onHideAction,
+  onRestoreAction,
+  onReorderActions,
+  onAddCustom,
+  onEditCustom,
+  customActivities,
+  hiddenActions,
+  actionOrder,
+  disabled = false,
+}) => {
+  const { locale } = useLocale();
+  // Adaptive Farben für Dark Mode
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const quickBtns = useMemo<QuickActionButtonConfig[]>(
+    () => [
+      ...QUICK_ACTION_DEFINITIONS.map(({ labelKey, ...button }) => ({
+        ...button,
+        label: translateDailyText(locale, labelKey),
+      })),
+      ...customActivities.map((activity) => ({
+        action: toCustomQuickActionId(activity.id),
+        icon: activity.emoji,
+        label: activity.name,
+        customActivity: activity,
+      })),
+    ],
+    [customActivities, locale],
+  );
+  const hiddenActionSet = useMemo(() => new Set(hiddenActions), [hiddenActions]);
+  const orderedQuickBtns = useMemo(
+    () => actionOrder.map((action) => quickBtns.find((btn) => btn.action === action)).filter((item): item is QuickActionButtonConfig => !!item),
+    [actionOrder, quickBtns],
+  );
+  const visibleQuickBtns = useMemo(
+    () => orderedQuickBtns.filter(({ action }) => isCustomQuickActionId(action) || !hiddenActionSet.has(action)),
+    [hiddenActionSet, orderedQuickBtns],
+  );
+  const hiddenQuickBtns = useMemo(
+    () => orderedQuickBtns.filter(
+      ({ action }) => !isCustomQuickActionId(action) && hiddenActionSet.has(action),
+    ),
+    [hiddenActionSet, orderedQuickBtns],
+  );
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  const itemWidth = QUICK_BUTTON_SIZE + QUICK_BUTTON_GAP; // Wrapper width + separator
+
+  const quickActionItems = useMemo<QuickActionRowItem[]>(
+    () =>
+      visibleQuickBtns.map((item) => ({
+        key: item.action,
+        type: 'action',
+        item,
+      })),
+    [visibleQuickBtns],
+  );
+
+  const handleHidePress = useCallback(
+    (action: QuickActionType) => {
+      if (visibleQuickBtns.length <= 1) {
+      Alert.alert(t('quick.minimumTitle'), t('quick.minimumMessage'));
+        return;
+      }
+
+      onHideAction(action);
+    },
+    [onHideAction, visibleQuickBtns.length],
+  );
+
+  const openRestoreMenu = useCallback(() => {
+    if (hiddenQuickBtns.length === 0) return;
+
+    Alert.alert(
+      t('quick.restoreTitle'),
+      t('quick.restoreQuestion'),
+      [
+        ...hiddenQuickBtns.map((hiddenBtn) => ({
+          text: `${hiddenBtn.icon} ${hiddenBtn.label}`,
+          onPress: () => onRestoreAction(hiddenBtn.action as QuickActionType),
+        })),
+        { text: t('common.cancel'), style: 'cancel' as const },
+      ],
+    );
+  }, [hiddenQuickBtns, onRestoreAction]);
+
+  const renderAddButton = () => (
+    <View style={s.circleButtonWrap}>
+      <GlassCard
+        style={[s.circleButton, s.circleButtonRestore]}
+        intensity={30}
+        overlayColor="rgba(255,255,255,0.32)"
+        borderColor="rgba(255,255,255,0.70)"
+      >
+        <TouchableOpacity
+          style={[s.circleInner, disabled && s.actionDisabled]}
+          onPress={() => {
+            if (!disabled) onAddCustom();
+          }}
+          activeOpacity={0.9}
+        >
+          <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#A26BFF' : PRIMARY }]}>
+            <Text style={s.quickActionPlusBadgeText}>+</Text>
+          </View>
+          <Text style={[s.quickActionPlusLabel, { color: textPrimary }]} numberOfLines={2}>
+            {t('custom.add')}
+          </Text>
+        </TouchableOpacity>
+      </GlassCard>
+    </View>
+  );
+
+  const renderQuickButton = ({ item, drag }: { item: QuickActionRowItem; drag?: () => void }) => {
+    if (item.type === 'restore-toggle') {
+      return (
+        <View style={s.circleButtonWrap}>
+          <GlassCard
+            style={[s.circleButton, s.circleButtonRestore]}
+            intensity={30}
+            overlayColor="rgba(255,255,255,0.32)"
+            borderColor="rgba(255,255,255,0.70)"
+          >
+            <TouchableOpacity
+              style={s.circleInner}
+              onPress={openRestoreMenu}
+              activeOpacity={0.9}
+            >
+              <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#44C38A' : '#1F9D55' }]}>
+                <Text style={s.quickActionPlusBadgeText}>+</Text>
+              </View>
+              <Text style={[s.quickActionPlusLabel, { color: textPrimary }]} numberOfLines={1}>
+                {t('common.back')}
+              </Text>
+              <Text style={[s.quickActionPlusMeta, { color: textSecondary }]} numberOfLines={1}>
+                {translateDailyText(locale, 'quick.hiddenCount', { count: hiddenQuickBtns.length })}
+              </Text>
+            </TouchableOpacity>
+          </GlassCard>
+        </View>
+      );
+    }
+
+    return (
+      <View style={s.circleButtonWrap}>
+        <GlassCard
+          style={s.circleButton}
+          intensity={30}
+          overlayColor="rgba(255,255,255,0.32)"
+          borderColor="rgba(255,255,255,0.70)"
+        >
+          <TouchableOpacity
+            style={[s.circleInner, disabled && !isEditMode && s.actionDisabled]}
+            onPress={() => {
+              if (isEditMode || disabled) return;
+              onPressAction(item.item.action);
+            }}
+            onLongPress={() => {
+              if (!isEditMode) {
+                setIsEditMode(true);
+                return;
+              }
+
+              drag?.();
+            }}
+            delayLongPress={250}
+            activeOpacity={isEditMode ? 1 : 0.9}
+          >
+            <Text style={s.circleEmoji} numberOfLines={1}>{item.item.icon}</Text>
+            <Text style={[s.circleLabel, { color: textSecondary }]} numberOfLines={2}>
+              {item.item.label}
+            </Text>
+          </TouchableOpacity>
+        </GlassCard>
+        {isEditMode ? (
+          <TouchableOpacity
+            style={[
+              s.quickActionHideBadge,
+              item.item.customActivity && { backgroundColor: isDark ? '#A26BFF' : PRIMARY },
+            ]}
+            onPress={() => {
+              if (item.item.customActivity) {
+                onEditCustom(item.item.customActivity);
+                return;
+              }
+              handleHidePress(item.item.action as QuickActionType);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={s.quickActionHideBadgeText}>{item.item.customActivity ? '✎' : '−'}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  };
+
+  return (
+    <View style={s.quickActionSection}>
+      {isEditMode ? (
+        <View style={s.quickActionEditBar}>
+          <TouchableOpacity
+            style={[
+              s.quickActionDoneButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.46)',
+                borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.72)',
+              },
+            ]}
+            onPress={() => setIsEditMode(false)}
+            activeOpacity={0.85}
+          >
+            <Text style={[s.quickActionDoneText, { color: textPrimary }]}>{t('common.done')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      {isEditMode ? (
+        <DraggableFlatList
+          data={quickActionItems}
+          horizontal
+          activationDistance={12}
+          autoscrollSpeed={120}
+          containerStyle={s.quickDragList}
+          contentContainerStyle={s.quickScrollContainer}
+          keyExtractor={(item) => item.key}
+          onDragEnd={({ data }) => {
+            onReorderActions(
+              data
+                .filter((entry): entry is Extract<QuickActionRowItem, { type: 'action' }> => entry.type === 'action')
+                .map((entry) => entry.item.action),
+            );
+          }}
+          renderItem={({ item, drag }: RenderItemParams<QuickActionRowItem>) => renderQuickButton({ item, drag })}
+          ItemSeparatorComponent={() => <View style={{ width: QUICK_BUTTON_GAP }} />}
+          ListFooterComponent={
+            hiddenQuickBtns.length > 0 ? (
+              <View style={s.quickActionFooterWrap}>{renderQuickButton({ item: { key: 'restore-toggle', type: 'restore-toggle' } })}</View>
+            ) : null
+          }
+          showsHorizontalScrollIndicator={false}
+        />
+      ) : (
+        <FlatList
+          data={quickActionItems}
+          horizontal
+          style={s.quickListBleed}
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item }) => renderQuickButton({ item })}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={s.quickScrollContainer}
+          ItemSeparatorComponent={() => <View style={{ width: QUICK_BUTTON_GAP }} />}
+          decelerationRate="normal"
+          getItemLayout={(_, index) => ({
+            length: itemWidth,
+            offset: itemWidth * index,
+            index,
+          })}
+          ListFooterComponent={<View style={s.quickActionFooterWrap}>{renderAddButton()}</View>}
+        />
+      )}
+    </View>
+  );
+};
+
 export default function DailyScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
+  const { locale } = useLocale();
+  ACTIVE_DAILY_LOCALE = locale;
+  DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
+  // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  // Dark Mode angepasste Farben
+  const textPrimary = isDark ? Colors.dark.textPrimary : PRIMARY;
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const vitaminDCompleteColor = isDark ? '#7FD39C' : '#3FA86B';
+  const vitaminDCompleteSoft = isDark ? 'rgba(127,211,156,0.16)' : 'rgba(63,168,107,0.14)';
+  const vitaminDCompleteBorder = isDark ? 'rgba(127,211,156,0.34)' : 'rgba(63,168,107,0.26)';
   const router = useRouter();
+  const { quickAction } = useLocalSearchParams<{ quickAction?: string | string[] }>();
+  
+  const { activeBabyId, isReady } = useActiveBaby();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
+
+  const {
+    promptVisible: nightWakePromptVisible,
+    promptCandidate: nightWakeCandidate,
+    promptFeedingStart: nightWakeFeedingStart,
+    promptBusy: nightWakeBusy,
+    maybeOfferNightWake,
+    pickWake: pickNightWake,
+    truncateNight,
+    dismissNightWakePrompt,
+  } = useNightWakePrompt({ userId: user?.id, babyId: activeBabyId });
 
   const [entries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
   const [monthEntries, setMonthEntries] = useState<DailyEntry[]>([]);
+  const [currentDeviceTimeMs, setCurrentDeviceTimeMs] = useState(() => Date.now());
+  const [latestBottleEntryId, setLatestBottleEntryId] = useState<string | null>(null);
+  const [latestBottleTimestamp, setLatestBottleTimestamp] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedWeekDate, setSelectedWeekDate] = useState(new Date()); // Separate state for week view
-  const [selectedMonthDate, setSelectedMonthDate] = useState(new Date()); // Separate state for month view
+  const historyCutoff = useHistoryCutoff();
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const monthViewAccess = useFeatureAccess('dailyMonthView');
+  const isMonthViewLocked = monthViewAccess.hasAccess === false;
+  const visibleTab = selectedTab === 'month' && isMonthViewLocked ? 'day' : selectedTab;
   const [weekOffset, setWeekOffset] = useState(0); // align with sleep-tracker week nav
   const [monthOffset, setMonthOffset] = useState(0); // align with sleep-tracker month nav
-  const [showInputModal, setShowInputModal] = useState(false);
-  const [showDateNav, setShowDateNav] = useState(true);
-  const fadeNavAnim = useRef(new Animated.Value(1)).current;
-  const hideNavTimeout = useRef<NodeJS.Timeout | null>(null);
+  const showMonthViewLockedAlert = useCallback(() => {
+    Alert.alert(t('view.monthLockedTitle'), t('view.monthLockedBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('view.monthLockedAction'),
+        onPress: () => router.push('/paywall?origin=lock_dailyMonthView' as any),
+      },
+    ]);
+  }, [router]);
 
-  const [activeTimer, setActiveTimer] = useState<{
-    id: string;
-    type: 'BOTTLE' | 'BREAST';
-    start: number;
-  } | null>(null);
+  useEffect(() => {
+    if (selectedTab === 'month' && isMonthViewLocked) {
+      const normalizationTimer = setTimeout(() => {
+        setSelectedTab('day');
+        setMonthOffset(0);
+      }, 0);
+      return () => clearTimeout(normalizationTimer);
+    }
+  }, [isMonthViewLocked, selectedTab]);
+  const selectedWeekDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + weekOffset * 7);
+    return date;
+  }, [weekOffset]);
+  const selectedMonthDate = useMemo(() => {
+    const date = new Date();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + monthOffset);
+    return date;
+  }, [monthOffset]);
+  const [showInputModal, setShowInputModal] = useState(false);
+  const [showCustomDefinitionModal, setShowCustomDefinitionModal] = useState(false);
+  const [showCustomEntryModal, setShowCustomEntryModal] = useState(false);
+  const [showFeedingOverviewModal, setShowFeedingOverviewModal] = useState(false);
+  const [showDateNav, setShowDateNav] = useState(true);
+  const fadeNavAnim = React.useState(() => new Animated.Value(1))[0];
+  const hideNavTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const quickActionHandledRef = useRef<string | null>(null);
+
+  const [activeTimer, setActiveTimer] = useState<ActiveCareTimer | null>(null);
+  const [hydratedTimerBabyId, setHydratedTimerBabyId] = useState<string | null>(null);
+  const isTimerHydrated = hydratedTimerBabyId === activeBabyId;
+  const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
+  const handledLiveStopRequestIdRef = useRef(0);
+  const [liveStopRequestId, setLiveStopRequestId] = useState(0);
 
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<QuickActionType | null>(null);
   const [editingEntry, setEditingEntry] = useState<DailyEntry | null>(null);
+  const [customActivities, setCustomActivities] = useState<CustomActivityType[]>([]);
+  const [editingCustomActivity, setEditingCustomActivity] = useState<CustomActivityType | null>(null);
+  const [selectedCustomActivity, setSelectedCustomActivity] = useState<CustomActivityType | null>(null);
+  const [editingCustomEntry, setEditingCustomEntry] = useState<DailyEntry | null>(null);
   const [splashVisible, setSplashVisible] = useState(false);
   const [splashBg, setSplashBg] = useState<string>('rgba(0,0,0,0.6)');
   const [splashEmoji, setSplashEmoji] = useState<string>('✅');
   const [splashText, setSplashText] = useState<string>('Gespeichert');
-  const splashAnim = useRef(new Animated.Value(0)).current;
-  const splashEmojiAnim = useRef(new Animated.Value(0.9)).current;
+  const splashAnim = React.useState(() => new Animated.Value(0))[0];
+  const splashEmojiAnim = React.useState(() => new Animated.Value(0.9))[0];
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [splashTitle, setSplashTitle] = useState<string>('');
   const [splashSubtitle, setSplashSubtitle] = useState<string>('');
   const [splashStatus, setSplashStatus] = useState<string>('');
   const [splashHint, setSplashHint] = useState<string>('');
+  const [splashHintEmoji, setSplashHintEmoji] = useState<string>('');
+  const [vitaminDChecks, setVitaminDChecks] = useState<VitaminDChecks>({});
+  const [vitaminDBusy, setVitaminDBusy] = useState(false);
+  const [hiddenQuickActions, setHiddenQuickActions] = useState<QuickActionType[]>([]);
+  const [quickActionOrder, setQuickActionOrder] = useState<QuickActionId[]>([...QUICK_ACTION_ORDER]);
+  const activeCustomActivities = useMemo(
+    () => customActivities.filter((activity) => !activity.is_archived),
+    [customActivities],
+  );
+  const availableQuickActionIds = useMemo<QuickActionId[]>(
+    () => [
+      ...QUICK_ACTION_ORDER,
+      ...activeCustomActivities.map((activity) => toCustomQuickActionId(activity.id)),
+    ],
+    [activeCustomActivities],
+  );
+  const splashEmojiParts = useMemo(() => Array.from(splashEmoji), [splashEmoji]);
+  const hiddenQuickActionsStorageKey = useMemo(
+    () => buildHiddenQuickActionsStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickActionOrderStorageKey = useMemo(
+    () => buildQuickActionOrderStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const showReadOnlyPreviewAlert = useCallback(() => {
+    Alert.alert(t('preview.title'), t('preview.message'));
+  }, []);
+  const ensureWritableInCurrentMode = useCallback(() => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  }, [isReadOnlyPreviewMode, showReadOnlyPreviewAlert]);
 
-  // Scroll animation for quick actions
-  const quickActionsScrollRef = useRef<FlatList>(null);
-  const scrollAnimation = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (selectedTab === 'week') {
-      loadWeekEntries();
-    } else if (selectedTab === 'month') {
-      loadMonthEntries();
-    } else {
-      loadEntries();
+  const loadCustomActivities = useCallback(async () => {
+    if (!activeBabyId || !isReady) {
+      setCustomActivities([]);
+      return;
     }
-  }, [selectedDate, selectedTab]);
 
-  // Separate effects for week/month data loading
-  useEffect(() => {
-    if (selectedTab === 'week') {
-      loadWeekEntries();
+    const { data, error } = await getCustomActivityTypes(activeBabyId, { includeArchived: true });
+    if (error) {
+      console.error('Daily: failed to load custom activities', error);
+      return;
     }
-  }, [selectedWeekDate, selectedTab]);
+    setCustomActivities(data ?? []);
+  }, [activeBabyId, isReady]);
 
   useEffect(() => {
-    if (selectedTab === 'month') {
-      loadMonthEntries();
+    const timeoutId = setTimeout(() => void loadCustomActivities(), 0);
+    return () => clearTimeout(timeoutId);
+  }, [loadCustomActivities]);
+
+  // Notification hooks
+  const { requestPermissions } = useNotifications();
+  const { isPartnerLinked } = usePartnerNotifications();
+
+  // Request notification permissions on mount
+  useEffect(() => {
+    requestPermissions();
+  }, [requestPermissions]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentDeviceTimeMs(Date.now());
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const loadLatestBottleInfo = useCallback(async () => {
+    if (!activeBabyId) {
+      setLatestBottleEntryId(null);
+      setLatestBottleTimestamp(null);
+      return;
     }
-  }, [selectedMonthDate, selectedTab]);
 
-  // Keep selectedWeekDate in sync with weekOffset (for data loading)
+    try {
+      const { data, error } = await supabase
+        .from('baby_care_entries')
+        .select('id,start_time')
+        .eq('baby_id', activeBabyId)
+        .eq('entry_type', 'feeding')
+        .eq('feeding_type', 'BOTTLE')
+        .order('start_time', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('Error loading latest bottle info:', error);
+        return;
+      }
+
+      const latestBottle = data?.[0];
+      const timestamp = latestBottle?.start_time ? new Date(latestBottle.start_time).getTime() : NaN;
+
+      if (latestBottle?.id && Number.isFinite(timestamp)) {
+        setLatestBottleEntryId(latestBottle.id);
+        setLatestBottleTimestamp(timestamp);
+        return;
+      }
+
+      setLatestBottleEntryId(null);
+      setLatestBottleTimestamp(null);
+    } catch (error) {
+      console.error('Failed to resolve latest bottle info:', error);
+    }
+  }, [activeBabyId]);
+
   useEffect(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + weekOffset * 7);
-    setSelectedWeekDate(d);
-  }, [weekOffset]);
+    let isActive = true;
 
-  // Reset offsets on tab change like sleep-tracker
+    (async () => {
+      try {
+        const [storedHiddenActions, storedOrder] = await Promise.all([
+          AsyncStorage.getItem(hiddenQuickActionsStorageKey),
+          AsyncStorage.getItem(quickActionOrderStorageKey),
+        ]);
+        if (!isActive) return;
+
+        setHiddenQuickActions(
+          storedHiddenActions ? normalizeHiddenQuickActions(JSON.parse(storedHiddenActions)) : [],
+        );
+        setQuickActionOrder(
+          storedOrder
+            ? normalizeQuickActionOrder(JSON.parse(storedOrder), availableQuickActionIds)
+            : [...availableQuickActionIds],
+        );
+      } catch (error) {
+        console.error('Daily: failed to load quick action preferences', error);
+        if (isActive) {
+          setHiddenQuickActions([]);
+          setQuickActionOrder([...availableQuickActionIds]);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [availableQuickActionIds, hiddenQuickActionsStorageKey, quickActionOrderStorageKey]);
+
+  const persistHiddenQuickActions = useCallback(
+    async (nextActions: QuickActionType[]) => {
+      try {
+        if (nextActions.length === 0) {
+          await AsyncStorage.removeItem(hiddenQuickActionsStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(hiddenQuickActionsStorageKey, JSON.stringify(nextActions));
+      } catch (error) {
+        console.error('Daily: failed to save hidden quick actions', error);
+      }
+    },
+    [hiddenQuickActionsStorageKey],
+  );
+
+  const updateHiddenQuickActions = useCallback(
+    (updater: (current: QuickActionType[]) => QuickActionType[]) => {
+      setHiddenQuickActions((current) => {
+        const next = normalizeHiddenQuickActions(updater(current));
+        void persistHiddenQuickActions(next);
+        return next;
+      });
+    },
+    [persistHiddenQuickActions],
+  );
+
+  const persistQuickActionOrder = useCallback(
+    async (nextOrder: QuickActionId[]) => {
+      try {
+        const normalized = normalizeQuickActionOrder(nextOrder, availableQuickActionIds);
+
+        if (
+          normalized.length === availableQuickActionIds.length
+          && normalized.every((action, index) => action === availableQuickActionIds[index])
+        ) {
+          await AsyncStorage.removeItem(quickActionOrderStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickActionOrderStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Daily: failed to save quick action order', error);
+      }
+    },
+    [availableQuickActionIds, quickActionOrderStorageKey],
+  );
+
+  const handleReorderQuickActions = useCallback(
+    (visibleActions: QuickActionId[]) => {
+      setQuickActionOrder((current) => {
+        const normalizedCurrent = normalizeQuickActionOrder(current, availableQuickActionIds);
+        const hiddenActions = normalizedCurrent.filter(
+          (action): action is QuickActionType =>
+            !isCustomQuickActionId(action) && hiddenQuickActions.includes(action),
+        );
+        const nextOrder = normalizeQuickActionOrder(
+          [...visibleActions, ...hiddenActions],
+          availableQuickActionIds,
+        );
+        void persistQuickActionOrder(nextOrder);
+        return nextOrder;
+      });
+    },
+    [availableQuickActionIds, hiddenQuickActions, persistQuickActionOrder],
+  );
+
+  const handleHideQuickAction = useCallback(
+    (action: QuickActionType) => {
+      updateHiddenQuickActions((current) => {
+        if (current.includes(action)) return current;
+        return [...current, action];
+      });
+    },
+    [updateHiddenQuickActions],
+  );
+
+  const handleRestoreQuickAction = useCallback(
+    (action: QuickActionType) => {
+      updateHiddenQuickActions((current) => current.filter((currentAction) => currentAction !== action));
+    },
+    [updateHiddenQuickActions],
+  );
+
   useEffect(() => {
-    if (selectedTab === 'week') setWeekOffset(0);
-    if (selectedTab === 'month') setMonthOffset(0);
-  }, [selectedTab]);
+    let active = true;
 
-  // Quick actions scroll hint animation - runs only once
+    (async () => {
+      if (!user?.id || !activeBabyId || !isReady) {
+        if (active) {
+          setVitaminDChecks({});
+        }
+        return;
+      }
+
+      try {
+        const checks = await loadVitaminDReminderState(user.id, activeBabyId);
+        if (!active) return;
+        setVitaminDChecks(checks);
+      } catch (error) {
+        console.error('Daily: failed to load Vitamin-D reminder', error);
+        if (active) {
+          setVitaminDChecks({});
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [activeBabyId, isReady, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !activeBabyId || !isReady) {
+      return;
+    }
+
+    let active = true;
+    const channel = supabase
+      .channel(`vitamin-d-habit-checks:${activeBabyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'baby_daily_habit_checks',
+        },
+        async (payload) => {
+          const nextRecord =
+            payload && typeof payload === 'object' && 'new' in payload
+              ? (payload.new as { baby_id?: string } | null)
+              : null;
+          const previousRecord =
+            payload && typeof payload === 'object' && 'old' in payload
+              ? (payload.old as { baby_id?: string } | null)
+              : null;
+          const changedBabyId = nextRecord?.baby_id ?? previousRecord?.baby_id ?? null;
+
+          if (changedBabyId && changedBabyId !== activeBabyId) {
+            return;
+          }
+
+          try {
+            const checks = await loadVitaminDReminderState(user.id, activeBabyId);
+            if (!active) return;
+            setVitaminDChecks(checks);
+          } catch (error) {
+            console.error('Daily: failed to refresh Vitamin-D state from realtime', error);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeBabyId, isReady, user?.id]);
+
+  const selectedDateKey = useMemo(() => toDateKey(selectedDate), [selectedDate]);
+  const isSelectedDateToday = selectedDateKey === toDateKey(new Date());
+  const isVitaminDCompleted = !!vitaminDChecks[selectedDateKey];
+  const showVitaminDStrip = !!user?.id && !!activeBabyId && !isVitaminDCompleted;
+  const showVitaminDTimelinePoint = !!user?.id && !!activeBabyId;
+  const latestBottleGapLabel = useMemo(() => {
+    if (latestBottleTimestamp === null) return null;
+
+    const diffMinutes = Math.round((currentDeviceTimeMs - latestBottleTimestamp) / (1000 * 60));
+    return formatBottleGapLabel(diffMinutes);
+  }, [currentDeviceTimeMs, latestBottleTimestamp]);
+  const bottleGapLabelByEntryId = useMemo(() => {
+    const labelMap = new Map<string, string>();
+    if (!latestBottleEntryId || !latestBottleGapLabel) return labelMap;
+
+    const isLatestBottleVisible = entries.some((entry) => entry.id === latestBottleEntryId);
+    if (!isLatestBottleVisible) return labelMap;
+
+    labelMap.set(latestBottleEntryId, latestBottleGapLabel);
+
+    return labelMap;
+  }, [entries, latestBottleEntryId, latestBottleGapLabel]);
+  const feedingOverviewCards = useMemo(() => buildFeedingOverviewCards(entries), [entries, locale]);
+  const feedingOverviewEntryCount = useMemo(
+    () => feedingOverviewCards.reduce((sum, card) => sum + card.count, 0),
+    [feedingOverviewCards],
+  );
+  const feedingOverviewLatestTime = useMemo(() => {
+    const timestamps = feedingOverviewCards
+      .map((card) => card.lastAt)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+    if (timestamps.length === 0) return null;
+    return Math.max(...timestamps);
+  }, [feedingOverviewCards]);
+  const feedingOverviewHighlights = useMemo(() => {
+    const bottleCard = feedingOverviewCards.find((card) => card.key === 'BOTTLE');
+    const waterCard = feedingOverviewCards.find((card) => card.key === 'WATER');
+    const solidsCard = feedingOverviewCards.find((card) => card.key === 'SOLIDS');
+    const breastCard = feedingOverviewCards.find((card) => card.key === 'BREAST');
+    const pumpCard = feedingOverviewCards.find((card) => card.key === 'PUMP');
+
+    return [
+      bottleCard && bottleCard.totalMl > 0 ? `🍼 ${bottleCard.totalMl} ml ${bottleCard.label}` : null,
+      waterCard && waterCard.totalMl > 0 ? `🚰 ${waterCard.totalMl} ml ${waterCard.label}` : null,
+      solidsCard && solidsCard.count > 0 ? `🥄 ${solidsCard.count}× ${solidsCard.label}` : null,
+      breastCard && breastCard.totalMinutes > 0
+        ? `🤱 ${formatDurationMinutesCompact(breastCard.totalMinutes)} ${breastCard.label}`
+        : null,
+      pumpCard && pumpCard.totalMl > 0 ? `🥛 ${t('daily.pumpedMl', { amount: pumpCard.totalMl })}` : null,
+    ].filter((item): item is string => !!item);
+  }, [feedingOverviewCards, locale]);
+
+  const handleToggleVitaminDCompletion = useCallback(async () => {
+    if (!userId || !activeBabyId || vitaminDBusy) return;
+    if (!ensureWritableInCurrentMode()) return;
+
+    setVitaminDBusy(true);
+    try {
+      const nextChecks = await saveVitaminDCompletion(
+        userId,
+        selectedDateKey,
+        !isVitaminDCompleted,
+        activeBabyId,
+      );
+      setVitaminDChecks(nextChecks);
+    } catch (error) {
+      console.error('Daily: failed to save Vitamin-D status', error);
+      Alert.alert(t('common.error'), t('alert.vitaminFailed'));
+    } finally {
+      setVitaminDBusy(false);
+    }
+  }, [
+    ensureWritableInCurrentMode,
+    activeBabyId,
+    isVitaminDCompleted,
+    selectedDateKey,
+    userId,
+    vitaminDBusy,
+  ]);
+
+  const queueLiveStopRequestFromUrl = useCallback((incomingUrl: string | null) => {
+    if (!incomingUrl) return;
+
+    const normalized = incomingUrl.toLowerCase();
+    const targetsDailyView = normalized.includes("daily_old");
+    const hasLiveStopParam = /[?&]livestop=(1|true)(?:&|$)/i.test(incomingUrl);
+    const hasFeedingTypeParam = /[?&]livetype=feeding(?:&|$)/i.test(incomingUrl);
+
+    if (!targetsDailyView || !hasLiveStopParam) return;
+    if (/[?&]livetype=/i.test(incomingUrl) && !hasFeedingTypeParam) return;
+
+    const now = Date.now();
+    const lastEvent = lastLiveStopEventRef.current;
+    if (lastEvent && lastEvent.url === incomingUrl && now - lastEvent.at < 1500) {
+      return;
+    }
+
+    lastLiveStopEventRef.current = { url: incomingUrl, at: now };
+    setLiveStopRequestId((current) => current + 1);
+  }, []);
+
+  const startBreastfeedingLiveActivity = useCallback(async (startMs: number) => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    try {
+      await sleepActivityService.startFeedingActivity(new Date(startMs), 'BREAST');
+    } catch (error) {
+      console.error('Failed to start feeding live activity:', error);
+    }
+  }, []);
+
+  const endBreastfeedingLiveActivity = useCallback(async (timer: ActiveCareTimer | null) => {
+    if (!timer || timer.type !== 'BREAST') {
+      return;
+    }
+
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+
+    try {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timer.start) / 1000));
+      await sleepActivityService.endFeedingActivity(formatDurationSeconds(elapsedSeconds), timer.type);
+    } catch (error) {
+      console.error('Failed to end feeding live activity:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', (event) => {
+      queueLiveStopRequestFromUrl(event.url);
+    });
+
+    Linking.getInitialURL()
+      .then((initialUrl) => {
+        queueLiveStopRequestFromUrl(initialUrl);
+      })
+      .catch((error) => {
+        console.error('Failed to read initial URL for feeding live activity stop:', error);
+      });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [queueLiveStopRequestFromUrl]);
+
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (quickActionsScrollRef.current) {
-        // Smooth scroll right to show hint
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 80,
-          animated: true,
-        });
-
-        // Then smoothly scroll back to start after a brief pause
-        setTimeout(() => {
-          if (quickActionsScrollRef.current) {
-            quickActionsScrollRef.current.scrollToOffset({
-              offset: 0,
-              animated: true,
-            });
-          }
-        }, 1000); // Brief pause for smooth flow
-      }
-    }, 2500); // Slightly longer initial delay
-
-    // Cleanup
-    return () => {
-      clearTimeout(timeoutId);
-      if (quickActionsScrollRef.current) {
-        quickActionsScrollRef.current.scrollToOffset({
-          offset: 0,
-          animated: false,
-        });
-      }
-    };
-  }, []);
+      void loadLatestBottleInfo();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [loadLatestBottleInfo]);
 
   // Helper functions for week view
   const getWeekStart = (date: Date) => {
@@ -275,7 +1443,7 @@ export default function DailyScreen() {
       Animated.timing(fadeNavAnim, { toValue: 0, duration: 500, useNativeDriver: true }).start(() =>
         setShowDateNav(false),
       );
-    }, 5000) as unknown as NodeJS.Timeout;
+    }, 5000);
     return () => clearTimeout(timer);
   }, [selectedDate, fadeNavAnim]);
 
@@ -287,98 +1455,261 @@ export default function DailyScreen() {
       Animated.timing(fadeNavAnim, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
         setShowDateNav(false),
       );
-    }, 5000) as unknown as NodeJS.Timeout;
+    }, 5000);
   };
 
   useEffect(() => {
-    triggerShowDateNav();
+    const timeoutId = setTimeout(triggerShowDateNav, 0);
     return () => {
+      clearTimeout(timeoutId);
       if (hideNavTimeout.current) clearTimeout(hideNavTimeout.current);
     };
   }, [selectedDate]);
 
-  // Realtime subscription removed for simplicity; list refreshes on actions
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setShowFeedingOverviewModal(false), 0);
+    return () => clearTimeout(timeoutId);
+  }, [selectedDate, selectedTab]);
 
-  const mapCareToDaily = (rows: any[]): DailyEntry[] =>
-    rows.map((r) => ({
-      id: r.id,
-      entry_date: r.start_time,
-      entry_type: r.entry_type,
-      start_time: r.start_time,
-      end_time: r.end_time ?? null,
-      notes: r.notes ?? null,
-      feeding_type: r.feeding_type ?? undefined,
-      feeding_volume_ml: r.feeding_volume_ml ?? undefined,
-      feeding_side: r.feeding_side ?? undefined,
-      diaper_type: r.diaper_type ?? undefined,
-      // helper for KPI (not part of type, accessed as any):
-      sub_type:
-        r.entry_type === 'feeding'
-          ? r.feeding_type === 'BREAST'
-            ? 'feeding_breast'
-            : r.feeding_type === 'BOTTLE'
-            ? 'feeding_bottle'
-            : 'feeding_solids'
-          : r.entry_type === 'diaper'
-          ? r.diaper_type === 'WET'
-            ? 'diaper_wet'
-            : r.diaper_type === 'DIRTY'
-            ? 'diaper_dirty'
-            : 'diaper_both'
-          : undefined,
-    } as unknown as DailyEntry));
+  // Realtime subscription removed for simplicity; list refreshes on actions
+  // mapCareToDaily moved to dailyCache.ts
+
+  const lastBottleVolumeMl = useMemo(() => {
+    const allEntries = [...entries, ...weekEntries, ...monthEntries];
+    let latestTime = -Infinity;
+    let latestVolume: number | null = null;
+
+    for (const entry of allEntries) {
+      if (entry.entry_type !== 'feeding' || (entry.feeding_type !== 'BOTTLE' && entry.feeding_type !== 'PUMP')) continue;
+      const volume = entry.feeding_volume_ml;
+      if (volume == null) continue;
+      const timeStr = entry.start_time ?? entry.entry_date;
+      const time = timeStr ? new Date(timeStr).getTime() : 0;
+      if (time >= latestTime) {
+        latestTime = time;
+        latestVolume = volume;
+      }
+    }
+
+    return latestVolume ?? 120;
+  }, [entries, weekEntries, monthEntries]);
+
+  const loadActiveTimer = useCallback(async () => {
+    if (!activeBabyId) {
+      setActiveTimer(null);
+      setHydratedTimerBabyId(activeBabyId ?? null);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('baby_care_entries')
+        .select('id,entry_type,feeding_type,start_time,custom_name,custom_emoji,custom_color,custom_tracking_mode')
+        .eq('baby_id', activeBabyId)
+        .in('entry_type', ['feeding', 'diaper', 'custom'])
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Error loading active timer:', error);
+        return;
+      }
+
+      const openTimers = data ?? [];
+      const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS', 'PUMP', 'WATER']);
+      const current = openTimers.find((row) => {
+        if (!row?.id || !row?.start_time) return false;
+        if (row.entry_type === 'feeding') {
+          return typeof row.feeding_type === 'string' && validTypeSet.has(row.feeding_type);
+        }
+        if (row.entry_type === 'diaper') return true;
+        return row.entry_type === 'custom' && row.custom_tracking_mode === 'duration';
+      });
+
+      // Data hygiene: only one timer can be active. Close stale open timers automatically.
+      const staleOpenTimers = openTimers.filter((row) => !!row?.id && (!current || row.id !== current.id));
+      if (!isReadOnlyPreviewMode && staleOpenTimers.length > 0) {
+        const nowIso = new Date().toISOString();
+        await Promise.allSettled(
+          staleOpenTimers.map((row) => {
+            const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
+            const endIso = Number.isFinite(startMs) ? new Date(startMs).toISOString() : nowIso;
+            return supabase
+              .from('baby_care_entries')
+              .update({ end_time: endIso, updated_at: nowIso })
+              .eq('id', row.id)
+              .eq('baby_id', activeBabyId)
+              .is('end_time', null);
+          }),
+        );
+      }
+
+      if (!current?.id || !current.start_time) {
+        setActiveTimer(null);
+        return;
+      }
+
+      const startMs = new Date(current.start_time).getTime();
+      if (!Number.isFinite(startMs)) {
+        setActiveTimer(null);
+        return;
+      }
+
+      const nextTimer: ActiveCareTimer = current.entry_type === 'custom'
+        ? {
+            id: current.id,
+            type: 'CUSTOM',
+            start: startMs,
+            label: current.custom_name ?? t('card.other'),
+            emoji: current.custom_emoji ?? '⭐️',
+            color: current.custom_color ?? '#5E3DB3',
+          }
+        : current.entry_type === 'diaper'
+          ? { id: current.id, type: 'DIAPER', start: startMs }
+          : {
+              id: current.id,
+              type: current.feeding_type as ActiveCareTimer['type'],
+              start: startMs,
+            };
+
+      setActiveTimer((prev) => {
+        if (prev && prev.id === nextTimer.id && prev.type === nextTimer.type && prev.start === nextTimer.start) {
+          return prev;
+        }
+
+        return nextTimer;
+      });
+    } catch (error) {
+      console.error('Failed to resolve active timer:', error);
+    } finally {
+      setHydratedTimerBabyId(activeBabyId ?? null);
+    }
+  }, [activeBabyId, isReadOnlyPreviewMode]);
 
   const loadEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDate(selectedDate);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadDailyEntries',
-      true,
-      2
-    );
-    if (result.success) setEntries(result.data!);
-    setIsLoading(false);
-    setRefreshing(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadDayEntriesWithCache(
+        selectedDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading day entries:', error);
+      setIsLoading(false);
+    } finally {
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
+      setRefreshing(false);
+    }
   };
 
   const loadWeekEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
+
     const weekStart = getWeekStart(selectedWeekDate);
     const weekEnd = getWeekEnd(selectedWeekDate);
-    
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForDateRange(weekStart, weekEnd);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadWeekEntries',
-      true,
-      2
-    );
-    if (result.success) setWeekEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadWeekEntriesWithCache(
+        weekStart,
+        weekEnd,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setWeekEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setWeekEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading week entries:', error);
+      setIsLoading(false);
+    } finally {
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
+    }
   };
 
   const loadMonthEntries = async () => {
+    if (!activeBabyId) return;
     setIsLoading(true);
-    const result = await SupabaseErrorHandler.executeWithHandling(
-      async () => {
-        const { data, error } = await getBabyCareEntriesForMonth(selectedMonthDate);
-        if (error) throw error;
-        return mapCareToDaily(data ?? []);
-      },
-      'LoadMonthEntries',
-      true,
-      2
-    );
-    if (result.success) setMonthEntries(result.data!);
-    setIsLoading(false);
+
+    try {
+      // Load with cache - instant if cached
+      const { data, isStale, refresh } = await loadMonthEntriesWithCache(
+        selectedMonthDate,
+        activeBabyId
+      );
+
+      // Show cached data immediately
+      if (data) {
+        setMonthEntries(data);
+        setIsLoading(false);
+      }
+
+      // Refresh in background if stale
+      if (isStale) {
+        const freshData = await refresh();
+        setMonthEntries(freshData);
+      }
+
+      // If no cache, data is already fresh
+      if (!data) {
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading month entries:', error);
+      setIsLoading(false);
+    } finally {
+      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
+    }
   };
+
+  useEffect(() => {
+    if (!isReady || !activeBabyId) return;
+    const timeoutId = setTimeout(() => {
+      if (visibleTab === 'week') {
+        void loadWeekEntries();
+      } else if (visibleTab === 'month') {
+        void loadMonthEntries();
+      } else {
+        void loadEntries();
+      }
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [selectedDate, selectedWeekDate, selectedMonthDate, visibleTab, activeBabyId, isReady]);
 
   const syncDailyEntries = async () => {};
 
@@ -386,7 +1717,7 @@ export default function DailyScreen() {
     setRefreshing(true);
 
     // Start loading entries
-    const loadPromise = loadEntries();
+    const loadPromise = Promise.all([loadEntries(), loadCustomActivities()]);
 
     // Set maximum refresh time to 2 seconds
     const timeoutPromise = new Promise<void>((resolve) => {
@@ -405,10 +1736,26 @@ export default function DailyScreen() {
     }
   };
 
-  const changeRelativeDate = (days: number) =>
-    setSelectedDate(new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000));
+  const changeRelativeDate = (days: number) => {
+    const next = new Date(selectedDate.getTime() + days * 24 * 60 * 60 * 1000);
+    if (isBeforeHistoryCutoff(next, historyCutoff)) {
+      showHistoryLimitAlert(router);
+      return;
+    }
+    setSelectedDate(next);
+  };
 
-  const handleQuickActionPress = (action: QuickActionType) => {
+  const handleQuickActionPress = (action: QuickActionId) => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (isCustomQuickActionId(action)) {
+      const activityId = getCustomActivityIdFromAction(action);
+      const activity = customActivities.find((item) => item.id === activityId && !item.is_archived);
+      if (!activity) return;
+      setSelectedCustomActivity(activity);
+      setEditingCustomEntry(null);
+      setShowCustomEntryModal(true);
+      return;
+    }
     if (action.startsWith('feeding')) setSelectedActivityType('feeding');
     else if (action.startsWith('diaper')) setSelectedActivityType('diaper');
     else setSelectedActivityType('other');
@@ -417,92 +1764,378 @@ export default function DailyScreen() {
     if (action === 'feeding_breast') setEditingEntry({} as any);
     if (action === 'feeding_bottle') setEditingEntry({} as any);
     if (action === 'feeding_solids') setEditingEntry({} as any);
+    if (action === 'feeding_pump') setEditingEntry({} as any);
+    if (action === 'feeding_water') setEditingEntry({} as any);
     if (action === 'diaper_wet' || action === 'diaper_dirty' || action === 'diaper_both') setEditingEntry({} as any);
     setShowInputModal(true);
   };
 
-  const handleSaveEntry = async (payload: any) => {
+  const openNewCustomActivity = () => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (!activeBabyId) {
+      Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
+      return;
+    }
+    setEditingCustomActivity(null);
+    setShowCustomDefinitionModal(true);
+  };
+
+  const openCustomActivityEditor = (activity: CustomActivityType) => {
+    if (!ensureWritableInCurrentMode()) return;
+    setEditingCustomActivity(activity);
+    setShowCustomDefinitionModal(true);
+  };
+
+  const handleSaveCustomActivityDefinition = async (draft: CustomActivityTypeDraft) => {
+    if (!activeBabyId) return false;
+    const result = editingCustomActivity
+      ? await updateCustomActivityType(editingCustomActivity.id, activeBabyId, draft)
+      : await createCustomActivityType(activeBabyId, draft);
+
+    if (result.error || !result.data) {
+      const errorCode = (result.error as { code?: string } | null)?.code;
+      Alert.alert(
+        t('common.error'),
+        errorCode === '23505'
+          ? t('custom.duplicate')
+          : String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    setCustomActivities((current) => {
+      const withoutSaved = current.filter((activity) => activity.id !== result.data!.id);
+      return [...withoutSaved, result.data!].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+    if (!editingCustomActivity) {
+      setQuickActionOrder((current) => [...current, toCustomQuickActionId(result.data!.id)]);
+    }
+    setEditingCustomActivity(null);
+    return true;
+  };
+
+  const handleArchiveCustomActivity = async () => {
+    if (!activeBabyId || !editingCustomActivity) return false;
+    const result = await archiveCustomActivityType(editingCustomActivity.id, activeBabyId);
+    if (result.error || !result.data) {
+      Alert.alert(
+        t('common.error'),
+        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    const archivedAction = toCustomQuickActionId(editingCustomActivity.id);
+    setCustomActivities((current) =>
+      current.map((activity) => (activity.id === result.data!.id ? result.data! : activity)),
+    );
+    setQuickActionOrder((current) => current.filter((action) => action !== archivedAction));
+    setEditingCustomActivity(null);
+    return true;
+  };
+
+  const resolveCustomActivityForEntry = (entry: DailyEntry): CustomActivityType | null => {
+    const stored = entry.custom_activity_type_id
+      ? customActivities.find((activity) => activity.id === entry.custom_activity_type_id)
+      : null;
+    if (!entry.custom_name || !entry.custom_emoji || !entry.custom_tracking_mode) {
+      return stored ?? null;
+    }
+
+    return {
+      id: entry.custom_activity_type_id ?? `snapshot:${entry.id ?? entry.entry_date}`,
+      baby_id: entry.baby_id ?? activeBabyId ?? '',
+      created_by: stored?.created_by ?? null,
+      name: entry.custom_name,
+      emoji: entry.custom_emoji,
+      color: entry.custom_color ?? '#5E3DB3',
+      tracking_mode: entry.custom_tracking_mode,
+      unit: entry.custom_unit ?? null,
+      default_quantity: null,
+      is_archived: stored?.is_archived ?? true,
+      created_at: stored?.created_at ?? entry.entry_date,
+      updated_at: stored?.updated_at ?? entry.entry_date,
+    };
+  };
+
+  const handleSaveCustomEntry = async (
+    payload: CustomActivityEntryPayload,
+    options: { startTimer: boolean },
+  ) => {
+    if (!ensureWritableInCurrentMode() || !activeBabyId || !selectedCustomActivity) return false;
+    const customPayload = {
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+      notes: payload.notes,
+      custom_activity_type_id: selectedCustomActivity.id.startsWith('snapshot:')
+        ? null
+        : selectedCustomActivity.id,
+      custom_name: selectedCustomActivity.name,
+      custom_emoji: selectedCustomActivity.emoji,
+      custom_color: selectedCustomActivity.color,
+      custom_tracking_mode: selectedCustomActivity.tracking_mode,
+      custom_quantity: payload.custom_quantity,
+      custom_unit: selectedCustomActivity.unit,
+    };
+
+    const result = editingCustomEntry?.id
+      ? await updateBabyCareEntry(editingCustomEntry.id, customPayload, activeBabyId)
+      : await addBabyCareEntry({ entry_type: 'custom', ...customPayload }, activeBabyId);
+
+    if (result.error || !result.data) {
+      Alert.alert(
+        t('common.error'),
+        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+      );
+      return false;
+    }
+
+    if (options.startTimer) {
+      setActiveTimer({
+        id: result.data.id,
+        type: 'CUSTOM',
+        start: new Date(payload.start_time).getTime(),
+        label: selectedCustomActivity.name,
+        emoji: selectedCustomActivity.emoji,
+        color: selectedCustomActivity.color,
+      });
+    }
+
+    showSuccessSplash(
+      selectedCustomActivity.color,
+      selectedCustomActivity.emoji,
+      'custom',
+      options.startTimer,
+      selectedCustomActivity.name,
+    );
+    setEditingCustomEntry(null);
+    await invalidateDailyCache(activeBabyId);
+    if (visibleTab === 'week') await loadWeekEntries();
+    else if (visibleTab === 'month') await loadMonthEntries();
+    else await loadEntries();
+    return true;
+  };
+
+  useEffect(() => {
+    const rawAction = Array.isArray(quickAction) ? quickAction[0] : quickAction;
+    if (!rawAction) {
+      quickActionHandledRef.current = null;
+      return;
+    }
+    if (quickActionHandledRef.current === rawAction) return;
+
+    const resolved =
+      rawAction === 'feeding'
+        ? { activityType: 'feeding' as const, subType: null }
+        : rawAction === 'diaper'
+          ? { activityType: 'diaper' as const, subType: null }
+          : rawAction === 'feeding_breast' || rawAction === 'feeding_bottle' || rawAction === 'feeding_solids' || rawAction === 'feeding_pump' || rawAction === 'feeding_water'
+            ? { activityType: 'feeding' as const, subType: rawAction as QuickActionType }
+            : rawAction === 'diaper_wet' || rawAction === 'diaper_dirty' || rawAction === 'diaper_both'
+              ? { activityType: 'diaper' as const, subType: rawAction as QuickActionType }
+              : null;
+
+    if (!resolved) return;
+    if (!ensureWritableInCurrentMode()) {
+      router.setParams({ quickAction: undefined });
+      return;
+    }
+    quickActionHandledRef.current = rawAction;
+    const timeoutId = setTimeout(() => {
+      setSelectedActivityType(resolved.activityType);
+      setSelectedSubType(resolved.subType);
+      setEditingEntry(null);
+      setShowInputModal(true);
+      router.setParams({ quickAction: undefined });
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [ensureWritableInCurrentMode, quickAction, router]);
+
+  const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
+    if (!ensureWritableInCurrentMode()) return;
+    if (!activeBabyId) {
+      Alert.alert(
+        t('alert.noBabyTitle'),
+        t('alert.noBaby')
+      );
+      return;
+    }
     console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+    const timerRequested = !!options?.startTimer && payload?.feeding_type !== 'PUMP' && payload?.feeding_type !== 'WATER';
     
     if (selectedActivityType === 'feeding') {
-      const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | undefined) ?? undefined;
+      const feedingType = (payload.feeding_type as 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER' | undefined) ?? undefined;
+      const resolvedStartTime = payload.start_time ?? new Date().toISOString();
+      const resolvedEndTime = timerRequested ? null : (payload.end_time ?? resolvedStartTime);
       let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
-        });
+        }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'feeding',
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           feeding_type: feedingType,
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
+        }, activeBabyId ?? undefined, {
+          bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
         });
         data = res.data; error = res.error;
       }
       if (error) {
-        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern der Fütterung'));
+        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFeedingFailed')));
         return;
       }
-      if (feedingType === 'BREAST' || feedingType === 'BOTTLE') {
-        const timerType = feedingType;
-        setActiveTimer({ id: data?.id || `temp_${Date.now()}`, type: timerType, start: Date.now() });
+      if (timerRequested && feedingType) {
+        const startMs = new Date(resolvedStartTime).getTime();
+        const timerType = feedingType as 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER';
+        const nextTimer = {
+          id: data?.id || editingEntry?.id || `temp_${timerType}_${startMs}`,
+          type: timerType,
+          start: startMs,
+        };
+
+        try {
+          await cancelLocalFeedingReminders();
+          if (user?.id && activeBabyId) {
+            await cancelBabyReminderNotification({
+              userId: user.id,
+              babyId: activeBabyId,
+              reminderType: 'feeding',
+            });
+          }
+        } catch (reminderError) {
+          console.error('Failed to cancel pending feeding reminders after timer start:', reminderError);
+        }
+
+        setActiveTimer(nextTimer);
+
+        if (timerType === 'BREAST') {
+          await startBreastfeedingLiveActivity(startMs);
+        }
+      } else if (
+        shouldCancelStaleReminderAfterManualEntry({
+          startTime: resolvedStartTime,
+          endTime: resolvedEndTime,
+        })
+      ) {
+        try {
+          await cancelLocalFeedingReminders();
+          if (user?.id && activeBabyId) {
+            await cancelBabyReminderNotification({
+              userId: user.id,
+              babyId: activeBabyId,
+              reminderType: 'feeding',
+            });
+          }
+        } catch (reminderError) {
+          console.error('Failed to cancel stale feeding reminders after manual entry:', reminderError);
+        }
       }
       showSuccessSplash(
-        feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : '#F5A623',
-        feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : '🥄',
-        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : 'feeding_solids'
+        feedingType === 'BREAST' ? '#8E4EC6' : feedingType === 'BOTTLE' ? '#4A90E2' : feedingType === 'PUMP' ? '#35B6B4' : feedingType === 'WATER' ? '#4FC3F7' : '#F5A623',
+        feedingType === 'BREAST' ? '🤱' : feedingType === 'BOTTLE' ? '🍼' : feedingType === 'PUMP' ? '🥛' : feedingType === 'WATER' ? '🚰' : '🥄',
+        feedingType === 'BREAST' ? 'feeding_breast' : feedingType === 'BOTTLE' ? 'feeding_bottle' : feedingType === 'PUMP' ? 'feeding_pump' : feedingType === 'WATER' ? 'feeding_water' : 'feeding_solids',
+        timerRequested
       );
+      if (!timerRequested) {
+        void maybeOfferNightWake({
+          startTime: resolvedStartTime,
+          endTime: resolvedEndTime,
+          feedingType: feedingType ?? null,
+        });
+      }
     } else if (selectedActivityType === 'diaper') {
       const diaperType = (payload.diaper_type as 'WET' | 'DIRTY' | 'BOTH' | undefined) ?? undefined;
-      let error;
+      const resolvedStartTime = payload.start_time ?? new Date().toISOString();
+      const resolvedEndTime = timerRequested ? null : (payload.end_time ?? resolvedStartTime);
+      let data, error;
       if (editingEntry?.id) {
         const res = await updateBabyCareEntry(editingEntry.id, {
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
-        });
-        error = res.error;
+          diaper_fever_measured: payload.diaper_fever_measured ?? null,
+          diaper_temperature_c: payload.diaper_temperature_c ?? null,
+          diaper_suppository_given: payload.diaper_suppository_given ?? null,
+          diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
+        }, activeBabyId ?? undefined);
+        data = res.data; error = res.error;
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'diaper',
-          start_time: payload.start_time,
-          end_time: payload.end_time ?? null,
+          start_time: resolvedStartTime,
+          end_time: resolvedEndTime,
           notes: payload.notes ?? null,
           diaper_type: diaperType,
+          diaper_fever_measured: payload.diaper_fever_measured ?? null,
+          diaper_temperature_c: payload.diaper_temperature_c ?? null,
+          diaper_suppository_given: payload.diaper_suppository_given ?? null,
+          diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
+        }, activeBabyId ?? undefined, {
+          diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
         });
-        error = res.error;
+        data = res.data; error = res.error;
       }
       if (error) {
-        Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Fehler beim Speichern'));
+        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFailed')));
         return;
+      }
+      if (timerRequested) {
+        const startMs = new Date(resolvedStartTime).getTime();
+        setActiveTimer({
+          id: data?.id || editingEntry?.id || `temp_DIAPER_${startMs}`,
+          type: 'DIAPER',
+          start: startMs,
+        });
       }
       showSuccessSplash(
         diaperType === 'WET' ? '#3498DB' : diaperType === 'DIRTY' ? '#8E5A2B' : '#38A169',
         diaperType === 'WET' ? '💧' : diaperType === 'DIRTY' ? '💩' : '💧💩',
-        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both'
+        diaperType === 'WET' ? 'diaper_wet' : diaperType === 'DIRTY' ? 'diaper_dirty' : 'diaper_both',
+        timerRequested
       );
     } else {
-      Alert.alert('Hinweis', 'Sonstige Einträge sind in der neuen Ansicht nicht verfügbar.');
+      Alert.alert(t('common.notice'), t('alert.otherUnavailable'));
     }
     setShowInputModal(false);
     setEditingEntry(null);
-    loadEntries();
+
+    // Invalidate cache after save
+    if (activeBabyId) {
+      await invalidateDailyCache(activeBabyId);
+    }
+
+    // Reload current view
+    if (visibleTab === 'week') {
+      loadWeekEntries();
+    } else if (visibleTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
   };
 
-  const showSuccessSplash = (hex: string, emoji: string, kind: string) => {
+  const showSuccessSplash = (
+    hex: string,
+    emoji: string,
+    kind: string,
+    timerStarted = false,
+    customName?: string,
+  ) => {
     const rgba = (h: string, a: number) => {
       const c = h.replace('#','');
       const r = parseInt(c.substring(0,2),16);
@@ -514,28 +2147,53 @@ export default function DailyScreen() {
     setSplashEmoji(emoji);
     // Texte je Kontext
     if (kind === 'feeding_breast') {
-      setSplashTitle('Stillen läuft');
-      setSplashSubtitle('Nimm dir Zeit. Genieße diese besonderen Momente.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Du gibst deinem Baby alles, was es braucht 💕');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.breast') }));
+      setSplashSubtitle(timerStarted ? t('daily.takeTime') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.breastHint'));
+      setSplashHintEmoji('💕');
       setSplashText('');
     } else if (kind === 'feeding_bottle') {
-      setSplashTitle('Fläschchen läuft');
-      setSplashSubtitle('Ganz in Ruhe – du machst das super.');
-      setSplashStatus('Wird gestartet...');
-      setSplashHint('Nähe und Ernährung – perfekt kombiniert 🤍');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.bottle') }));
+      setSplashSubtitle(timerStarted ? t('daily.bottleCalm') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.bottleHint'));
+      setSplashHintEmoji('🤍');
       setSplashText('');
     } else if (kind === 'feeding_solids') {
-      setSplashTitle('Beikost gespeichert');
-      setSplashSubtitle('Jeder Löffel ein kleiner Fortschritt.');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('feeding.solids') }));
+      setSplashSubtitle(timerStarted ? t('daily.timerUntilStop') : t('daily.solidsSaved'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopTogether') : t('daily.solidsHint'));
+      setSplashHintEmoji('');
+      setSplashText('');
+    } else if (kind === 'feeding_pump') {
+      setSplashTitle(t('daily.saved', { name: t('feeding.pump') }));
+      setSplashSubtitle(t('daily.pumpBody'));
       setSplashStatus('');
-      setSplashHint('Weiter so – ihr wachst gemeinsam!');
+      setSplashHint(t('daily.pumpHint'));
+      setSplashHintEmoji('🥛');
+      setSplashText('');
+    } else if (kind === 'feeding_water') {
+      setSplashTitle(t('daily.saved', { name: t('feeding.water') }));
+      setSplashSubtitle(t('daily.waterBody'));
+      setSplashStatus('');
+      setSplashHint(t('daily.waterHint'));
+      setSplashHintEmoji('🚰');
+      setSplashText('');
+    } else if (kind === 'custom') {
+      setSplashTitle(t(timerStarted ? 'custom.running' : 'custom.saved', { name: customName ?? t('card.other') }));
+      setSplashSubtitle(timerStarted ? t('custom.timerHint') : t('daily.noTimer'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint('');
+      setSplashHintEmoji('');
       setSplashText('');
     } else {
-      setSplashTitle('Wickeln gespeichert');
-      setSplashSubtitle('Alles frisch – wohlfühlen ist wichtig.');
-      setSplashStatus('');
-      setSplashHint('Danke für deine liebevolle Fürsorge ✨');
+      setSplashTitle(t(timerStarted ? 'daily.running' : 'daily.saved', { name: t('summary.diaper') }));
+      setSplashSubtitle(timerStarted ? t('daily.timerUntilStop') : t('daily.diaperFresh'));
+      setSplashStatus(timerStarted ? t('daily.timerStarted') : '');
+      setSplashHint(timerStarted ? t('daily.stopSingle') : t('daily.diaperHint'));
+      setSplashHintEmoji('✨');
       setSplashText('');
     }
     setSplashVisible(true);
@@ -556,29 +2214,163 @@ export default function DailyScreen() {
     }, 4500);
   };
 
-  const handleTimerStop = async () => {
+  const handleTimerStop = useCallback(async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!activeTimer) return;
-    const { error } = await stopBabyCareEntryTimer(activeTimer.id);
+    if (!activeBabyId) return;
+
+    const timerToStop = activeTimer;
+    const { error } = await stopBabyCareEntryTimer(timerToStop.id, activeBabyId);
     if (error) {
-      Alert.alert('Fehler', String((error as any)?.message ?? error ?? 'Unbekannter Fehler'));
+      Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('common.unknownError')));
       return;
     }
-    setActiveTimer(null);
-    loadEntries();
-    Alert.alert('Erfolg', 'Timer gestoppt! ⏹️');
-  };
 
-  const handleDeleteEntry = async (id: string) => {
-    Alert.alert('Eintrag löschen', 'Möchtest du diesen Eintrag wirklich löschen?', [
-      { text: 'Abbrechen', style: 'cancel' },
+    await endBreastfeedingLiveActivity(timerToStop);
+    setActiveTimer(null);
+
+    if (timerToStop.type === 'BREAST' || timerToStop.type === 'BOTTLE' || timerToStop.type === 'SOLIDS') {
+      void maybeOfferNightWake({
+        startTime: new Date(timerToStop.start),
+        endTime: new Date(),
+        feedingType: timerToStop.type,
+      });
+    }
+
+    // Invalidate cache after timer stop
+    await invalidateDailyCache(activeBabyId);
+
+    // Reload current view
+    if (visibleTab === 'week') {
+      loadWeekEntries();
+    } else if (visibleTab === 'month') {
+      loadMonthEntries();
+    } else {
+      loadEntries();
+    }
+
+    Alert.alert(t('common.success'), t('daily.timerStopped'));
+  }, [
+    ensureWritableInCurrentMode,
+    activeBabyId,
+    activeTimer,
+    endBreastfeedingLiveActivity,
+    maybeOfferNightWake,
+    visibleTab,
+    loadWeekEntries,
+    loadMonthEntries,
+    loadEntries,
+  ]);
+
+  useEffect(() => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+    if (!isTimerHydrated) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncFeedingLiveActivity = async () => {
+      try {
+        if (activeTimer?.type === 'BREAST') {
+          const restored = await sleepActivityService.restoreCurrentFeedingActivity();
+          if (cancelled) return;
+
+          if (!restored) {
+            await sleepActivityService.startFeedingActivity(new Date(activeTimer.start), activeTimer.type);
+            return;
+          }
+
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activeTimer.start) / 1000));
+          await sleepActivityService.updateFeedingActivity(formatDurationSeconds(elapsedSeconds), activeTimer.type);
+        } else {
+          await sleepActivityService.endAllFeedingActivities();
+        }
+      } catch (error) {
+        console.error('Failed to synchronize feeding live activity:', error);
+      }
+    };
+
+    void syncFeedingLiveActivity();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTimer?.id, activeTimer?.start, activeTimer?.type, isTimerHydrated]);
+
+  useEffect(() => {
+    if (!sleepActivityService.isLiveActivitySupported()) {
+      return;
+    }
+    if (!isTimerHydrated || activeTimer?.type !== 'BREAST') {
+      return;
+    }
+
+    const updateElapsedTimeInLiveActivity = async () => {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - activeTimer.start) / 1000));
+      await sleepActivityService.updateFeedingActivity(formatDurationSeconds(elapsedSeconds), activeTimer.type);
+    };
+
+    void updateElapsedTimeInLiveActivity();
+
+    const intervalId = setInterval(() => {
+      void updateElapsedTimeInLiveActivity();
+    }, 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [activeTimer?.id, activeTimer?.start, activeTimer?.type, isTimerHydrated]);
+
+  useEffect(() => {
+    if (liveStopRequestId === 0) return;
+    if (handledLiveStopRequestIdRef.current === liveStopRequestId) return;
+    if (!isTimerHydrated) return;
+
+    handledLiveStopRequestIdRef.current = liveStopRequestId;
+
+    if (!activeTimer?.id || activeTimer.type !== 'BREAST') {
+      console.log('Live Activity stop requested, but no active breastfeeding timer exists.');
+      return;
+    }
+
+    if (isReadOnlyPreviewMode) return;
+    const timeoutId = setTimeout(() => void handleTimerStop(), 0);
+    return () => clearTimeout(timeoutId);
+  }, [activeTimer?.id, activeTimer?.type, handleTimerStop, isReadOnlyPreviewMode, isTimerHydrated, liveStopRequestId]);
+
+  const handleDeleteEntry = async (id: string, afterDelete?: () => void) => {
+    if (!ensureWritableInCurrentMode()) return;
+    Alert.alert(t('alert.deleteTitle'), t('alert.deleteQuestion'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Löschen',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
-          const { error } = await deleteBabyCareEntry(id);
+          if (!ensureWritableInCurrentMode()) return;
+          if (!activeBabyId) return;
+          const { error } = await deleteBabyCareEntry(id, activeBabyId);
           if (error) return;
-          loadEntries();
-          Alert.alert('Erfolg', 'Eintrag gelöscht! 🗑️');
+
+          if (activeTimer?.id === id) {
+            await endBreastfeedingLiveActivity(activeTimer);
+            setActiveTimer(null);
+          }
+
+          // Invalidate cache after delete
+          await invalidateDailyCache(activeBabyId);
+
+          // Reload current view
+          if (visibleTab === 'week') {
+            loadWeekEntries();
+          } else if (visibleTab === 'month') {
+            loadMonthEntries();
+          } else {
+            loadEntries();
+          }
+
+          afterDelete?.();
+          Alert.alert(t('common.success'), t('alert.deleted'));
         },
       },
     ]);
@@ -587,71 +2379,35 @@ export default function DailyScreen() {
   const TopTabs = () => (
     <View style={s.topTabsContainer}>
       {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[s.topTab, selectedTab === tab && s.activeTopTab]} intensity={22}>
+        <GlassCard key={tab} style={[s.topTab, visibleTab === tab && s.activeTopTab]} intensity={22}>
           <TouchableOpacity
             style={s.topTabInner}
+            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+            pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
             onPress={() => {
+              if (tab === 'month' && isMonthViewLocked) {
+                showMonthViewLockedAlert();
+                return;
+              }
               setSelectedTab(tab);
-              if (tab === 'day') triggerShowDateNav();
+              if (tab === 'week') setWeekOffset(0);
+              if (tab === 'month') setMonthOffset(0);
+              if (tab === 'day') {
+                setSelectedDate(new Date());
+                triggerShowDateNav();
+              }
             }}
             activeOpacity={0.85}
           >
-            <Text style={[s.topTabText, selectedTab === tab && s.activeTopTabText]}>
-              {tab === 'day' ? 'Tag' : tab === 'week' ? 'Woche' : 'Monat'}
+            <Text style={[s.topTabText, { color: textSecondary }, visibleTab === tab && s.activeTopTabText]}>
+              {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
+              {tab === 'month' && isMonthViewLocked ? '  🔒' : ''}
             </Text>
           </TouchableOpacity>
         </GlassCard>
       ))}
     </View>
   );
-
-  const quickBtns: { icon: string; label: string; action: QuickActionType }[] = [
-    { action: 'feeding_breast', label: 'Stillen', icon: '🤱' },
-    { action: 'feeding_bottle', label: 'Fläschchen', icon: '🍼' },
-    { action: 'feeding_solids', label: 'Beikost', icon: '🥄' },
-    { action: 'diaper_wet', label: 'Nass', icon: '💧' },
-    { action: 'diaper_dirty', label: 'Voll', icon: '💩' },
-    { action: 'diaper_both', label: 'Beides', icon: '💧💩' },
-  ];
-
-  const QuickActionRow = () => {
-    const renderQuickButton = ({ item }: { item: typeof quickBtns[0] }) => (
-      <GlassCard
-        style={s.circleButton}
-        intensity={30}
-        overlayColor="rgba(255,255,255,0.32)"
-        borderColor="rgba(255,255,255,0.70)"
-      >
-        <TouchableOpacity style={s.circleInner} onPress={() => handleQuickActionPress(item.action)} activeOpacity={0.9}>
-          <Text style={s.circleEmoji}>{item.icon}</Text>
-          <Text style={s.circleLabel}>{item.label}</Text>
-        </TouchableOpacity>
-      </GlassCard>
-    );
-
-
-
-    return (
-      <View style={s.quickActionSection}>
-        <FlatList
-          ref={quickActionsScrollRef}
-          data={quickBtns}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          renderItem={renderQuickButton}
-          keyExtractor={(_, i) => String(i)}
-          contentContainerStyle={s.quickScrollContainer}
-          ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          snapToInterval={112} // 96 Breite + 16 Separator
-          // Wenn du 104px runde Buttons willst:
-          // - stelle circleButton width/height auf 104, borderRadius 52
-          // - setze snapToInterval auf 120
-        />
-      </View>
-    );
-  };
 
   // Week navigation functions
   const goToPreviousWeek = () => setWeekOffset((o) => o - 1);
@@ -660,11 +2416,11 @@ export default function DailyScreen() {
 
   const WeekView = () => {
     // Reference date derived from weekOffset (exact like sleep-tracker)
-    const refDate = useMemo(() => {
+    const refDate = (() => {
       const d = new Date();
       d.setDate(d.getDate() + weekOffset * 7);
       return d;
-    }, [weekOffset]);
+    })();
 
     const weekDays = getWeekDays(refDate);
     const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -689,9 +2445,8 @@ export default function DailyScreen() {
     const maxCount = Math.max(...dayTotals, 4);
 
     // Weekly summary totals
-    const totalFeedings = weekEntries.filter((e) => e.entry_type === 'feeding').length;
+    const totalFeedings = weekEntries.filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP' && e.feeding_type !== 'WATER').length;
     const totalDiapers = weekEntries.filter((e) => e.entry_type === 'diaper').length;
-    const avgPerDay = Math.round((weekEntries.length / 7) * 10) / 10;
 
     const weekStart = getWeekStart(refDate);
     const weekEnd = getWeekEnd(refDate);
@@ -701,24 +2456,24 @@ export default function DailyScreen() {
         {/* Week Navigation - identical structure */}
         <View style={s.weekNavigationContainer}>
           <TouchableOpacity style={s.weekNavButton} onPress={goToPreviousWeek}>
-            <Text style={s.weekNavButtonText}>‹</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
           <View style={s.weekHeaderCenter}>
-            <Text style={s.weekHeaderTitle}>Wochenübersicht</Text>
-            <Text style={s.weekHeaderSubtitle}>
-              {weekStart.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
+            <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
+              {weekStart.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })}
             </Text>
           </View>
 
           <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
-            <Text style={s.weekNavButtonText}>›</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Wickeln diese Woche - Design Guide konform mit Liquid Glass (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Wickeln diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('week.diapers')}</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
@@ -750,8 +2505,8 @@ export default function DailyScreen() {
                   </View>
 
                   <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
-                    <Text allowFontScaling={false} style={s.chartValue}>{diaperCount}</Text>
+                    <Text allowFontScaling={false} style={[s.chartLabel, { color: textSecondary }]}>{dayNames[i]}</Text>
+                    <Text allowFontScaling={false} style={[s.chartValue, { color: textSecondary }]}>{diaperCount}</Text>
                   </View>
                 </View>
               );
@@ -759,24 +2514,24 @@ export default function DailyScreen() {
           </View>
         </LiquidGlassCard>
 
-        {/* Füttern diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
+        {/* Mahlzeiten diese Woche (Stillen, Fläschchen, Beikost) - EXAKT wie Sleep-Tracker */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Füttern diese Woche</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('week.meals')}</Text>
 
           {/* feste Gesamtbreite = WEEK_CONTENT_WIDTH (wie Timeline) */}
           <View style={[s.chartArea, { width: WEEK_CONTENT_WIDTH, alignSelf: 'center' }]}>
             {weekDays.map((day, i) => {
-              const feedingEntries = getEntriesForDay(day).filter((e) => e.entry_type === 'feeding');
+              const feedingEntries = getEntriesForDay(day).filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP' && e.feeding_type !== 'WATER');
               const breast = feedingEntries.filter((e: any) => e.feeding_type === 'BREAST').length;
               const bottle = feedingEntries.filter((e: any) => e.feeding_type === 'BOTTLE').length;
               const solids = feedingEntries.filter((e: any) => e.feeding_type === 'SOLIDS').length;
               
               const maxFeed = Math.max(4, ...weekDays.flatMap((d) => {
-                const items = getEntriesForDay(d).filter((e) => e.entry_type === 'feeding');
+                const items = getEntriesForDay(d).filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP' && e.feeding_type !== 'WATER');
                 return [
                   items.filter((e: any) => e.feeding_type === 'BREAST').length,
                   items.filter((e: any) => e.feeding_type === 'BOTTLE').length,
-                  items.filter((e: any) => e.feeding_type === 'SOLIDS').length
+                  items.filter((e: any) => e.feeding_type === 'SOLIDS').length,
                 ];
               }));
 
@@ -807,8 +2562,8 @@ export default function DailyScreen() {
                   </View>
 
                   <View style={[s.chartLabelContainer, { width: WEEK_COL_WIDTH + extra }]}>
-                    <Text allowFontScaling={false} style={s.chartLabel}>{dayNames[i]}</Text>
-                    <Text allowFontScaling={false} style={s.chartValue}>{breast + bottle + solids}</Text>
+                    <Text allowFontScaling={false} style={[s.chartLabel, { color: textSecondary }]}>{dayNames[i]}</Text>
+                    <Text allowFontScaling={false} style={[s.chartValue, { color: textSecondary }]}>{breast + bottle + solids}</Text>
                   </View>
                 </View>
               );
@@ -819,15 +2574,15 @@ export default function DailyScreen() {
           <View style={s.chartLegend}>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBreast]} />
-              <Text style={s.legendLabel}>Stillen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.breast')}</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendBottle]} />
-              <Text style={s.legendLabel}>Fläschchen</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.bottle')}</Text>
             </View>
             <View style={s.legendItem}>
               <View style={[s.legendSwatch, s.legendSolids]} />
-              <Text style={s.legendLabel}>Beikost</Text>
+              <Text style={[s.legendLabel, { color: textSecondary }]}>{t('feeding.solids')}</Text>
             </View>
           </View>
         </LiquidGlassCard>
@@ -835,43 +2590,22 @@ export default function DailyScreen() {
         {/* Wochenzusammenfassung - Design Guide konform (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.weekSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={s.summaryTitle}>Wochenzusammenfassung</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('week.summary')}</Text>
             <View style={s.summaryStats}>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>🍼</Text>
-                  <Text style={s.statValue}>{totalFeedings}</Text>
-                  <Text style={s.statLabel}>Fütterungen</Text>
+                  <Text style={[s.statValue, { color: textPrimary }]}>{totalFeedings}</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.meals')}</Text>
                 </View>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>💧</Text>
-                  <Text style={s.statValue}>{totalDiapers}</Text>
-                  <Text style={s.statLabel}>Windeln</Text>
-                </View>
-                <View style={s.statItem}>
-                  <Text style={s.statEmoji}>⭐</Text>
-                  <Text style={s.statValue}>{avgPerDay}</Text>
-                  <Text style={s.statLabel}>Ø pro Tag</Text>
+                  <Text style={[s.statValue, { color: textPrimary }]}>{totalDiapers}</Text>
+                  <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.diapers')}</Text>
                 </View>
             </View>
           </View>
         </LiquidGlassCard>
 
-        {/* Trend-Analyse - Design Guide konform (EXAKT wie Sleep-Tracker) */}
-        <LiquidGlassCard style={s.trendCard}>
-          <View style={s.trendInner}>
-            <Text style={s.trendTitle}>Trend-Analyse</Text>
-            <View style={s.trendContent}>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>📈</Text>
-                <Text style={s.trendText}>Konstante Aktivität</Text>
-              </View>
-              <View style={s.trendItem}>
-                <Text style={s.trendEmoji}>🕒</Text>
-                <Text style={s.trendText}>Regelmäßige Intervalle</Text>
-              </View>
-            </View>
-          </View>
-        </LiquidGlassCard>
       </View>
     );
   };
@@ -880,12 +2614,12 @@ export default function DailyScreen() {
 
   const MonthView = () => {
     // Referenz-Monat: aktueller Monat + monthOffset (wie Sleep-Tracker)
-    const refMonthDate = useMemo(() => {
+    const refMonthDate = (() => {
       const d = new Date();
       d.setDate(1);
       d.setMonth(d.getMonth() + monthOffset);
       return d;
-    }, [monthOffset]);
+    })();
     
     // Lokale Hilfsfunktionen
     const getMonthStart = (date: Date) => {
@@ -902,9 +2636,9 @@ export default function DailyScreen() {
       return new Date(year, month + 1, 0).getDate();
     };
     
-    const monthStart = useMemo(() => getMonthStart(refMonthDate), [refMonthDate]);
-    const monthEnd = useMemo(() => getMonthEnd(refMonthDate), [refMonthDate]);
-    const daysInMonth = useMemo(() => getDaysInMonth(refMonthDate), [refMonthDate]);
+    const monthStart = getMonthStart(refMonthDate);
+    const monthEnd = getMonthEnd(refMonthDate);
+    const daysInMonth = getDaysInMonth(refMonthDate);
 
     // Erstelle Kalender-Grid - gruppiert nach Wochen (wie Sleep-Tracker)
     const getCalendarWeeks = () => {
@@ -937,7 +2671,7 @@ export default function DailyScreen() {
       return weeks;
     };
 
-    const calendarWeeks = useMemo(() => getCalendarWeeks(), [monthStart, daysInMonth]);
+    const calendarWeeks = getCalendarWeeks();
 
     const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const endOfDay   = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
@@ -969,6 +2703,21 @@ export default function DailyScreen() {
     type DayScore = 'excellent' | 'good' | 'okay' | 'poor' | 'none';
 
     const getDayColors = (score: DayScore) => {
+      if (isDark) {
+        switch (score) {
+          case 'excellent':
+            return { bg: 'rgba(34,197,94,0.46)', text: '#FFFFFF', border: 'rgba(74,222,128,0.95)' };
+          case 'good':
+            return { bg: 'rgba(16,185,129,0.38)', text: '#FFFFFF', border: 'rgba(45,212,191,0.88)' };
+          case 'okay':
+            return { bg: 'rgba(245,158,11,0.42)', text: '#FFFFFF', border: 'rgba(251,191,36,0.95)' };
+          case 'poor':
+            return { bg: 'rgba(239,68,68,0.42)', text: '#FFFFFF', border: 'rgba(248,113,113,0.9)' };
+          default:
+            return { bg: 'rgba(255,255,255,0.08)', text: textSecondary, border: 'rgba(255,255,255,0.22)' };
+        }
+      }
+
       switch (score) {
         case 'excellent':
           return { bg: 'rgba(56,161,105,0.22)', text: '#2F855A', border: 'rgba(255,255,255,0.65)' };
@@ -979,36 +2728,37 @@ export default function DailyScreen() {
         case 'poor':
           return { bg: 'rgba(229,62,62,0.18)',  text: '#9B2C2C', border: 'rgba(255,255,255,0.55)' };
         default:
-          return { bg: 'rgba(255,255,255,0.10)', text: '#7D5A50', border: 'rgba(255,255,255,0.35)' };
+          return { bg: 'rgba(255,255,255,0.10)', text: textSecondary, border: 'rgba(255,255,255,0.35)' };
       }
     };
 
     return (
       <View style={s.monthViewContainer}>
-        {/* Monats-Navigation - Design Guide konform */}
-        <View style={s.monthNavigationContainer}>
-          <TouchableOpacity style={s.monthNavButton} onPress={() => setMonthOffset(o => o - 1)}>
-            <Text style={s.monthNavButtonText}>‹</Text>
+        {/* Monats-Navigation - exakt gleich wie Wochenübersicht */}
+        <View style={s.weekNavigationContainer}>
+          <TouchableOpacity style={s.weekNavButton} onPress={() => setMonthOffset(o => o - 1)}>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
           </TouchableOpacity>
 
-          <View style={s.monthHeaderCenter}>
-            <Text style={s.monthHeaderTitle}>
-              {refMonthDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
+          <View style={s.weekHeaderCenter}>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
+            <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
+              {refMonthDate.toLocaleDateString(DAILY_LOCALE_TAG, { month: 'long', year: 'numeric' })}
             </Text>
           </View>
 
           <TouchableOpacity
-            style={[s.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
+            style={[s.weekNavButton, monthOffset >= 0 && s.disabledNavButton]}
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset(o => o + 1)}
           >
-            <Text style={s.monthNavButtonText}>›</Text>
+            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
           </TouchableOpacity>
         </View>
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
         <LiquidGlassCard style={s.chartGlassCard}>
-          <Text style={s.chartTitle}>Aktivitätskalender</Text>
+          <Text style={[s.chartTitle, { color: textSecondary }]}>{t('month.calendar')}</Text>
           <View style={{ width: WEEK_CONTENT_WIDTH, alignSelf: 'center', paddingVertical: 16 }}>
             {/* Wochentags-Header mit exakten Spaltenbreiten */}
             <View style={s.weekdayHeader}>
@@ -1023,7 +2773,7 @@ export default function DailyScreen() {
                       alignItems: 'center',
                     }}
                   >
-                    <Text style={s.weekdayLabel}>{label}</Text>
+                    <Text style={[s.weekdayLabel, { color: textSecondary }]}>{label}</Text>
                   </View>
                 );
               })}
@@ -1052,7 +2802,15 @@ export default function DailyScreen() {
                           <TouchableOpacity
                             style={[
                               s.calendarDayButton,
-                              { backgroundColor: c.bg, borderColor: c.border }
+                              { backgroundColor: c.bg, borderColor: c.border },
+                              isDark &&
+                                score !== 'none' && {
+                                  shadowColor: c.border,
+                                  shadowOffset: { width: 0, height: 1 },
+                                  shadowOpacity: 0.24,
+                                  shadowRadius: 4,
+                                  elevation: 2,
+                                },
                             ]}
                           >
                             <Text style={[s.calendarDayNumber, { color: c.text }]}>{date.getDate()}</Text>
@@ -1077,22 +2835,17 @@ export default function DailyScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={s.monthSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={s.summaryTitle}>Monatsübersicht</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
             <View style={s.summaryStats}>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>🍼</Text>
-                <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'feeding').length}</Text>
-                <Text style={s.statLabel}>Fütterungen</Text>
+                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter((e: any) => e.entry_type === 'feeding' && e.feeding_type !== 'PUMP' && e.feeding_type !== 'WATER').length}</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.meals')}</Text>
               </View>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>💧</Text>
-                <Text style={s.statValue}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
-                <Text style={s.statLabel}>Windeln</Text>
-              </View>
-              <View style={s.statItem}>
-                <Text style={s.statEmoji}>📊</Text>
-                <Text style={s.statValue}>{monthEntries.length > 0 ? Math.round(monthEntries.length / daysInMonth) : 0}</Text>
-                <Text style={s.statLabel}>Ø pro Tag</Text>
+                <Text style={[s.statValue, { color: textPrimary }]}>{monthEntries.filter(e => e.entry_type === 'diaper').length}</Text>
+                <Text style={[s.statLabel, { color: textSecondary }]}>{t('summary.diapers')}</Text>
               </View>
             </View>
           </View>
@@ -1103,75 +2856,187 @@ export default function DailyScreen() {
   };
 
   const KPISection = () => {
-    const currentEntries = selectedTab === 'week' ? weekEntries : entries;
-    const feedingEntries = currentEntries.filter((e) => e.entry_type === 'feeding');
+    const currentEntries = visibleTab === 'week' ? weekEntries : entries;
+    const feedingOverview = buildFeedingOverview(currentEntries as any[]);
     const diaperEntries = currentEntries.filter((e) => e.entry_type === 'diaper');
 
-    const bottleCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_bottle').length;
-    const breastCount = feedingEntries.filter((f: any) => f.sub_type === 'feeding_breast').length;
+    const hasBottleFeedings = feedingOverview.bottleCount > 0;
+    const hasBreastFeedings = feedingOverview.breastCount > 0;
+    const hasSolidFeedings = feedingOverview.solidsCount > 0;
+    const hasPumpEntries = feedingOverview.pumpCount > 0;
+    const hasWaterEntries = feedingOverview.waterCount > 0;
+
+    let feedingStatValue = `${feedingOverview.totalBottleMl}`;
+    let feedingStatUnit: 'ml' | 'times' = 'ml';
+    let feedingPrimaryDetail = t('summary.noMeal');
+    let feedingSecondaryDetail: string | null = null;
+
+    if (feedingOverview.totalFeedingCount > 0) {
+      if (hasBottleFeedings) {
+        feedingPrimaryDetail = t('daily.bottleCount', { count: feedingOverview.bottleCount });
+        feedingSecondaryDetail = [
+          hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+          hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+          hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+          hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+        ]
+          .filter(Boolean)
+          .join(' • ') || null;
+      } else if (hasBreastFeedings || hasSolidFeedings) {
+        const useBreastAsPrimary =
+          hasBreastFeedings && (!hasSolidFeedings || feedingOverview.breastCount >= feedingOverview.solidsCount);
+
+        feedingStatUnit = 'times';
+        if (useBreastAsPrimary) {
+          feedingStatValue = `${feedingOverview.breastCount}`;
+          feedingPrimaryDetail = 'Stillen';
+          feedingSecondaryDetail = [
+            hasSolidFeedings ? `Beikost ${feedingOverview.solidsCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
+        } else {
+          feedingStatValue = `${feedingOverview.solidsCount}`;
+          feedingPrimaryDetail = 'Beikost';
+          feedingSecondaryDetail = [
+            hasBreastFeedings ? `Stillen ${feedingOverview.breastCount}×` : null,
+            hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+            hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
+        }
+      }
+    } else if (hasPumpEntries || hasWaterEntries) {
+      feedingSecondaryDetail = [
+        hasPumpEntries ? `Abpumpen ${feedingOverview.pumpCount}×` : null,
+        hasWaterEntries ? `Wasser ${feedingOverview.waterCount}×` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ') || null;
+    }
+
+    if (latestBottleGapLabel) {
+      feedingSecondaryDetail = [latestBottleGapLabel, feedingSecondaryDetail]
+        .filter(Boolean)
+        .join(' • ');
+    }
 
     const lastDiaperEntry = diaperEntries
       .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())[0];
 
     const lastDiaperTime = lastDiaperEntry
-      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-      : 'Nie';
+      ? new Date(lastDiaperEntry.entry_date).toLocaleTimeString(DAILY_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })
+      : t('summary.never');
 
     return (
       <View style={s.kpiRow}>
-        <GlassCard
-          style={s.kpiCard}
-          intensity={24}
-          overlayColor="rgba(94, 61, 179, 0.13)"
-          borderColor="rgba(94, 61, 179, 0.35)"
+        <TouchableOpacity
+          style={s.kpiCardShell}
+          activeOpacity={0.92}
+          onPress={() => setShowFeedingOverviewModal(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('summary.mealsAccessibility')}
         >
-          <View style={s.kpiHeaderRow}>
-            <Text style={s.kpiEmoji}>🍼</Text>
-            <Text style={s.kpiTitle}>Fütterung</Text>
-          </View>
-          <Text style={[s.kpiValue, s.kpiValueCentered]}>{feedingEntries.length}</Text>
-          <Text style={s.kpiSub}>{breastCount}× Stillen • {bottleCount}× Flasche</Text>
-        </GlassCard>
+          <GlassCard
+            style={[s.kpiCard, s.kpiCardInteractive]}
+            intensity={24}
+            overlayColor="rgba(94, 61, 179, 0.13)"
+            borderColor="rgba(94, 61, 179, 0.35)"
+          >
+            <View style={[s.kpiHeaderRow, s.kpiHeaderRowSpaced]}>
+              <View style={s.kpiHeaderCopy}>
+                <Text style={s.kpiEmoji}>🍼</Text>
+                <Text style={[s.kpiTitle, { color: textSecondary }]}>{t('summary.meals')}</Text>
+              </View>
+              <IconSymbol name="chevron.right" size={14} color={textSecondary} />
+            </View>
+            <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>
+              {feedingStatValue}
+              <Text style={s.kpiMlUnit}>{feedingStatUnit === 'ml' ? ' ml' : '×'}</Text>
+            </Text>
+            <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubPrimary, { color: textSecondary }]}>
+              {feedingPrimaryDetail}
+            </Text>
+            {feedingSecondaryDetail ? (
+              <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
+                {feedingSecondaryDetail}
+              </Text>
+            ) : (
+              <Text numberOfLines={1} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
+                {t('summary.tap')}
+              </Text>
+            )}
+          </GlassCard>
+        </TouchableOpacity>
 
-        <GlassCard
-          style={s.kpiCard}
-          intensity={24}
-          overlayColor="rgba(94, 61, 179, 0.08)"
-          borderColor="rgba(94, 61, 179, 0.22)"
-        >
-          <View style={s.kpiHeaderRow}>
-            <Text style={s.kpiEmoji}>🧷</Text>
-            <Text style={s.kpiTitle}>Wickeln</Text>
-          </View>
-          <Text style={[s.kpiValue, s.kpiValueCentered]}>{diaperEntries.length}</Text>
-          <Text style={s.kpiSub}>Letzter: {lastDiaperTime}</Text>
-        </GlassCard>
+        <View style={s.kpiCardShell}>
+          <GlassCard
+            style={s.kpiCard}
+            intensity={24}
+            overlayColor="rgba(94, 61, 179, 0.08)"
+            borderColor="rgba(94, 61, 179, 0.22)"
+          >
+            <View style={s.kpiHeaderRow}>
+              <View style={s.kpiHeaderCopy}>
+                <Text style={s.kpiEmoji}>🧷</Text>
+                <Text style={[s.kpiTitle, { color: textSecondary }]}>{t('summary.diaper')}</Text>
+              </View>
+            </View>
+            <Text style={[s.kpiValue, s.kpiValueCentered, { color: textPrimary }]}>{diaperEntries.length}</Text>
+            <Text style={[s.kpiSub, { color: textSecondary }]}>{t('summary.last')} {lastDiaperTime}</Text>
+          </GlassCard>
+        </View>
       </View>
     );
   };
+
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
 
   return (
     <ThemedBackground style={s.backgroundImage}>
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-        <Header title="Unser Tag" subtitle="Euer Tag – voller kleiner Meilensteine ✨" />
+        <Header
+          title={t('screen.title')}
+          subtitle={headerSubtitle}
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
+        />
 
         <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
+
+        {isReadOnlyPreviewMode && (
+          <View style={s.readOnlyPreviewBanner}>
+            <Text style={s.readOnlyPreviewTitle}>{t('preview.active')}</Text>
+            <Text style={s.readOnlyPreviewText}>
+              {t('preview.banner')}
+            </Text>
+          </View>
+        )}
 
         <TimerBanner
           timer={activeTimer}
           onStop={handleTimerStop}
+          disabled={isReadOnlyPreviewMode}
           onCancel={async () => {
+            if (!ensureWritableInCurrentMode()) return;
             if (!activeTimer) return;
-            Alert.alert('Timer abbrechen', 'Willst du den laufenden Eintrag wirklich verwerfen?', [
-              { text: 'Nein', style: 'cancel' },
+            Alert.alert(t('timer.cancelTitle'), t('timer.cancelQuestion'), [
+              { text: t('timer.no'), style: 'cancel' },
               {
-                text: 'Ja, verwerfen',
+                text: t('timer.discard'),
                 style: 'destructive',
                 onPress: async () => {
-                  const { error } = await deleteBabyCareEntry(activeTimer.id);
+                  const timerToCancel = activeTimer;
+                  const { error } = await deleteBabyCareEntry(timerToCancel.id, activeBabyId ?? undefined);
                   if (!error) {
+                    await endBreastfeedingLiveActivity(timerToCancel);
                     setActiveTimer(null);
                     loadEntries();
                   }
@@ -1181,25 +3046,138 @@ export default function DailyScreen() {
           }}
         />
 
-        <DebugPanel />
-
         <ScrollView
           style={s.scrollContainer}
           contentContainerStyle={s.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         >
-          <TopTabs />
+          {TopTabs()}
 
-          {selectedTab === 'week' ? (
-            <WeekView />
-          ) : selectedTab === 'month' ? (
-            <MonthView />
+          {visibleTab === 'week' ? (
+            WeekView()
+          ) : visibleTab === 'month' ? (
+            MonthView()
           ) : (
             <View style={s.content}>
-              <QuickActionRow />
+              {/* Day Navigation - gleich wie Sleep-Tracker */}
+              <View style={s.weekNavigationContainer}>
+                <TouchableOpacity
+                  style={s.weekNavButton}
+                  onPress={() => changeRelativeDate(-1)}
+                >
+                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
+                </TouchableOpacity>
+                <View style={s.weekHeaderCenter}>
+                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
+                  <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
+                    {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[s.weekNavButton, new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0) && s.disabledNavButton]}
+                  disabled={new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0)}
+                  onPress={() => changeRelativeDate(1)}
+                >
+                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
+                </TouchableOpacity>
+              </View>
 
-              <Text style={s.sectionTitle}>Kennzahlen</Text>
-              <KPISection />
+              <QuickActionRow
+                onPressAction={handleQuickActionPress}
+                onHideAction={handleHideQuickAction}
+                onRestoreAction={handleRestoreQuickAction}
+                onReorderActions={handleReorderQuickActions}
+                onAddCustom={openNewCustomActivity}
+                onEditCustom={openCustomActivityEditor}
+                customActivities={activeCustomActivities}
+                hiddenActions={hiddenQuickActions}
+                actionOrder={quickActionOrder}
+                disabled={isReadOnlyPreviewMode}
+              />
+
+              {showVitaminDStrip && (
+                <GlassCard
+                  style={s.vitaminDStrip}
+                  intensity={22}
+                  overlayColor={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.28)'}
+                  borderColor={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.58)'}
+                >
+                  <View style={s.vitaminDStripInner}>
+                    <View
+                      style={[
+                        s.vitaminDLeadIcon,
+                        {
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.28)',
+                          borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.58)',
+                        },
+                      ]}
+                    >
+                      <IconSymbol name="checklist" size={15} color={textPrimary} />
+                    </View>
+
+                    <View style={s.vitaminDStripCopy}>
+                      <Text style={[s.vitaminDTitle, { color: textPrimary }]}>{t('vitamin.title')}</Text>
+                      <View style={s.vitaminDSignalsRow}>
+                        <View style={s.vitaminDSignal}>
+                          <View
+                            style={[
+                              s.vitaminDSignalDot,
+                              {
+                                backgroundColor: isVitaminDCompleted
+                                  ? textPrimary
+                                  : isDark
+                                  ? 'rgba(255,255,255,0.22)'
+                                  : 'rgba(125,90,80,0.28)',
+                              },
+                            ]}
+                          />
+                          <Text style={[s.vitaminDSignalText, { color: textSecondary }]}>
+                            {isSelectedDateToday
+                              ? isVitaminDCompleted
+                                ? t('vitamin.done')
+                                : t('vitamin.open')
+                              : isVitaminDCompleted
+                              ? t('vitamin.dayDone')
+                              : t('vitamin.dayOpen')}
+                          </Text>
+                        </View>
+
+                      </View>
+                    </View>
+
+                    <View style={s.vitaminDControlRow}>
+                      <TouchableOpacity
+                        style={[
+                          s.vitaminDIconButton,
+                          isVitaminDCompleted && s.vitaminDIconButtonActive,
+                          (vitaminDBusy || isReadOnlyPreviewMode) && s.actionDisabled,
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={handleToggleVitaminDCompletion}
+                        disabled={vitaminDBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          isVitaminDCompleted
+                            ? t('vitamin.resetAccessibility')
+                            : t('vitamin.markAccessibility')
+                        }
+                      >
+                        <Text
+                          style={[
+                            s.vitaminDIconButtonMark,
+                            { color: isVitaminDCompleted ? '#ffffff' : textPrimary },
+                          ]}
+                        >
+                          {isVitaminDCompleted ? '✓' : '+'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </GlassCard>
+              )}
+
+              <Text style={[s.sectionTitle, { color: textSecondary }]}>{t('section.metrics')}</Text>
+              {KPISection()}
 
               <View style={s.recipeButtonSection}>
                 <TouchableOpacity
@@ -1207,21 +3185,136 @@ export default function DailyScreen() {
                   activeOpacity={0.88}
                   onPress={() => router.push('/recipe-generator')}
                 >
-                  <IconSymbol name="fork.knife.circle.fill" size={22} color={PRIMARY} />
-                  <Text style={s.recipeText}>BLW-Rezepte entdecken</Text>
+                  <IconSymbol name="fork.knife.circle.fill" size={22} color={textPrimary} />
+                  <Text style={[s.recipeText, { color: textPrimary }]}>{t('section.recipes')}</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={s.timelineSection}>
-                <Text style={s.sectionTitle}>Timeline</Text>
+                <Text style={[s.sectionTitle, { color: textSecondary }]}>{t('section.timeline')}</Text>
 
                 <View style={s.entriesSection}>
-                  {entries.map((item) => (
+                  {showVitaminDTimelinePoint && (
+                    <View style={s.vitaminDTimelineItem}>
+                      <View style={s.vitaminDTimelineRail}>
+                        <View
+                          style={[
+                            s.vitaminDTimelineDot,
+                            {
+                              backgroundColor: isVitaminDCompleted
+                                ? vitaminDCompleteColor
+                                : isDark
+                                ? 'rgba(255,255,255,0.26)'
+                                : 'rgba(125,90,80,0.28)',
+                            },
+                          ]}
+                        />
+                        {entries.length > 0 && (
+                          <View
+                            style={[
+                              s.vitaminDTimelineStem,
+                              {
+                                backgroundColor: isDark
+                                  ? 'rgba(255,255,255,0.14)'
+                                  : 'rgba(125,90,80,0.14)',
+                              },
+                            ]}
+                          />
+                        )}
+                      </View>
+
+                      <GlassCard
+                        style={s.vitaminDTimelineChip}
+                        intensity={18}
+                        overlayColor={
+                          isVitaminDCompleted
+                            ? vitaminDCompleteSoft
+                            : isDark
+                            ? 'rgba(255,255,255,0.06)'
+                            : 'rgba(255,255,255,0.22)'
+                        }
+                        borderColor={
+                          isVitaminDCompleted
+                            ? vitaminDCompleteBorder
+                            : isDark
+                            ? 'rgba(255,255,255,0.14)'
+                            : 'rgba(255,255,255,0.5)'
+                        }
+                      >
+                        <View style={s.vitaminDTimelineChipInner}>
+                          <Text
+                            style={[
+                              s.vitaminDTimelineText,
+                              {
+                                color: isVitaminDCompleted
+                                  ? vitaminDCompleteColor
+                                  : textPrimary,
+                              },
+                            ]}
+                          >
+                            {isSelectedDateToday
+                              ? isVitaminDCompleted
+                                ? t('vitamin.given')
+                                : t('vitamin.notGiven')
+                              : isVitaminDCompleted
+                              ? t('vitamin.documented')
+                              : t('vitamin.pending')}
+                          </Text>
+
+                          <View style={s.vitaminDTimelineActions}>
+                            <TouchableOpacity
+                              style={[
+                                s.vitaminDTimelineIconButton,
+                                isVitaminDCompleted
+                                  ? {
+                                      borderColor: vitaminDCompleteBorder,
+                                      backgroundColor: vitaminDCompleteSoft,
+                                    }
+                                  : null,
+                                (vitaminDBusy || isReadOnlyPreviewMode) && s.actionDisabled,
+                              ]}
+                              activeOpacity={0.85}
+                              onPress={handleToggleVitaminDCompletion}
+                              disabled={vitaminDBusy}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('vitamin.resetAccessibility')}
+                            >
+                              <Text
+                                style={[
+                                  s.vitaminDIconButtonMark,
+                                  {
+                                    color: isVitaminDCompleted
+                                      ? vitaminDCompleteColor
+                                      : textPrimary,
+                                  },
+                                ]}
+                              >
+                                {isVitaminDCompleted ? '✓' : '+'}
+                              </Text>
+                            </TouchableOpacity>
+
+                          </View>
+                        </View>
+                      </GlassCard>
+                    </View>
+                  )}
+
+                  {entries.map((item, index) => (
                     <ActivityCard
-                      key={item.id ?? Math.random().toString()}
+                      key={item.id ?? `${item.entry_type}-${item.start_time ?? item.entry_date ?? index}`}
                       entry={item}
+                      auxiliaryBadgeLabel={item.id ? bottleGapLabelByEntryId.get(item.id) ?? null : null}
                       onDelete={handleDeleteEntry}
                       onEdit={(entry) => {
+                        if (!ensureWritableInCurrentMode()) return;
+                        if (entry.entry_type === 'custom') {
+                          const definition = resolveCustomActivityForEntry(entry);
+                          if (!definition) return;
+                          setSelectedCustomActivity(definition);
+                          setEditingCustomEntry(entry);
+                          setShowCustomEntryModal(true);
+                          return;
+                        }
                         setEditingEntry(entry);
                         if (entry.entry_type === 'feeding') setSelectedActivityType('feeding');
                         else if (entry.entry_type === 'diaper') setSelectedActivityType('diaper');
@@ -1231,7 +3324,9 @@ export default function DailyScreen() {
                       marginHorizontal={8}
                     />
                   ))}
-                  {entries.length === 0 && <EmptyState type="day" message="Noch keine Aktivitäten heute 🤍" />}
+                  {entries.length === 0 && !showVitaminDTimelinePoint && (
+                    <EmptyState type="day" message={t('section.createAccessibility')} />
+                  )}
                 </View>
               </View>
             </View>
@@ -1240,28 +3335,215 @@ export default function DailyScreen() {
 
         {/* FAB entfernt wie gewünscht */}
 
+        <Modal
+          visible={showFeedingOverviewModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowFeedingOverviewModal(false)}
+        >
+          <View
+            style={[
+              s.feedingOverviewOverlay,
+              { backgroundColor: isDark ? 'rgba(7, 10, 15, 0.68)' : 'rgba(32, 24, 20, 0.30)' },
+            ]}
+          >
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setShowFeedingOverviewModal(false)}
+            />
+
+            <BlurView
+              style={[
+                s.feedingOverviewSheet,
+                {
+                  backgroundColor: isDark ? 'rgba(18, 18, 24, 0.78)' : 'rgba(255, 250, 244, 0.82)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.60)',
+                },
+              ]}
+              tint={isDark ? 'dark' : 'extraLight'}
+              intensity={80}
+            >
+              <View style={s.feedingOverviewHandle} />
+
+              <View style={s.feedingOverviewHeader}>
+                <View style={s.feedingOverviewHeaderCopy}>
+                  <Text style={[s.feedingOverviewTitle, { color: textPrimary }]}>{t('meals.title')}</Text>
+                  <Text style={[s.feedingOverviewSubtitle, { color: textSecondary }]}>
+                    {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, {
+                      weekday: 'long',
+                      day: '2-digit',
+                      month: 'long',
+                    })}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    s.feedingOverviewCloseButton,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.55)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.72)',
+                    },
+                  ]}
+                  activeOpacity={0.88}
+                  onPress={() => setShowFeedingOverviewModal(false)}
+                >
+                  <IconSymbol name="xmark" size={16} color={textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={s.feedingOverviewScrollContent}
+              >
+                <LinearGradient
+                  colors={
+                    isDark
+                      ? ['rgba(79, 69, 160, 0.92)', 'rgba(35, 105, 143, 0.88)']
+                      : ['rgba(112, 90, 201, 0.96)', 'rgba(70, 151, 210, 0.92)']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={s.feedingOverviewHero}
+                >
+                  <View style={s.feedingOverviewHeroTop}>
+                    <Text style={s.feedingOverviewHeroEyebrow}>{t('meals.eyebrow')}</Text>
+                    <Text style={s.feedingOverviewHeroValue}>{feedingOverviewEntryCount}</Text>
+                    <Text style={s.feedingOverviewHeroLabel}>
+                      {feedingOverviewEntryCount === 1 ? t('meals.one') : t('meals.other')}
+                    </Text>
+                    <Text style={s.feedingOverviewHeroSubLabel}>
+                      {feedingOverviewLatestTime
+                        ? t('meals.latest', { time: formatClockTime(feedingOverviewLatestTime) ?? '' })
+                        : t('meals.empty')}
+                    </Text>
+                  </View>
+
+                  <View style={s.feedingOverviewHeroChipRow}>
+                    {feedingOverviewHighlights.length > 0 ? (
+                      feedingOverviewHighlights.map((highlight) => (
+                        <View key={highlight} style={s.feedingOverviewHeroChip}>
+                          <Text style={s.feedingOverviewHeroChipText}>{highlight}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <View style={s.feedingOverviewHeroHintCard}>
+                        <Text style={s.feedingOverviewHeroHintText}>
+                          {t('meals.description')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </LinearGradient>
+
+                <View style={s.feedingOverviewGrid}>
+                  {feedingOverviewCards.map((card, index) => (
+                    <GlassCard
+                      key={card.key}
+                      style={[
+                        s.feedingOverviewCard,
+                        index === feedingOverviewCards.length - 1 && feedingOverviewCards.length % 2 === 1
+                          ? s.feedingOverviewCardFull
+                          : null,
+                      ]}
+                      intensity={18}
+                      overlayColor={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.34)'}
+                      borderColor={isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)'}
+                    >
+                      <View
+                        style={[
+                          s.feedingOverviewCardAccent,
+                          { backgroundColor: card.accentSoft, borderColor: `${card.accent}55` },
+                        ]}
+                      >
+                        <Text style={s.feedingOverviewCardAccentEmoji}>{card.icon}</Text>
+                      </View>
+
+                      <Text style={[s.feedingOverviewCardTitle, { color: textPrimary }]}>{card.label}</Text>
+                      <Text style={[s.feedingOverviewCardCount, { color: textPrimary }]}>{card.count}×</Text>
+                      <Text style={[s.feedingOverviewCardMetric, { color: textSecondary }]}>{card.metric}</Text>
+                      <Text style={[s.feedingOverviewCardSecondary, { color: textSecondary }]}>{card.secondary}</Text>
+                    </GlassCard>
+                  ))}
+                </View>
+              </ScrollView>
+            </BlurView>
+          </View>
+        </Modal>
+
         <ActivityInputModal
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}
+          hiddenSubTypes={hiddenQuickActions}
+          forceDarkMode={isDark}
           date={selectedDate}
           onClose={() => { setShowInputModal(false); setEditingEntry(null); }}
           onSave={handleSaveEntry}
+          onDelete={handleDeleteEntry}
           initialData={editingEntry && editingEntry.id ? {
             id: editingEntry.id!,
             feeding_type: (editingEntry as any).feeding_type as any,
             feeding_volume_ml: (editingEntry as any).feeding_volume_ml ?? null,
             feeding_side: (editingEntry as any).feeding_side as any,
             diaper_type: (editingEntry as any).diaper_type as any,
+            diaper_fever_measured: (editingEntry as any).diaper_fever_measured ?? null,
+            diaper_temperature_c: (editingEntry as any).diaper_temperature_c ?? null,
+            diaper_suppository_given: (editingEntry as any).diaper_suppository_given ?? null,
+            diaper_suppository_dose_mg: (editingEntry as any).diaper_suppository_dose_mg ?? null,
             notes: editingEntry.notes ?? null,
             start_time: editingEntry.start_time!,
             end_time: editingEntry.end_time ?? null,
           } : (selectedSubType ? {
             // Preselect fields from quick actions
-            feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : undefined,
+            feeding_type: selectedSubType === 'feeding_breast' ? 'BREAST' : selectedSubType === 'feeding_bottle' ? 'BOTTLE' : selectedSubType === 'feeding_solids' ? 'SOLIDS' : selectedSubType === 'feeding_pump' ? 'PUMP' : selectedSubType === 'feeding_water' ? 'WATER' : undefined,
+            feeding_volume_ml: selectedSubType === 'feeding_bottle' || selectedSubType === 'feeding_pump' ? lastBottleVolumeMl : selectedSubType === 'feeding_water' ? 120 : null,
             diaper_type: selectedSubType === 'diaper_wet' ? 'WET' : selectedSubType === 'diaper_dirty' ? 'DIRTY' : selectedSubType === 'diaper_both' ? 'BOTH' : undefined,
             start_time: new Date().toISOString(),
           } : undefined)}
+        />
+
+        <CustomActivityDefinitionModal
+          visible={showCustomDefinitionModal}
+          initialValue={editingCustomActivity}
+          onClose={() => {
+            setShowCustomDefinitionModal(false);
+            setEditingCustomActivity(null);
+          }}
+          onSave={handleSaveCustomActivityDefinition}
+          onArchive={editingCustomActivity ? handleArchiveCustomActivity : undefined}
+        />
+
+        <CustomActivityEntryModal
+          visible={showCustomEntryModal}
+          definition={selectedCustomActivity}
+          date={selectedDate}
+          initialData={editingCustomEntry}
+          onClose={() => {
+            setShowCustomEntryModal(false);
+            setSelectedCustomActivity(null);
+            setEditingCustomEntry(null);
+          }}
+          onSave={handleSaveCustomEntry}
+          onDelete={editingCustomEntry?.id ? () => {
+            const entryId = editingCustomEntry.id!;
+            void handleDeleteEntry(entryId, () => {
+              setShowCustomEntryModal(false);
+              setSelectedCustomActivity(null);
+              setEditingCustomEntry(null);
+            });
+          } : undefined}
+        />
+
+        <NightWakePrompt
+          visible={nightWakePromptVisible}
+          candidate={nightWakeCandidate}
+          feedingStart={nightWakeFeedingStart}
+          busy={nightWakeBusy}
+          onPickWake={pickNightWake}
+          onTruncate={truncateNight}
+          onDismiss={dismissNightWakePrompt}
         />
       </SafeAreaView>
       {splashVisible && (
@@ -1271,18 +3553,35 @@ export default function DailyScreen() {
         >
           <LinearGradient
             colors={[splashBg, splashBg]}
-            style={StyleSheet.absoluteFillObject as any}
+            style={StyleSheet.absoluteFill as any}
           />
           <View style={s.splashCenterCard}>
             <Animated.View style={[s.splashEmojiRing, { transform: [{ scale: splashEmojiAnim }] }]}>
-              <Text style={s.splashEmoji}>{splashEmoji}</Text>
+              {splashEmojiParts.length <= 1 ? (
+                <Text style={s.splashEmoji} allowFontScaling={false}>{splashEmoji}</Text>
+              ) : (
+                <View style={s.splashEmojiRow}>
+                  {splashEmojiParts.map((emoji, index) => (
+                    <Text key={`${emoji}-${index}`} style={s.splashEmojiMulti} allowFontScaling={false}>
+                      {emoji}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </Animated.View>
             {splashTitle ? <Text style={s.splashTitle}>{splashTitle}</Text> : null}
             {splashSubtitle ? <Text style={s.splashSubtitle}>{splashSubtitle}</Text> : null}
             {splashStatus ? <Text style={s.splashStatus}>{splashStatus}</Text> : null}
             {splashHint ? (
               <View style={s.splashHintCard}>
-                <Text style={s.splashHintText}>♡  {splashHint}</Text>
+                <Text style={s.splashHintText}>
+                  <Text style={s.splashHintEmoji} allowFontScaling={false}>♡</Text>
+                  {'  '}
+                  {splashHint}
+                  {splashHintEmoji ? (
+                    <Text style={s.splashHintEmoji} allowFontScaling={false}> {splashHintEmoji}</Text>
+                  ) : null}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -1298,6 +3597,31 @@ const s = StyleSheet.create({
   scrollContainer: { flex: 1 },
   scrollContent: { paddingBottom: 140 },
   content: { paddingHorizontal: LAYOUT_PAD },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 210, 160, 0.7)',
+    backgroundColor: 'rgba(70, 45, 25, 0.4)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  readOnlyPreviewTitle: {
+    color: '#FFE2B3',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  readOnlyPreviewText: {
+    color: 'rgba(255, 240, 220, 0.95)',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 
   sectionTitle: {
     marginTop: SECTION_GAP_TOP,
@@ -1307,6 +3631,140 @@ const s = StyleSheet.create({
     color: '#7D5A50',
     textAlign: 'center',
     width: '100%',
+  },
+  vitaminDStrip: {
+    marginTop: SECTION_GAP_TOP,
+    borderRadius: 18,
+    overflow: 'hidden',
+  },
+  vitaminDStripInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 15,
+  },
+  vitaminDLeadIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vitaminDStripCopy: {
+    flex: 1,
+    paddingLeft: 2,
+    paddingRight: 8,
+  },
+  vitaminDSignalsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 4,
+  },
+  vitaminDSignal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vitaminDTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: PRIMARY,
+  },
+  vitaminDSignalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  vitaminDSignalText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  vitaminDControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 4,
+  },
+  vitaminDIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vitaminDIconButtonActive: {
+    backgroundColor: PRIMARY,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  vitaminDIconButtonSoftActive: {
+    backgroundColor: 'rgba(255,255,255,0.34)',
+    borderColor: 'rgba(255,255,255,0.78)',
+  },
+  vitaminDIconButtonMark: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: -1,
+  },
+  vitaminDTimelineItem: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'stretch',
+    paddingHorizontal: 8,
+  },
+  vitaminDTimelineRail: {
+    width: 12,
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  vitaminDTimelineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  vitaminDTimelineStem: {
+    width: 1,
+    flex: 1,
+    marginTop: 5,
+  },
+  vitaminDTimelineChip: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  vitaminDTimelineChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  vitaminDTimelineText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  vitaminDTimelineActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vitaminDTimelineIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.48)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   recipeButtonSection: {
@@ -1342,7 +3800,7 @@ const s = StyleSheet.create({
     elevation: 8,
   },
   glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(255,255,255,0.30)',
   },
 
@@ -1405,17 +3863,122 @@ const s = StyleSheet.create({
 
   // Quick actions as round glass buttons
   quickActionSection: { marginTop: SECTION_GAP_TOP },
-  quickScrollContainer: { paddingHorizontal: 0 },
+  // Nur die Kreis-Reihe laeuft bis an den Bildschirmrand, damit angeschnittene
+  // Kreise nicht mitten im Inhalt haengen
+  quickListBleed: { marginHorizontal: -LAYOUT_PAD },
+  quickScrollContainer: {
+    paddingHorizontal: LAYOUT_PAD,
+    paddingTop: 6,
+    paddingBottom: 4,
+    alignItems: 'center',
+  },
+  quickDragList: {
+    marginHorizontal: -LAYOUT_PAD,
+    overflow: 'visible',
+  },
+  quickActionEditBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 10,
+  },
+  quickActionDoneButton: {
+    minWidth: 84,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  quickActionDoneText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  circleButtonWrap: {
+    width: QUICK_BUTTON_SIZE,
+    height: QUICK_BUTTON_SIZE,
+    overflow: 'visible',
+  },
+  quickActionFooterWrap: {
+    marginLeft: QUICK_BUTTON_GAP,
+  },
   circleButton: {
-    width: 96,
-    height: 96,
-    borderRadius: 48, // fully round
+    width: QUICK_BUTTON_SIZE,
+    height: QUICK_BUTTON_SIZE,
+    borderRadius: QUICK_BUTTON_SIZE / 2, // fully round
     borderWidth: 1,
     overflow: 'hidden',
   },
-  circleInner: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 8 },
-  circleEmoji: { fontSize: 26 },
-  circleLabel: { marginTop: 6, fontSize: 13, fontWeight: '700', color: '#7D5A50' },
+  circleButtonRestore: {
+    justifyContent: 'center',
+  },
+  circleInner: {
+    flex: 1,
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  circleEmoji: { fontSize: 26, lineHeight: 30, textAlign: 'center' },
+  circleLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#7D5A50',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  quickActionHideBadge: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E25555',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  quickActionHideBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: -1,
+  },
+  quickActionPlusBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  quickActionPlusBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  quickActionPlusLabel: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  quickActionPlusMeta: {
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
 
   // KPI glass cards
   kpiRow: {
@@ -1423,20 +3986,207 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 8,
   },
-  kpiCard: {
+  kpiCardShell: {
     width: '48%',
+  },
+  kpiCard: {
+    width: '100%',
+    minHeight: 154,
     borderRadius: 20,
     paddingVertical: 18,
     paddingHorizontal: 14,
     borderWidth: 1,
     overflow: 'hidden',
   },
-  kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  kpiCardInteractive: {},
+  kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  kpiHeaderRowSpaced: { justifyContent: 'space-between' },
+  kpiHeaderCopy: { flexDirection: 'row', alignItems: 'center' },
   kpiEmoji: { fontSize: 14, marginRight: 6 },
   kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
   kpiValue: { fontSize: 34, fontWeight: '800', color: PRIMARY, fontVariant: ['tabular-nums'] },
-kpiValueCentered: { textAlign: 'center', width: '100%' },
-  kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50' },
+  kpiValueCentered: { textAlign: 'center', width: '100%' },
+  kpiMlUnit: { fontSize: 18, fontWeight: '700' },
+  kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50', textAlign: 'center' },
+  kpiSubPrimary: { textAlign: 'center', fontWeight: '700', width: '100%', maxWidth: '100%' },
+  kpiSubSecondary: { marginTop: 2, fontSize: 11, textAlign: 'center', width: '100%', maxWidth: '100%' },
+
+  feedingOverviewOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  feedingOverviewSheet: {
+    width: '100%',
+    maxHeight: '82%',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 22,
+  },
+  feedingOverviewHandle: {
+    alignSelf: 'center',
+    width: 52,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    marginBottom: 16,
+  },
+  feedingOverviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  feedingOverviewHeaderCopy: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  feedingOverviewTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  feedingOverviewSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  feedingOverviewCloseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedingOverviewScrollContent: {
+    paddingBottom: 8,
+  },
+  feedingOverviewHero: {
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 16,
+  },
+  feedingOverviewHeroTop: {
+    alignItems: 'center',
+  },
+  feedingOverviewHeroEyebrow: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+  },
+  feedingOverviewHeroValue: {
+    marginTop: 8,
+    color: '#FFFFFF',
+    fontSize: 54,
+    lineHeight: 58,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  feedingOverviewHeroLabel: {
+    marginTop: 2,
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  feedingOverviewHeroSubLabel: {
+    marginTop: 6,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  feedingOverviewHeroChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+  },
+  feedingOverviewHeroChip: {
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  feedingOverviewHeroChipText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  feedingOverviewHeroHintCard: {
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.16)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  feedingOverviewHeroHintText: {
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  feedingOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  feedingOverviewCard: {
+    width: '48%',
+    minHeight: 166,
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  feedingOverviewCardFull: {
+    width: '100%',
+    minHeight: 150,
+  },
+  feedingOverviewCardAccent: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  feedingOverviewCardAccentEmoji: {
+    fontSize: 20,
+  },
+  feedingOverviewCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  feedingOverviewCardCount: {
+    marginTop: 8,
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  feedingOverviewCardMetric: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  feedingOverviewCardSecondary: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 17,
+  },
 
   // Liquid Glass Base Styles (exakt wie Sleep-Tracker)
   liquidGlassWrapper: {
@@ -1458,7 +4208,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     elevation: 4,
   },
   liquidGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
 
   // Timeline Section (exakt wie Sleep-Tracker)
@@ -1512,6 +4262,9 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     padding: 6,
+  },
+  disabledNavButton: {
+    opacity: 0.35,
   },
   weekNavButtonText: {
     fontSize: 24,
@@ -1644,6 +4397,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   chartBarBreast: { backgroundColor: '#8E4EC6' }, // Lila für Stillen
   chartBarBottle: { backgroundColor: '#4A90E2' }, // Blau für Fläschchen
   chartBarSolids: { backgroundColor: '#F5A623' }, // Orange für Beikost
+  chartBarPump: { backgroundColor: '#35B6B4' }, // Türkis für Abpumpen
   chartLabel: {
     fontSize: screenWidth < 360 ? 11 : 12, // responsiv für schmale Geräte
     color: '#5D4A40',           // Dunkler für Glass Hintergrund
@@ -1683,6 +4437,7 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   legendBreast: { backgroundColor: '#8E4EC6' }, // Lila für Stillen
   legendBottle: { backgroundColor: '#4A90E2' }, // Blau für Fläschchen
   legendSolids: { backgroundColor: '#F5A623' }, // Orange für Beikost
+  legendPump: { backgroundColor: '#35B6B4' }, // Türkis für Abpumpen
   daySection: {
     marginBottom: 20,
   },
@@ -1735,48 +4490,6 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     color: '#7D5A50',
     textAlign: 'center',
     fontWeight: '500',
-  },
-  // Trend Card (Design Guide konform - EXAKT wie Sleep-Tracker)
-  trendCard: {
-    padding: 0,
-    marginHorizontal: TIMELINE_INSET,
-    marginBottom: 8,
-  },
-  trendInner: {
-    width: WEEK_CONTENT_WIDTH,
-    alignSelf: 'center',
-    padding: 24,
-  },
-  trendTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#7D5A50',
-    marginBottom: SECTION_GAP_BOTTOM,
-    textAlign: 'center',
-  },
-  trendContent: {
-    flexDirection: 'column',
-    gap: 12,
-    paddingHorizontal: 8,
-  },
-  trendItem: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    paddingVertical: 4,
-  },
-  trendEmoji: {
-    fontSize: 24,
-    marginRight: 12,
-    width: 32,
-    textAlign: 'center',
-  },
-  trendText: {
-    fontSize: 14,
-    color: '#7D5A50',
-    fontWeight: '600',
-    flex: 1,
-    flexWrap: 'wrap',
   },
   // Month View Styles (EXAKT wie Sleep-Tracker)
   monthViewContainer: {
@@ -1873,8 +4586,19 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
   splashEmoji: {
     fontSize: 72,
     textAlign: 'center',
-    marginBottom: 10,
     color: '#fff',
+    includeFontPadding: false,
+  },
+  splashEmojiRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashEmojiMulti: {
+    fontSize: 56,
+    color: '#fff',
+    includeFontPadding: false,
+    marginHorizontal: 2,
   },
   splashText: {
     fontSize: 20,
@@ -1925,14 +4649,20 @@ kpiValueCentered: { textAlign: 'center', width: '100%' },
     textAlign: 'center',
     fontWeight: '700',
   },
+  splashHintEmoji: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   splashEmojiRing: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)'
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'visible',
   },
 });

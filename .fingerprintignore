@@ -1,0 +1,8 @@
+# Machine-specific native build artifacts must not affect OTA compatibility.
+ios/Pods/**/*
+ios/build/**/*
+ios/.xcode.env.local
+
+android/.gradle/**/*
+android/app/build/**/*
+android/build/**/*

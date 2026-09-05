@@ -5,7 +5,13 @@ export interface BabySizeData {
   weight: string;
   fruitComparison: string;
   description: string;
+  imageUrl?: string;
 }
+
+const SUPABASE_IMAGE_BASE =
+  `${process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://kwniiyayhzgjfqjsjcfu.supabase.co'}/storage/v1/object/public/baby-size`;
+
+const babySizeImage = (fileName: string) => `${SUPABASE_IMAGE_BASE}/${fileName}`;
 
 export const babySizeData: BabySizeData[] = [
   {
@@ -13,293 +19,335 @@ export const babySizeData: BabySizeData[] = [
     length: "0,1-0,2 mm",
     weight: "< 0,1 g",
     fruitComparison: "ein Mohnkorn",
-    description: "In der ersten Woche findet die Befruchtung statt. Die befruchtete Eizelle beginnt sich zu teilen und wandert durch den Eileiter in die Gebärmutter."
+    description: "In der ersten Woche findet die Befruchtung statt. Die befruchtete Eizelle beginnt sich zu teilen und wandert durch den Eileiter in die Gebärmutter.",
+    imageUrl: babySizeImage("week-01-mohnkorn.png"),
   },
   {
     week: 2,
     length: "0,2 mm",
     weight: "< 0,1 g",
     fruitComparison: "ein Mohnkorn",
-    description: "Die befruchtete Eizelle hat sich zu einer Blastozyste entwickelt und nistet sich in der Gebärmutterschleimhaut ein."
+    description: "Die befruchtete Eizelle hat sich zu einer Blastozyste entwickelt und nistet sich in der Gebärmutterschleimhaut ein.",
+    imageUrl: babySizeImage("week-02-mohnkorn.png"),
   },
   {
     week: 3,
     length: "0,4 mm",
     weight: "< 0,1 g",
-    fruitComparison: "ein Sesamkorn",
-    description: "Die Zellen beginnen sich zu differenzieren. Die Plazenta und die ersten Blutgefäße beginnen sich zu bilden."
+    fruitComparison: "ein Mohnkorn",
+    description: "Die Zellen beginnen sich zu differenzieren. Die Plazenta und die ersten Blutgefäße beginnen sich zu bilden.",
+    imageUrl: babySizeImage("week-03-mohnkorn.png"),
   },
   {
     week: 4,
     length: "2-3 mm",
     weight: "< 0,1 g",
-    fruitComparison: "ein Reiskorn",
-    description: "Das Herz beginnt zu schlagen und die Grundlage für das Gehirn, die Wirbelsäule und das Nervensystem wird gelegt."
+    fruitComparison: "ein Mohnkorn",
+    description: "Das Herz beginnt zu schlagen und die Grundlage für das Gehirn, die Wirbelsäule und das Nervensystem wird gelegt.",
+    imageUrl: babySizeImage("week-04-mohnkorn.png"),
   },
   {
     week: 5,
     length: "4-5 mm",
     weight: "< 0,1 g",
-    fruitComparison: "ein Reiskorn",
-    description: "Die Augen, Ohren und Nase beginnen sich zu formen. Die Arme und Beine entwickeln sich als kleine Knospen."
+    fruitComparison: "ein Apfelkern",
+    description: "Die Augen, Ohren und Nase beginnen sich zu formen. Die Arme und Beine entwickeln sich als kleine Knospen.",
+    imageUrl: babySizeImage("week-05-apfelkern.png"),
   },
   {
     week: 6,
     length: "6-7 mm",
     weight: "0,1 g",
-    fruitComparison: "eine Linse",
-    description: "Das Herz schlägt nun regelmäßig. Die Finger und Zehen beginnen sich zu formen."
+    fruitComparison: "eine Erbse",
+    description: "Das Herz schlägt nun regelmäßig. Die Finger und Zehen beginnen sich zu formen.",
+    imageUrl: babySizeImage("week-06-erbse.png"),
   },
   {
     week: 7,
     length: "1 cm",
     weight: "1 g",
-    fruitComparison: "eine Himbeere",
-    description: "Die Arme und Beine werden länger und die Finger und Zehen sind deutlicher zu erkennen. Die Gesichtszüge entwickeln sich weiter."
+    fruitComparison: "eine Heidelbeere",
+    description: "Die Arme und Beine werden länger und die Finger und Zehen sind deutlicher zu erkennen. Die Gesichtszüge entwickeln sich weiter.",
+    imageUrl: babySizeImage("week-07-heidelbeere.png"),
   },
   {
     week: 8,
     length: "1,6 cm",
     weight: "1 g",
-    fruitComparison: "eine Weintraube",
-    description: "Alle wichtigen Organe sind angelegt. Die Augen sind noch geschlossen, aber die Augenlider entwickeln sich."
+    fruitComparison: "eine Himbeere",
+    description: "Alle wichtigen Organe sind angelegt. Die Augen sind noch geschlossen, aber die Augenlider entwickeln sich.",
+    imageUrl: babySizeImage("week-08-himbeere.png"),
   },
   {
     week: 9,
     length: "2,3 cm",
     weight: "2 g",
-    fruitComparison: "eine Weintraube",
-    description: "Das Baby beginnt, sich zu bewegen, obwohl du es noch nicht spüren kannst. Die Genitalien beginnen sich zu entwickeln."
+    fruitComparison: "eine Erdbeere",
+    description: "Das Baby beginnt, sich zu bewegen, obwohl du es noch nicht spüren kannst. Die Genitalien beginnen sich zu entwickeln.",
+    imageUrl: babySizeImage("week-09-erdbeere.png"),
   },
   {
     week: 10,
     length: "3,1 cm",
     weight: "4 g",
-    fruitComparison: "eine Erdbeere",
-    description: "Die Finger und Zehen sind nicht mehr durch Schwimmhäute verbunden. Die Nägel beginnen zu wachsen."
+    fruitComparison: "eine Aprikose",
+    description: "Die Finger und Zehen sind nicht mehr durch Schwimmhäute verbunden. Die Nägel beginnen zu wachsen.",
+    imageUrl: babySizeImage("week-10-aprikose.png"),
   },
   {
     week: 11,
     length: "4,1 cm",
     weight: "7 g",
-    fruitComparison: "eine Feige",
-    description: "Das Baby kann nun seinen Kopf beugen und die Finger öffnen und schließen. Die Geschlechtsorgane entwickeln sich weiter."
+    fruitComparison: "eine Limette",
+    description: "Das Baby kann nun seinen Kopf beugen und die Finger öffnen und schließen. Die Geschlechtsorgane entwickeln sich weiter.",
+    imageUrl: babySizeImage("week-11-limette.png"),
   },
   {
     week: 12,
     length: "5,4 cm",
     weight: "14 g",
-    fruitComparison: "eine Limette",
-    description: "Die Nieren produzieren Urin, der ins Fruchtwasser abgegeben wird. Die Reflexe beginnen sich zu entwickeln."
+    fruitComparison: "eine Zwetschge",
+    description: "Die Nieren produzieren Urin, der ins Fruchtwasser abgegeben wird. Die Reflexe beginnen sich zu entwickeln.",
+    imageUrl: babySizeImage("week-12-zwetschge.png"),
   },
   {
     week: 13,
     length: "7,4 cm",
     weight: "23 g",
-    fruitComparison: "eine Zitrone",
-    description: "Das Baby kann nun seine Finger bewegen und einen Faustschluss machen. Die Stimmbänder bilden sich."
+    fruitComparison: "ein Pfirsich",
+    description: "Das Baby kann nun seine Finger bewegen und einen Faustschluss machen. Die Stimmbänder bilden sich.",
+    imageUrl: babySizeImage("week-13-pfirsich.png"),
   },
   {
     week: 14,
     length: "8,7 cm",
     weight: "43 g",
-    fruitComparison: "eine Pfirsich",
-    description: "Das Baby kann nun Gesichtsausdrücke machen und den Daumen lutschen. Die Lanugo-Behaarung beginnt zu wachsen."
+    fruitComparison: "eine Zitrone",
+    description: "Das Baby kann nun Gesichtsausdrücke machen und den Daumen lutschen. Die Lanugo-Behaarung beginnt zu wachsen.",
+    imageUrl: babySizeImage("week-14-zitrone.png"),
   },
   {
     week: 15,
     length: "10,1 cm",
     weight: "70 g",
-    fruitComparison: "eine Nektarine",
-    description: "Die Knochen werden härter und die Muskeln stärker. Das Baby kann nun Fruchtwasser schlucken."
+    fruitComparison: "eine Orange",
+    description: "Die Knochen werden härter und die Muskeln stärker. Das Baby kann nun Fruchtwasser schlucken.",
+    imageUrl: babySizeImage("week-15-orange.png"),
   },
   {
     week: 16,
     length: "11,6 cm",
     weight: "100 g",
     fruitComparison: "eine Avocado",
-    description: "Die Augen können sich nun bewegen und reagieren auf Licht. Die Ohren haben ihre endgültige Position erreicht."
+    description: "Die Augen können sich nun bewegen und reagieren auf Licht. Die Ohren haben ihre endgültige Position erreicht.",
+    imageUrl: babySizeImage("week-16-avocado.png"),
   },
   {
     week: 17,
     length: "13 cm",
     weight: "140 g",
-    fruitComparison: "eine Birne",
-    description: "Das Immunsystem beginnt sich zu entwickeln. Die Plazenta ist nun vollständig ausgebildet."
+    fruitComparison: "eine Avocado",
+    description: "Das Immunsystem beginnt sich zu entwickeln. Die Plazenta ist nun vollständig ausgebildet.",
+    imageUrl: babySizeImage("week-17-avocado.png"),
   },
   {
     week: 18,
     length: "14,2 cm",
     weight: "190 g",
     fruitComparison: "eine Süßkartoffel",
-    description: "Das Baby kann nun gähnen und sich strecken. Die Fingerabdrücke sind vollständig ausgebildet."
+    description: "Das Baby kann nun gähnen und sich strecken. Die Fingerabdrücke sind vollständig ausgebildet.",
+    imageUrl: babySizeImage("week-18-suesskartoffel.png"),
   },
   {
     week: 19,
     length: "15,3 cm",
     weight: "240 g",
     fruitComparison: "eine Mango",
-    description: "Das Vernix caseosa (eine weiße, käsige Substanz) beginnt, die Haut des Babys zu bedecken. Die Bewegungen werden stärker."
+    description: "Das Vernix caseosa (eine weiße, käsige Substanz) beginnt, die Haut des Babys zu bedecken. Die Bewegungen werden stärker.",
+    imageUrl: babySizeImage("week-19-mango.png"),
   },
   {
     week: 20,
     length: "16,4 cm",
     weight: "300 g",
-    fruitComparison: "eine Banane",
-    description: "Das Baby entwickelt einen regelmäßigen Schlaf-Wach-Rhythmus. Die Haare auf dem Kopf beginnen zu wachsen."
+    fruitComparison: "eine Papaya",
+    description: "Das Baby entwickelt einen regelmäßigen Schlaf-Wach-Rhythmus. Die Haare auf dem Kopf beginnen zu wachsen.",
+    imageUrl: babySizeImage("week-20-papaya.png"),
   },
   {
     week: 21,
     length: "26,7 cm",
     weight: "360 g",
-    fruitComparison: "eine Karotte",
-    description: "Die Augenbrauen und Wimpern sind nun sichtbar. Das Baby kann nun auf Geräusche von außen reagieren."
+    fruitComparison: "eine Papaya",
+    description: "Die Augenbrauen und Wimpern sind nun sichtbar. Das Baby kann nun auf Geräusche von außen reagieren.",
+    imageUrl: babySizeImage("week-21-papaya.png"),
   },
   {
     week: 22,
     length: "27,8 cm",
     weight: "430 g",
     fruitComparison: "eine Papaya",
-    description: "Die Augen sind vollständig ausgebildet, aber die Iris hat noch keine Farbe. Die Fingernägel haben die Fingerspitzen erreicht."
+    description: "Die Augen sind vollständig ausgebildet, aber die Iris hat noch keine Farbe. Die Fingernägel haben die Fingerspitzen erreicht.",
+    imageUrl: babySizeImage("week-22-papaya.png"),
   },
   {
     week: 23,
     length: "28,9 cm",
     weight: "501 g",
-    fruitComparison: "eine Mango",
-    description: "Das Baby kann nun die Stimme der Mutter erkennen. Die Lungen beginnen, Surfactant zu produzieren."
+    fruitComparison: "eine Papaya",
+    description: "Das Baby kann nun die Stimme der Mutter erkennen. Die Lungen beginnen, Surfactant zu produzieren.",
+    imageUrl: babySizeImage("week-23-papaya.png"),
   },
   {
     week: 24,
     length: "30 cm",
     weight: "600 g",
-    fruitComparison: "ein Maiskolben",
-    description: "Die Gesichtszüge sind nun deutlich zu erkennen. Das Baby kann nun blinzeln und die Augen öffnen."
+    fruitComparison: "eine Papaya",
+    description: "Die Gesichtszüge sind nun deutlich zu erkennen. Das Baby kann nun blinzeln und die Augen öffnen.",
+    imageUrl: babySizeImage("week-24-papaya.png"),
   },
   {
     week: 25,
     length: "34,6 cm",
     weight: "660 g",
-    fruitComparison: "ein Blumenkohl",
-    description: "Das Baby reagiert nun auf Berührungen und kann Schmerz empfinden. Die Lungen entwickeln sich weiter."
+    fruitComparison: "eine Aubergine",
+    description: "Das Baby reagiert nun auf Berührungen und kann Schmerz empfinden. Die Lungen entwickeln sich weiter.",
+    imageUrl: babySizeImage("week-25-aubergine.png"),
   },
   {
     week: 26,
     length: "35,6 cm",
     weight: "760 g",
-    fruitComparison: "eine Kokosnuss",
-    description: "Die Augen öffnen sich. Das Baby kann nun Licht und Dunkelheit unterscheiden."
+    fruitComparison: "eine Aubergine",
+    description: "Die Augen öffnen sich. Das Baby kann nun Licht und Dunkelheit unterscheiden.",
+    imageUrl: babySizeImage("week-26-aubergine.png"),
   },
   {
     week: 27,
     length: "36,6 cm",
     weight: "875 g",
-    fruitComparison: "ein Kopfsalat",
-    description: "Das Gehirn entwickelt sich rapide. Das Baby kann nun Schluckauf haben, den du als rhythmische Bewegungen spüren kannst."
+    fruitComparison: "eine Aubergine",
+    description: "Das Gehirn entwickelt sich rapide. Das Baby kann nun Schluckauf haben, den du als rhythmische Bewegungen spüren kannst.",
+    imageUrl: babySizeImage("week-27-aubergine.png"),
   },
   {
     week: 28,
     length: "37,6 cm",
     weight: "1000 g",
     fruitComparison: "eine Aubergine",
-    description: "Das Baby kann nun die Augen öffnen und schließen. Es kann auch träumen, was durch REM-Schlaf erkennbar ist."
+    description: "Das Baby kann nun die Augen öffnen und schließen. Es kann auch träumen, was durch REM-Schlaf erkennbar ist.",
+    imageUrl: babySizeImage("week-28-aubergine.png"),
   },
   {
     week: 29,
     length: "38,6 cm",
     weight: "1150 g",
-    fruitComparison: "ein Kürbis",
-    description: "Das Baby legt nun Fett an, was ihm hilft, die Körpertemperatur zu regulieren. Die Knochen sind vollständig ausgebildet, aber noch weich."
+    fruitComparison: "ein kleiner Kürbis",
+    description: "Das Baby legt nun Fett an, was ihm hilft, die Körpertemperatur zu regulieren. Die Knochen sind vollständig ausgebildet, aber noch weich.",
+    imageUrl: babySizeImage("week-29-kleiner-kuerbis.png"),
   },
   {
     week: 30,
     length: "39,9 cm",
     weight: "1300 g",
-    fruitComparison: "ein Kohlkopf",
-    description: "Das Baby kann nun Licht wahrnehmen und zur Lichtquelle blicken. Die Fingernägel haben die Fingerspitzen erreicht."
+    fruitComparison: "ein kleiner Kürbis",
+    description: "Das Baby kann nun Licht wahrnehmen und zur Lichtquelle blicken. Die Fingernägel haben die Fingerspitzen erreicht.",
+    imageUrl: babySizeImage("week-30-kleiner-kuerbis.png"),
   },
   {
     week: 31,
     length: "41,1 cm",
     weight: "1500 g",
-    fruitComparison: "ein Kokosnuss",
-    description: "Das Immunsystem entwickelt sich weiter. Das Baby kann nun Geschmäcker unterscheiden."
+    fruitComparison: "ein kleiner Kürbis",
+    description: "Das Immunsystem entwickelt sich weiter. Das Baby kann nun Geschmäcker unterscheiden.",
+    imageUrl: babySizeImage("week-31-kleiner-kuerbis.png"),
   },
   {
     week: 32,
     length: "42,4 cm",
     weight: "1700 g",
-    fruitComparison: "ein Kürbis",
-    description: "Die Pupillen können sich nun verengen und erweitern. Das Baby nimmt eine Kopf-nach-unten-Position ein."
+    fruitComparison: "ein kleiner Kürbis",
+    description: "Die Pupillen können sich nun verengen und erweitern. Das Baby nimmt eine Kopf-nach-unten-Position ein.",
+    imageUrl: babySizeImage("week-32-kleiner-kuerbis.png"),
   },
   {
     week: 33,
     length: "43,7 cm",
     weight: "1900 g",
-    fruitComparison: "eine Ananas",
-    description: "Die Lungen sind fast vollständig entwickelt. Das Baby übt das Atmen, indem es Fruchtwasser ein- und ausatmet."
+    fruitComparison: "eine Honigmelone",
+    description: "Die Lungen sind fast vollständig entwickelt. Das Baby übt das Atmen, indem es Fruchtwasser ein- und ausatmet.",
+    imageUrl: babySizeImage("week-33-honigmelone.png"),
   },
   {
     week: 34,
     length: "45 cm",
     weight: "2150 g",
-    fruitComparison: "eine Melone",
-    description: "Das Baby hat nun Fingernägel, die bis zu den Fingerspitzen reichen. Die meisten Systeme sind vollständig entwickelt."
+    fruitComparison: "eine Honigmelone",
+    description: "Das Baby hat nun Fingernägel, die bis zu den Fingerspitzen reichen. Die meisten Systeme sind vollständig entwickelt.",
+    imageUrl: babySizeImage("week-34-honigmelone.png"),
   },
   {
     week: 35,
     length: "46,2 cm",
     weight: "2400 g",
     fruitComparison: "eine Honigmelone",
-    description: "Das Baby hat nun wenig Platz zum Bewegen und die Bewegungen können sich ändern. Die Nieren sind vollständig entwickelt."
+    description: "Das Baby hat nun wenig Platz zum Bewegen und die Bewegungen können sich ändern. Die Nieren sind vollständig entwickelt.",
+    imageUrl: babySizeImage("week-35-honigmelone.png"),
   },
   {
     week: 36,
     length: "47,4 cm",
     weight: "2600 g",
-    fruitComparison: "ein Romaine-Salat",
-    description: "Das Baby hat nun wenig Lanugo-Haare und mehr Kopfhaare. Die Leber kann Abfallprodukte verarbeiten."
+    fruitComparison: "eine Honigmelone",
+    description: "Das Baby hat nun wenig Lanugo-Haare und mehr Kopfhaare. Die Leber kann Abfallprodukte verarbeiten.",
+    imageUrl: babySizeImage("week-36-honigmelone.png"),
   },
   {
     week: 37,
     length: "48,6 cm",
     weight: "2900 g",
-    fruitComparison: "ein Staudensellerie",
-    description: "Das Baby gilt nun als termingerecht. Die Lungen sind bereit für die Außenwelt."
+    fruitComparison: "eine Honigmelone",
+    description: "Das Baby gilt nun als termingerecht. Die Lungen sind bereit für die Außenwelt.",
+    imageUrl: babySizeImage("week-37-honigmelone.png"),
   },
   {
     week: 38,
     length: "49,8 cm",
     weight: "3100 g",
-    fruitComparison: "ein Kürbis",
-    description: "Das Baby legt weiterhin Fett an. Die Gehirnentwicklung setzt sich fort."
+    fruitComparison: "eine Wassermelone",
+    description: "Das Baby legt weiterhin Fett an. Die Gehirnentwicklung setzt sich fort.",
+    imageUrl: babySizeImage("week-38-wassermelone.png"),
   },
   {
     week: 39,
     length: "50,7 cm",
     weight: "3300 g",
     fruitComparison: "eine Wassermelone",
-    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Nägel können über die Fingerspitzen hinausragen."
+    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Nägel können über die Fingerspitzen hinausragen.",
+    imageUrl: babySizeImage("week-39-wassermelone.png"),
   },
   {
     week: 40,
     length: "51,2 cm",
     weight: "3400 g",
     fruitComparison: "eine Wassermelone",
-    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Plazenta liefert Antikörper, die dem Baby in den ersten Monaten nach der Geburt helfen."
+    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Plazenta liefert Antikörper, die dem Baby in den ersten Monaten nach der Geburt helfen.",
+    imageUrl: babySizeImage("week-40-wassermelone.png"),
   },
   {
     week: 41,
     length: "51,5 cm",
     weight: "3600 g",
     fruitComparison: "eine Wassermelone",
-    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Nägel können über die Fingerspitzen hinausragen."
+    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Nägel können über die Fingerspitzen hinausragen.",
+    imageUrl: babySizeImage("week-41-wassermelone.png"),
   },
   {
     week: 42,
     length: "51,7 cm",
     weight: "3700 g",
     fruitComparison: "eine Wassermelone",
-    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Plazenta beginnt zu altern."
+    description: "Das Baby ist nun vollständig entwickelt und bereit für die Geburt. Die Plazenta beginnt zu altern.",
+    imageUrl: babySizeImage("week-42-wassermelone.png"),
   }
 ];

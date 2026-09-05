@@ -1,106 +1,125 @@
-import React from 'react';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter , useFocusEffect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { fetchPaywallState } from '@/lib/paywall';
+import {
+  getPaywallAccessReasonLabel,
+  type PaywallAccessReason,
+} from '@/lib/paywallAccess';
+import {
+  DEFAULT_MORE_LOCALE,
+  MoreTranslationKey,
+  translateMoreText,
+} from '@/lib/moreTranslations';
 
-const TIMELINE_INSET = 8; // wie im Sleep-Tracker
+let ACTIVE_MORE_LOCALE = DEFAULT_MORE_LOCALE;
+const t = (key: MoreTranslationKey, params?: Record<string, string | number>) =>
+  translateMoreText(ACTIVE_MORE_LOCALE, key, params);
 
 export default function MoreScreen() {
+  ACTIVE_MORE_LOCALE = useLocale().locale;
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
-  const { isBabyBorn, setIsBabyBorn } = useBabyStatus();
+  const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { session, signOut } = useAuth();
+  const [accessReason, setAccessReason] = useState<PaywallAccessReason>('none');
 
-  const handleSwitchBack = () => {
-    Alert.alert(
-      "Zurück zur Schwangerschaftsansicht",
-      "Möchtest du wirklich zur Schwangerschaftsansicht zurückkehren?",
-      [
-        {
-          text: "Abbrechen",
-          style: "cancel"
-        },
-        {
-          text: "Ja, zurückkehren",
-          onPress: async () => {
-            try {
-              await setIsBabyBorn(false);
-              Alert.alert("Erfolg", "Du bist jetzt in der Schwangerschaftsansicht.");
-            } catch (error) {
-              console.error('Error switching to pregnancy view:', error);
-              Alert.alert("Fehler", "Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
-            }
+  // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
+  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const useLightIcons = colorScheme === 'dark' || useDarkMode;
+  const iconAccentColor = useLightIcons ? '#FFFFFF' : theme.accent;
+  const iconSecondaryColor = useLightIcons ? 'rgba(255,255,255,0.9)' : theme.tabIconDefault;
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadAccessState = async () => {
+        try {
+          const state = await fetchPaywallState();
+          if (active) {
+            setAccessReason(state.accessReason);
+          }
+        } catch (error) {
+          console.error('Failed to refresh paywall access state:', error);
+          if (active) {
+            setAccessReason('none');
           }
         }
-      ]
-    );
+      };
+
+      void loadAccessState();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
+  const handlePremiumPress = async () => {
+    router.push('/subscription');
   };
+
+  const hasActiveAccess = accessReason !== 'none';
+  const hasSubscription = accessReason === 'subscription';
+  const subscriptionTitle = hasSubscription
+    ? t('subscription.manage')
+    : hasActiveAccess
+      ? t('subscription.access')
+      : t('subscription.view');
+  const subscriptionDescription = hasSubscription
+    ? t('subscription.manageDescription')
+    : hasActiveAccess
+      ? t('subscription.activeDescription', { reason: getPaywallAccessReasonLabel(accessReason) })
+      : t('subscription.viewDescription');
 
   // Abmelden-Funktion
   const handleLogout = async () => {
     Alert.alert(
-      'Abmelden',
-      'Möchtest du dich wirklich abmelden?',
+      t('logout.action'),
+      t('logout.question'),
       [
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Abmelden',
+          text: t('logout.action'),
           style: 'destructive',
           onPress: async () => {
             try {
               // Abmelden mit Supabase
               const { error } = await signOut();
               if (error) throw error;
-
-              // Zur Login-Seite navigieren
-              router.replace('/(auth)');
             } catch (error) {
               console.error('Logout error:', error);
-              Alert.alert('Fehler', 'Beim Abmelden ist ein Fehler aufgetreten.');
+              const message = error instanceof Error
+                ? error.message
+                : (typeof error === 'object' && error !== null && 'message' in error)
+                  ? String((error as { message?: unknown }).message ?? t('common.unknownError'))
+                  : t('common.unknownError');
+              Alert.alert(t('common.error'), t('logout.failed', { message }));
             }
           },
         },
       ],
       { cancelable: true }
-    );
-  };
-
-  // Wechsel zur Babyansicht
-  const handleSwitchToBabyView = () => {
-    Alert.alert(
-      "Zur Babyansicht wechseln",
-      "Möchtest du wirklich zur Babyansicht wechseln?",
-      [
-        {
-          text: "Abbrechen",
-          style: "cancel"
-        },
-        {
-          text: "Ja, wechseln",
-          onPress: async () => {
-            try {
-              await setIsBabyBorn(true);
-              Alert.alert("Erfolg", "Du bist jetzt in der Babyansicht.");
-            } catch (error) {
-              console.error('Error switching to baby view:', error);
-              Alert.alert("Fehler", "Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
-            }
-          }
-        }
-      ]
     );
   };
 
@@ -110,101 +129,65 @@ export default function MoreScreen() {
        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
         
         <Header 
-          title="Mehr" 
-          subtitle="Einstellungen und weitere Funktionen" 
+          title={t('screen.title')}
+          subtitle={t('screen.subtitle')}
+          showBackButton
+          onBackPress={() => router.push('/(tabs)/home')}
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Baby & Familie
+              {t('subscription.section')}
             </ThemedText>
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/(tabs)/weight-tracker')}
+              onPress={handlePremiumPress}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="chart.line.uptrend.xyaxis" size={24} color={theme.accent} />
+                <IconSymbol name="star.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Gewichtskurve
+                  {subscriptionTitle}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Verfolge deine Gewichtsentwicklung
+                  {subscriptionDescription}
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
+            </TouchableOpacity>
+
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
+              {t('shop.section')}
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/prints-shop' as any)}
+            >
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="bag.fill" size={24} color={iconAccentColor} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>
+                  {t('shop.title')}
+                </ThemedText>
+                <ThemedText style={styles.menuItemDescription}>
+                  {t('shop.description')}
+                </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Wissen & Hilfe
-            </ThemedText>
-
-            {/* Geburtsplan-Link (nur vor der Geburt anzeigen) */}
-            {!isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => router.push('/(tabs)/geburtsplan')}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="doc.text.fill" size={24} color={theme.accent} />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Geburtsplan
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Erstelle und bearbeite deinen persönlichen Geburtsplan
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/mini-wiki')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="book.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Mini-Wiki
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Wissenswertes über die ersten Monate
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => router.push('/faq')}
-            >
-              <View style={styles.menuItemIcon}>
-                <IconSymbol name="questionmark.circle.fill" size={24} color={theme.accent} />
-              </View>
-              <View style={styles.menuItemContent}>
-                <ThemedText style={styles.menuItemTitle}>
-                  Häufige Fragen
-                </ThemedText>
-                <ThemedText style={styles.menuItemDescription}>
-                  Antworten auf typische Fragen nach der Geburt
-                </ThemedText>
-              </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-            </TouchableOpacity>
-          </LiquidGlassCard>
-
-          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-            <ThemedText style={styles.sectionTitle}>
-              Einstellungen
+              {t('settings.section')}
             </ThemedText>
 
             <TouchableOpacity
@@ -212,17 +195,17 @@ export default function MoreScreen() {
               onPress={() => router.push('/app-settings')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="gear" size={24} color={theme.accent} />
+                <IconSymbol name="gear" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  App-Einstellungen
+                  {t('settings.appTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Benachrichtigungen, Erscheinungsbild, etc.
+                  {t('settings.appDescription')}
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -230,17 +213,17 @@ export default function MoreScreen() {
               onPress={() => router.push('/profil')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="person.crop.circle" size={24} color={theme.accent} />
+                <IconSymbol name="person.crop.circle" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Profil
+                  {t('settings.profileTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Deine persönlichen Daten verwalten
+                  {t('settings.profileDescription')}
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -248,95 +231,89 @@ export default function MoreScreen() {
               onPress={() => router.push('/account-linking')}
             >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="link" size={24} color={theme.accent} />
+                <IconSymbol name="link" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Accounts verknüpfen
+                  {t('settings.linkTitle')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Verbinde dich mit deinem Partner oder Familie
+                  {t('settings.linkDescription')}
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
-            {/* Zur Babyansicht wechseln (nur vor der Geburt anzeigen) */}
-            {!isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleSwitchToBabyView}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.forward" size={24} color="#3A9E8C" />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Zur Babyansicht wechseln
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Wechsle zur Ansicht nach der Geburt
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-              </TouchableOpacity>
-            )}
-
-            {/* Zurück zur Schwangerschaftsansicht (nur nach der Geburt anzeigen) */}
-            {isBabyBorn && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={handleSwitchBack}
-              >
-                <View style={styles.menuItemIcon}>
-                  <IconSymbol name="arrow.uturn.backward" size={24} color="#FF6B6B" />
-                </View>
-                <View style={styles.menuItemContent}>
-                  <ThemedText style={styles.menuItemTitle}>
-                    Zurück zur Schwangerschaftsansicht
-                  </ThemedText>
-                  <ThemedText style={styles.menuItemDescription}>
-                    Wechsle zurück zur Ansicht vor der Geburt
-                  </ThemedText>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
-              </TouchableOpacity>
-            )}
           </LiquidGlassCard>
 
           <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
             <ThemedText style={styles.sectionTitle}>
-              Über die App
+              {t('support.section')}
             </ThemedText>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/support' as any)}
+            >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="info.circle.fill" size={24} color={theme.accent} />
+                <IconSymbol name="envelope.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Informationen
+                  {t('support.contact')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Version, Datenschutz, Impressum
+                  support@lottibaby.de
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => router.push('/feature-requests' as any)}
+            >
               <View style={styles.menuItemIcon}>
-                <IconSymbol name="star.fill" size={24} color={theme.accent} />
+                <IconSymbol name="lightbulb.fill" size={24} color={iconAccentColor} />
               </View>
               <View style={styles.menuItemContent}>
                 <ThemedText style={styles.menuItemTitle}>
-                  Bewerten
+                  {t('support.suggestions')}
                 </ThemedText>
                 <ThemedText style={styles.menuItemDescription}>
-                  Bewerte die App im App Store
+                  {t('support.suggestionsDescription')}
                 </ThemedText>
               </View>
-              <IconSymbol name="chevron.right" size={20} color={theme.tabIconDefault} />
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
+            </TouchableOpacity>
+          </LiquidGlassCard>
+
+          <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+            <ThemedText style={styles.sectionTitle}>
+              {t('legal.section')}
+            </ThemedText>
+
+            <TouchableOpacity
+              style={styles.legalItem}
+              onPress={() => router.push('/datenschutz' as any)}
+            >
+              <ThemedText style={styles.legalTitle}>{t('legal.privacy')}</ThemedText>
+              <ThemedText style={styles.legalMeta}>{t('legal.privacyVersion')}</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.legalItem}
+              onPress={() => router.push('/nutzungsbedingungen' as any)}
+            >
+              <ThemedText style={styles.legalTitle}>{t('legal.terms')}</ThemedText>
+              <ThemedText style={styles.legalMeta}>{t('legal.termsVersion')}</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.legalItem}
+              onPress={() => router.push('/impressum' as any)}
+            >
+              <ThemedText style={styles.legalTitle}>{t('legal.imprint')}</ThemedText>
             </TouchableOpacity>
           </LiquidGlassCard>
 
@@ -347,7 +324,7 @@ export default function MoreScreen() {
               onPress={handleLogout}
             >
               <ThemedText style={styles.logoutButtonText}>
-                Abmelden
+                {t('logout.action')}
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -379,8 +356,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
   },
   sectionTitle: {
     fontSize: 18,
@@ -412,6 +387,21 @@ const styles = StyleSheet.create({
   menuItemDescription: {
     fontSize: 13,
     opacity: 0.8,
+  },
+  legalItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  legalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  legalMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    opacity: 0.7,
   },
   logoutSection: {
     marginTop: 20,

@@ -4,7 +4,7 @@ import { FeedingEvent, saveFeedingEvent, updateFeedingEventEnd } from '@/lib/bab
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 
 export interface FeedingEventData {
-  type: 'feeding_breast' | 'feeding_bottle' | 'feeding_solids';
+  type: 'feeding_breast' | 'feeding_bottle' | 'feeding_solids' | 'feeding_pump' | 'feeding_water';
   volume_ml?: number;
   side?: 'LEFT' | 'RIGHT' | 'BOTH';
   note?: string;
@@ -14,19 +14,29 @@ export interface FeedingEventData {
 export class FeedingEventManager {
   
   // Map UI types to database types
-  private static mapTypeToDatabase(uiType: string): 'BREAST' | 'BOTTLE' | 'SOLIDS' {
-    const typeMap: Record<string, 'BREAST' | 'BOTTLE' | 'SOLIDS'> = {
+  private static mapTypeToDatabase(uiType: string): 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER' {
+    const typeMap: Record<string, 'BREAST' | 'BOTTLE' | 'SOLIDS' | 'PUMP' | 'WATER'> = {
       'feeding_breast': 'BREAST',
       'feeding_bottle': 'BOTTLE', 
-      'feeding_solids': 'SOLIDS'
+      'feeding_solids': 'SOLIDS',
+      'feeding_pump': 'PUMP',
+      'feeding_water': 'WATER',
     };
     return typeMap[uiType] || 'BREAST';
   }
 
-  static async createFeedingEvent(data: FeedingEventData): Promise<{ success: boolean; id?: string; error?: string }> {
+  static async createFeedingEvent(
+    data: FeedingEventData,
+    babyId: string
+  ): Promise<{ success: boolean; id?: string; error?: string }> {
+  
     const operation = async () => {
+      if (!babyId) {
+        throw new Error('No active baby selected');
+      }
+  
       console.log('🍼 Creating feeding event with data:', data);
-      
+  
       const feedingEvent: FeedingEvent = {
         type: this.mapTypeToDatabase(data.type),
         start_time: data.date.toISOString(),
@@ -34,32 +44,30 @@ export class FeedingEventManager {
         side: data.side,
         note: data.note || '',
       };
-
+  
       console.log('🍼 Mapped feeding event:', feedingEvent);
-
-      const { data: result, error } = await saveFeedingEvent(feedingEvent);
-      
-      if (error) {
-        throw error;
-      }
-
+  
+      const { data: result, error } = await saveFeedingEvent(feedingEvent, babyId);
+  
+      if (error) throw error;
+  
       console.log('✅ Feeding event created successfully:', result);
       return result;
     };
-
+  
     const result = await SupabaseErrorHandler.executeWithHandling(
       operation,
       'FeedingEvent.create',
       true,
       3
     );
-
+  
     if (result.success) {
       return { success: true, id: result.data?.id };
     } else {
-      return { 
-        success: false, 
-        error: result.error?.userMessage || 'Fehler beim Speichern des Fütterungseintrags' 
+      return {
+        success: false,
+        error: result.error?.userMessage || 'Fehler beim Speichern des Fütterungseintrags',
       };
     }
   }

@@ -1,9 +1,9 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { IconSymbol } from './IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useNavigation } from '@/contexts/NavigationContext';
 
 interface BackButtonProps {
   onPress?: () => void;
@@ -16,15 +16,15 @@ const BackButton: React.FC<BackButtonProps> = ({
   color, 
   size = 24 
 }) => {
-  const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const navigation = useNavigation();
 
   const handlePress = () => {
     if (onPress) {
       onPress();
     } else {
-      router.back();
+      navigation.goBack();
     }
   };
 

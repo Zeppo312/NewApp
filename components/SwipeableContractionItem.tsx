@@ -5,6 +5,8 @@ import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { deleteContraction } from '@/lib/supabase';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getContractionLocaleTag, translateContractionText } from '@/lib/contractionTranslations';
 
 type Contraction = {
   id: string;
@@ -42,8 +44,8 @@ const formatDateTime = (date: Date): string => {
 };
 
 // Format date only
-const formatDate = (date: Date): string => {
-  return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+const formatDate = (date: Date, localeTag: string): string => {
+  return date.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit' });
 };
 
 // Funktion zur Bestimmung der Farbe basierend auf der Intensität
@@ -67,21 +69,24 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
   totalCount,
   onDelete
 }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateContractionText>[1]) => translateContractionText(locale, key);
+  const localeTag = getContractionLocaleTag(locale);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
 
   // Funktion zum Löschen einer Wehe
   const handleDelete = () => {
     Alert.alert(
-      'Wehe löschen',
-      'Möchtest du diese Wehe wirklich löschen?',
+      t('item.deleteTitle'),
+      t('item.deleteQuestion'),
       [
         {
-          text: 'Abbrechen',
+          text: t('common.cancel'),
           style: 'cancel'
         },
         {
-          text: 'Löschen',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: () => {
             // Kleine Verzögerung, um sicherzustellen, dass die UI aktualisiert ist
@@ -109,7 +114,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
             lightColor={theme.text}
             darkColor={theme.text}
           >
-            {index !== undefined && totalCount !== undefined ? `Wehe #${totalCount - index}` : 'Wehe'}
+            {index !== undefined && totalCount !== undefined ? `${t('item.contraction')} #${totalCount - index}` : t('item.contraction')}
           </ThemedText>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
             <ThemedText
@@ -131,7 +136,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
                 lightColor="#FFFFFF"
                 darkColor="#FFFFFF"
               >
-                {formatDate(new Date(item.startTime))}
+                {formatDate(new Date(item.startTime), localeTag)}
               </ThemedText>
             </View>
           </View>
@@ -147,7 +152,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
             lightColor="#FF6B6B"
             darkColor="#FF6B6B"
           >
-            Löschen
+            {t('common.delete')}
           </ThemedText>
         </TouchableOpacity>
       </View>
@@ -165,7 +170,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
               lightColor={theme.text}
               darkColor={theme.text}
             >
-              Dauer:
+              {t('item.duration')}
             </ThemedText>
             <ThemedText
               type="defaultSemiBold"
@@ -187,7 +192,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
               lightColor={theme.text}
               darkColor={theme.text}
             >
-              Abstand:
+              {item.interval && item.interval > 0 ? t('item.interval') : t('item.start')}
             </ThemedText>
             <ThemedText
               type="defaultSemiBold"
@@ -195,7 +200,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
               lightColor={theme.accent}
               darkColor={theme.accent}
             >
-              {item.interval ? formatTime(item.interval) : '--:--'}
+              {item.interval && item.interval > 0 ? formatTime(item.interval) : formatDateTime(new Date(item.startTime))}
             </ThemedText>
           </ThemedView>
         </View>
@@ -207,7 +212,7 @@ const ContractionItem: React.FC<SwipeableContractionItemProps> = ({
             lightColor={theme.text}
             darkColor={theme.text}
           >
-            Stärke:
+            {t('item.intensity')}
           </ThemedText>
 
           {item.intensity ? (
