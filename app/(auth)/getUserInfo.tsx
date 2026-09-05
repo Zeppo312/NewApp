@@ -8,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground, type BackgroundPreset } from '@/contexts/BackgroundContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -82,6 +83,7 @@ export default function GetUserInfoScreen() {
   const { user } = useAuth();
   const { refreshBabyDetails } = useBabyStatus();
   const { refreshBabies } = useActiveBaby();
+  const { refresh: refreshOnboardingStatus } = useOnboardingStatus();
   const { syncUser } = useConvex();
   const {
     selectedBackground,
@@ -569,6 +571,7 @@ export default function GetUserInfoScreen() {
       }
 
       await refreshBabies();
+      await refreshOnboardingStatus();
       void syncUser();
 
       // Nach dem Speichern zur entsprechenden Seite navigieren oder Paywall zeigen

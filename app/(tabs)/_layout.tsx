@@ -25,7 +25,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { getOnboardingCompletionState } from '@/lib/onboarding';
+import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
 import {
   DEFAULT_NAVIGATION_LOCALE,
   NavigationTranslationKey,
@@ -125,16 +125,10 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading, isResolved } = useBabyStatus();
-  const userId = session?.user?.id ?? null;
-  const canCheckOnboarding = !authLoading && isResolved && userId !== null;
-  const [onboardingResult, setOnboardingResult] = React.useState<{
-    userId: string | null;
-    complete: boolean;
-  }>({ userId: null, complete: false });
-  const isCheckingOnboarding = canCheckOnboarding && onboardingResult.userId !== userId;
-  const isOnboardingComplete = canCheckOnboarding
-    && onboardingResult.userId === userId
-    && onboardingResult.complete;
+  const {
+    isComplete: isOnboardingComplete,
+    isResolved: isOnboardingStatusResolved,
+  } = useOnboardingStatus();
   const theme = Colors[colorScheme ?? 'light'];
   const adaptiveColors = useAdaptiveColors();
   const hasSession = Boolean(session);
@@ -171,31 +165,6 @@ export default function TabLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    if (!canCheckOnboarding || !userId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    getOnboardingCompletionState()
-      .then((complete) => {
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete });
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to check onboarding completion on tabs layout:', error);
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete: false });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canCheckOnboarding, userId]);
-
-  useEffect(() => {
     if (!hasSession || !isOnboardingComplete || !currentRoute || !isResolved || isLoading || !isVisibleTabRoute) return;
 
     if (currentRoute === 'diary') {
@@ -225,7 +194,10 @@ export default function TabLayout() {
     }
   }, [currentRoute, hasSession, isBabyBorn, isLoading, isOnboardingComplete, isResolved, isVisibleTabRoute, router]);
 
-  if (authLoading || (hasSession && (!isResolved || isCheckingOnboarding))) {
+  if (
+    authLoading ||
+    (hasSession && !isOnboardingStatusResolved)
+  ) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={theme.accent} />

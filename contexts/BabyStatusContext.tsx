@@ -256,6 +256,9 @@ export const BabyStatusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
 
         applyResolvedState(resolved, resolutionScope);
+        // Navigation und Screen muessen nicht auf den anschliessenden
+        // AsyncStorage-Schreibvorgang warten.
+        setIsLoading(false);
         await writeCachedStatus(resolved);
       } catch (error) {
         console.error('Error loading baby details:', error);

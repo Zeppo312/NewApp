@@ -31,6 +31,10 @@ import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
 import { SubscriptionAccessProvider } from '@/contexts/SubscriptionAccessContext';
+import {
+  OnboardingStatusProvider,
+  useOnboardingStatus,
+} from '@/contexts/OnboardingStatusContext';
 import { getDeviceAppLocale } from '@/lib/localization';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
@@ -154,7 +158,9 @@ function RootLayoutNav() {
       : { error: 'Fehler', startupFailed: 'Die Nachricht konnte gerade nicht bestätigt werden. Bitte versuche es erneut.', loading: 'Lade …' };
   const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
+  const [hasCompletedBootstrap, setHasCompletedBootstrap] = useState(false);
   const { isResolved: isBabyStatusResolved } = useBabyStatus();
+  const { isResolved: isOnboardingStatusResolved } = useOnboardingStatus();
   const { requestPermissions, expoPushToken } = useNotifications();
   const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
   const { activeBackend } = useBackend();
@@ -809,23 +815,24 @@ function RootLayoutNav() {
     }
   }, [loading]);
 
-  // Splash-Screen erst ausblenden, wenn Auth, aktives Kind und dessen Status
-  // zum aktuellen Benutzer passen. So gelangt kein veralteter Zwischenzustand
-  // in den Navigator.
+  const isBootstrapReady =
+    !loading &&
+    Boolean(initialRoute) &&
+    isLocaleReady &&
+    isActiveBabyReady &&
+    isBabyStatusResolved &&
+    isOnboardingStatusResolved;
+
+  // Die Sperre gilt nur fuer den Kaltstart. Spaetere Kindwechsel duerfen den
+  // bereits laufenden Navigator nicht unmounten.
   useEffect(() => {
-    if (!loading && isActiveBabyReady && isBabyStatusResolved && isLocaleReady) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [isActiveBabyReady, isBabyStatusResolved, isLocaleReady, loading]);
+    if (!isBootstrapReady || hasCompletedBootstrap) return;
+    setHasCompletedBootstrap(true);
+    SplashScreen.hideAsync().catch(() => {});
+  }, [hasCompletedBootstrap, isBootstrapReady]);
 
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (
-    loading ||
-    !initialRoute ||
-    !isLocaleReady ||
-    !isActiveBabyReady ||
-    !isBabyStatusResolved
-  ) {
+  if (!hasCompletedBootstrap && !isBootstrapReady) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
@@ -1058,7 +1065,9 @@ export default Sentry.wrap(function RootLayout() {
                   <NavigationProvider>
                     <ActiveBabyProvider>
                       <BabyStatusProvider>
-                        <RootLayoutNav />
+                        <OnboardingStatusProvider>
+                          <RootLayoutNav />
+                        </OnboardingStatusProvider>
                       </BabyStatusProvider>
                     </ActiveBabyProvider>
                   </NavigationProvider>

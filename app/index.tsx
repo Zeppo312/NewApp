@@ -5,30 +5,22 @@ import { View, ActivityIndicator, Text } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { getOnboardingCompletionState } from '@/lib/onboarding';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
 
 export default function Index() {
   const { locale } = useLocale();
   const { session, loading, refreshSession } = useAuth();
   const { isBabyBorn, isLoading: isBabyStatusLoading, isResolved: isBabyStatusResolved } = useBabyStatus();
+  const {
+    isComplete: isOnboardingComplete,
+    isResolved: isOnboardingStatusResolved,
+  } = useOnboardingStatus();
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const backgroundColor = isDark ? Colors.dark.background : '#FFFFFF';
   const textColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
-  const userId = session?.user?.id ?? null;
-  const canCheckOnboarding = !loading && isBabyStatusResolved && userId !== null;
-  const [onboardingResult, setOnboardingResult] = useState<{
-    userId: string | null;
-    complete: boolean;
-  }>({ userId: null, complete: false });
-  const isCheckingOnboarding =
-    canCheckOnboarding && onboardingResult.userId !== userId;
-  const isOnboardingComplete =
-    canCheckOnboarding &&
-    onboardingResult.userId === userId &&
-    onboardingResult.complete;
   const hasTriedRecoveryRef = useRef(false);
 
   // Debug-Ausgabe
@@ -65,33 +57,14 @@ export default function Index() {
       });
   }, [loading, refreshSession, session]);
 
-  useEffect(() => {
-    if (!canCheckOnboarding || !userId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    getOnboardingCompletionState()
-      .then((complete) => {
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete });
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to check onboarding completion:', error);
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete: false });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canCheckOnboarding, userId]);
-
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
-  if (loading || isBabyStatusLoading || !isBabyStatusResolved || isRecoveringSession || isCheckingOnboarding) {
+  if (
+    loading ||
+    isBabyStatusLoading ||
+    !isBabyStatusResolved ||
+    !isOnboardingStatusResolved ||
+    isRecoveringSession
+  ) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor }}>
         <ActivityIndicator size="large" color="#E9C9B6" />

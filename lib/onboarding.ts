@@ -28,10 +28,10 @@ export const isOnboardingComplete = (
   return hasCompletedProfileBasics(profile) && hasPersistedUserSettings(settings);
 };
 
-export const getOnboardingCompletionState = async () => {
+export const getOnboardingCompletionState = async (knownUserId?: string) => {
   const [profile, settings] = await Promise.all([
-    getCachedUserProfile(),
-    getCachedUserSettings(),
+    getCachedUserProfile(knownUserId),
+    getCachedUserSettings(knownUserId),
   ]);
   return isOnboardingComplete(profile, settings);
 };

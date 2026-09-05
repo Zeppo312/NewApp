@@ -2,49 +2,22 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useEffect, useState } from 'react';
-import { getOnboardingCompletionState } from '@/lib/onboarding';
+import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
 
 export default function AuthIndex() {
   const { session, loading: authLoading } = useAuth();
   const { isBabyBorn, isLoading: babyStatusLoading, isResolved: babyStatusResolved } = useBabyStatus();
-  const userId = session?.user?.id ?? null;
-  const canCheckOnboarding = !authLoading && babyStatusResolved && userId !== null;
-  const [onboardingResult, setOnboardingResult] = useState<{
-    userId: string | null;
-    complete: boolean;
-  }>({ userId: null, complete: false });
-  const isCheckingOnboarding = canCheckOnboarding && onboardingResult.userId !== userId;
-  const isOnboardingComplete = canCheckOnboarding
-    && onboardingResult.userId === userId
-    && onboardingResult.complete;
+  const {
+    isComplete: isOnboardingComplete,
+    isResolved: isOnboardingStatusResolved,
+  } = useOnboardingStatus();
 
-  useEffect(() => {
-    if (!canCheckOnboarding || !userId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    getOnboardingCompletionState()
-      .then((complete) => {
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete });
-        }
-      })
-      .catch((error) => {
-        console.error('Failed to check onboarding completion on auth index:', error);
-        if (!cancelled) {
-          setOnboardingResult({ userId, complete: false });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canCheckOnboarding, userId]);
-
-  if (authLoading || babyStatusLoading || !babyStatusResolved || isCheckingOnboarding) {
+  if (
+    authLoading ||
+    babyStatusLoading ||
+    !babyStatusResolved ||
+    !isOnboardingStatusResolved
+  ) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#E9C9B6" />
