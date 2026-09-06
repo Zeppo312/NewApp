@@ -874,7 +874,7 @@ export default function HomeScreen() {
   const { isBabyBorn } = useBabyStatus();
   const pathname = usePathname();
   const router = useRouter();
-  // Lottis Fürsorge: nur für Premiumtester/Admins sichtbar (später Premium-Abo).
+  // Premium-Funktionen bleiben ohne Zugriff als gesperrte Vorschau sichtbar.
   const advisorAccess = useAdvisorAccess();
   // Sprach-Logging: gleiches Premium-Gating.
   const voiceLogAccess = useVoiceLogAccess();
@@ -2103,34 +2103,42 @@ export default function HomeScreen() {
 
   const renderPremiumSection = () => {
     const items: PremiumHighlightItem[] = [];
-    if (advisorAccess === true) {
+    if (advisorAccess !== null) {
       items.push({
         key: 'advisor',
+        locked: advisorAccess !== true,
         emoji: '🌿',
         title: t('premium.advisor'),
         subtitle: t('premium.advisorDescription'),
         onPress: () => handleNavigate('/lottis-fuersorge'),
       });
     }
-    if (voiceLogAccess === true) {
+    if (voiceLogAccess !== null) {
       items.push({
         key: 'voice-log',
+        locked: voiceLogAccess !== true,
         emoji: '🎙️',
         title: t('premium.voice'),
         subtitle: t('premium.voiceDescription'),
         onPress: () => setShowVoiceLogModal(true),
       });
     }
-    if (askLottiAccess === true) {
+    if (askLottiAccess !== null) {
       items.push({
         key: 'ask-lotti',
+        locked: askLottiAccess !== true,
         emoji: '✨',
         title: t('premium.askLotti'),
         subtitle: t('premium.askLottiDescription'),
         onPress: () => handleNavigate('/frag-lotti'),
       });
     }
-    return <PremiumHighlights items={items} />;
+    return (
+      <PremiumHighlights
+        items={items}
+        onUnlock={() => router.push('/paywall?origin=lock_premium')}
+      />
+    );
   };
 
   const renderQuickAccessCard = (

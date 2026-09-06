@@ -1451,18 +1451,20 @@ export default function PregnancyHomeScreen() {
 
   const renderPremiumSection = () => {
     const items: PremiumHighlightItem[] = [];
-    if (advisorAccess === true) {
+    if (advisorAccess !== null) {
       items.push({
         key: 'advisor',
+        locked: advisorAccess !== true,
         emoji: '🌿',
         title: t('premium.advisor'),
         subtitle: t('premium.advisorDescription'),
         onPress: () => router.push('/lottis-fuersorge'),
       });
     }
-    if (voiceLogAccess === true) {
+    if (voiceLogAccess !== null) {
       items.push({
         key: 'voice-log',
+        locked: voiceLogAccess !== true,
         emoji: '🎙️',
         title: t('premium.voice'),
         subtitle: t('premium.voiceDescription'),
@@ -1472,16 +1474,22 @@ export default function PregnancyHomeScreen() {
         },
       });
     }
-    if (askLottiAccess === true) {
+    if (askLottiAccess !== null) {
       items.push({
         key: 'ask-lotti',
+        locked: askLottiAccess !== true,
         emoji: '✨',
         title: t('premium.askLotti'),
         subtitle: t('premium.askLottiDescription'),
         onPress: () => router.push('/frag-lotti'),
       });
     }
-    return <PremiumHighlights items={items} />;
+    return (
+      <PremiumHighlights
+        items={items}
+        onUnlock={() => router.push('/paywall?origin=lock_premium')}
+      />
+    );
   };
 
   const renderQuickAccessSection = () => (

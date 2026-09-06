@@ -26,11 +26,13 @@ export interface PremiumHighlightItem {
   title: string;
   /** Wird aktuell nicht gerendert (Panel bewusst kompakt), bleibt für Accessibility. */
   subtitle: string;
+  locked?: boolean;
   onPress: () => void;
 }
 
 interface Props {
   items: PremiumHighlightItem[];
+  onUnlock: () => void;
 }
 
 // Halbtransparent, damit der Blur darunter durchscheint — der Lila-Ton bleibt,
@@ -97,10 +99,12 @@ const Sparkle: React.FC<(typeof SPARKLES)[number]> = ({ left, top, size, duratio
   );
 };
 
-const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }> = ({
+const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number; onUnlock: () => void }> = ({
   item,
   pulseDelay,
+  onUnlock,
 }) => {
+  const { locale } = useLocale();
   const pulse = React.useState(() => new Animated.Value(0))[0];
   const pressScale = React.useState(() => new Animated.Value(1))[0];
 
@@ -137,12 +141,12 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onPress={item.onPress}
+      onPress={item.locked ? onUnlock : item.onPress}
       onPressIn={() => animatePress(0.96)}
       onPressOut={() => animatePress(1)}
       accessibilityRole="button"
-      accessibilityLabel={item.title}
-      accessibilityHint={item.subtitle}
+      accessibilityLabel={item.locked ? `${item.title}, ${{ de: 'Gesperrt', en: 'Locked', es: 'Bloqueado' }[locale]}` : item.title}
+      accessibilityHint={item.locked ? { de: 'Abo-Auswahl öffnen', en: 'Open subscription options', es: 'Abrir opciones de suscripción' }[locale] : item.subtitle}
       style={styles.featureTouchable}
     >
       <Animated.View style={[styles.featureButton, { transform: [{ scale: pressScale }] }]}>
@@ -162,13 +166,14 @@ const FeatureButton: React.FC<{ item: PremiumHighlightItem; pulseDelay: number }
             {item.emoji}
           </Text>
         </View>
-        <Text style={styles.featureTitle}>{item.title}</Text>
+        <Text style={styles.featureTitle}>{item.locked ? '🔒 ' : ''}{item.title}</Text>
       </Animated.View>
     </TouchableOpacity>
   );
 };
 
-const PremiumHighlights: React.FC<Props> = ({ items }) => {
+const PremiumHighlights: React.FC<Props> = ({ items, onUnlock }) => {
+  const hasLockedItems = items.some((item) => item.locked);
   const { locale } = useLocale();
   const { width } = useWindowDimensions();
   // Drei schmale Spalten brechen bei großer Schrift mitten im Wort um —
@@ -239,16 +244,18 @@ const PremiumHighlights: React.FC<Props> = ({ items }) => {
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>
-            Lotti <Text style={styles.headerTitleAccent}>Premium</Text>
+            {hasLockedItems ? '🔒 ' : ''}Lotti <Text style={styles.headerTitleAccent}>Premium</Text>
           </Text>
           <Text style={styles.headerSubtitle}>
-            {{ de: 'Exklusiv für dich freigeschaltet', en: 'Unlocked exclusively for you', es: 'Desbloqueado en exclusiva para ti' }[locale]}
+            {hasLockedItems
+              ? { de: 'Mit Lotti Premium freischalten', en: 'Unlock with Lotti Premium', es: 'Desbloquear con Lotti Premium' }[locale]
+              : { de: 'Exklusiv für dich freigeschaltet', en: 'Unlocked exclusively for you', es: 'Desbloqueado en exclusiva para ti' }[locale]}
           </Text>
         </View>
 
         <View style={[styles.featureRow, isStacked ? styles.featureRowStacked : null]}>
           {items.map((item, index) => (
-            <FeatureButton key={item.key} item={item} pulseDelay={index * 700} />
+            <FeatureButton key={item.key} item={item} pulseDelay={index * 700} onUnlock={onUnlock} />
           ))}
         </View>
       </View>
