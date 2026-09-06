@@ -217,13 +217,13 @@ const localizedDefaults: Record<
       },
       {
         label: "Partner connection: track together",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
       {
         label: "Planner, appointments & shared calendar",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
@@ -241,7 +241,7 @@ const localizedDefaults: Record<
       },
       {
         label: "Recipes, generator, saved recipes & weaning videos",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
@@ -318,7 +318,7 @@ const localizedDefaults: Record<
         bullets: [
           "All core trackers & 7 days of sleep and daily history",
           "Pregnancy tools, growth & baby profiles",
-          "Milestones, baby weather & self-care",
+          "BLW recipes, milestones, baby weather & self-care",
           "Community, groups, chats, guides & reminders",
         ],
       },
@@ -436,13 +436,13 @@ const localizedDefaults: Record<
       },
       {
         label: "Conexión de pareja: seguimiento conjunto",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
       {
         label: "Agenda, citas y calendario compartido",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
@@ -460,7 +460,7 @@ const localizedDefaults: Record<
       },
       {
         label: "Recetas, generador, recetas guardadas y vídeos de alimentación",
-        lite: false,
+        lite: true,
         standard: true,
         premium: true,
       },
@@ -537,7 +537,7 @@ const localizedDefaults: Record<
         bullets: [
           "Seguimientos básicos y 7 días de historial",
           "Herramientas de embarazo, crecimiento y perfiles",
-          "Hitos, tiempo para el bebé y autocuidado",
+          "Recetas BLW, hitos, tiempo para el bebé y autocuidado",
           "Comunidad, grupos, chats, guías y recordatorios",
         ],
       },

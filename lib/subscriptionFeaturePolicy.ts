@@ -37,12 +37,12 @@ export type SubscriptionFeaturePolicy = {
 
 export const DEFAULT_FEATURE_MATRIX: SubscriptionFeatureMatrix = {
   basisTracker: ["lite", "standard", "premium"],
-  partnerLink: ["standard", "premium"],
-  planner: ["standard", "premium"],
-  shoppingList: ["standard", "premium"],
+  partnerLink: ["lite", "standard", "premium"],
+  planner: ["lite", "standard", "premium"],
+  shoppingList: ["lite", "standard", "premium"],
   wochenmomente: ["standard", "premium"],
   pdfExport: ["standard", "premium"],
-  recipes: ["standard", "premium"],
+  recipes: ["lite", "standard", "premium"],
   fullHistory: ["standard", "premium"],
   sleepMonthView: ["standard", "premium"],
   dailyMonthView: ["standard", "premium"],
@@ -134,7 +134,7 @@ export const FEATURE_ADMIN_COPY: Record<
     section: "baby",
     areas: ["Rezepte", "Meine Rezepte", "Beikost-Auswahl", "Beikost-Videokurs"],
     serverEnforced: false,
-    editable: true,
+    editable: false,
   },
   fullHistory: {
     label: "Kompletter Verlauf",
@@ -272,6 +272,10 @@ export function sanitizeSubscriptionFeaturePolicy(
     if (tiers.length !== rawTiers.length) return null;
     features[feature] = [...tiers];
   }
+
+  // Rezepte und Beikost gehören in jeden Tarif. Alte Server- und Cache-Werte
+  // dürfen die frühere Standard-Paywall nicht wieder aktivieren.
+  features.recipes = [...SUBSCRIPTION_TIERS];
 
   return {
     schemaVersion: 1,
@@ -420,7 +424,7 @@ export const featureAllowedByPolicy = (
   policy: SubscriptionFeaturePolicy,
   feature: AppFeature,
   tier: AppSubscriptionTier,
-) => policy.features[feature].includes(tier);
+) => feature === "recipes" || policy.features[feature].includes(tier);
 
 export const publishSubscriptionFeaturePolicy = async (
   expectedVersion: number,

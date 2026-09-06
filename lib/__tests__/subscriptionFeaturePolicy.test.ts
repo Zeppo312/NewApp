@@ -35,6 +35,13 @@ describe("dynamic subscription feature policy", () => {
     const policy = getCurrentSubscriptionFeaturePolicy();
     expect(policy.features).toEqual(DEFAULT_FEATURE_MATRIX);
     expect(featureAllowedByPolicy(policy, "basisTracker", "lite")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "partnerLink", "lite")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "partnerLink", "standard")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "partnerLink", "premium")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "shoppingList", "lite")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "shoppingList", "standard")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "shoppingList", "premium")).toBe(true);
+    expect(featureAllowedByPolicy(policy, "recipes", "lite")).toBe(true);
     expect(featureAllowedByPolicy(policy, "voiceLog", "standard")).toBe(false);
     expect(featureAllowedByPolicy(policy, "sleepMonthView", "lite")).toBe(
       false,
@@ -107,5 +114,25 @@ describe("dynamic subscription feature policy", () => {
       refreshSubscriptionFeaturePolicy({ force: true }),
     ).rejects.toThrow("offline");
     expect(getCurrentSubscriptionFeaturePolicy()).toEqual(storedPolicy);
+  });
+
+  it("keeps recipes available when the old restriction is cached or returned by the server", async () => {
+    const oldPolicy = {
+      ...storedPolicy,
+      features: { ...DEFAULT_FEATURE_MATRIX, recipes: ["standard", "premium"] as const },
+    };
+    await AsyncStorage.setItem(
+      "subscription_feature_policy_v1",
+      JSON.stringify({ policy: oldPolicy, fetchedAt: Date.now() }),
+    );
+    const cached = await hydrateSubscriptionFeaturePolicy();
+    expect(featureAllowedByPolicy(cached, "recipes", "lite")).toBe(true);
+    expect(cached.features.recipes).toEqual(["lite", "standard", "premium"]);
+
+    jest.spyOn(supabase, "rpc").mockResolvedValue({ data: oldPolicy, error: null } as never);
+    const refreshed = await refreshSubscriptionFeaturePolicy({ force: true });
+    expect(featureAllowedByPolicy(refreshed, "recipes", "lite")).toBe(true);
+    expect(refreshed.features.recipes).toEqual(["lite", "standard", "premium"]);
+    expect(featureAllowedByPolicy(refreshed, "voiceLog", "lite")).toBe(false);
   });
 });

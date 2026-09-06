@@ -143,6 +143,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'scalemass': 'monitor-weight',
   'slider.horizontal.3': 'tune',
   'paintpalette': 'palette',
+  'lock.fill': 'lock',
   'lock.shield': 'security',
   'sparkles': 'auto-awesome',
   'share': 'share',

@@ -18,6 +18,16 @@ const premiumOnly = { lite: false, standard: false, premium: true };
 describe("paywall feature comparison", () => {
   const germanRows = DEFAULT_PAYWALL_CONTENT.plans.comparisonRows;
 
+  it("includes shopping and inventory in every subscription tier", () => {
+    const shoppingRow = germanRows.find((row) => row.featureKey === "shoppingList");
+    expect(shoppingRow).toMatchObject(allTiers);
+    SUBSCRIPTION_TIERS.forEach((tier) => {
+      expect(
+        isPaywallComparisonIncluded(shoppingRow!, tier, DEFAULT_SUBSCRIPTION_FEATURE_POLICY),
+      ).toBe(true);
+    });
+  });
+
   it("lists every current feature group exactly once", () => {
     expect(germanRows).toHaveLength(27);
     expect(new Set(germanRows.map(({ label }) => label)).size).toBe(
@@ -72,7 +82,12 @@ describe("paywall feature comparison", () => {
     expect(germanRows.slice(14, 23)).toEqual(
       germanRows
         .slice(14, 23)
-        .map((row) => ({ ...row, ...standardAndPremium })),
+        .map((row) => ({
+          ...row,
+          ...(["recipes", "shoppingList", "partnerLink", "planner"].includes(row.featureKey ?? "")
+            ? allTiers
+            : standardAndPremium),
+        })),
     );
     expect(germanRows.slice(23)).toEqual(
       germanRows.slice(23).map((row) => ({ ...row, ...premiumOnly })),

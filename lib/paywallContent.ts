@@ -356,21 +356,21 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
     {
       label: "Partner-Verknüpfung: gemeinsam tracken",
       featureKey: "partnerLink",
-      lite: false,
+      lite: true,
       standard: true,
       premium: true,
     },
     {
       label: "Planer, Termine & gemeinsamer Kalender",
       featureKey: "planner",
-      lite: false,
+      lite: true,
       standard: true,
       premium: true,
     },
     {
       label: "Einkaufslisten & Kundenkarten",
       featureKey: "shoppingList",
-      lite: false,
+      lite: true,
       standard: true,
       premium: true,
     },
@@ -384,7 +384,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
     {
       label: "Rezepte, Generator, eigene Rezepte & Beikost-Videos",
       featureKey: "recipes",
-      lite: false,
+      lite: true,
       standard: true,
       premium: true,
     },
@@ -465,7 +465,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       bullets: [
         "Alle Basis-Tracker & 7 Tage Schlaf- und Tagesverlauf",
         "Schwangerschafts-Tools, Wachstum & Babyprofile",
-        "Meilensteine, Babywetter & Selfcare",
+        "BLW-Rezepte, Meilensteine, Babywetter & Selfcare",
         "Community, Gruppen, Chats, Ratgeber & Erinnerungen",
       ],
     },

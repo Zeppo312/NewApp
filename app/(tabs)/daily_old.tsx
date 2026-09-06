@@ -681,12 +681,19 @@ const QuickActionRow: React.FC<{
           }}
           activeOpacity={0.9}
         >
-          <View style={[s.quickActionPlusBadge, { backgroundColor: isDark ? '#A26BFF' : PRIMARY }]}>
-            <Text style={s.quickActionPlusBadgeText}>+</Text>
+          <View style={[s.quickActionPlusBadge, { backgroundColor: canCreateCustomActivities ? (isDark ? '#A26BFF' : PRIMARY) : 'transparent' }]}>
+            {canCreateCustomActivities ? (
+              <Text style={s.quickActionPlusBadgeText}>+</Text>
+            ) : (
+              <Text style={s.quickActionPlusBadgeText}>🔒</Text>
+            )}
           </View>
           <Text style={[s.quickActionPlusLabel, { color: textPrimary }]} numberOfLines={2}>
             {t('custom.add')}
           </Text>
+          {!canCreateCustomActivities && (
+            <Text style={[s.quickActionPlusMeta, { color: textSecondary }]}>Premium</Text>
+          )}
         </TouchableOpacity>
       </GlassCard>
     </View>
@@ -835,7 +842,7 @@ const QuickActionRow: React.FC<{
             offset: itemWidth * index,
             index,
           })}
-          ListFooterComponent={canCreateCustomActivities ? <View style={s.quickActionFooterWrap}>{renderAddButton()}</View> : null}
+          ListFooterComponent={<View style={s.quickActionFooterWrap}>{renderAddButton()}</View>}
         />
       )}
     </View>
@@ -1776,7 +1783,11 @@ export default function DailyScreen() {
   };
 
   const openNewCustomActivity = () => {
-    if (!canCreateCustomActivities || !ensureWritableInCurrentMode()) return;
+    if (!ensureWritableInCurrentMode()) return;
+    if (!canCreateCustomActivities) {
+      router.push('/paywall?origin=lock_customActivities' as any);
+      return;
+    }
     if (!activeBabyId) {
       Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
       return;
