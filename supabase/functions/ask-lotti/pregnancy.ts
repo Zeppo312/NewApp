@@ -255,10 +255,10 @@ export const pregnancyCopy = (locale: AskLottiLocale) => ({
         : "I can summarize your records, but I cannot provide medical assessments. For symptoms, bleeding, pain or concerns, contact your midwife or OB-GYN; in an emergency, call your local emergency number.",
   unsupported:
     locale === "de"
-      ? "Dabei kann ich dir noch nicht zuverlässig helfen. Frag mich gern zu deiner Schwangerschaftswoche, deinen Check-ins, Terminen oder der Geburtsvorbereitung."
+      ? "Ich helfe dir bei Fragen rund um Baby, Schwangerschaft, Geburt und Wochenbett. Andere Themen kann ich hier nicht bearbeiten. Stell mir gern eine allgemeine Frage dazu – auch ohne Einträge."
       : locale === "es"
-        ? "Todavía no puedo ayudarte de forma fiable con eso. Pregúntame por tu semana de embarazo, tus registros, tus citas o la preparación al parto."
-        : "I cannot help with that reliably yet. Ask me about your pregnancy week, your check-ins, appointments, or birth preparation.",
+        ? "Te ayudo con preguntas sobre bebés, embarazo, parto y posparto. No puedo tratar otros temas aquí. Puedes hacer preguntas generales, incluso sin registros."
+        : "I can help with babies, pregnancy, birth and postpartum life. I cannot cover other topics here. General questions are welcome, even without records.",
   noData:
     locale === "de"
       ? "Dazu finde ich im gewählten Zeitraum noch keine passenden Einträge. Du kannst einen anderen Zeitraum nennen oder erst einen Check-in oder Eintrag anlegen."

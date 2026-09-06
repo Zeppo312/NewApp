@@ -103,7 +103,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockCreateCustomActivityType).not.toHaveBeenCalled();
     expect(mockGetCustomActivityTypes).toHaveBeenCalledWith("baby-1");
     expect(mockAddBabyCareEntry).toHaveBeenCalledWith(
@@ -125,7 +125,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 0, failedCount: 1 });
+    expect(result).toMatchObject({ savedCount: 0, failedCount: 1 });
     expect(mockAddBabyCareEntry).not.toHaveBeenCalled();
   });
 
@@ -156,7 +156,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockAddBabyCareEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         custom_name: "Vitamin D",
@@ -205,7 +205,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockCreateCustomActivityType).toHaveBeenCalledWith(
       "baby-1",
       expect.objectContaining({
@@ -254,7 +254,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockCreateCustomActivityType).toHaveBeenCalledWith(
       "baby-1",
       expect.objectContaining({ name: "Vitamin D", emoji: "💊" }),
@@ -304,7 +304,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockAddBabyCareEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         custom_activity_type_id: "activity-existing",
@@ -351,7 +351,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 1, failedCount: 0 });
+    expect(result).toMatchObject({ savedCount: 1, failedCount: 0 });
     expect(mockCreateCustomActivityType).not.toHaveBeenCalled();
     expect(mockAddBabyCareEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -389,7 +389,7 @@ describe("saveVoiceLogEntries custom activities", () => {
       "baby-1",
     );
 
-    expect(result).toEqual({ savedCount: 0, failedCount: 1 });
+    expect(result).toMatchObject({ savedCount: 0, failedCount: 1 });
     expect(mockAddBabyCareEntry).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,6 @@
-// Mikrofon-Kreis für das Sprach-Logging: ein ruhiger, gefüllter Kreis mit
-// Vektor-Icon — ohne Glas, Emoji oder harte Schatten. Beim Aufnehmen atmen
-// zwei zarte Ringe im Sprechpegel, beim Verarbeiten kreist ein feiner Bogen.
-
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   Easing,
@@ -141,15 +138,23 @@ export const VoiceOrb: React.FC<Props> = ({ mode, size = 88, metering, accent, i
             width: size * (isFilled ? 1 : 0.8),
             height: size * (isFilled ? 1 : 0.8),
             borderRadius: size,
-            backgroundColor: isFilled ? accent : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            backgroundColor: isDark ? 'rgba(218,187,241,0.16)' : 'rgba(255,255,255,0.5)',
+            borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.9)',
           },
           coreStyle,
         ]}
       >
+        <LinearGradient
+          pointerEvents="none"
+          colors={isDark ? ['rgba(240,218,255,0.28)', 'rgba(160,119,195,0.20)', 'rgba(192,209,246,0.14)'] : ['rgba(255,255,255,0.95)', 'rgba(218,188,239,0.65)', 'rgba(184,204,239,0.65)']}
+          start={{ x: 0.15, y: 0 }}
+          end={{ x: 0.85, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <Ionicons
           name={iconName}
           size={size * (isFilled ? 0.34 : 0.28)}
-          color={isFilled ? (isDark ? '#1A1024' : '#FFFFFF') : accent}
+          color={accent}
         />
       </Animated.View>
     </View>
@@ -165,6 +170,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   core: {
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    boxShadow: '0 8px 24px rgba(113,78,143,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },

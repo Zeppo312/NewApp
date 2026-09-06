@@ -21,6 +21,7 @@ type VoiceLogIconEntry = Pick<
 
 /** Gleiche Emoji-Zuordnung wie die Eintragskarten in „Unser Tag“. */
 export const getVoiceLogEntryEmoji = (entry: VoiceLogIconEntry): string => {
+  if (entry.type === 'doctor_question') return '🩺';
   if (entry.type === 'sleep') return '😴';
   if (entry.type === 'custom') return entry.custom_emoji?.trim() || '⭐️';
   if (entry.type === 'shopping') return '🛒';

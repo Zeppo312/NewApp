@@ -10,6 +10,15 @@ export type RecipeLocale = "de" | "en" | "es";
 export const DEFAULT_RECIPE_LOCALE: RecipeLocale = "de";
 
 const de = {
+  "favorites.all": "Alle Rezepte",
+  "favorites.title": "Favoriten",
+  "favorites.add": "Zu Favoriten hinzufügen",
+  "favorites.remove": "Aus Favoriten entfernen",
+  "favorites.emptyTitle": "Noch keine Favoriten",
+  "favorites.emptyText": "Tippe auf das Herz an einem Rezept, um es hier zu speichern.",
+  "favorites.loadFailed": "Favoriten konnten nicht geladen werden. Bitte öffne die Rezeptübersicht erneut.",
+  "favorites.saveFailed": "Deine Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.",
+
   "common.error": "Fehler",
   "common.notice": "Hinweis",
   "common.success": "Erfolg",
@@ -149,6 +158,15 @@ export type RecipeTranslationKey = keyof typeof de;
 type RecipeCatalog = Record<RecipeTranslationKey, string>;
 
 const en: RecipeCatalog = {
+  "favorites.all": "All recipes",
+  "favorites.title": "Favorites",
+  "favorites.add": "Add to favorites",
+  "favorites.remove": "Remove from favorites",
+  "favorites.emptyTitle": "No favorites yet",
+  "favorites.emptyText": "Tap the heart on a recipe to save it here.",
+  "favorites.loadFailed": "Favorites could not be loaded. Please reopen the recipe catalog.",
+  "favorites.saveFailed": "Your change could not be saved. Please try again.",
+
   "common.error": "Error",
   "common.notice": "Note",
   "common.success": "Success",
@@ -285,6 +303,15 @@ const en: RecipeCatalog = {
 };
 
 const es: RecipeCatalog = {
+  "favorites.all": "Todas las recetas",
+  "favorites.title": "Favoritos",
+  "favorites.add": "Añadir a favoritos",
+  "favorites.remove": "Quitar de favoritos",
+  "favorites.emptyTitle": "Aún no hay favoritos",
+  "favorites.emptyText": "Toca el corazón de una receta para guardarla aquí.",
+  "favorites.loadFailed": "No se pudieron cargar los favoritos. Vuelve a abrir el catálogo.",
+  "favorites.saveFailed": "No se pudo guardar el cambio. Inténtalo de nuevo.",
+
   "common.error": "Error",
   "common.notice": "Aviso",
   "common.success": "Listo",

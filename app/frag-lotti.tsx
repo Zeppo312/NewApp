@@ -1,3 +1,4 @@
+import { canImportLottiMessage, isUnavailableLottiAnswer, retryQuestionForMessage } from "@/lib/askLotti/messageActions";
 import React, {
   useCallback,
   useEffect,
@@ -6,9 +7,11 @@ import React, {
   useState,
 } from "react";
 import * as Haptics from "expo-haptics";
+import { BlurView } from "expo-blur";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +28,10 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import VoiceLogModal from "@/components/VoiceLogModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { parseLottiEntries } from "@/lib/voiceLog/api";
+import type { VoiceLogParseResult } from "@/lib/voiceLog/types";
 import Header from "@/components/Header";
 import { LockedFeatureScreen } from "@/components/LockedFeatureScreen";
 import { ThemedBackground } from "@/components/ThemedBackground";
@@ -66,7 +73,11 @@ type ChatMessage = StoredChatMessage;
 
 export default function AskLottiScreen() {
   const { locale } = useLocale();
-  const { activeBabyId } = useActiveBaby();
+  const { activeBabyId, activeBaby } = useActiveBaby();
+  const { user } = useAuth();
+  const [entryDraft, setEntryDraft] = useState<VoiceLogParseResult | null>(null);
+  const [importingMessageId, setImportingMessageId] = useState<string | null>(null);
+  const importInFlightRef = useRef(false);
   // Vor der Geburt gibt es keine Baby-Einträge: Lotti antwortet dann aus der
   // Schwangerschaftsseite der App (SSW, Check-ins, Termine, Vorbereitung).
   const { isBabyBorn } = useBabyStatus();
@@ -100,6 +111,22 @@ export default function AskLottiScreen() {
     [contextMode, locale],
   );
   const [question, setQuestion] = useState("");
+  const [keyboardVisible, setKeyboardVisible] = useState(Keyboard.isVisible());
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardVisible(true),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardVisible(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const [isSending, setIsSending] = useState(false);
   const [remainingToday, setRemainingToday] = useState<number | null>(null);
   // The intro is rendered, never stored: it is locale-dependent and would
@@ -167,6 +194,21 @@ export default function AskLottiScreen() {
     void saveConversations(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, activeConversationId]);
+
+  const importEntries = async (message: ChatMessage) => {
+    if (importInFlightRef.current || !user || access !== true || !canImportLottiMessage(message)) return;
+    importInFlightRef.current = true;
+    setImportingMessageId(message.id);
+    try {
+      const result = await parseLottiEntries(message.text, activeBaby?.name ?? null, activeBabyId, locale, contextMode);
+      setEntryDraft(result);
+    } catch (error) {
+      Alert.alert(t("importEntries"), error instanceof Error ? error.message : t("genericError"));
+    } finally {
+      importInFlightRef.current = false;
+      setImportingMessageId(null);
+    }
+  };
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(createConversationId());
@@ -312,6 +354,8 @@ export default function AskLottiScreen() {
           id: createMessageId("lotti"),
           role: "lotti",
           text: response.answer,
+          isError: response.isFallback === true || isUnavailableLottiAnswer(response.answer),
+          retryQuestion: response.isFallback === true || isUnavailableLottiAnswer(response.answer) ? value : undefined,
           evidence: response.evidence,
           disclaimer: response.disclaimer,
           isGeneral:
@@ -497,9 +541,9 @@ export default function AskLottiScreen() {
                   >
                     {message.id === "intro" ? introMessage.text : message.text}
                   </Text>
-                  {message.retryQuestion ? (
+                  {retryQuestionForMessage(message, messages) ? (
                     <Pressable
-                      onPress={() => void send(message.retryQuestion)}
+                      onPress={() => void send(retryQuestionForMessage(message, messages))}
                       disabled={isSending}
                       style={({ pressed }) => [
                         styles.retryButton,
@@ -568,6 +612,18 @@ export default function AskLottiScreen() {
                       ))}
                     </View>
                   ) : null}
+                  {canImportLottiMessage(message) && access === true ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t("importEntries")}
+                      disabled={importingMessageId !== null}
+                      onPress={() => void importEntries(message)}
+                      style={({ pressed }) => [styles.retryButton, pressed && styles.retryPressed]}
+                    >
+                      {importingMessageId === message.id ? <ActivityIndicator size="small" color={palette.accent} /> : <IconSymbol name="plus" size={16} color={palette.accent} />}
+                      <Text style={{ color: palette.accent }}>{t(importingMessageId === message.id ? "importLoading" : "importEntries")}</Text>
+                    </Pressable>
+                  ) : null}
                   {message.disclaimer ? (
                     <Text selectable style={styles.disclaimer}>
                       {message.disclaimer}
@@ -620,7 +676,7 @@ export default function AskLottiScreen() {
           <View
             style={[
               styles.composerWrap,
-              { paddingBottom: Math.max(insets.bottom, 8) },
+              { paddingBottom: keyboardVisible ? 8 : Math.max(insets.bottom, 8) },
             ]}
           >
             <View style={styles.composerMeta}>
@@ -635,6 +691,12 @@ export default function AskLottiScreen() {
               ) : null}
             </View>
             <View style={[styles.composer, canSend && styles.composerActive]}>
+              <BlurView
+                pointerEvents="none"
+                tint={isDark ? "systemUltraThinMaterialDark" : "systemUltraThinMaterialLight"}
+                intensity={45}
+                style={styles.composerGlass}
+              />
               <TextInput
                 value={question}
                 onChangeText={setQuestion}
@@ -762,6 +824,18 @@ export default function AskLottiScreen() {
             )}
           </View>
         </Modal>
+        {entryDraft ? (
+          <VoiceLogModal
+            visible
+            initialResult={entryDraft}
+            userId={user?.id ?? null}
+            babyId={activeBabyId}
+            babyName={activeBaby?.name ?? null}
+            mode={contextMode}
+            onClose={() => setEntryDraft(null)}
+            onSaved={() => {}}
+          />
+        ) : null}
       </SafeAreaView>
     </ThemedBackground>
   );
@@ -1175,12 +1249,7 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
   composerWrap: {
     paddingHorizontal: 14,
     paddingTop: 9,
-    backgroundColor: isDark ? "rgba(14,11,22,0.96)" : "rgba(255,252,250,0.97)",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(104,72,184,0.10)",
-    boxShadow: isDark
-      ? "0 -10px 28px rgba(0,0,0,0.45)"
-      : "0 -10px 28px rgba(78,52,117,0.08)",
+    backgroundColor: "transparent",
   },
   composerMeta: {
     minHeight: 20,
@@ -1218,12 +1287,18 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 6,
     paddingVertical: 6,
-    backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "#FFFFFF",
+    backgroundColor: isDark ? "rgba(28,22,44,0.45)" : "rgba(255,255,255,0.38)",
     borderWidth: 1,
-    borderColor: isDark ? "rgba(255,255,255,0.16)" : "rgba(104,72,184,0.17)",
+    borderColor: isDark ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.85)",
     boxShadow: isDark
       ? "0 5px 18px rgba(0,0,0,0.32)"
       : "0 5px 18px rgba(77,51,112,0.07)",
+  },
+  composerGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 23,
+    borderCurve: "continuous",
+    overflow: "hidden",
   },
   composerActive: {
     borderColor: isDark ? "rgba(200,179,255,0.55)" : "rgba(104,72,184,0.38)",

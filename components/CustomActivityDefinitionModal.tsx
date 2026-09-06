@@ -183,8 +183,6 @@ export default function CustomActivityDefinitionModal({
               value={emoji}
               onChangeText={setEmoji}
               maxLength={32}
-              placeholder="⭐️"
-              placeholderTextColor={textSecondary}
               style={[styles.input, styles.emojiInput, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
             />
             <Text style={[styles.fieldHint, { color: textSecondary }]}>{t('custom.emojiHint')}</Text>

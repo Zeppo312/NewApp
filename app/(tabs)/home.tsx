@@ -44,11 +44,6 @@ import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancell
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 import {
-  featureAllowedForTier,
-  useSubscriptionTier,
-  type AppFeature,
-} from '@/lib/entitlements';
-import {
   DEFAULT_HOME_LOCALE,
   getHomeLocaleTag,
   HomeTranslationKey,
@@ -117,15 +112,7 @@ type HomeQuickAccessCardDefinition = Omit<HomeQuickAccessCardConfig, 'title' | '
 const HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'home_quick_access_order';
 const HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'home_quick_access_hidden';
 
-// Kacheln, die in Tiers ohne das jeweilige Feature komplett ausgeblendet
-// werden (kleinteilige Features ohne Lock-Screen). Gesperrte Flaggschiff-
-// Features (Planer, Einkauf) bleiben sichtbar und führen zum Lock-Screen.
-const QUICK_ACCESS_CARD_FEATURES: Partial<
-  Record<HomeQuickAccessCardId, AppFeature>
-> = {
-  'recipe-generator': 'recipes',
-};
-
+// Nicht-KI-Kacheln bleiben in allen Tarifen sichtbar; die Zielseiten prüfen den Zugriff.
 const HOME_QUICK_ACCESS_CARD_DEFINITIONS: HomeQuickAccessCardDefinition[] = [
   {
     id: 'recipe-generator',
@@ -982,16 +969,6 @@ export default function HomeScreen() {
     [locale],
   );
   const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
-  const subscriptionTier = useSubscriptionTier();
-  const isCardAvailableForTier = useCallback(
-    (id: HomeQuickAccessCardId) => {
-      if (subscriptionTier === null) return true;
-      const feature = QUICK_ACCESS_CARD_FEATURES[id];
-      if (!feature) return true;
-      return featureAllowedForTier(feature, subscriptionTier);
-    },
-    [subscriptionTier],
-  );
   const orderedQuickAccessCards = useMemo(
     () =>
       quickAccessOrder
@@ -999,10 +976,9 @@ export default function HomeScreen() {
         .filter(
           (card): card is HomeQuickAccessCardConfig =>
             !!card &&
-            !hiddenQuickAccessIdSet.has(card.id) &&
-            isCardAvailableForTier(card.id),
+            !hiddenQuickAccessIdSet.has(card.id),
         ),
-    [hiddenQuickAccessIdSet, isCardAvailableForTier, quickAccessCardById, quickAccessOrder],
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
   const hiddenQuickAccessCards = useMemo(
     () =>
@@ -1011,10 +987,9 @@ export default function HomeScreen() {
         .filter(
           (card): card is HomeQuickAccessCardConfig =>
             !!card &&
-            hiddenQuickAccessIdSet.has(card.id) &&
-            isCardAvailableForTier(card.id),
+            hiddenQuickAccessIdSet.has(card.id),
         ),
-    [hiddenQuickAccessIdSet, isCardAvailableForTier, quickAccessCardById, quickAccessOrder],
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
   );
 
   const triggerHaptic = () => {

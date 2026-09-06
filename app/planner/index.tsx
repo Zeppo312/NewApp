@@ -2459,7 +2459,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   dayOverviewSection: {
-    marginTop: -42,
+    marginTop: 0,
   },
   dayOverviewHeader: {
     minHeight: 30,

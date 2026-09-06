@@ -20,7 +20,7 @@ import {
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
+import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff, useSubscriptionTier } from '@/lib/entitlements';
 import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
@@ -567,6 +567,7 @@ const QuickActionRow: React.FC<{
   onHideAction: (action: QuickActionType) => void;
   onRestoreAction: (action: QuickActionType) => void;
   onReorderActions: (actions: QuickActionId[]) => void;
+  canCreateCustomActivities: boolean;
   onAddCustom: () => void;
   onEditCustom: (activity: CustomActivityType) => void;
   customActivities: CustomActivityType[];
@@ -578,6 +579,7 @@ const QuickActionRow: React.FC<{
   onHideAction,
   onRestoreAction,
   onReorderActions,
+  canCreateCustomActivities,
   onAddCustom,
   onEditCustom,
   customActivities,
@@ -833,7 +835,7 @@ const QuickActionRow: React.FC<{
             offset: itemWidth * index,
             index,
           })}
-          ListFooterComponent={<View style={s.quickActionFooterWrap}>{renderAddButton()}</View>}
+          ListFooterComponent={canCreateCustomActivities ? <View style={s.quickActionFooterWrap}>{renderAddButton()}</View> : null}
         />
       )}
     </View>
@@ -886,6 +888,8 @@ export default function DailyScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const historyCutoff = useHistoryCutoff();
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
+  const subscriptionTier = useSubscriptionTier();
+  const canCreateCustomActivities = subscriptionTier === 'standard' || subscriptionTier === 'premium';
   const monthViewAccess = useFeatureAccess('dailyMonthView');
   const isMonthViewLocked = monthViewAccess.hasAccess === false;
   const visibleTab = selectedTab === 'month' && isMonthViewLocked ? 'day' : selectedTab;
@@ -1748,6 +1752,7 @@ export default function DailyScreen() {
   const handleQuickActionPress = (action: QuickActionId) => {
     if (!ensureWritableInCurrentMode()) return;
     if (isCustomQuickActionId(action)) {
+      if (!canCreateCustomActivities) return;
       const activityId = getCustomActivityIdFromAction(action);
       const activity = customActivities.find((item) => item.id === activityId && !item.is_archived);
       if (!activity) return;
@@ -1771,7 +1776,7 @@ export default function DailyScreen() {
   };
 
   const openNewCustomActivity = () => {
-    if (!ensureWritableInCurrentMode()) return;
+    if (!canCreateCustomActivities || !ensureWritableInCurrentMode()) return;
     if (!activeBabyId) {
       Alert.alert(t('alert.noBabyTitle'), t('alert.noBaby'));
       return;
@@ -1787,7 +1792,7 @@ export default function DailyScreen() {
   };
 
   const handleSaveCustomActivityDefinition = async (draft: CustomActivityTypeDraft) => {
-    if (!activeBabyId) return false;
+    if (!activeBabyId || (!editingCustomActivity && !canCreateCustomActivities)) return false;
     const result = editingCustomActivity
       ? await updateCustomActivityType(editingCustomActivity.id, activeBabyId, draft)
       : await createCustomActivityType(activeBabyId, draft);
@@ -1863,6 +1868,7 @@ export default function DailyScreen() {
     options: { startTimer: boolean },
   ) => {
     if (!ensureWritableInCurrentMode() || !activeBabyId || !selectedCustomActivity) return false;
+    if (!editingCustomEntry?.id && !canCreateCustomActivities) return false;
     const customPayload = {
       start_time: payload.start_time,
       end_time: payload.end_time,
@@ -3087,9 +3093,10 @@ export default function DailyScreen() {
                 onHideAction={handleHideQuickAction}
                 onRestoreAction={handleRestoreQuickAction}
                 onReorderActions={handleReorderQuickActions}
+                canCreateCustomActivities={canCreateCustomActivities}
                 onAddCustom={openNewCustomActivity}
                 onEditCustom={openCustomActivityEditor}
-                customActivities={activeCustomActivities}
+                customActivities={canCreateCustomActivities ? activeCustomActivities : []}
                 hiddenActions={hiddenQuickActions}
                 actionOrder={quickActionOrder}
                 disabled={isReadOnlyPreviewMode}

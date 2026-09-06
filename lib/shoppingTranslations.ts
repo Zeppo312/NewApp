@@ -63,6 +63,8 @@ const de: Catalog = {
   'search.hide': 'Suche und Filter ausblenden',
 
   'shopping.item': 'Einkaufsposten',
+  'shopping.suggestions': 'Bereits gekauft',
+  'shopping.useSuggestion': '{{title}} zur Einkaufsliste hinzufügen',
   'shopping.newPlaceholder': 'Neuer Einkaufsposten …',
   'shopping.closeInput': 'Eingabe schließen',
   'shopping.addAccessibility': 'Einkaufsposten hinzufügen',
@@ -338,6 +340,8 @@ const en: Catalog = {
   'search.hide': 'Hide search and filters',
 
   'shopping.item': 'Shopping item',
+  'shopping.suggestions': 'Previously purchased',
+  'shopping.useSuggestion': 'Add {{title}} to the shopping list',
   'shopping.newPlaceholder': 'New shopping item …',
   'shopping.closeInput': 'Close input',
   'shopping.addAccessibility': 'Add shopping item',
@@ -613,6 +617,8 @@ const es: Catalog = {
   'search.hide': 'Ocultar búsqueda y filtros',
 
   'shopping.item': 'Artículo de compra',
+  'shopping.suggestions': 'Comprado anteriormente',
+  'shopping.useSuggestion': 'Añadir {{title}} a la lista de compras',
   'shopping.newPlaceholder': 'Nuevo artículo …',
   'shopping.closeInput': 'Cerrar entrada',
   'shopping.addAccessibility': 'Añadir artículo de compra',

@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useSubscriptionAccess } from '@/contexts/SubscriptionAccessContext';
 import { translatePaywall, type PaywallTranslationKey } from '@/lib/paywallTranslations';
@@ -145,6 +146,7 @@ export function PaywallPlansExperience({
   onOpenImprint,
   onOpenDataManagement,
 }: PaywallPlansExperienceProps) {
+  const insets = useSafeAreaInsets();
   const { locale, localeTag } = useLocale();
   const subscriptionAccess = useSubscriptionAccess();
   const t = (key: PaywallTranslationKey, params?: Record<string, string | number>) => translatePaywall(locale, key, params);
@@ -664,7 +666,10 @@ export function PaywallPlansExperience({
 
       {useInternalScrollView ? (
         <ScrollView
-          contentContainerStyle={styles.scrollInner}
+          contentContainerStyle={[
+            styles.scrollInner,
+            { paddingTop: Math.max(32, insets.top + 8) },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {inner}

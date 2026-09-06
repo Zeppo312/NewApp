@@ -2,6 +2,9 @@ import type { AppLocale } from "@/lib/localization";
 
 const de = {
   title: "Frag Lotti",
+  importEntries: "Einträge übernehmen",
+  importLoading: "Vorschläge werden vorbereitet …",
+
   subtitle: "Alltagstipps – persönlich, wenn Daten passen",
   loading: "Lotti denkt nach und prüft passende Einträge …",
   intro:
@@ -25,7 +28,7 @@ const de = {
   thanks: "Sehr gern! Wenn du noch etwas wissen möchtest, frag einfach weiter.",
   retry: "Noch einmal versuchen",
   tooLong: "Deine Frage darf höchstens 500 Zeichen lang sein.",
-  invalidQuestion: "Bitte formuliere eine Frage zu euren Einträgen.",
+  invalidQuestion: "Bitte formuliere eine Frage rund um Baby oder Schwangerschaft.",
   noBaby: "Bitte wähle zuerst ein Baby aus.",
   genericError:
     "Lotti konnte die Frage gerade nicht beantworten. Bitte versuche es später noch einmal.",
@@ -73,6 +76,9 @@ const de = {
 type Key = keyof typeof de;
 const en: Record<Key, string> = {
   title: "Ask Lotti",
+  importEntries: "Save entries",
+  importLoading: "Preparing suggestions …",
+
   subtitle: "Everyday guidance, personalized when it helps",
   loading: "Lotti is thinking and checking relevant records …",
   intro:
@@ -143,6 +149,9 @@ const en: Record<Key, string> = {
 };
 const es: Record<Key, string> = {
   title: "Pregunta a Lotti",
+  importEntries: "Guardar entradas",
+  importLoading: "Preparando sugerencias …",
+
   subtitle: "Orientación diaria, personalizada cuando ayuda",
   loading: "Lotti está pensando y revisando datos relevantes …",
   intro:

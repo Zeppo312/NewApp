@@ -7,7 +7,8 @@ export type VoiceLogEntryType =
   | 'diaper'
   | 'custom'
   | 'shopping'
-  | 'planner';
+  | 'planner'
+  | 'doctor_question';
 
 /** 'baby': Schlaf/Füttern/Windel/eigene Aktivitäten + Einkauf + Planer; 'pregnancy': Einkauf + Planer. */
 export type VoiceLogMode = 'baby' | 'pregnancy';

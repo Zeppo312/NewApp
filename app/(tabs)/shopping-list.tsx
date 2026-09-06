@@ -68,6 +68,7 @@ import {
   upsertShoppingItem,
 } from '@/lib/shopping';
 import { drainShoppingWidgetToggles, syncShoppingWidget } from '@/lib/shoppingWidget';
+import { getShoppingSuggestions } from '@/lib/shoppingSuggestions';
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
 
@@ -146,19 +147,6 @@ const formatPurchaseDate = (value: string) =>
   });
 
 const normalizeSearchText = (value: string) => value.trim().toLowerCase();
-
-const matchesShoppingSearch = (item: ShoppingListItem, query: string) => {
-  if (query.length === 0) return true;
-  return [
-    item.title,
-    item.normalized_name,
-    categoryLabel(item.category),
-    item.notes ?? '',
-  ]
-    .join(' ')
-    .toLowerCase()
-    .includes(query);
-};
 
 const matchesInventorySearch = (item: InventoryItem, query: string) => {
   if (query.length === 0) return true;
@@ -333,7 +321,6 @@ function ShoppingListScreenContent() {
   const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isInventorySearchVisible, setIsInventorySearchVisible] = useState(false);
-  const [isShoppingSearchVisible, setIsShoppingSearchVisible] = useState(false);
   const [collapsedInventoryCategories, setCollapsedInventoryCategories] = useState<string[]>([]);
   const [isAddShoppingExpanded, setIsAddShoppingExpanded] = useState(false);
   const [isPurchasedExpanded, setIsPurchasedExpanded] = useState(false);
@@ -345,6 +332,10 @@ function ShoppingListScreenContent() {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const shoppingSuggestions = useMemo(
+    () => getShoppingSuggestions(shoppingItems, newItemTitle),
+    [shoppingItems, newItemTitle]
+  );
 
   const [editingInventory, setEditingInventory] = useState<Partial<InventoryItem> | null>(null);
 
@@ -477,11 +468,6 @@ function ShoppingListScreenContent() {
 
   const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchQuery), [searchQuery]);
 
-  const searchedShoppingItems = useMemo(
-    () => shoppingItems.filter((item) => matchesShoppingSearch(item, normalizedSearchQuery)),
-    [normalizedSearchQuery, shoppingItems]
-  );
-
   const searchedInventoryItems = useMemo(
     () =>
       inventoryItems
@@ -491,19 +477,19 @@ function ShoppingListScreenContent() {
   );
 
   const categoryCounts = useMemo(() => {
-    const items = section === 'inventory' ? searchedInventoryItems : searchedShoppingItems;
+    const items = section === 'inventory' ? searchedInventoryItems : shoppingItems;
     const counts: Record<string, number> = { all: items.length };
     for (const item of items) {
       counts[item.category] = (counts[item.category] ?? 0) + 1;
     }
     return counts;
-  }, [section, searchedInventoryItems, searchedShoppingItems]);
+  }, [section, searchedInventoryItems, shoppingItems]);
 
   const filteredShoppingItems = useMemo(() => {
     const filtered =
       selectedCategory === 'all'
-        ? searchedShoppingItems
-        : searchedShoppingItems.filter((item) => item.category === selectedCategory);
+        ? shoppingItems
+        : shoppingItems.filter((item) => item.category === selectedCategory);
 
     return [...filtered].sort((a, b) => {
       if (shoppingSort === 'category') {
@@ -516,7 +502,7 @@ function ShoppingListScreenContent() {
       }
       return getCreatedAtTime(b) - getCreatedAtTime(a);
     });
-  }, [selectedCategory, searchedShoppingItems, shoppingSort]);
+  }, [selectedCategory, shoppingItems, shoppingSort]);
 
   const filteredInventoryItems = useMemo(() => {
     const filtered =
@@ -549,11 +535,11 @@ function ShoppingListScreenContent() {
 
   // --- Einkaufsliste -------------------------------------------------------
 
-  const handleAddShoppingItem = useCallback(async () => {
-    if (newItemTitle.trim().length === 0) return;
+  const handleAddShoppingItem = useCallback(async (title = newItemTitle) => {
+    if (isAddingItem || title.trim().length === 0) return;
     setIsAddingItem(true);
     const { data, error } = await upsertShoppingItem({
-      title: newItemTitle,
+      title,
       category: selectedCategory === 'all' ? 'other' : selectedCategory,
     });
     setIsAddingItem(false);
@@ -565,7 +551,7 @@ function ShoppingListScreenContent() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsAddShoppingExpanded(false);
     setShoppingItems((items) => [data, ...items]);
-  }, [newItemTitle, selectedCategory]);
+  }, [isAddingItem, newItemTitle, selectedCategory]);
 
   const handleTogglePurchased = useCallback(
     async (item: ShoppingListItem) => {
@@ -997,20 +983,8 @@ function ShoppingListScreenContent() {
     });
   }, []);
 
-  const toggleShoppingSearch = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsShoppingSearchVisible((current) => {
-      if (current) {
-        setSearchQuery('');
-        setIsFiltersExpanded(false);
-      }
-      return !current;
-    });
-  }, []);
-
   const openAddShopping = useCallback(() => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsShoppingSearchVisible(false);
     setIsFiltersExpanded(false);
     setSearchQuery('');
     setIsAddShoppingExpanded(true);
@@ -1206,8 +1180,6 @@ function ShoppingListScreenContent() {
           },
         ]}
       >
-        {isShoppingSearchVisible && !isAddShoppingExpanded ? renderListControls() : null}
-
         {isAddShoppingExpanded ? (
           <LiquidGlassCard
             style={styles.card}
@@ -1226,6 +1198,33 @@ function ShoppingListScreenContent() {
                   <IconSymbol name="xmark" size={18} color="rgba(125,90,80,0.65)" />
                 </TouchableOpacity>
               </View>
+              {shoppingSuggestions.length > 0 ? (
+                <View style={styles.shoppingSuggestions}>
+                  <ThemedText style={styles.shoppingMeta}>
+                    {t('shopping.suggestions')}
+                  </ThemedText>
+                  <ScrollView style={{ maxHeight: 176 }} keyboardShouldPersistTaps="handled">
+                    {shoppingSuggestions.map((item) => (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={styles.shoppingSuggestion}
+                        onPress={() => handleAddShoppingItem(item.title)}
+                        disabled={isAddingItem}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('shopping.useSuggestion', { title: item.title })}
+                      >
+                        <IconSymbol name="clock" size={16} color={primaryForeground} />
+                        <ThemedText
+                          numberOfLines={1}
+                          style={[styles.shoppingTitle, { flex: 1 }, isDark && styles.shoppingTitleDark]}
+                        >
+                          {item.title}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
               <View style={styles.addRow}>
                 <TextInput
                   style={styles.addInput}
@@ -1233,13 +1232,13 @@ function ShoppingListScreenContent() {
                   placeholderTextColor="rgba(125,90,80,0.5)"
                   value={newItemTitle}
                   onChangeText={setNewItemTitle}
-                  onSubmitEditing={handleAddShoppingItem}
+                  onSubmitEditing={() => handleAddShoppingItem()}
                   returnKeyType="done"
                   autoFocus
                 />
                 <TouchableOpacity
                   style={[styles.addButton, isDark && styles.addButtonDark]}
-                  onPress={handleAddShoppingItem}
+                  onPress={() => handleAddShoppingItem()}
                   disabled={isAddingItem}
                   accessibilityLabel={t('shopping.addAccessibility')}
                 >
@@ -1312,26 +1311,6 @@ function ShoppingListScreenContent() {
                 />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={[
-                styles.inventorySearchToggle,
-                isShoppingSearchVisible && styles.inventorySearchToggleActive,
-              ]}
-              onPress={toggleShoppingSearch}
-              accessibilityRole="button"
-              accessibilityState={{ expanded: isShoppingSearchVisible }}
-              accessibilityLabel={
-                isShoppingSearchVisible
-                  ? t('search.hide')
-                  : t('search.show')
-              }
-            >
-              <IconSymbol
-                name="magnifyingglass"
-                size={18}
-                color={isShoppingSearchVisible ? '#FFFFFF' : PRIMARY}
-              />
-            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -2542,6 +2521,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shoppingSuggestions: { marginBottom: 10, gap: 4 },
+  shoppingSuggestion: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
   addInput: {
     flex: 1,
     height: 44,

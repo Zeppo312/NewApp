@@ -54,6 +54,8 @@ export type AskLottiHistoryItem = {
 };
 
 export type AskLottiResponse = {
+  /** True when generation failed and only a fallback/evidence is available. */
+  isFallback?: boolean;
   answer: string;
   evidence: AskLottiEvidence[];
   disclaimer: string;

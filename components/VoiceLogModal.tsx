@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Alert,
   Modal,
   Platform,
@@ -17,6 +18,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -37,7 +41,7 @@ import {
   parseVoiceRecording,
   saveVoiceLogEntries,
 } from '@/lib/voiceLog/api';
-import type { VoiceLogMode, VoiceLogParsedEntry, VoiceLogShoppingCategory } from '@/lib/voiceLog/types';
+import type { VoiceLogMode, VoiceLogParsedEntry, VoiceLogShoppingCategory, VoiceLogParseResult } from '@/lib/voiceLog/types';
 import { VoiceOrb } from '@/components/voice/VoiceOrb';
 import { VoiceWaveform } from '@/components/voice/VoiceWaveform';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -54,7 +58,7 @@ const RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 } as const;
 
-const ACCENT_LIGHT = '#9C27B0';
+const ACCENT_LIGHT = '#8054A6';
 const ACCENT_DARK = '#CE93D8';
 
 type Phase = 'idle' | 'recording' | 'processing' | 'review' | 'saving';
@@ -66,6 +70,7 @@ const ENTRY_TYPE_OPTIONS: { value: VoiceLogParsedEntry['type']; labelKey: DailyT
   { value: 'diaper', labelKey: 'voice.diaper' },
   { value: 'shopping', labelKey: 'voice.shopping' },
   { value: 'planner', labelKey: 'voice.planner' },
+  { value: 'doctor_question', labelKey: 'voice.doctorQuestion' },
 ];
 
 const PLANNER_KIND_OPTIONS: { value: NonNullable<VoiceLogParsedEntry['planner_kind']>; labelKey: DailyTranslationKey }[] = [
@@ -177,6 +182,7 @@ type Props = {
   babyName?: string | null;
   /** 'pregnancy': nur Einkaufsliste & Planer (kein Baby-Tracking). */
   mode?: VoiceLogMode;
+  initialResult?: VoiceLogParseResult;
   onClose: () => void;
   /** Nach erfolgreichem Speichern (Home lädt Einträge/Schlafminuten neu). */
   onSaved: () => void;
@@ -191,6 +197,8 @@ const getEntryIconName = (
   type: VoiceLogParsedEntry['type'],
 ): React.ComponentProps<typeof Ionicons>['name'] => {
   switch (type) {
+    case 'doctor_question':
+      return 'medkit-outline';
     case 'sleep':
       return 'moon-outline';
     case 'feeding':
@@ -212,19 +220,33 @@ const VoiceLogModal: React.FC<Props> = ({
   babyId,
   babyName,
   mode = 'baby',
+  initialResult,
   onClose,
   onSaved,
 }) => {
   const { locale } = useLocale();
+  const insets = useSafeAreaInsets();
+  const [reduceTransparency, setReduceTransparency] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void AccessibilityInfo.isReduceTransparencyEnabled().then((value) => {
+      if (active) setReduceTransparency(value);
+    });
+    const subscription = AccessibilityInfo.addEventListener('reduceTransparencyChanged', setReduceTransparency);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
   const isPregnancy = mode === 'pregnancy';
   const localeTag = getDailyLocaleTag(locale);
   const t = useCallback((key: DailyTranslationKey, params?: Record<string, string | number>) => translateDailyText(locale, key, params), [locale]);
   const entryTypeOptions = useMemo(
     () =>
       ENTRY_TYPE_OPTIONS.filter((option) =>
-        isPregnancy ? option.value === 'shopping' || option.value === 'planner' : true,
+        initialResult || isPregnancy ? ['shopping', 'planner', 'doctor_question'].includes(option.value) : true,
       ),
-    [isPregnancy],
+    [initialResult, isPregnancy],
   );
   const feedingTypeOptions = useMemo(() => FEEDING_TYPE_OPTIONS.map((option) => ({ ...option, label: option.value === 'BREAST' ? t('feeding.breast') : option.value === 'BOTTLE' ? t('card.bottle') : option.value === 'SOLIDS' ? t('feeding.solids') : option.value === 'PUMP' ? t('feeding.pump') : t('voice.waterTea') })), [t]);
   const feedingSideOptions = useMemo(() => FEEDING_SIDE_OPTIONS.map((option) => ({ ...option, label: option.value === 'LEFT' ? t('input.left') : option.value === 'RIGHT' ? t('input.right') : t('input.both') })), [t]);
@@ -234,21 +256,22 @@ const VoiceLogModal: React.FC<Props> = ({
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const accentColor = isDark ? ACCENT_DARK : ACCENT_LIGHT;
-  const overlayColor = isDark ? 'rgba(0,0,0,0.66)' : 'rgba(32,24,36,0.28)';
-  const panelColor = isDark ? '#171519' : '#FCFBFD';
-  const sectionBg = isDark ? '#211F23' : '#F5F2F7';
-  const sectionBorder = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(67,43,76,0.09)';
+  const overlayColor = isDark ? 'rgba(0,0,0,0.66)' : 'rgba(45,32,54,0.18)';
+  const panelColor = Platform.OS === 'android' || reduceTransparency ? (isDark ? '#25202D' : '#F8F3FA') : (isDark ? 'rgba(29,24,38,0.58)' : 'rgba(255,250,255,0.48)');
+  const sectionBg = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.55)';
+  const sectionBorder = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.85)';
 
   const recorder = useAudioRecorder(RECORDING_OPTIONS);
   // 80 ms → flüssige Waveform; die Dauer-Anzeige braucht es ohnehin.
   const recorderState = useAudioRecorderState(recorder, 80);
 
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>(initialResult ? 'review' : 'idle');
   /** Startzeitpunkt der laufenden Aufnahme (Date.now()) — für die Mindestdauer. */
   const recordingStartedAtRef = useRef(0);
-  const [transcript, setTranscript] = useState('');
-  const [entries, setEntries] = useState<VoiceLogParsedEntry[]>([]);
-  const [selected, setSelected] = useState<boolean[]>([]);
+  const saveInFlightRef = useRef(false);
+  const [transcript, setTranscript] = useState(initialResult?.transcript ?? '');
+  const [entries, setEntries] = useState<VoiceLogParsedEntry[]>(initialResult?.entries ?? []);
+  const [selected, setSelected] = useState<boolean[]>(() => initialResult?.entries.map(() => true) ?? []);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editingDraft, setEditingDraft] = useState<VoiceLogParsedEntry | null>(null);
   const [editedTimeField, setEditedTimeField] = useState<EditedTimeField | null>(null);
@@ -429,6 +452,11 @@ const VoiceLogModal: React.FC<Props> = ({
   const updateEntryType = (type: VoiceLogParsedEntry['type']) => {
     if (!editingDraft) return;
     if (type === 'custom') return;
+    if (type === 'doctor_question') {
+      updateDraft({ type, end_local: null, timer_requested: false, feeding_type_needs_confirmation: false });
+      setEditedTimeField(null);
+      return;
+    }
     if (type === 'planner') {
       updateDraft({
         type,
@@ -487,6 +515,17 @@ const VoiceLogModal: React.FC<Props> = ({
 
   const saveEditing = () => {
     if (editingIndex === null || !editingDraft) return;
+    if (editingDraft.type === 'doctor_question') {
+      const note = editingDraft.note?.trim();
+      if (!note) {
+        Alert.alert(t('voice.doctorQuestion'), t('voice.doctorQuestionRequired'));
+        return;
+      }
+      setEntries((current) => current.map((entry, index) => index === editingIndex ? { ...editingDraft, note } : entry));
+      setSelected((current) => current.map((value, index) => index === editingIndex ? true : value));
+      cancelEditing();
+      return;
+    }
     if (editingDraft.type === 'planner') {
       const title = (editingDraft.planner_title ?? '').trim();
       if (!title) {
@@ -722,6 +761,7 @@ const VoiceLogModal: React.FC<Props> = ({
   };
 
   const handleSave = async () => {
+    if (saveInFlightRef.current) return;
     if (!userId) {
       Alert.alert(t('common.notice'), t('voice.login'));
       return;
@@ -735,40 +775,43 @@ const VoiceLogModal: React.FC<Props> = ({
       return;
     }
 
+    saveInFlightRef.current = true;
     setPhase('saving');
-    const { savedCount, failedCount } = await saveVoiceLogEntries(
-      selectedEntries,
-      userId,
-      babyId,
-      locale,
-    );
-
-    if (savedCount > 0) {
-      onSaved();
-    }
-    if (failedCount > 0) {
-      Alert.alert(
-        t('voice.entry'),
-        savedCount > 0
-          ? t('voice.partialSave', { saved: savedCount, failed: failedCount })
-          : t('voice.saveFailed'),
+    try {
+      const { savedCount, failedCount, failedEntries } = await saveVoiceLogEntries(
+        selectedEntries,
+        userId,
+        babyId,
+        locale,
       );
-      setPhase(savedCount > 0 ? 'idle' : 'review');
-      if (savedCount > 0) closeModal();
-      return;
+
+      if (savedCount > 0) {
+        onSaved();
+      }
+      if (failedCount > 0) {
+        Alert.alert(
+          t('voice.entry'),
+          savedCount > 0
+            ? t('voice.partialSave', { saved: savedCount, failed: failedCount })
+            : t('voice.saveFailed'),
+        );
+        setEntries(failedEntries);
+        setSelected(failedEntries.map(() => true));
+        setPhase('review');
+        return;
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      closeModal();
+    } catch {
+      Alert.alert(t('voice.entry'), t('voice.saveFailed'));
+      setPhase('review');
+    } finally {
+      saveInFlightRef.current = false;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    closeModal();
   };
 
   const renderIdle = () => (
     <Animated.View style={styles.centerBlock} entering={FadeIn.duration(260)} exiting={FadeOut.duration(160)}>
-      <Text style={[styles.stateTitle, { color: textPrimary }]}>
-        {isPregnancy ? t('voice.aiGreetingPregnancy') : t('voice.aiGreeting')}
-      </Text>
-      <Text style={[styles.stateHint, { color: textSecondary }]}>
-        {t(isPregnancy ? 'voice.idleHintPregnancy' : 'voice.idleHint')}
-      </Text>
       <TouchableOpacity
         onPress={startRecording}
         activeOpacity={0.85}
@@ -776,15 +819,9 @@ const VoiceLogModal: React.FC<Props> = ({
         accessibilityRole="button"
         accessibilityLabel={t('voice.tap')}
       >
-        <VoiceOrb mode="idle" size={78} accent={accentColor} isDark={isDark} />
+        <VoiceOrb mode="idle" size={94} accent={accentColor} isDark={isDark} />
         <Text style={[styles.recordActionLabel, { color: accentColor }]}>{t('voice.tap')}</Text>
       </TouchableOpacity>
-      <View style={[styles.exampleBox, { backgroundColor: sectionBg, borderColor: sectionBorder }]}>
-        <Ionicons name="chatbubble-ellipses-outline" size={17} color={textSecondary} />
-        <Text style={[styles.exampleText, { color: textSecondary }]}>
-          {isPregnancy ? t('voice.examplePregnancy') : `${babyName ? `${babyName} ` : ''}${t('voice.example')}`}
-        </Text>
-      </View>
     </Animated.View>
   );
 
@@ -797,7 +834,7 @@ const VoiceLogModal: React.FC<Props> = ({
       <Text style={[styles.recordingTimer, { color: textPrimary }]}>
         {formatSeconds(recorderState.durationMillis)}
       </Text>
-      <View style={[styles.waveformShell, { backgroundColor: sectionBg }]}>
+      <View style={[styles.waveformShell, { backgroundColor: sectionBg, borderColor: sectionBorder }]}>
         <VoiceWaveform metering={recorderState.metering} color={accentColor} />
       </View>
       <TouchableOpacity
@@ -1199,7 +1236,21 @@ const VoiceLogModal: React.FC<Props> = ({
           </>
         ) : null}
 
-        {editingDraft.type !== 'shopping' &&
+        {editingDraft.type === 'doctor_question' ? (
+          <>
+            <Text style={[styles.fieldLabel, { color: textPrimary }]}>{t('voice.doctorQuestion')}</Text>
+            <TextInput
+              style={[styles.noteInput, { color: textPrimary, backgroundColor: inputBackground, borderColor: sectionBorder }]}
+              value={editingDraft.note ?? ''}
+              onChangeText={(note) => updateDraft({ note })}
+              accessibilityLabel={t('voice.doctorQuestion')}
+              multiline
+              maxLength={2000}
+              textAlignVertical="top"
+            />
+          </>
+        ) : null}
+        {editingDraft.type !== 'doctor_question' && editingDraft.type !== 'shopping' &&
         !(editingDraft.type === 'custom' && !editingDraft.custom_log_entry) ? (
           <>
         <Text style={[styles.fieldLabel, { color: textPrimary }]}>
@@ -1440,11 +1491,12 @@ const VoiceLogModal: React.FC<Props> = ({
         </View>
         <View style={styles.understoodTextWrap}>
           <Text style={[styles.understoodTitle, { color: textPrimary }]}>
-            {entries.length === 0 ? t('voice.notUnderstood') : t('voice.understood').replace(' ✨', '')}
+            {entries.length === 0 ? t(initialResult ? 'voice.importEmpty' : 'voice.notUnderstood') : t('voice.detected')}
           </Text>
-          <Text style={[styles.understoodHint, { color: textSecondary }]}>
-            {entries.length === 0 ? t('voice.none') : t('voice.understoodHint')}
-          </Text>
+          {initialResult && entries.length > 0 ? <Text style={[styles.understoodHint, { color: textSecondary }]}>{t('voice.importHint')}</Text> : null}
+          {entries.length === 0 && !initialResult && (
+            <Text style={[styles.understoodHint, { color: textSecondary }]}>{t('voice.none')}</Text>
+          )}
         </View>
       </Animated.View>
 
@@ -1453,29 +1505,23 @@ const VoiceLogModal: React.FC<Props> = ({
           entering={FadeInUp.delay(160).duration(320)}
           style={[styles.transcriptBox, { backgroundColor: sectionBg, borderColor: sectionBorder }]}
         >
-          <Ionicons name="mic-outline" size={16} color={textSecondary} />
+          <Ionicons name={initialResult ? 'chatbubble-outline' : 'mic-outline'} size={16} color={textSecondary} />
           <Text style={[styles.transcriptText, { color: textSecondary }]}>„{transcript}“</Text>
         </Animated.View>
       ) : null}
 
       {entries.length === 0 ? (
         <Animated.View entering={FadeInUp.delay(260).duration(320)} style={styles.centerBlock}>
-          <Text style={[styles.hintText, { color: textSecondary }]}>
-            {t('voice.none')}
-          </Text>
           <TouchableOpacity
-            style={[styles.primaryButton, { backgroundColor: accentColor, marginTop: 16 }]}
-            onPress={reset}
+            style={[styles.primaryButton, styles.retryButton, { backgroundColor: accentColor }]}
+            onPress={initialResult ? closeModal : reset}
             activeOpacity={0.8}
           >
-            <Text style={styles.primaryButtonText}>{t('voice.newRecording')}</Text>
+            <Text style={styles.primaryButtonText}>{t(initialResult ? 'common.cancel' : 'voice.newRecording')}</Text>
           </TouchableOpacity>
         </Animated.View>
       ) : (
         <>
-          <Animated.Text entering={FadeInUp.delay(260).duration(300)} style={[styles.sectionTitle, { color: textPrimary }]}>
-            {t('voice.detected')}
-          </Animated.Text>
           {entries.map((entry, index) => {
             const { emoji, title, timeText } = describeVoiceLogEntry(entry, locale);
             const isActive = selected[index];
@@ -1606,11 +1652,11 @@ const VoiceLogModal: React.FC<Props> = ({
           <Animated.View entering={FadeInUp.delay(320 + entries.length * 90).duration(300)} style={styles.recordingActions}>
             <TouchableOpacity
               style={[styles.secondaryButton, { borderColor: sectionBorder }]}
-              onPress={reset}
+              onPress={initialResult ? closeModal : reset}
               activeOpacity={0.8}
             >
               <Text style={[styles.secondaryButtonText, { color: textSecondary }]}>
-                {t('voice.newRecording')}
+                {t(initialResult ? 'common.cancel' : 'voice.newRecording')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1659,9 +1705,18 @@ const VoiceLogModal: React.FC<Props> = ({
             {
               backgroundColor: panelColor,
               borderColor: sectionBorder,
+              marginBottom: Math.max(insets.bottom, 12),
             },
           ]}
         >
+          {Platform.OS !== 'android' && !reduceTransparency && <BlurView pointerEvents="none" tint={isDark ? 'systemMaterialDark' : 'systemMaterialLight'} intensity={65} style={StyleSheet.absoluteFill} />}
+          <LinearGradient
+            pointerEvents="none"
+            colors={isDark ? ['rgba(225,197,255,0.12)', 'rgba(45,32,58,0.04)', 'rgba(184,204,235,0.08)'] : ['rgba(255,255,255,0.65)', 'rgba(244,225,250,0.18)', 'rgba(227,237,251,0.30)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.handleArea}>
             <View style={[styles.sheetHandle, { backgroundColor: isDark ? '#514B54' : '#D9D3DC' }]} />
           </View>
@@ -1675,17 +1730,14 @@ const VoiceLogModal: React.FC<Props> = ({
           >
             <View style={styles.header}>
               <View style={styles.headerCopy}>
-                <Text style={[styles.headerTitle, { color: textPrimary }]}>{t('voice.title')}</Text>
-                <Text style={[styles.headerSubtitle, { color: textSecondary }]}>
-                  {isPregnancy ? t('voice.subtitlePregnancy') : t('voice.subtitle')}
-                </Text>
+                <Text style={[styles.headerTitle, { color: textPrimary }]}>{t(initialResult ? 'voice.importTitle' : 'voice.title')}</Text>
               </View>
               <TouchableOpacity
                 onPress={closeModal}
                 activeOpacity={0.72}
                 style={[styles.closeButton, { backgroundColor: sectionBg }]}
                 accessibilityRole="button"
-                accessibilityLabel={`${t('common.cancel')} · ${t('voice.title')}`}
+                accessibilityLabel={`${t('common.cancel')} · ${t(initialResult ? 'voice.importTitle' : 'voice.title')}`}
               >
                 <Ionicons name="close" size={20} color={textSecondary} />
               </TouchableOpacity>
@@ -1709,14 +1761,15 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   panel: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    width: '95%',
+    maxWidth: 600,
+    alignSelf: 'center',
+    borderRadius: 32,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: 0,
     overflow: 'hidden',
     maxHeight: '90%',
-    boxShadow: '0 -8px 30px rgba(24, 18, 27, 0.08)',
+    boxShadow: '0 12px 40px rgba(39, 24, 52, 0.18)',
   },
   handleArea: {
     height: 22,
@@ -1734,7 +1787,7 @@ const styles = StyleSheet.create({
   scrollInner: {
     paddingHorizontal: 22,
     paddingTop: 4,
-    paddingBottom: 40,
+    paddingBottom: 26,
   },
   header: {
     flexDirection: 'row',
@@ -1751,9 +1804,9 @@ const styles = StyleSheet.create({
     letterSpacing: -0.25,
   },
   closeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1792,7 +1845,7 @@ const styles = StyleSheet.create({
   recordActionLabel: {
     fontSize: 13,
     fontWeight: '700',
-    marginTop: -2,
+    marginTop: 8,
   },
   exampleBox: {
     width: '100%',
@@ -1830,15 +1883,19 @@ const styles = StyleSheet.create({
   },
   waveformShell: {
     width: '100%',
-    height: 58,
-    borderRadius: 16,
+    height: 76,
+    borderWidth: 1,
+    borderRadius: 22,
     borderCurve: 'continuous',
     justifyContent: 'center',
     paddingHorizontal: 14,
     marginTop: 20,
   },
   stopButton: {
-    minWidth: 136,
+    minWidth: 170,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.42)',
+    boxShadow: '0 6px 18px rgba(100,64,133,0.20)',
     minHeight: 48,
     borderRadius: 24,
     flexDirection: 'row',
@@ -1907,6 +1964,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  retryButton: {
+    flex: 0,
+    width: '100%',
+    marginTop: 4,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   primaryButtonText: {
     color: '#FFF',

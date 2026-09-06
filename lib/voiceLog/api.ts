@@ -6,7 +6,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 
-import { supabase, addBabyCareEntry } from '@/lib/supabase';
+import { supabase, addBabyCareEntry, saveDoctorQuestion } from '@/lib/supabase';
 import {
   createCustomActivityType,
   getCustomActivityTypes,
@@ -145,6 +145,9 @@ export const describeVoiceLogEntry = (
     ? `${formatDayPrefix(start, locale)}${formatTime(start, locale)}${displayEnd ? ` – ${formatTime(displayEnd, locale)}` : ''}`
     : '';
 
+  if (entry.type === 'doctor_question') {
+    return { emoji: '🩺', title: t('voice.doctorQuestion'), timeText: '' };
+  }
   if (entry.type === 'sleep') {
     return {
       emoji: getVoiceLogEntryEmoji(entry),
@@ -228,23 +231,41 @@ export const parseVoiceRecording = async (
   locale: DailyLocale = 'de',
   mode: VoiceLogMode = 'baby',
 ): Promise<VoiceLogParseResult> => {
-  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const [audioBase64, recentMilkPreference] = await Promise.all([
     FileSystem.readAsStringAsync(localUri, { encoding: 'base64' }),
     mode === 'baby' ? fetchRecentMilkPreference(babyId) : Promise.resolve(null),
   ]);
 
+  return invokeEntryParser({ audioBase64, mimeType, recentMilkPreference }, babyName, babyId, locale, mode);
+};
+
+/** Extract reviewable suggestions from a chat answer; never writes entries. */
+export const parseLottiEntries = (
+  text: string,
+  babyName: string | null,
+  babyId: string | null,
+  locale: DailyLocale,
+  mode: VoiceLogMode,
+): Promise<VoiceLogParseResult> =>
+  invokeEntryParser({ text }, babyName, babyId, locale, mode);
+
+const invokeEntryParser = async (
+  input: { text: string } | { audioBase64: string; mimeType: string; recentMilkPreference: 'BREAST' | 'BOTTLE' | null },
+  babyName: string | null | undefined,
+  babyId: string | null | undefined,
+  locale: DailyLocale,
+  mode: VoiceLogMode,
+): Promise<VoiceLogParseResult> => {
+  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const { data, error } = await supabase.functions.invoke<VoiceLogParseResult>(
     'voice-log-parse',
     {
       body: {
-        audioBase64,
-        mimeType,
+        ...input,
         deviceNow: formatLocalDateTime(new Date()),
         locale,
         babyName: babyName ?? null,
         babyId: babyId ?? null,
-        recentMilkPreference,
         mode,
       },
     },
@@ -286,6 +307,7 @@ export const parseVoiceRecording = async (
 export interface VoiceLogSaveResult {
   savedCount: number;
   failedCount: number;
+  failedEntries: VoiceLogParsedEntry[];
 }
 
 /**
@@ -298,6 +320,7 @@ export const saveVoiceLogEntries = async (
   babyId?: string | null,
   locale: DailyLocale = 'de',
 ): Promise<VoiceLogSaveResult> => {
+  const failedEntries: VoiceLogParsedEntry[] = [];
   let savedCount = 0;
   let failedCount = 0;
   let savedShoppingCount = 0;
@@ -367,9 +390,29 @@ export const saveVoiceLogEntries = async (
   };
 
   for (const entry of entries) {
+    if (entry.type === 'doctor_question') {
+      const question = entry.note?.trim();
+      if (!question || question.length > 2000) {
+        failedCount += 1;
+        failedEntries.push(entry);
+        continue;
+      }
+      try {
+        const { error } = await saveDoctorQuestion(question);
+        if (error) throw error;
+        savedCount += 1;
+      } catch (error) {
+        console.error('Failed to save doctor question:', error);
+        failedCount += 1;
+        failedEntries.push(entry);
+      }
+      continue;
+    }
+
     if (entry.type === 'custom') {
       if (!babyId) {
         failedCount += 1;
+        failedEntries.push(entry);
         continue;
       }
       try {
@@ -453,6 +496,7 @@ export const saveVoiceLogEntries = async (
       } catch (error) {
         console.error('Failed to save voice custom activity:', error);
         failedCount += 1;
+        failedEntries.push(entry);
       }
       continue;
     }
@@ -461,6 +505,7 @@ export const saveVoiceLogEntries = async (
       const title = (entry.planner_title ?? '').trim();
       if (!start || !title) {
         failedCount += 1;
+        failedEntries.push(entry);
         continue;
       }
       try {
@@ -487,6 +532,7 @@ export const saveVoiceLogEntries = async (
       } catch (error) {
         console.error('Failed to save voice planner entry:', error);
         failedCount += 1;
+        failedEntries.push(entry);
       }
       continue;
     }
@@ -500,6 +546,7 @@ export const saveVoiceLogEntries = async (
       if (error) {
         console.error('Failed to save voice shopping item:', error);
         failedCount += 1;
+        failedEntries.push(entry);
       } else {
         savedCount += 1;
         savedShoppingCount += 1;
@@ -508,11 +555,13 @@ export const saveVoiceLogEntries = async (
     }
     if (entry.type === 'feeding' && entry.feeding_type_needs_confirmation) {
       failedCount += 1;
+      failedEntries.push(entry);
       continue;
     }
     const start = localTimeToDate(entry.start_local);
     if (!start) {
       failedCount += 1;
+      failedEntries.push(entry);
       continue;
     }
     const parsedEnd = localTimeToDate(entry.end_local);
@@ -556,6 +605,7 @@ export const saveVoiceLogEntries = async (
     } catch (error) {
       console.error('Failed to save voice log entry:', entry.type, error);
       failedCount += 1;
+      failedEntries.push(entry);
     }
   }
 
@@ -573,5 +623,5 @@ export const saveVoiceLogEntries = async (
     );
   }
 
-  return { savedCount, failedCount };
+  return { savedCount, failedCount, failedEntries };
 };

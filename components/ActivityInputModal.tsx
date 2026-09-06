@@ -15,6 +15,7 @@ import {
   Alert,
   TextInputProps,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
@@ -122,6 +123,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   onDelete,
   initialData,
 }) => {
+  const router = useRouter();
   const { locale } = useLocale();
   const recipesAccess = useFeatureAccess('recipes').hasAccess;
   const t = useCallback((key: DailyTranslationKey) => translateDailyText(locale, key), [locale]);
@@ -1267,7 +1269,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </Text>
           </View>
         )}
-        {feedingOptions.length > 0 && feedingType === 'solids' && recipesAccess === true && (
+        {feedingOptions.length > 0 && feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
@@ -1281,20 +1283,38 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                   borderColor: 'rgba(255,255,255,0.14)',
                 },
               ]}
-              onPress={() => setRecipeDropdownOpen((v) => !v)}
+              onPress={() => {
+                if (recipesAccess === null) return;
+                if (!recipesAccess) {
+                  Alert.alert(t('input.blwRecipes'), t('input.recipesLockedHint'), [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    {
+                      text: t('input.recipeSubscriptionOptions'),
+                      onPress: () => {
+                        onClose();
+                        router.push('/paywall?origin=lock_recipes');
+                      },
+                    },
+                  ]);
+                  return;
+                }
+                setRecipeDropdownOpen((v) => !v);
+              }}
               activeOpacity={0.9}
             >
               <Text style={[styles.recipeDropdownLabel, { color: theme.text }]}>
-                {selectedRecipeId
+                {recipesAccess === false
+                  ? t('input.recipeSubscriptionOptions')
+                  : selectedRecipeId
                   ? recipeOptions.find((r) => r.id === selectedRecipeId)?.title?.trim() || t('input.chooseRecipe')
                   : isLoadingRecipes
                   ? t('input.loadingRecipes')
                   : t('input.chooseRecipeOptional')}
               </Text>
-              <Text style={[styles.recipeDropdownCaret, { color: theme.textSecondary }]}>{recipeDropdownOpen ? '▲' : '▼'}</Text>
+              <Text style={[styles.recipeDropdownCaret, { color: theme.textSecondary }]}>{recipesAccess === false ? '🔒' : recipeDropdownOpen ? '▲' : '▼'}</Text>
             </TouchableOpacity>
 
-            {recipeDropdownOpen && (
+            {recipesAccess === true && recipeDropdownOpen && (
               <View
                 style={[
                   styles.recipeList,
@@ -1349,7 +1369,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             )}
 
             <Text style={[styles.infoText, { marginTop: 12, color: theme.textSecondary }]}>
-              {t('input.recipeHint')}
+              {t(recipesAccess === false ? 'input.recipesLockedHint' : 'input.recipeHint')}
             </Text>
           </View>
         )}

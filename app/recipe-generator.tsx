@@ -1,4 +1,6 @@
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useAuth } from '@/contexts/AuthContext';
+import { useRecipeFavorites } from '@/hooks/useRecipeFavorites';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -238,6 +240,28 @@ const RecipeGeneratorContent = () => {
   );
   const { activeBaby, activeBabyId } = useActiveBaby();
 
+  const { user } = useAuth();
+  const favorites = useRecipeFavorites(user?.id);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  useEffect(() => {
+    if (favorites.loadError) Alert.alert(t("common.error"), t("favorites.loadFailed"));
+  }, [favorites.loadError]);
+  const favoriteButton = (recipe: RecipeRecord) => (
+    <TouchableOpacity
+      style={styles.favoriteButton}
+      accessibilityRole="button"
+      accessibilityLabel={`${t(favorites.ids.includes(recipe.id) ? "favorites.remove" : "favorites.add")}: ${recipe.title}`}
+      accessibilityState={{ selected: favorites.ids.includes(recipe.id), disabled: !favorites.ready || favorites.busy }}
+      disabled={!favorites.ready || favorites.busy}
+      onPress={(event) => {
+        event.stopPropagation();
+        void favorites.toggle(recipe.id).catch(() => Alert.alert(t("common.error"), t("favorites.saveFailed")));
+      }}
+    >
+      <IconSymbol name={favorites.ids.includes(recipe.id) ? "heart.fill" : "heart"} size={24} color={accentColor} />
+    </TouchableOpacity>
+  );
+
   const [recipes, setRecipes] = useState<RecipeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -316,6 +340,7 @@ const RecipeGeneratorContent = () => {
   const sortedRecipes = useMemo(() => {
     return recipes
       .filter((recipe) => {
+        if (favoritesOnly && !favorites.ids.includes(recipe.id)) return false;
         if (!normalizedSearchQuery) return true;
         const searchableText = normalizeRecipeSearchText(
           [
@@ -336,7 +361,7 @@ const RecipeGeneratorContent = () => {
         }
         return a.min_months - b.min_months;
       });
-  }, [normalizedSearchQuery, recipes]);
+  }, [normalizedSearchQuery, recipes, favoritesOnly, favorites.ids]);
 
   const blockedRecipeCount = useMemo(() => {
     if (selectedAllergies.length === 0) return 0;
@@ -779,8 +804,23 @@ const RecipeGeneratorContent = () => {
                 ) : null}
               </View>
 
+              <View style={styles.favoriteTabs}>
+                {[false, true].map(only => (
+                  <TouchableOpacity
+                    key={String(only)}
+                    style={[styles.favoriteTab, favoritesOnly === only && styles.favoriteTabActive]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: favoritesOnly === only }}
+                    onPress={() => setFavoritesOnly(only)}
+                  >
+                    {only && <IconSymbol name="heart.fill" size={18} color={accentColor} />}
+                    <ThemedText style={styles.refreshLabel}>{t(only ? "favorites.title" : "favorites.all")}</ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
               {/* Loading State */}
-              {isLoading ? (
+              {isLoading || (favoritesOnly && !favorites.ready && !favorites.loadError && !!user) ? (
                 <View style={styles.loadingWrapper}>
                   <ActivityIndicator size="large" color={accentColor} />
                   <ThemedText style={styles.loadingText}>
@@ -793,7 +833,7 @@ const RecipeGeneratorContent = () => {
                   <View style={styles.catalogHeader}>
                     <View style={styles.catalogTitleGroup}>
                       <ThemedText style={styles.catalogTitle}>
-                        {t("catalog.title")}
+                        {t(favoritesOnly ? "favorites.title" : "catalog.title")}
                       </ThemedText>
                       <ThemedText style={styles.catalogCount}>
                         {translateRecipePlural(
@@ -868,7 +908,7 @@ const RecipeGeneratorContent = () => {
                         </TouchableOpacity>
                       </View>
                     </LiquidGlassCard>
-                  ) : sortedRecipes.length === 0 && hasActiveSearch ? (
+                  ) : sortedRecipes.length === 0 && (hasActiveSearch || favoritesOnly) ? (
                     <LiquidGlassCard
                       style={styles.card}
                       intensity={24}
@@ -886,20 +926,18 @@ const RecipeGeneratorContent = () => {
                           color={accentColor}
                         />
                         <ThemedText style={styles.emptyStateTitle}>
-                          {t("catalog.searchEmptyTitle")}
+                          {t(hasActiveSearch ? "catalog.searchEmptyTitle" : "favorites.emptyTitle")}
                         </ThemedText>
                         <ThemedText style={styles.emptyStateText}>
-                          {t("catalog.searchEmptyText", {
-                            query: searchQuery.trim(),
-                          })}
+                          {favorites.loadError ? t("favorites.loadFailed") : t(hasActiveSearch ? "catalog.searchEmptyText" : "favorites.emptyText", { query: searchQuery.trim() })}
                         </ThemedText>
                         <TouchableOpacity
                           style={styles.searchResetButton}
-                          onPress={() => setSearchQuery("")}
+                          onPress={() => { setSearchQuery(""); setFavoritesOnly(false); }}
                           activeOpacity={0.85}
                         >
                           <ThemedText style={styles.searchResetLabel}>
-                            {t("catalog.searchReset")}
+                            {t(favoritesOnly ? "favorites.all" : "catalog.searchReset")}
                           </ThemedText>
                         </TouchableOpacity>
                       </View>
@@ -956,6 +994,7 @@ const RecipeGeneratorContent = () => {
                                 </ThemedText>
                               </View>
                             </View>
+                            {favoriteButton(recipe)}
                             <ThemedText style={styles.disabledNotice}>
                               {t("catalog.filteredNotice")}
                             </ThemedText>
@@ -1032,6 +1071,7 @@ const RecipeGeneratorContent = () => {
                             </View>
                           </View>
 
+                          {favoriteButton(recipe)}
                           <View style={styles.catalogTextColumn}>
                             <ThemedText
                               style={styles.recipeTitle}
@@ -1138,7 +1178,7 @@ const RecipeGeneratorContent = () => {
                     )}
                   </ThemedText>
                 </View>
-                <View style={styles.recipeModalHeaderSpacer} />
+                {favoriteButton(selectedRecipe)}
               </View>
               <ScrollView
                 contentInsetAdjustmentBehavior="automatic"
@@ -2361,6 +2401,10 @@ const createStyles = ({
       lineHeight: 20,
       textAlign: "left",
     },
+    favoriteTabs: { flexDirection: "row", gap: 10, marginBottom: 16, flexWrap: "wrap" },
+    favoriteTab: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, borderColor: glassBorder },
+    favoriteTabActive: { backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.15), borderColor: accentColor },
+    favoriteButton: { minWidth: 44, minHeight: 44, alignSelf: "flex-end", alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.10) },
     catalogHeader: {
       flexDirection: "row",
       alignItems: "center",
