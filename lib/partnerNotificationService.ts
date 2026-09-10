@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import { getAppSettings, getCachedUser, supabase } from './supabase';
 import { getAppLocaleTag, getPersistedAppLocale, type AppLocale } from './localization';
 

@@ -1,5 +1,5 @@
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { getAppSettings, getCachedUser, supabase } from './supabase';
@@ -22,7 +22,19 @@ Notifications.setNotificationHandler({
 
 // Diese Funktion registriert das Gerät für Push-Benachrichtigungen
 export async function registerForPushNotificationsAsync() {
+  if (!Notifications.supportsRemoteNotifications()) return null;
+
   let token;
+
+  // Android 13+ needs a channel before the system can show the permission prompt.
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+    });
+  }
   
   // Prüfen, ob das Gerät ein physisches Gerät ist (kein Simulator)
   if (Device.isDevice) {
@@ -46,7 +58,7 @@ export async function registerForPushNotificationsAsync() {
     try {
       token = (await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig?.extra?.eas?.projectId,
-      })).data;
+      }))?.data;
 
       console.log('Push token retrieved successfully');
     } catch (error) {
@@ -54,16 +66,6 @@ export async function registerForPushNotificationsAsync() {
     }
   } else {
     console.log('Push-Benachrichtigungen erfordern ein physisches Gerät');
-  }
-
-  // Plattformspezifische Einstellungen (nur für Android)
-  if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
   }
 
   return token;

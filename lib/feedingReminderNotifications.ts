@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 
 export const FEEDING_REMINDER_IDENTIFIER = 'feeding-reminder';
 export const FEEDING_REMINDER_TYPE = 'feeding_reminder';

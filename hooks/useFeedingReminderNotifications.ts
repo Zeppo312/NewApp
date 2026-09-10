@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import type { FeedingPrediction } from '@/lib/feeding-interval';
 import {
   cancelBabyReminderNotification,

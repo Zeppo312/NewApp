@@ -47,7 +47,8 @@ import { useBackend } from '@/contexts/BackendContext';
 import { useConvex } from '@/contexts/ConvexContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
-import { ProgressCircle } from '@/components/ProgressCircle';
+import { SleepCaptureButton } from '@/components/tracking/SleepCaptureButton';
+import { SleepTimerFace } from '@/components/tracking/SleepTimerFace';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
 import { getBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
@@ -635,57 +636,11 @@ function CentralTimerComponent({
   return (
     <View style={styles.centralTimerContainer}>
       <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
-        <View
-          style={[
-            styles.circleArea,
-            { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }
-          ]}
-        >
-          <View style={[styles.glassCircle, {
-            width: circleSize,
-            height: circleSize,
-            borderRadius: circleSize / 2,
-          }]}>
-            <BlurView intensity={18} tint="light" style={[styles.glassCircleBlur, { borderRadius: circleSize / 2 }]}>
-              <View style={[styles.glassCircleOverlay, { borderRadius: circleSize / 2 }]} />
-            </BlurView>
-          </View>
+        <SleepTimerFace size={circleSize} active={Boolean(activeSleepEntry)} progress={progress} textColor={textPrimary}
+          timeLabel={activeSleepEntry
+            ? isStoppingSleep ? t('prediction.stopping') : formatDurationSeconds(elapsedTime)
+            : isStartingSleep ? t('prediction.starting') : currentTime.toLocaleTimeString(SLEEP_TRACKER_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}>
 
-          <View style={[styles.progressAbsolute, { width: circleSize, height: circleSize }]}>
-            <ProgressCircle
-              progress={progress}
-              size={circleSize}
-              strokeWidth={8}
-              progressColor={activeSleepEntry ? '#87CEEB' : 'rgba(135, 206, 235, 0.4)'}
-              backgroundColor="rgba(135, 206, 235, 0.2)"
-              textColor="transparent"
-            />
-          </View>
-
-          <View pointerEvents="none" style={styles.centerOverlay}>
-            <Text
-              style={[
-                styles.centralTime,
-                { color: textPrimary, fontWeight: '800' },
-              ]}
-            >
-              {activeSleepEntry
-                ? isStoppingSleep
-                  ? t('prediction.stopping')
-                  : formatDurationSeconds(elapsedTime)
-                : isStartingSleep
-                  ? t('prediction.starting')
-                  : currentTime.toLocaleTimeString(SLEEP_TRACKER_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-          </View>
-
-          <View pointerEvents="none" style={styles.upperContent}>
-            <View style={[styles.centralIcon, { backgroundColor: activeSleepEntry ? 'rgba(135, 206, 235, 0.9)' : 'rgba(255, 140, 66, 0.9)', borderRadius: 30, padding: 8, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-              <IconSymbol name={activeSleepEntry ? 'moon.fill' : 'sun.max.fill'} size={28} color="#FFFFFF" />
-            </View>
-          </View>
-
-          <View pointerEvents="none" style={styles.lowerContent}>
             {activeSleepEntry && (
               <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
                 {t('prediction.sleeping')}
@@ -718,8 +673,7 @@ function CentralTimerComponent({
                 {predictionError || t('prediction.ready')}
               </Text>
             )}
-          </View>
-        </View>
+        </SleepTimerFace>
       </Animated.View>
     </View>
   );
@@ -3953,57 +3907,19 @@ export default function SleepTrackerScreen() {
           </>
         ) : (
           <>
-            <TouchableOpacity
-              style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W, marginRight: GRID_GUTTER }, isActionBlocked && styles.actionDisabled]}
-              disabled={isActionBlocked}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
+            <SleepCaptureButton kind="start" title={t('timer.start')} hint={loadingLabel || t('timer.startHint')}
+              textColor={textSecondary} disabled={isActionBlocked}
+              style={{ width: GRID_COL_W, marginRight: GRID_GUTTER, marginBottom: 16 }}
               onPress={() => {
                 if (isActionBlocked) return;
                 triggerHaptic();
                 const now = new Date();
-                const period = isNightSleepPrediction(sleepPrediction)
-                  ? 'night'
-                  : getSleepPeriodForStart(now, nightWindowSettings);
+                const period = isNightSleepPrediction(sleepPrediction) ? 'night' : getSleepPeriodForStart(now, nightWindowSettings);
                 void handleStartSleep(period);
-              }}
-              activeOpacity={0.9}
-            >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
-                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                    <IconSymbol name="moon.fill" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.start')}</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
-                    {loadingLabel || t('timer.startHint')}
-                  </Text>
-                </View>
-              </BlurView>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.liquidGlassCardWrapper, { width: GRID_COL_W }, isActionBlocked && styles.actionDisabled]}
-              disabled={isActionBlocked}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              pressRetentionOffset={{ top: 20, bottom: 20, left: 18, right: 18 }}
-              onPress={() => {
-                if (isActionBlocked) return;
-                triggerHaptic();
-                openManualSleepModal();
-              }}
-              activeOpacity={0.9}
-            >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
-                <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
-                  <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
-                    <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.manual')}</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>{t('timer.add')}</Text>
-                </View>
-              </BlurView>
-            </TouchableOpacity>
+              }} />
+            <SleepCaptureButton kind="manual" title={t('timer.manual')} hint={t('timer.add')}
+              textColor={textSecondary} disabled={isActionBlocked} style={{ width: GRID_COL_W, marginBottom: 16 }}
+              onPress={() => { if (!isActionBlocked) { triggerHaptic(); openManualSleepModal(); } }} />
           </>
         )}
       </View>
@@ -5689,73 +5605,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     position: 'relative',
   },
-  // Neu: Expliziter quadratischer Container für den Kreis
-  circleArea: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glassCircle: {
-    position: 'absolute',
-    overflow: 'hidden',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  glassCircleBlur: {
-    flex: 1,
-  },
-  glassCircleOverlay: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(135, 206, 235, 0.1)', // Baby blue overlay
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  // Neu: Progress Circle absolut positionieren
-  progressAbsolute: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
-  // Neu: Exakte Zentrierung der Uhrzeit
-  centerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Neu: Content über der Uhrzeit (Icon)
-  upperContent: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: '60%', // Icon oben im oberen Drittel
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Neu: Content unter der Uhrzeit (Status + Hinweis)
-  lowerContent: {
-    position: 'absolute',
-    top: '60%', // Beginnt unter der Uhrzeit
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 8,
-  },
-  centralIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   centralStatus: {
     fontSize: 16,
     fontWeight: '800',
@@ -5764,18 +5613,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     textAlignVertical: 'center',
     includeFontPadding: false,
-  },
-  centralTime: {
-    fontSize: 32,
-    fontWeight: '900',
-    letterSpacing: 0,
-    textAlign: 'center',
-    lineHeight: 32, // Match fontSize for perfect alignment
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'Roboto',
-    textAlignVertical: 'center', // Android specific
-    includeFontPadding: false, // Android specific - removes extra padding
-    // Monospaced Ziffern für exakte Zentrierung
-    fontVariant: ['tabular-nums'],
   },
   centralHint: {
     fontSize: 12,

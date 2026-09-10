@@ -14,6 +14,8 @@ import { getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 interface ActivityCardProps {
   entry: DailyEntry;
+  readOnly?: boolean;
+  appearance?: 'light' | 'dark';
   onDelete: (id: string) => void;
   onEdit?: (entry: DailyEntry) => void;
   marginHorizontal?: number;
@@ -22,6 +24,8 @@ interface ActivityCardProps {
 
 const ActivityCard: React.FC<ActivityCardProps> = ({
   entry,
+  readOnly = false,
+  appearance,
   onDelete,
   onEdit,
   marginHorizontal = 16,
@@ -32,9 +36,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   const localeTag = getDailyLocaleTag(locale);
   // Adaptive Farben für Dark Mode (basierend auf Hintergrundbild-Einstellung)
   const adaptiveColors = useAdaptiveColors();
-  const colorScheme = adaptiveColors.effectiveScheme;
+  const colorScheme = appearance ?? adaptiveColors.effectiveScheme;
   const theme = Colors[colorScheme];
-  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const isDark = appearance ? appearance === 'dark' : colorScheme === 'dark' || adaptiveColors.isDarkBackground;
   // Im Dark Mode alle Texte hell/weiß
   const textColor = isDark ? Colors.dark.textPrimary : '#7D5A50';
   const secondaryTextColor = isDark ? Colors.dark.textSecondary : '#333';
@@ -329,7 +333,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
   };
 
   return (
-    <Swipeable renderRightActions={renderRightActions}>
+    <Swipeable enabled={!readOnly} renderRightActions={readOnly ? undefined : renderRightActions}>
       <Animated.View
         style={{
           transform: [{ scale: pressAnimation }],
@@ -338,6 +342,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
       >
         <TouchableOpacity
           activeOpacity={0.9}
+          disabled={readOnly}
           onPress={() => onEdit && onEdit(entry)}
           onPressIn={() => setPressed(true)}
           onPressOut={() => setPressed(false)}
@@ -355,7 +360,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 <View style={styles.titleRow}>
                   <ThemedText style={[styles.title, { color: textColor }]}>{detail.label}</ThemedText>
 
-                  <Animated.View
+                  {!readOnly && <Animated.View
                     style={{
                       transform: [{
                         rotate: expandAnimation.interpolate({
@@ -370,7 +375,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                       size={14}
                       color={theme.tabIconDefault}
                     />
-                  </Animated.View>
+                  </Animated.View>}
                 </View>
                 {(auxiliaryBadgeLabel || customQuantityLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
                   <View style={styles.badgesWrap}>

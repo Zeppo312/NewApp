@@ -1,3 +1,4 @@
+import { caretakerCopy } from '@/lib/caretaker-copy';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState } from 'react';
@@ -499,6 +500,13 @@ export default function LoginScreen() {
                     </View>
                   </TouchableOpacity>
                 )}
+
+                <TouchableOpacity accessibilityRole="button" disabled={isLoading}
+                  onPress={() => router.push('/caregiver-join')}
+                  style={[styles.button, { backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 1, borderColor: accentColor }]}>
+                  <ThemedText style={{ color: primaryTextColor, fontWeight: '700', fontSize: 16 }}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestEntry}</ThemedText>
+                  <ThemedText style={{ color: secondaryTextColor, fontSize: 12, marginTop: 4 }}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestHint}</ThemedText>
+                </TouchableOpacity>
 
                 {isRegistering && (
                   <View style={styles.inputContainer}>

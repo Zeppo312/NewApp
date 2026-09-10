@@ -31,7 +31,9 @@ export type CustomActivityEntryPayload = {
 
 type Props = {
   visible: boolean;
-  definition: CustomActivityType | null;
+  definition: Pick<CustomActivityType, 'name' | 'emoji' | 'color' | 'tracking_mode' | 'unit' | 'default_quantity'> | null;
+  useExactDate?: boolean;
+  startTimerByDefault?: boolean;
   date: Date;
   initialData?: DailyEntry | null;
   onClose: () => void;
@@ -58,6 +60,8 @@ export default function CustomActivityEntryModal({
   onClose,
   onSave,
   onDelete,
+  useExactDate = false,
+  startTimerByDefault = false,
 }: Props) {
   const { locale } = useLocale();
   const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
@@ -83,7 +87,7 @@ export default function CustomActivityEntryModal({
     if (!visible || !definition) return;
     const initialStart = initialData?.start_time
       ? new Date(initialData.start_time)
-      : combineDayAndClock(date, new Date());
+      : useExactDate ? new Date(date) : combineDayAndClock(date, new Date());
     const start = Number.isFinite(initialStart.getTime()) ? initialStart : combineDayAndClock(date, new Date());
     const initialEnd = initialData?.end_time ? new Date(initialData.end_time) : null;
     const duration = initialEnd && Number.isFinite(initialEnd.getTime())
@@ -101,10 +105,10 @@ export default function CustomActivityEntryModal({
     );
     setDurationMinutes(String(duration));
     setNotes(initialData?.notes ?? '');
-    setStartTimer(definition.tracking_mode === 'duration' && !!initialData?.id && !initialData.end_time);
+    setStartTimer(definition.tracking_mode === 'duration' && (initialData?.id ? !initialData.end_time : startTimerByDefault));
     setPickerVisible(false);
     setBusy(false);
-  }, [date, definition, initialData, visible]);
+  }, [date, definition, initialData, visible, useExactDate, startTimerByDefault]);
 
   const formattedTime = useMemo(
     () => startTime.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),

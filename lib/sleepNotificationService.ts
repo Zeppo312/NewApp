@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import BackgroundTimer from 'react-native-background-timer';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';

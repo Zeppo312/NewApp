@@ -275,6 +275,12 @@ const localizedDefaults: Record<
         standard: false,
         premium: true,
       },
+      {
+        label: "Caregiver mode: time-limited access for grandparents & trusted people",
+        lite: false,
+        standard: false,
+        premium: true,
+      },
     ],
     quoteText:
       "“Starting the breastfeeding timer one-handed at 3 a.m. – and my partner can immediately see how the night went. Exactly what we needed.”",
@@ -296,6 +302,7 @@ const localizedDefaults: Record<
           "✨ Personal pregnancy briefing",
           "✨ Voice logging & Lotti's Care",
           "✨ Ask Lotti using relevant data from your routine",
+          "Caregiver mode: invite grandparents & trusted people – no subscription of their own needed",
         ],
       },
       standard: {
@@ -494,6 +501,12 @@ const localizedDefaults: Record<
         standard: false,
         premium: true,
       },
+      {
+        label: "Modo cuidador: acceso temporal para abuelos y personas de confianza",
+        lite: false,
+        standard: false,
+        premium: true,
+      },
     ],
     quoteText:
       "«Iniciar el temporizador de lactancia con una mano a las 3 de la mañana y que mi pareja vea cómo fue la noche. Justo lo que necesitábamos».",
@@ -515,6 +528,7 @@ const localizedDefaults: Record<
           "✨ Resumen personal del embarazo",
           "✨ Registro por voz y Cuidados de Lotti",
           "✨ Pregunta a Lotti con datos relevantes de vuestra rutina",
+          "Modo cuidador: invita a abuelos y personas de confianza sin que necesiten su propia suscripción",
         ],
       },
       standard: {
@@ -623,13 +637,15 @@ export const localizePaywallPlansContent = (
         germanTier.ctaLabel,
         targetTier.ctaLabel,
       ),
-      bullets: sourceTier.bullets.map((value, index) =>
-        translateIfDefault(
+      bullets: sourceTier.bullets.map((value, index) => {
+        const defaultIndex = germanTier.bullets.indexOf(value);
+        const translationIndex = defaultIndex >= 0 ? defaultIndex : index;
+        return translateIfDefault(
           value,
-          germanTier.bullets[index] ?? "",
-          targetTier.bullets[index] ?? value,
-        ),
-      ),
+          germanTier.bullets[translationIndex] ?? "",
+          targetTier.bullets[translationIndex] ?? value,
+        );
+      }),
     };
   }
   return result;

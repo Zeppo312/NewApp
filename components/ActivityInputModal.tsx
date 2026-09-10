@@ -10,7 +10,6 @@ import {
   Platform,
   ScrollView,
   LayoutAnimation,
-  UIManager,
   Image,
   Alert,
   TextInputProps,
@@ -56,10 +55,12 @@ interface ActivityInputModalProps {
   activityType: ActivityType;
   initialSubType?: string | null;
   hiddenSubTypes?: string[];
+  restricted?: boolean;
+  saving?: boolean;
   date?: Date;
   forceDarkMode?: boolean;
   onClose: () => void;
-  onSave: (data: any, options?: { startTimer?: boolean }) => void; // data ist DB-ready für baby_care_entries
+  onSave: (data: any, options?: { startTimer?: boolean }) => void | Promise<void>; // data ist DB-ready für baby_care_entries
   onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
   initialData?: Partial<{
     id: string;
@@ -116,6 +117,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   activityType,
   initialSubType,
   hiddenSubTypes = [],
+  restricted = false,
+  saving = false,
   date,
   forceDarkMode,
   onClose,
@@ -315,11 +318,6 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     [isValidManualDate, sanitizeManualDate]
   );
 
-  // Enable LayoutAnimation for Android
-  if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
-  }
-
   // Effekt zum Zurücksetzen der Werte bei Sichtbarkeit
   // Only initialize on open or target change to avoid resetting user edits.
   useEffect(() => {
@@ -423,7 +421,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // Windel-Vorräte laden, damit bei mehreren Posten optional gewählt werden
   // kann, welche Windel abgebucht wird (nur bei neuen Einträgen).
   useEffect(() => {
-    if (!visible || activityType !== 'diaper' || initialData?.id || !activeBabyId) {
+    if (restricted || !visible || activityType !== 'diaper' || initialData?.id || !activeBabyId) {
       setDiaperInventoryItems([]);
       setSelectedDiaperItemId(null);
       return;
@@ -438,11 +436,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [visible, activityType, initialData?.id, activeBabyId]);
+  }, [restricted, visible, activityType, initialData?.id, activeBabyId]);
 
   // Milchpulver-Vorräte (mit hinterlegter Dosierung) für Fläschchen-Einträge.
   useEffect(() => {
-    if (!visible || activityType !== 'feeding' || initialData?.id || !activeBabyId) {
+    if (restricted || !visible || activityType !== 'feeding' || initialData?.id || !activeBabyId) {
       setFormulaInventoryItems([]);
       setSelectedFormulaItemId(null);
       return;
@@ -461,12 +459,12 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [visible, activityType, initialData?.id, activeBabyId]);
+  }, [restricted, visible, activityType, initialData?.id, activeBabyId]);
 
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
     const loadRecipes = async () => {
-      if (!(visible && activityType === 'feeding' && feedingType === 'solids' && recipesAccess === true)) return;
+      if (restricted || !(visible && activityType === 'feeding' && feedingType === 'solids' && recipesAccess === true)) return;
       try {
         setIsLoadingRecipes(true);
         const { data, error } = await fetchRecipes();
@@ -489,7 +487,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       }
     };
     loadRecipes();
-  }, [visible, activityType, feedingType, recipesAccess]);
+  }, [restricted, visible, activityType, feedingType, recipesAccess]);
 
   useEffect(() => {
     if (feedingType === 'pump' || feedingType === 'water') {
@@ -579,6 +577,10 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
     // other: nur base + notes
 
+    if (restricted) {
+      if (!saving) void Promise.resolve(onSave(payload, { startTimer: false })).then(onClose).catch(() => {});
+      return;
+    }
     console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
     onSave(payload, { startTimer: activityType === 'feeding' ? startTimer : false });
     onClose();
@@ -587,8 +589,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   // Löschen: Nur bei Bearbeitung verfügbar
   const handleDelete = () => {
     if (!initialData?.id || !onDelete) return;
+    if (saving) return;
     onDelete(initialData.id);
-    onClose();
+    if (!restricted) onClose();
   };
 
   const safeModalStartTime = useMemo(
@@ -943,7 +946,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </Modal>
       )}
 
-      {activityType === 'feeding' && feedingType !== 'pump' && feedingType !== 'water' && (
+      {!restricted && activityType === 'feeding' && feedingType !== 'pump' && feedingType !== 'water' && (
         <TouchableOpacity
           style={[
             styles.timerToggle,
@@ -1029,6 +1032,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </View>
       <TouchableOpacity 
         style={[styles.headerButton, { backgroundColor: theme.accent }]} 
+        disabled={saving}
+        accessibilityState={{ disabled: saving, busy: saving }}
         onPress={handleSave}
       >
         <Text style={styles.saveHeaderButtonText}>✓</Text>
@@ -1269,7 +1274,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             </Text>
           </View>
         )}
-        {feedingOptions.length > 0 && feedingType === 'solids' && (
+        {!restricted && feedingOptions.length > 0 && feedingType === 'solids' && (
           <View style={{width: '100%', alignItems: 'center', paddingTop: 20}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>🥦</FixedEmojiText>{' '}
@@ -1469,7 +1474,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </View>
       ) : null}
 
-      {diaperOptions.length > 0 ? (
+      {!restricted && diaperOptions.length > 0 ? (
       <View style={styles.diaperHealthGroup}>
         <TouchableOpacity
           style={[

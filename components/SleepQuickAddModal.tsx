@@ -33,7 +33,10 @@ export type SleepQuickEntry = {
 
 type Props = {
   visible: boolean;
+  saving?: boolean;
   initialStart?: Date;
+  initialEntry?: SleepQuickEntry;
+  onDelete?: () => void;
   onClose: () => void;
   onSave: (entry: SleepQuickEntry) => void;
 };
@@ -52,7 +55,7 @@ const resolvePickerDate = (value?: Date | null, fallback?: Date) =>
   getSafePickerDate(value, fallback ?? new Date());
 
 // ─── Reusable time picker button + modal ────────────────────
-const TimePickerField = ({
+export const TimePickerField = ({
   label,
   time,
   onConfirm,
@@ -80,7 +83,7 @@ const TimePickerField = ({
   tapLabel: string;
 }) => {
   const [showIOS, setShowIOS] = useState(false);
-  const [showAndroid, setShowAndroid] = useState(false);
+  const [androidStep, setAndroidStep] = useState<'date' | 'time' | null>(null);
   const [draft, setDraft] = useState<Date>(resolvePickerDate(time));
 
   useEffect(() => {
@@ -102,9 +105,11 @@ const TimePickerField = ({
         onPress={() => {
           setDraft(resolvePickerDate(time));
           if (Platform.OS === 'ios') setShowIOS(true);
-          else setShowAndroid(true);
+          else setAndroidStep('date');
         }}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={label}
       >
         <Text style={[styles.timeCardLabel, { color: textSecondary }]}>{label}</Text>
         {time ? (
@@ -175,14 +180,21 @@ const TimePickerField = ({
       )}
 
       {/* Android – native picker */}
-      {Platform.OS !== 'ios' && showAndroid && (
+      {Platform.OS === 'android' && androidStep && (
         <DateTimePicker
-          value={resolvePickerDate(time)}
-          mode="datetime"
+          key={androidStep}
+          value={resolvePickerDate(draft)}
+          mode={androidStep}
           is24Hour
-          onChange={(_, d) => {
-            setShowAndroid(false);
-            if (d) onConfirm(d);
+          onChange={(event, d) => {
+            if (event.type === 'dismissed' || !d) { setAndroidStep(null); return; }
+            if (androidStep === 'date') {
+              setDraft(d);
+              setAndroidStep('time');
+            } else {
+              setAndroidStep(null);
+              onConfirm(d);
+            }
           }}
         />
       )}
@@ -194,14 +206,17 @@ const TimePickerField = ({
 const SleepQuickAddModal: React.FC<Props> = ({
   visible,
   initialStart,
+  initialEntry,
+  onDelete,
   onClose,
   onSave,
+  saving = false,
 }) => {
   const { locale, localeTag } = useLocale();
   const c = {
-    de: { cancel: 'Abbrechen', done: 'Fertig', tap: 'Tippen zum Eingeben', title: 'Schlaf hinzufügen', subtitle: 'Zeitraum und Qualität festhalten', period: '⏰ Zeitraum', asleep: 'Eingeschlafen', awake: 'Aufgewacht', open: 'Offen', quality: '😴 Schlafqualität', good: 'Gut', medium: 'Mittel', bad: 'Schlecht', notes: '📝 Notizen', notesPlaceholder: 'Optionale Notiz hinzufügen…', save: 'Speichern' },
-    en: { cancel: 'Cancel', done: 'Done', tap: 'Tap to enter', title: 'Add sleep', subtitle: 'Record the time and quality', period: '⏰ Time period', asleep: 'Fell asleep', awake: 'Woke up', open: 'Ongoing', quality: '😴 Sleep quality', good: 'Good', medium: 'Okay', bad: 'Poor', notes: '📝 Notes', notesPlaceholder: 'Add an optional note…', save: 'Save' },
-    es: { cancel: 'Cancelar', done: 'Listo', tap: 'Toca para introducir', title: 'Añadir sueño', subtitle: 'Registra el horario y la calidad', period: '⏰ Periodo', asleep: 'Se durmió', awake: 'Se despertó', open: 'En curso', quality: '😴 Calidad del sueño', good: 'Buena', medium: 'Regular', bad: 'Mala', notes: '📝 Notas', notesPlaceholder: 'Añade una nota opcional…', save: 'Guardar' },
+    de: { cancel: 'Abbrechen', done: 'Fertig', tap: 'Tippen zum Eingeben', editTitle: 'Schlaf bearbeiten', delete: 'Eintrag löschen', title: 'Schlaf hinzufügen', subtitle: 'Zeitraum und Qualität festhalten', period: '⏰ Zeitraum', asleep: 'Eingeschlafen', awake: 'Aufgewacht', open: 'Offen', quality: '😴 Schlafqualität', good: 'Gut', medium: 'Mittel', bad: 'Schlecht', notes: '📝 Notizen', notesPlaceholder: 'Optionale Notiz hinzufügen…', save: 'Speichern' },
+    en: { cancel: 'Cancel', done: 'Done', tap: 'Tap to enter', editTitle: 'Edit sleep', delete: 'Delete entry', title: 'Add sleep', subtitle: 'Record the time and quality', period: '⏰ Time period', asleep: 'Fell asleep', awake: 'Woke up', open: 'Ongoing', quality: '😴 Sleep quality', good: 'Good', medium: 'Okay', bad: 'Poor', notes: '📝 Notes', notesPlaceholder: 'Add an optional note…', save: 'Save' },
+    es: { cancel: 'Cancelar', done: 'Listo', tap: 'Toca para introducir', editTitle: 'Editar sueño', delete: 'Eliminar registro', title: 'Añadir sueño', subtitle: 'Registra el horario y la calidad', period: '⏰ Periodo', asleep: 'Se durmió', awake: 'Se despertó', open: 'En curso', quality: '😴 Calidad del sueño', good: 'Buena', medium: 'Regular', bad: 'Mala', notes: '📝 Notas', notesPlaceholder: 'Añade una nota opcional…', save: 'Guardar' },
   }[locale];
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -220,12 +235,12 @@ const SleepQuickAddModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (visible) {
-      setStartTime(resolvePickerDate(initialStart));
-      setEndTime(null);
-      setQuality('good');
-      setNotes('');
+      setStartTime(resolvePickerDate(initialEntry?.start ?? initialStart));
+      setEndTime(initialEntry?.end ?? null);
+      setQuality(initialEntry ? initialEntry.quality : 'good');
+      setNotes(initialEntry?.notes ?? '');
     }
-  }, [visible, initialStart?.valueOf()]);
+  }, [visible, initialStart?.valueOf(), initialEntry?.start.valueOf(), initialEntry?.end?.valueOf(), initialEntry?.quality, initialEntry?.notes]);
 
   const handleSave = () => {
     onSave({ start: startTime, end: endTime, quality, notes: notes.trim() });
@@ -258,7 +273,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
             {/* Header */}
             <View style={styles.header}>
               <Text style={styles.headerEmoji}>😴</Text>
-              <Text style={[styles.headerTitle, { color: textPrimary }]}>{c.title}</Text>
+              <Text style={[styles.headerTitle, { color: textPrimary }]}>{initialEntry ? c.editTitle : c.title}</Text>
               <Text style={[styles.headerSubtitle, { color: textSecondary }]}>
                 {c.subtitle}
               </Text>
@@ -348,6 +363,10 @@ const SleepQuickAddModal: React.FC<Props> = ({
               placeholderTextColor={textSecondary}
               multiline
             />
+            {onDelete && <TouchableOpacity accessibilityRole="button" disabled={saving} onPress={onDelete}
+              style={{ minHeight: 48, alignItems: 'center', justifyContent: 'center', marginVertical: 12 }}>
+              <Text style={{ color: '#E05263', fontWeight: '600' }}>{c.delete}</Text>
+            </TouchableOpacity>}
           </ScrollView>
 
           {/* Bottom bar */}
@@ -366,6 +385,8 @@ const SleepQuickAddModal: React.FC<Props> = ({
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.saveBtn, { backgroundColor: accentColor }]}
+              disabled={saving}
+              accessibilityState={{ disabled: saving, busy: saving }}
               onPress={handleSave}
               activeOpacity={0.7}
             >
@@ -387,7 +408,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: RADIUS,
     borderTopRightRadius: RADIUS,
     overflow: 'hidden',
-    maxHeight: '90%',
+    height: '90%',
   },
   scroll: { flex: 1 },
   scrollInner: {

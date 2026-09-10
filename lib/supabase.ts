@@ -1820,9 +1820,6 @@ export const getUserInvitations = async (userId: string) => {
   }
 };
 
-// Funktion zum Einlösen eines Einladungscodes wurde in eine separate Datei ausgelagert
-export { redeemInvitationCode } from './redeemInvitationCode';
-
 // Funktion zum Abrufen verknüpfter Benutzer mit Profilinformationen
 export const getLinkedUsers = async (userId: string) => {
   try {

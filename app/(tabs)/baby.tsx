@@ -21,7 +21,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { useLocalSearchParams, useRouter, Stack , useFocusEffect, useNavigation as useRouteNavigation } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import { defineMilestoneCheckerTask, saveBabyInfoForBackgroundTask, isTaskRegistered } from '@/tasks/milestoneCheckerTask';
 import {
   LAYOUT_PAD,

@@ -10,12 +10,11 @@ import {
   Alert,
   StatusBar,
   ActivityIndicator,
-  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CachedImage } from '@/components/CachedImage';
 import { BlurView } from 'expo-blur';
-import { Redirect, router, Stack, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
 import * as Linking from 'expo-linking';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -29,7 +28,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { saveAppSettings, supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { setLocalProfileName } from '@/lib/localProfile';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -82,11 +81,6 @@ const lightenHex = (hex: string, amount = 0.35) => {
 
 export default function ProfilScreen() {
   ACTIVE_PROFILE_LOCALE = useLocale().locale;
-  const params = useLocalSearchParams<{
-    focus?: string | string[];
-    communitySetup?: string | string[];
-    communityAvatar?: string | string[];
-  }>();
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -107,13 +101,6 @@ export default function ProfilScreen() {
   const dangerCardBackground = isDark ? 'rgba(255,107,107,0.22)' : 'rgba(255,130,130,0.5)';
   const actionDisabledBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(168,168,168,0.5)';
   const { user, session, signOut } = useAuth();
-  const requestedFocus = Array.isArray(params.focus) ? params.focus[0] : params.focus;
-  const communitySetup = Array.isArray(params.communitySetup) ? params.communitySetup[0] : params.communitySetup;
-  const communityAvatarParam = Array.isArray(params.communityAvatar)
-    ? params.communityAvatar[0]
-    : params.communityAvatar;
-  const shouldCompleteCommunityUsername = communitySetup === 'username';
-
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName]   = useState('');
@@ -124,7 +111,6 @@ export default function ProfilScreen() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarBase64, setAvatarBase64] = useState<string | null>(null);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
-  const [communityUseAvatar, setCommunityUseAvatar] = useState(true);
 
   // UI
   const [isLoading, setIsLoading]                   = useState(true);
@@ -136,7 +122,6 @@ export default function ProfilScreen() {
   const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
   const [emailOverlayValue, setEmailOverlayValue] = useState('');
   const latestLoadRequestIdRef = useRef(0);
-  const usernameInputRef = useRef<TextInput>(null);
 
   const loadUserData = useCallback(async () => {
     const requestId = ++latestLoadRequestIdRef.current;
@@ -154,20 +139,11 @@ export default function ProfilScreen() {
 
       if (user.email) setEmail(user.email);
 
-      const [{ data: profileData, error: profileError }, { data: settingsData, error: settingsError }] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('first_name, last_name, username, user_role, avatar_url')
-          .eq('id', userId)
-          .single(),
-        supabase
-          .from('user_settings')
-          .select('community_use_avatar')
-          .eq('user_id', userId)
-          .order('updated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('first_name, last_name, username, user_role, avatar_url')
+        .eq('id', userId)
+        .single();
 
       if (!profileError && profileData) {
         if (requestId !== latestLoadRequestIdRef.current) return;
@@ -185,16 +161,6 @@ export default function ProfilScreen() {
         );
       }
 
-      if (!settingsError && requestId === latestLoadRequestIdRef.current) {
-        if (typeof settingsData?.community_use_avatar === 'boolean') {
-          setCommunityUseAvatar(settingsData.community_use_avatar);
-        } else if (communityAvatarParam === 'hidden') {
-          setCommunityUseAvatar(false);
-        } else if (communityAvatarParam === 'visible') {
-          setCommunityUseAvatar(true);
-        }
-      }
-
     } catch (e) {
       console.error(e);
       if (requestId === latestLoadRequestIdRef.current) {
@@ -205,22 +171,12 @@ export default function ProfilScreen() {
         setIsLoading(false);
       }
     }
-  }, [communityAvatarParam, user]);
+  }, [user]);
 
   useEffect(() => {
     if (user) loadUserData();
     else setIsLoading(false);
   }, [loadUserData, user]);
-
-  useEffect(() => {
-    if (requestedFocus !== 'username' || isLoading) return;
-
-    const timeout = setTimeout(() => {
-      usernameInputRef.current?.focus();
-    }, 350);
-
-    return () => clearTimeout(timeout);
-  }, [isLoading, requestedFocus]);
 
   const pickAvatarImage = async () => {
     try {
@@ -484,16 +440,9 @@ export default function ProfilScreen() {
       return;
     }
 
-    if (shouldCompleteCommunityUsername && !username.trim()) {
-      Alert.alert(t('community.usernameRequiredTitle'), t('community.usernameRequiredMessage'));
-      usernameInputRef.current?.focus();
-      return;
-    }
-
     setIsSaving(true);
 
     let finalAvatarUrl = avatarUrl;
-    const trimmedUsername = username.trim();
 
     try {
       if (avatarBase64) {
@@ -513,7 +462,6 @@ export default function ProfilScreen() {
         profileResult = await supabase.from('profiles').update({
           first_name: firstName,
           last_name: lastName,
-          username: trimmedUsername || null,
           user_role: userRole,
           avatar_url: finalAvatarUrl || null,
           updated_at: new Date().toISOString(),
@@ -523,7 +471,6 @@ export default function ProfilScreen() {
           id: user.id,
           first_name: firstName,
           last_name: lastName,
-          username: trimmedUsername || null,
           user_role: userRole,
           avatar_url: finalAvatarUrl || null,
           created_at: new Date().toISOString(),
@@ -532,17 +479,6 @@ export default function ProfilScreen() {
       }
       if (profileResult.error) throw profileResult.error;
       await setLocalProfileName(user.id, firstName, lastName);
-
-      const nextIdentityMode = trimmedUsername ? 'username' : 'real_name';
-      const nextCommunityUseAvatar =
-        shouldCompleteCommunityUsername && communityAvatarParam
-          ? communityAvatarParam !== 'hidden'
-          : communityUseAvatar;
-      const { error: settingsError } = await saveAppSettings({
-        community_identity_mode: nextIdentityMode,
-        community_use_avatar: nextCommunityUseAvatar,
-      });
-      if (settingsError) throw settingsError;
 
       Alert.alert(t('save.successTitle'), t('save.successMessage'), [
         { text: t('common.ok'), onPress: () => router.push('/more') },
@@ -779,75 +715,6 @@ export default function ProfilScreen() {
                       />
                     </View>
 
-                  </View>
-                </LiquidGlassCard>
-
-                <LiquidGlassCard
-                  style={[styles.sectionCard, isDark && { backgroundColor: 'rgba(0,0,0,0.35)' }]}
-                  intensity={26}
-                  overlayColor={glassOverlay}
-                  borderColor={glassBorder}
-                >
-                  <View style={styles.sectionHeader}>
-                    <View style={[styles.sectionIcon, { backgroundColor: toRgba(accentPurple, isDark ? 0.22 : 0.12) }]}>
-                      <IconSymbol name="person.2.fill" size={22} color={accentPurple} />
-                    </View>
-                    <View style={styles.sectionHeaderText}>
-                      <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>
-                        {t('section.community')}
-                      </ThemedText>
-                      <ThemedText style={[styles.sectionSubtitle, { color: textSecondary }]}>
-                        {t('section.communityDescription')}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  <View style={styles.cardInner}>
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>{t('field.username')}</ThemedText>
-                      {shouldCompleteCommunityUsername ? (
-                        <ThemedText style={[styles.helperText, { color: accentPurple }]}>
-                          {t('community.usernameHint')}
-                        </ThemedText>
-                      ) : null}
-                      <TextInput
-                        ref={usernameInputRef}
-                        style={[styles.inputGlass, { borderColor: glassBorder, backgroundColor: glassSurface, color: textPrimary }]}
-                        value={username}
-                        onChangeText={setUsername}
-                        placeholder={t('field.usernamePlaceholder')}
-                        placeholderTextColor={isDark ? '#CFC7BC' : '#9BA0A6'}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                      />
-                    </View>
-
-                    <View style={styles.formGroup}>
-                      <ThemedText style={[styles.label, { color: textPrimary }]}>
-                        {t('community.avatarLabel')}
-                      </ThemedText>
-                      <View
-                        style={[
-                          styles.preferenceToggleRow,
-                          { borderColor: glassBorder, backgroundColor: glassSurfaceButton },
-                        ]}
-                      >
-                        <View style={styles.preferenceToggleTextWrap}>
-                          <ThemedText style={[styles.preferenceToggleTitle, { color: textPrimary }]}>
-                            {t('community.avatarTitle')}
-                          </ThemedText>
-                          <ThemedText style={[styles.helperText, { color: textSecondary }]}>
-                            {t('community.avatarDescription')}
-                          </ThemedText>
-                        </View>
-                        <Switch
-                          value={communityUseAvatar}
-                          onValueChange={setCommunityUseAvatar}
-                          trackColor={{ false: '#D9CEC7', true: accentPurple }}
-                          thumbColor="#FFFFFF"
-                        />
-                      </View>
-                    </View>
-
                     <View style={styles.formGroup}>
                       <ThemedText style={[styles.label, { color: textPrimary }]}>{t('field.role')}</ThemedText>
                       <View style={styles.duoRow}>
@@ -940,6 +807,34 @@ export default function ProfilScreen() {
                       <ThemedText style={[styles.sectionLinkButtonText, { color: textPrimary }]}>
                         {t('baby.open')}
                       </ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                </LiquidGlassCard>
+
+                <LiquidGlassCard
+                  style={styles.sectionCard}
+                  intensity={26}
+                  overlayColor={glassOverlay}
+                  borderColor={glassBorder}
+                >
+                  <View style={styles.cardInner}>
+                    <ThemedText style={[styles.sectionTitle, { color: textPrimary }]}>{t('personalize.title')}</ThemedText>
+                    <ThemedText style={[styles.sectionHelperText, { color: textSecondary }]}>{t('personalize.description')}</ThemedText>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={[styles.sectionLinkButton, { borderColor: glassBorder, backgroundColor: glassSurfaceButton }]}
+                      onPress={() => router.push('/(tabs)/baby?edit=1')}
+                    >
+                      <IconSymbol name="photo" size={20} color={textPrimary} />
+                      <ThemedText style={[styles.sectionLinkButtonText, { color: textPrimary }]}>{t('personalize.babyPhoto')}</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={[styles.sectionLinkButton, { borderColor: glassBorder, backgroundColor: glassSurfaceButton }]}
+                      onPress={() => router.push('/app-settings?focus=background')}
+                    >
+                      <IconSymbol name="paintpalette" size={20} color={textPrimary} />
+                      <ThemedText style={[styles.sectionLinkButtonText, { color: textPrimary }]}>{t('personalize.background')}</ThemedText>
                     </TouchableOpacity>
                   </View>
                 </LiquidGlassCard>
@@ -1268,25 +1163,6 @@ const styles = StyleSheet.create({
   },
   pickButtonText: { fontSize: 16, color: '#7D7D85', fontWeight: '700' },
   pickButtonTextActive: { color: '#FFFFFF', fontWeight: '800' },
-
-  preferenceToggleRow: {
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  preferenceToggleTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  preferenceToggleTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
 
   actionTouchable: {
     borderRadius: 22,

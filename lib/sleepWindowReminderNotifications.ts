@@ -1,4 +1,4 @@
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 
 export const SLEEP_WINDOW_REMINDER_IDENTIFIER = 'sleep-window-reminder';
 export const SLEEP_WINDOW_REMINDER_TYPE = 'sleep_window_reminder';

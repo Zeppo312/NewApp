@@ -1,15 +1,7 @@
 /**
- * Zentraler Schalter für die nutzergenerierten Bereiche: Community-Feed,
- * Gruppen, Gruppen-Chat, Direktnachrichten und öffentliche Profile.
- *
- * Hintergrund: Die Nutzungsbedingungen sagen seit dem 26.08.2026, dass Inhalte
- * privat bleiben und nicht veröffentlicht werden. Solange das gilt, darf in der
- * App nichts erreichbar sein, was Inhalte zwischen Nutzerinnen und Nutzern
- * austauscht — sonst fehlen genau die Passagen (Regeln, Melden, Blockieren,
- * 24-Stunden-Moderation), die Apple für solche Bereiche verlangt.
- *
- * Der Code der Bereiche bleibt liegen. Wird der Schalter wieder auf `true`
- * gesetzt, müssen die AGB-Passagen und die Consent-Texte zurück.
+ * Die Community-Seiten wurden entfernt. Alte Deep Links und Push-Ziele
+ * werden weiterhin abgefangen und zur Startseite umgeleitet.
+ * Partner-Verknüpfung und gemeinsame Baby-Daten sind davon unabhängig.
  */
 export const COMMUNITY_ENABLED = false;
 

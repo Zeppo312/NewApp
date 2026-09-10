@@ -1,3 +1,4 @@
+import { loadCaretakerGuestSession } from '@/lib/caretaker-guest';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -22,6 +23,16 @@ export default function Index() {
   const textColor = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const [isRecoveringSession, setIsRecoveringSession] = useState(false);
   const hasTriedRecoveryRef = useRef(false);
+
+  const [guestReady, setGuestReady] = useState(false);
+  const [hasGuestSession, setHasGuestSession] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    loadCaretakerGuestSession().then(saved => {
+      if (!cancelled) setHasGuestSession(Boolean(saved));
+    }).catch(() => {}).finally(() => { if (!cancelled) setGuestReady(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Debug-Ausgabe
   useEffect(() => {
@@ -60,6 +71,7 @@ export default function Index() {
   // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
   if (
     loading ||
+    !guestReady ||
     isBabyStatusLoading ||
     !isBabyStatusResolved ||
     !isOnboardingStatusResolved ||
@@ -77,6 +89,7 @@ export default function Index() {
 
   // Explizite Weiterleitung zum Login-Screen, wenn keine Session vorhanden ist
   if (!session) {
+    if (hasGuestSession) return <Redirect href="/caregiver-join" />;
     console.log('No session, redirecting to auth');
     return <Redirect href="/(auth)" />;
   }

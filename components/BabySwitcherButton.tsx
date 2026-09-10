@@ -26,6 +26,8 @@ import { useLocale } from '@/contexts/LocaleContext';
 
 type BabySwitcherButtonProps = {
   size?: number;
+  /** Keep the current form open after choosing a baby. */
+  navigateOnSelect?: boolean;
   showTrigger?: boolean;
   /** Zeigt unten rechts ein kleines Badge, das den Wechsel zu anderen Kindern andeutet */
   showSwitchHint?: boolean;
@@ -35,6 +37,7 @@ type BabySwitcherButtonProps = {
 
 const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   size = 36,
+  navigateOnSelect = true,
   showTrigger = true,
   showSwitchHint = false,
   isOpen,
@@ -133,6 +136,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const handleSelectBaby = async (babyId: string) => {
     try {
       await setActiveBabyId(babyId);
+      if (!navigateOnSelect) { setModalOpen(false); return; }
       const targetRoute = await getHomeRouteForBaby(babyId);
       navigateFromModal(targetRoute, {
         replace: true,

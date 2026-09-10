@@ -15,9 +15,6 @@ export { shouldShowPaywallForState } from './paywallDecision';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
 export const PAYWALL_TRIAL_DAYS = DEFAULT_PAYWALL_TRIAL_DAYS;
-export const PAYWALL_HARD_GATE_NEW_USERS_SINCE = new Date(
-  '2026-04-09T00:00:00+02:00',
-);
 
 export type PaywallState = {
   isPro: boolean;
@@ -41,14 +38,6 @@ const resolveAccountCreatedAt = (user: any): Date | null => {
   return parseDate(user?.created_at);
 };
 
-const shouldRequireImmediateSubscription = (
-  accessReason: PaywallAccessReason,
-  accountCreatedAt: Date | null,
-): boolean =>
-  accessReason === 'none' &&
-  accountCreatedAt !== null &&
-  accountCreatedAt.getTime() >= PAYWALL_HARD_GATE_NEW_USERS_SINCE.getTime();
-
 const mapRowToState = (
   settings: any,
   premiumStatus: PremiumStatusResult,
@@ -63,17 +52,9 @@ const mapRowToState = (
     : isAdmin
       ? 'admin'
       : paywallAccessRole ?? 'none';
-  const requiresImmediateSubscription = shouldRequireImmediateSubscription(
-    accessReason,
-    accountCreatedAt,
-  );
-  const paywallAccountCreationGraceMs = trialDays * 24 * 60 * 60 * 1000;
-  const accountAge = accountCreatedAt ? Date.now() - accountCreatedAt.getTime() : null;
-  const isTrialExpired =
-    requiresImmediateSubscription ||
-    (accessReason === 'none' &&
-      accountAge !== null &&
-      accountAge >= paywallAccountCreationGraceMs);
+  // Legacy-Name: steuert die nicht schließbare Paywall, keine kostenlose
+  // Freigabe allein aufgrund des Kontoalters.
+  const isTrialExpired = accessReason === 'none';
 
   return {
     isPro,
@@ -97,7 +78,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       isAdmin: false,
       paywallAccessRole: null,
       accessReason: 'none',
-      isTrialExpired: false,
+      isTrialExpired: true,
       lastShownAt: null,
       accountCreatedAt: null,
       trialDays: PAYWALL_TRIAL_DAYS,
@@ -135,7 +116,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       isAdmin: false,
       paywallAccessRole: null,
       accessReason: 'none',
-      isTrialExpired: false,
+      isTrialExpired: true,
       lastShownAt: null,
       accountCreatedAt: null,
       trialDays: PAYWALL_TRIAL_DAYS,

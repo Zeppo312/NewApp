@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -96,6 +96,21 @@ export default function AppSettingsScreen() {
   const theme = Colors[colorScheme];
   const router = useRouter();
   const { focus } = useLocalSearchParams<{ focus?: string }>();
+  const settingsScrollRef = useRef<ScrollView>(null);
+  const backgroundSectionRef = useRef<View>(null);
+  const didFocusBackground = useRef(false);
+  const focusBackgroundSection = () => {
+    if (focus !== 'background' || didFocusBackground.current) return;
+    const scroll = settingsScrollRef.current;
+    const section = backgroundSectionRef.current;
+    if (!scroll || !section) return;
+    requestAnimationFrame(() => {
+      section.measureLayout(scroll.getInnerViewNode(), (_x, y) => {
+        scroll.scrollTo({ y: Math.max(0, y - 12), animated: true });
+        didFocusBackground.current = true;
+      }, () => {});
+    });
+  };
   const { user, session, signOut } = useAuth();
   const { locale, localeTag, preference, setPreference } = useLocale();
   const t = (
@@ -964,6 +979,7 @@ export default function AppSettingsScreen() {
               onBackPress={() => router.push('/more')}
             />
             <ScrollView
+              ref={settingsScrollRef}
               contentContainerStyle={styles.scrollContent}
               contentInsetAdjustmentBehavior="automatic"
               showsVerticalScrollIndicator={false}
@@ -1611,6 +1627,7 @@ export default function AppSettingsScreen() {
                   </LiquidGlassCard>
 
                   {/* Hintergrundbild */}
+                  <View ref={backgroundSectionRef} onLayout={focusBackgroundSection} collapsable={false}>
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
                     <View style={styles.sectionHeading}>
                       <IconSymbol name="photo" size={16} color={primaryIconColor} />
@@ -1739,6 +1756,7 @@ export default function AppSettingsScreen() {
                       </>
                     )}
                   </LiquidGlassCard>
+                  </View>
 
                   {/* Daten verwalten */}
                   <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>

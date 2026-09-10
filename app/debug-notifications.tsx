@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { pollPartnerActivities, getUnreadPartnerNotificationCount } from '@/lib/partnerNotificationService';
 import { getPartnerId } from '@/lib/accountLinks';

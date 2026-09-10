@@ -10,7 +10,6 @@ import {
   View,
   Keyboard,
   LayoutAnimation,
-  UIManager,
   StyleProp,
   ViewStyle,
   TextStyle,
@@ -149,13 +148,6 @@ const toDateOnlyKey = (value?: Date | null) => {
   copy.setHours(0, 0, 0, 0);
   return `${copy.getFullYear()}-${String(copy.getMonth() + 1).padStart(2, "0")}-${String(copy.getDate()).padStart(2, "0")}`;
 };
-
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export const PlannerCaptureModal: React.FC<Props> = ({
   visible,

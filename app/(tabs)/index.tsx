@@ -12,7 +12,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { saveContraction, getContractions, deleteContraction, updateContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import * as Device from 'expo-device';
 import { 
   startContractionTimer, 

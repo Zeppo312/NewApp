@@ -10,10 +10,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { invalidatePremiumStatusCache } from '@/lib/appCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
-import { markPaywallShown } from '@/lib/paywall';
+import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import {
   DEFAULT_PAYWALL_CONTENT,
-  clonePaywallPlansContent,
   fetchPaywallContent,
   formatEuroAmount,
   type PaywallPlansContent,
@@ -82,7 +81,7 @@ const buildPlanPrices = (
 };
 
 export default function PaywallScreen() {
-  const { next, origin, preview, trialExpired } = useLocalSearchParams<{
+  const { next, origin, preview } = useLocalSearchParams<{
     next?: string;
     origin?: string;
     preview?: string;
@@ -96,7 +95,12 @@ export default function PaywallScreen() {
   const nextRoute =
     typeof next === 'string' && next.length > 0 ? next : '/(tabs)/home';
   const isAdminPreview = preview === 'admin';
-  const isTrialExpired = trialExpired === '1';
+  // Route-Parameter dürfen keinen kostenlosen Zugang oder Schließen erlauben.
+  const [accessCheck, setAccessCheck] = useState<{
+    userId: string;
+    requiresSubscription: boolean;
+  } | null>(null);
+  const isTrialExpired = !user || accessCheck?.userId !== user.id || accessCheck.requiresSubscription;
   const [plansContent, setPlansContent] = useState<PaywallPlansContent>(() =>
     localizePaywallPlansContent(locale, DEFAULT_PAYWALL_CONTENT.plans),
   );
@@ -175,8 +179,23 @@ export default function PaywallScreen() {
   }, [isPurchasesSupported, isRevenueCatConfigured, user]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) return;
+    const userId = user.id;
+    void shouldShowPaywall().then(({ shouldShow }) => {
+      if (!cancelled) setAccessCheck({ userId, requiresSubscription: shouldShow });
+    }).catch((error) => {
+      console.error('Paywall access check failed:', error);
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  useEffect(() => {
     if (isAdminPreview) return;
-    void markPaywallShown(origin);
+    // Die Erfassung darf weder die Navigation blockieren noch Zugang gewähren.
+    void markPaywallShown(origin).catch((error) => {
+      console.error('Failed to record paywall view:', error);
+    });
   }, [isAdminPreview, origin]);
 
   useEffect(() => {
@@ -196,7 +215,7 @@ export default function PaywallScreen() {
     interval: SubscriptionInterval,
   ) => {
     if (!isPurchasesSupported) {
-      router.replace(nextRoute as any);
+      setPurchaseError(t('unavailable'));
       return;
     }
 
@@ -246,7 +265,7 @@ export default function PaywallScreen() {
 
   const restoreAndRefresh = async () => {
     if (!isPurchasesSupported) {
-      router.replace(nextRoute as any);
+      setPurchaseError(t('unavailable'));
       return;
     }
 
@@ -304,7 +323,7 @@ export default function PaywallScreen() {
         billingLabel={billingLabel}
         storeProvider={storeProvider}
         isTrialExpired={isTrialExpired}
-        allowClose={!isAdminPreview}
+        allowClose={!isAdminPreview && !isTrialExpired}
         showAppleEula={Platform.OS === 'ios'}
         visiblePurchaseError={visiblePurchaseError}
         pendingAction={pendingAction}
@@ -315,7 +334,7 @@ export default function PaywallScreen() {
         onRestorePress={() => {
           void restoreAndRefresh();
         }}
-        onClose={() => router.back()}
+        onClose={() => { if (!isTrialExpired) router.back(); }}
         onOpenPrivacy={() => router.push('/datenschutz' as any)}
         onOpenTerms={() => router.push('/nutzungsbedingungen' as any)}
         onOpenAppleEula={() => {

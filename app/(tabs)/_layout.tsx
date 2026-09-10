@@ -139,7 +139,6 @@ export default function TabLayout() {
     const visibleTabPaths = new Set([
       '/',
       '/blog',
-      '/notifications',
       '/home',
       '/pregnancy-home',
       '/countdown',
@@ -156,7 +155,6 @@ export default function TabLayout() {
       '/size-tracker',
       '/period-tracker',
       '/more',
-      '/community',
       '/shopping-list',
       '/debug',
     ]);
@@ -240,6 +238,7 @@ export default function TabLayout() {
           },
         }),
       }}>
+      <Tabs.Screen name="account-linking" options={getTabVisibilityOptions(true)} />
       {/* VERSTECKTE TABS - diese werden in keiner der Ansichten in der Tab-Leiste angezeigt */}
       <Tabs.Screen
         name="diary"
@@ -386,27 +385,6 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: t('tab.notifications'),
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
-          ...getTabVisibilityOptions(true),
-        }}
-      />
-
-      {/* Community-Route bleibt erhalten, ist aber nicht mehr in der Tab-Leiste sichtbar */}
-      <Tabs.Screen
-        name="community"
-        options={{
-          title: t('tab.community'),
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />
-          ),
-          ...getTabVisibilityOptions(true),
-        }}
-      />
-
       {/* Tab 4/5: Einkaufsliste (ersetzt den frueheren Community-Tab) */}
       <Tabs.Screen
         name="shopping-list"
@@ -423,22 +401,6 @@ export default function TabLayout() {
         options={{
           title: t('tab.debug'),
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="wrench.fill" color={color} />,
-          ...getTabVisibilityOptions(true),
-        }}
-      />
-
-      <Tabs.Screen
-        name="groups/index"
-        options={{
-          title: t('tab.groups'),
-          ...getTabVisibilityOptions(true),
-        }}
-      />
-
-      <Tabs.Screen
-        name="groups/[groupId]"
-        options={{
-          title: t('tab.group'),
           ...getTabVisibilityOptions(true),
         }}
       />

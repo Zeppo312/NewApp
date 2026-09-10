@@ -22,13 +22,13 @@ describe('paywall state decision', () => {
     expect(shouldShowPaywallForState(expiredState, intervalMs)).toBe(true);
   });
 
-  it('fails open when subscription status is technically unavailable', () => {
+  it('keeps the gate closed when no access can be verified', () => {
     expect(
       shouldShowPaywallForState({
         ...expiredState,
         subscriptionStatus: 'unavailable',
       }, intervalMs),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('never shows for confirmed active access', () => {
@@ -40,4 +40,28 @@ describe('paywall state decision', () => {
       }, intervalMs),
     ).toBe(false);
   });
+
+  it.each([new Date(), null, new Date('2026-01-01')])(
+    'requires a subscription regardless of account age (%s) or a recent paywall view',
+    (accountCreatedAt) => {
+      expect(shouldShowPaywallForState({
+        ...expiredState,
+        accountCreatedAt,
+        isTrialExpired: false,
+        trialDays: 30,
+        lastShownAt: new Date(),
+      }, intervalMs)).toBe(true);
+    },
+  );
+
+  it.each(['admin', 'tester', 'premium_tester', 'lite_tester', 'cooperation_partner'] as const)(
+    'preserves verified %s access even if the store is unavailable',
+    (accessReason) => {
+      expect(shouldShowPaywallForState({
+        ...expiredState,
+        subscriptionStatus: 'unavailable',
+        accessReason,
+      }, intervalMs)).toBe(false);
+    },
+  );
 });

@@ -13,7 +13,6 @@ import {
   Switch,
   Text,
   TouchableOpacity,
-  UIManager,
   View,
   ViewStyle,
 } from 'react-native';
@@ -82,13 +81,6 @@ const BRAND_PURPLE_SOFT = '#8E4EC6';
 const TEXT_PRIMARY = '#4A3A33';
 const TEXT_SECONDARY = '#7D5A50';
 const TEXT_TERTIARY = '#9C8178';
-
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type AdvisorTheme = {
   isDark: boolean;

@@ -1,25 +1,32 @@
+import { onboardingColors as brand } from '@/components/onboarding/theme';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View, TouchableOpacity, TextInput, Alert, ImageBackground, SafeAreaView, StatusBar, Platform, ActivityIndicator, Image, KeyboardAvoidingView, ScrollView, Keyboard, TouchableWithoutFeedback, InputAccessoryView } from 'react-native';
+import { StyleSheet, Image, ImageBackground, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, ActivityIndicator, KeyboardAvoidingView, ScrollView, Keyboard, InputAccessoryView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { OnboardingChoice, OnboardingSurface, OnboardingTransition } from '@/components/onboarding/surfaces';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
 import { useConvex } from '@/contexts/ConvexContext';
-import { useBackground, type BackgroundPreset } from '@/contexts/BackgroundContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { invalidateUserProfileCache, invalidateUserSettingsCache } from '@/lib/appCache';
 import { supabase } from '@/lib/supabase';
 import { saveBabyInfo } from '@/lib/baby';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { shouldShowPaywall } from '@/lib/paywall';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
-import * as ImagePicker from 'expo-image-picker';
+import { SurveyStep, ProductTryout } from '@/components/onboarding/personalized-steps';
+import { getPersonalizedStart, getOnboardingNeeds, type OnboardingNeed, type OnboardingChallenge, type OnboardingSupport, type OnboardingHabit } from '@/lib/onboarding-personalization';
+import { ValueStep, FeedbackStep, HabitStep } from '@/components/onboarding/value-steps';
+import { WellbeingStep, wellbeingCopy } from '@/components/onboarding/wellbeing-step';
+import { valueCopy } from '@/components/onboarding/value-copy';
+import { OnboardingProductMoment } from '@/components/onboarding/product-moment';
+import { getOnboardingSteps, getOnboardingDestination, getNextOnboardingIndex, getPreviousOnboardingIndex } from '@/lib/onboarding-flow';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
 import {
@@ -28,18 +35,6 @@ import {
   OnboardingTranslationKey,
   translateOnboardingText,
 } from '@/lib/onboardingTranslations';
-
-type StepKey =
-  | 'firstName'
-  | 'lastName'
-  | 'role'
-  | 'invitation'
-  | 'babyStatus'
-  | 'dates'
-  | 'babyInfo'
-  | 'babyPhoto'
-  | 'background'
-  | 'summary';
 
 const MIN_VALID_PROFILE_DATE_YEAR = 2000;
 const MIN_VALID_PROFILE_DATE = new Date(MIN_VALID_PROFILE_DATE_YEAR, 0, 1);
@@ -50,31 +45,6 @@ const t = (
   params?: Record<string, string | number>,
 ) => translateOnboardingText(ACTIVE_ONBOARDING_LOCALE, key, params);
 
-const ONBOARDING_PRESET_OPTIONS: readonly {
-  id: BackgroundPreset;
-  labelKey: OnboardingTranslationKey;
-}[] = [
-  { id: 'default', labelKey: 'preset.default' },
-  { id: 'verspielt', labelKey: 'preset.playful' },
-  { id: 'dunkler', labelKey: 'preset.darker' },
-  { id: 'nightmode', labelKey: 'preset.night' },
-  { id: 'shadow', labelKey: 'preset.shadow' },
-  { id: 'wave', labelKey: 'preset.wave' },
-  { id: 'stone', labelKey: 'preset.stone' },
-];
-
-const ONBOARDING_STEP_ORDER: StepKey[] = ['firstName', 'lastName', 'role', 'invitation', 'babyStatus', 'dates', 'babyInfo', 'babyPhoto', 'background', 'summary'];
-
-const PRESET_DARK_MODE_MAP: Record<BackgroundPreset, boolean> = {
-  default: false,
-  verspielt: false,
-  dunkler: true,
-  nightmode: true,
-  shadow: true,
-  wave: false,
-  stone: true,
-};
-
 export default function GetUserInfoScreen() {
   ACTIVE_ONBOARDING_LOCALE = useLocale().locale;
   ONBOARDING_LOCALE_TAG = getOnboardingLocaleTag(ACTIVE_ONBOARDING_LOCALE);
@@ -82,18 +52,9 @@ export default function GetUserInfoScreen() {
   const invitationAccessoryViewID = 'invitation-code-keyboard-accessory';
   const { user } = useAuth();
   const { refreshBabyDetails } = useBabyStatus();
-  const { refreshBabies } = useActiveBaby();
+  const { refreshBabies, activeBaby } = useActiveBaby();
   const { refresh: refreshOnboardingStatus } = useOnboardingStatus();
   const { syncUser } = useConvex();
-  const {
-    selectedBackground,
-    backgroundSource,
-    hasCustomBackground,
-    isDarkBackground,
-    setPresetBackground,
-    pickAndSaveBackground,
-    setBackgroundMode,
-  } = useBackground();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
@@ -148,17 +109,14 @@ export default function GetUserInfoScreen() {
 
   // Benutzerinformationen
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [userRole, setUserRole] = useState<'mama' | 'papa' | ''>('');
 
   // Baby-Informationen
   const [babyName, setBabyName] = useState('');
-  const [babyGender, setBabyGender] = useState<'male' | 'female' | 'unknown'>('unknown');
+  const babyGender = 'unknown' as const;
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isBabyBorn, setIsBabyBorn] = useState<boolean | null>(null);
   const [birthDate, setBirthDate] = useState<Date | null>(null);
-  const [wantsBabyPhotoUpload, setWantsBabyPhotoUpload] = useState<boolean | null>(null);
-  const [babyPhotoUrl, setBabyPhotoUrl] = useState<string | null>(null);
   // Gewicht und Größe werden in dieser Version nicht verwendet, aber für zukünftige Erweiterungen vorbereitet
   const [babyWeight] = useState('');
   const [babyHeight] = useState('');
@@ -168,10 +126,16 @@ export default function GetUserInfoScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
   const [showBirthDatePicker, setShowBirthDatePicker] = useState(false);
-  const [isPickingBackground, setIsPickingBackground] = useState(false);
 
   // Einladungscode
   const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
+  const [showInvitation, setShowInvitation] = useState(false);
+  const [need, setNeed] = useState<OnboardingNeed | null>(null);
+  const [challenge, setChallenge] = useState<OnboardingChallenge | null>(null);
+  const [demoCompleted, setDemoCompleted] = useState(false);
+  const [wellbeing, setWellbeing] = useState<{ mood: number | null; energy: number | null }>({ mood: null, energy: null });
+  const [habit, setHabit] = useState<OnboardingHabit | null>(null);
+  const [support, setSupport] = useState<OnboardingSupport | null>(null);
   const [invitationStatus, setInvitationStatus] = useState<'idle' | 'accepted' | 'skipped'>('idle');
   const [isRedeemingInvitation, setIsRedeemingInvitation] = useState(false);
   const autoRedeemAttemptedRef = useRef(false);
@@ -189,27 +153,27 @@ export default function GetUserInfoScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Schrittweise Abfrage
-  const shouldShowInvitationStep = !hasPrefilledInvitationCode
+  const shouldShowInvitationStep = showInvitation
     || (!isRedeemingInvitation && invitationStatus !== 'accepted' && invitationError !== null);
-  const onboardingSteps = useMemo<StepKey[]>(() => {
-    const baseSteps = shouldShowInvitationStep
-      ? ONBOARDING_STEP_ORDER
-      : ONBOARDING_STEP_ORDER.filter((step) => step !== 'invitation');
-    const defaultSteps = isBabyBorn === true
-      ? baseSteps
-      : baseSteps.filter((step) => step !== 'babyPhoto');
-
-    return invitationStatus === 'accepted'
-      ? (shouldShowInvitationStep
-        ? ['firstName', 'lastName', 'role', 'invitation', 'background', 'summary']
-        : ['firstName', 'lastName', 'role', 'background', 'summary'])
-      : defaultSteps;
-  }, [invitationStatus, shouldShowInvitationStep, isBabyBorn]);
+  const onboardingSteps = useMemo(
+    () => getOnboardingSteps(shouldShowInvitationStep, invitationStatus === 'accepted'),
+    [invitationStatus, shouldShowInvitationStep],
+  );
   const [currentStep, setCurrentStep] = useState(0);
+  const [helpful, setHelpful] = useState(false);
   const boundedCurrentStep = Math.min(currentStep, Math.max(0, onboardingSteps.length - 1));
   const totalSteps = onboardingSteps.length;
   const currentStepKey = onboardingSteps[boundedCurrentStep];
   const isPartnerFlow = invitationStatus === 'accepted';
+  const momentBabyBorn = isPartnerFlow
+    ? (activeBaby ? Boolean(activeBaby.birth_date) : Boolean(invitationInfo?.isBabyBorn ?? isBabyBorn))
+    : isBabyBorn === true;
+
+  const selectedStart = getPersonalizedStart(momentBabyBorn, need);
+  useEffect(() => { setHabit(null); setDemoCompleted(false); setHelpful(false); }, [selectedStart]);
+  useEffect(() => {
+    if (need && !getOnboardingNeeds(momentBabyBorn).includes(need)) setNeed(null);
+  }, [momentBabyBorn, need]);
 
   // Bei Schrittwechsel nach oben scrollen
   useEffect(() => {
@@ -366,100 +330,6 @@ export default function GetUserInfoScreen() {
     setShowBirthDatePicker(false);
   };
 
-  const pickBabyPhoto = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(t('photo.permissionTitle'), t('photo.permissionMessage'));
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
-        base64: true,
-      });
-
-      if (result.canceled || !result.assets || result.assets.length === 0) {
-        return;
-      }
-
-      const asset = result.assets[0];
-      let base64Data: string | null = null;
-
-      if (asset.base64) {
-        base64Data = `data:image/jpeg;base64,${asset.base64}`;
-      } else if (asset.uri) {
-        const response = await fetch(asset.uri);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        base64Data = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-      }
-
-      if (!base64Data) {
-        Alert.alert(t('common.error'), t('photo.processFailed'));
-        return;
-      }
-
-      setBabyPhotoUrl(base64Data);
-    } catch (error) {
-      console.error('Error picking baby photo in onboarding:', error);
-      Alert.alert(t('common.error'), t('photo.selectFailed'));
-    }
-  };
-
-  const handleSelectPresetBackground = async (preset: BackgroundPreset) => {
-    await setPresetBackground(preset);
-    await setBackgroundMode(PRESET_DARK_MODE_MAP[preset]);
-  };
-
-  const handlePickCustomBackground = async () => {
-    if (isPickingBackground) return;
-
-    try {
-      setIsPickingBackground(true);
-      const result = await pickAndSaveBackground();
-
-      if (result.error) {
-        console.error('Background selection failed:', result.error);
-        Alert.alert(t('common.error'), t('background.selectFailed'));
-        return;
-      }
-
-      if (result.success && result.needsModeSelection) {
-        Alert.alert(
-          t('background.brightnessTitle'),
-          t('background.brightnessMessage'),
-          [
-            {
-              text: t('common.light'),
-              onPress: () => {
-                void setBackgroundMode(false);
-              },
-            },
-            {
-              text: t('common.dark'),
-              onPress: () => {
-                void setBackgroundMode(true);
-              },
-            },
-          ],
-        );
-      }
-    } catch (error) {
-      console.error('Error picking onboarding background:', error);
-      Alert.alert(t('common.error'), t('background.selectFailed'));
-    } finally {
-      setIsPickingBackground(false);
-    }
-  };
-
   // Speichern der Benutzerdaten in verschiedenen Tabellen
   const saveUserData = async () => {
     try {
@@ -468,11 +338,14 @@ export default function GetUserInfoScreen() {
         return;
       }
 
+      if (!firstName.trim() || !userRole || !need || !challenge || !support) {
+        Alert.alert(t('common.notice'), t('survey.choose'));
+        setCurrentStep(onboardingSteps.indexOf(!firstName.trim() ? 'firstName' : !userRole ? 'role' : !need ? 'needs' : !challenge ? 'challenge' : 'support'));
+        return;
+      }
       setIsSaving(true);
       const partnerFlow = invitationStatus === 'accepted';
-      const babyBorn = partnerFlow
-        ? Boolean(invitationInfo?.isBabyBorn ?? isBabyBorn ?? false)
-        : isBabyBorn === true;
+      const babyBorn = momentBabyBorn;
       const safeDueDateIso = toSafeIsoString(dueDate);
       const safeBirthDateIso = toSafeIsoString(birthDate);
       const calculatedDueDate = partnerFlow
@@ -482,13 +355,12 @@ export default function GetUserInfoScreen() {
         ? null
         : (babyBorn ? safeBirthDateIso : null);
 
-      // Speichern der Profildaten (Vorname, Nachname, Rolle)
+      // Nur abgefragte Profildaten speichern; vorhandenen Nachnamen beibehalten.
       const profileResult = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          first_name: firstName,
-          last_name: lastName,
+          first_name: firstName.trim(),
           user_role: userRole,
           updated_at: new Date().toISOString()
         });
@@ -545,6 +417,11 @@ export default function GetUserInfoScreen() {
         throw new Error(t('save.settingsFailed'));
       }
 
+      const { error: answersError } = await supabase.auth.updateUser({
+        data: { onboarding_preferences: { version: 1, need, challenge, support, habit, wellbeing } },
+      });
+      if (answersError) throw new Error(t('save.profileFailed'));
+
       await Promise.all([
         invalidateUserProfileCache(),
         invalidateUserSettingsCache(),
@@ -558,7 +435,6 @@ export default function GetUserInfoScreen() {
           birth_date: calculatedBirthDate,
           weight: babyWeight,
           height: babyHeight,
-          photo_url: babyBorn ? babyPhotoUrl : null,
         };
 
         const { error: babyError } = await saveBabyInfo(babyInfo);
@@ -575,24 +451,22 @@ export default function GetUserInfoScreen() {
       void syncUser();
 
       // Nach dem Speichern zur entsprechenden Seite navigieren oder Paywall zeigen
-      const nextRoute = babyBorn ? '/(tabs)/home' : '/(tabs)/countdown';
+      const nextRoute = getOnboardingDestination(babyBorn, selectedStart);
 
+      let requiresSubscription = true;
       try {
-        const { shouldShow, state } = await shouldShowPaywall();
-        if (shouldShow) {
-          await markPaywallShown('onboarding');
-          router.replace({
-            pathname: '/paywall',
-            params: {
-              next: nextRoute,
-              origin: 'onboarding',
-              trialExpired: state.isTrialExpired ? '1' : '0',
-            },
-          });
-          return;
-        }
+        const { shouldShow } = await shouldShowPaywall();
+        requiresSubscription = shouldShow;
       } catch (paywallError) {
         console.error('Paywall check after onboarding failed:', paywallError);
+      }
+
+      if (requiresSubscription) {
+        router.replace({
+          pathname: '/paywall',
+          params: { next: nextRoute, origin: 'onboarding', trialExpired: '1' },
+        });
+        return;
       }
 
       router.replace(nextRoute);
@@ -613,17 +487,14 @@ export default function GetUserInfoScreen() {
           return;
         }
         break;
-      case 'lastName':
-        if (!lastName.trim()) {
-          Alert.alert(t('common.notice'), t('validation.lastName'));
-          return;
-        }
-        break;
       case 'role':
         if (!userRole) {
           Alert.alert(t('common.notice'), t('validation.role'));
           return;
         }
+        break;
+      case 'invitation':
+        if (!firstName.trim() || !userRole) { setCurrentStep(onboardingSteps.indexOf(!firstName.trim() ? 'firstName' : 'role')); return; }
         break;
       case 'babyStatus':
         if (isBabyBorn === null) {
@@ -645,23 +516,19 @@ export default function GetUserInfoScreen() {
           return;
         }
         break;
-      case 'babyInfo':
-        break;
-      case 'babyPhoto':
-        if (wantsBabyPhotoUpload === null) {
-          Alert.alert(t('common.notice'), t('validation.photoChoice'));
-          return;
-        }
-        if (wantsBabyPhotoUpload === true && !babyPhotoUrl) {
-          Alert.alert(t('common.notice'), t('validation.photoRequired'));
-          return;
+      case 'needs':
+      case 'challenge':
+      case 'support':
+        if ((currentStepKey === 'needs' && !need) || (currentStepKey === 'challenge' && !challenge) || (currentStepKey === 'support' && !support)) {
+          Alert.alert(t('common.notice'), t('survey.choose')); return;
         }
         break;
       default:
         break;
     }
 
-    const nextStep = boundedCurrentStep + 1;
+    Keyboard.dismiss();
+    const nextStep = getNextOnboardingIndex(onboardingSteps, boundedCurrentStep, demoCompleted);
 
     if (nextStep >= totalSteps) {
       saveUserData();
@@ -679,108 +546,58 @@ export default function GetUserInfoScreen() {
     }
 
     // Zum vorherigen Schritt
-    setCurrentStep(boundedCurrentStep - 1);
+    setCurrentStep(getPreviousOnboardingIndex(onboardingSteps, boundedCurrentStep, demoCompleted));
   };
 
   // Render-Funktion für den aktuellen Schritt
   const renderCurrentStep = () => {
     switch (currentStepKey) {
-      case 'firstName': // Vorname
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/BabyThinking.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('firstName.title')}</ThemedText>
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              value={firstName}
-              onChangeText={setFirstName}
-              placeholder={t('firstName.placeholder')}
-              placeholderTextColor={theme.tabIconDefault}
-              autoFocus
-            />
-          </ThemedView>
-        );
-
-      case 'lastName': // Nachname
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/BabyThinking.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('lastName.title')}</ThemedText>
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              value={lastName}
-              onChangeText={setLastName}
-              placeholder={t('lastName.placeholder')}
-              placeholderTextColor={theme.tabIconDefault}
-              autoFocus
-            />
-          </ThemedView>
-        );
-
-      case 'role': // Mama oder Papa
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/MamaPapaBaby.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('role.title')}</ThemedText>
-            <View style={styles.roleButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.roleButton, userRole === 'mama' && styles.roleButtonActive]}
-                onPress={() => setUserRole('mama')}
-              >
-                <IconSymbol
-                  name="person.fill"
-                  size={24}
-                  color={userRole === 'mama' ? '#FFFFFF' : theme.tabIconDefault}
-                />
-                <ThemedText style={[styles.roleButtonText, userRole === 'mama' && styles.roleButtonTextActive]}>
-                  {t('role.mama')}
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.roleButton, userRole === 'papa' && styles.roleButtonActive]}
-                onPress={() => setUserRole('papa')}
-              >
-                <IconSymbol
-                  name="person.fill"
-                  size={24}
-                  color={userRole === 'papa' ? '#FFFFFF' : theme.tabIconDefault}
-                />
-                <ThemedText style={[styles.roleButtonText, userRole === 'papa' && styles.roleButtonTextActive]}>
-                  {t('role.papa')}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          </ThemedView>
-        );
+      case 'welcome':
+      case 'personalValue':
+      case 'relief':
+      case 'sharedValue':
+        return <ValueStep kind={currentStepKey} locale={ACTIVE_ONBOARDING_LOCALE} need={selectedStart}
+          dueDate={isPartnerFlow ? parseSafeDate(invitationInfo?.dueDate) : dueDate}
+          babyName={isPartnerFlow ? activeBaby?.name : babyName} challenge={challenge ?? 'remember'} support={support ?? 'solo'} />;
+      case 'firstName':
+        return <View style={styles.stepContainer}>
+          <ThemedText style={styles.stepTitle}>{t('flow.nameLabel')}</ThemedText>
+          <ThemedText style={styles.description}>{t('flow.youBody')}</ThemedText>
+          <View style={styles.questionArea}><Image source={require('@/assets/images/BabyThinking.png')} style={styles.babyIllustration} resizeMode="contain" accessible={false} /><OnboardingSurface style={{ padding: 20 }}>
+            <TextInput style={styles.input} value={firstName} onChangeText={setFirstName}
+              placeholder={t('firstName.placeholder')} placeholderTextColor={brand.muted}
+              accessibilityLabel={t('flow.nameLabel')} textContentType="givenName" autoComplete="given-name"
+              autoCapitalize="words" returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
+          </OnboardingSurface></View>
+        </View>;
+      case 'role':
+        return <View style={styles.stepContainer}>
+          <ThemedText style={styles.stepTitle}>{t('flow.roleLabel')}</ThemedText>
+          <View style={styles.questionArea}>
+            <Image source={require('@/assets/images/MamaPapaBaby.png')} style={styles.babyIllustration} resizeMode="contain" accessible={false} />
+            {(['mama', 'papa'] as const).map(role => <OnboardingChoice key={role} selected={userRole === role}
+              accessibilityLabel={t(`role.${role}`)} onPress={() => setUserRole(role)} contentStyle={styles.roleChoice}>
+              <IconSymbol name="person.fill" size={26} color={brand.accentText} />
+              <ThemedText style={styles.roleButtonText}>{t(`role.${role}`)}</ThemedText>
+              <View style={{ flex: 1 }} /><IconSymbol name={userRole === role ? 'checkmark.circle.fill' : 'circle'} size={24} color={brand.accentText} />
+            </OnboardingChoice>)}
+            {!hasPrefilledInvitationCode && invitationStatus !== 'accepted' && <TouchableOpacity accessibilityRole="button" style={styles.textLink}
+              onPress={() => { Keyboard.dismiss(); setShowInvitation(true); setCurrentStep(getOnboardingSteps(true, false).indexOf('invitation')); }}>
+              <ThemedText style={styles.linkText}>{t('flow.inviteLink')}</ThemedText><IconSymbol name="arrow.right" size={16} color={brand.accentText} />
+            </TouchableOpacity>}
+          </View>
+        </View>;
 
       case 'invitation': // Einladungscode
         return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/BabyBirth.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
+          <View style={styles.stepContainer}>
             {invitationStatus === 'accepted' ? (
               <>
                 <ThemedText style={styles.stepTitle}>{t('invitation.successTitle')}</ThemedText>
                 <View style={styles.infoCard}>
                   <View style={styles.infoRow}>
-                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
-                      <IconSymbol name="checkmark.circle.fill" size={18} color="#9DBEBB" />
+                    <View style={[styles.infoRowIcon, { backgroundColor: brand.softAccent }]}>
+                      <IconSymbol name="checkmark.circle.fill" size={18} color={brand.accentText} />
                     </View>
                     <View style={styles.infoRowContent}>
                       <ThemedText style={styles.infoRowLabel}>{t('invitation.partner')}</ThemedText>
@@ -794,7 +611,7 @@ export default function GetUserInfoScreen() {
                       <View style={styles.infoCardDivider} />
                       <View style={styles.infoRow}>
                         <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
-                          <IconSymbol name="calendar" size={18} color="#8E4EC6" />
+                          <IconSymbol name="calendar" size={18} color={brand.accentText} />
                         </View>
                         <View style={styles.infoRowContent}>
                           <ThemedText style={styles.infoRowLabel}>{t('invitation.dueDate')}</ThemedText>
@@ -817,14 +634,14 @@ export default function GetUserInfoScreen() {
                   </View>
                 </View>
                 <ThemedText style={styles.invitationSkipNote}>
-                  {t('invitation.continueSummary')}
+                  {t('invitation.continuePreview')}
                 </ThemedText>
               </>
             ) : (
               <>
                 <ThemedText style={styles.stepTitle}>{t('invitation.title')}</ThemedText>
                 <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 16 }]}>
-                  {t('invitation.description')}
+                  {t('flow.inviteBody')}
                 </ThemedText>
 
                 <TextInput
@@ -862,51 +679,40 @@ export default function GetUserInfoScreen() {
                     style={[styles.booleanButton, { marginLeft: 5 }]}
                     onPress={() => {
                       setInvitationStatus('skipped');
-                      goToNextStep();
+                      setInvitationError(null);
+                      setShowInvitation(false);
+                      setCurrentStep(getOnboardingSteps(false, false).indexOf(!firstName.trim() ? 'firstName' : !userRole ? 'role' : 'babyStatus'));
                     }}
                     disabled={isRedeemingInvitation}
                   >
-                    <ThemedText style={styles.booleanButtonText}>{t('invitation.skip')}</ThemedText>
+                    <ThemedText style={styles.booleanButtonText}>{t('flow.continueSolo')}</ThemedText>
                   </TouchableOpacity>
                 </View>
               </>
             )}
-          </ThemedView>
+          </View>
         );
 
-      case 'babyStatus': // Baby bereits geboren?
+      case 'babyStatus':
         return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/babyborn.png')}
-              style={styles.babyImage}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('babyStatus.title')}</ThemedText>
-            <View style={styles.booleanButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.booleanButton, isBabyBorn === true && styles.booleanButtonActive]}
-                onPress={() => {
-                  setIsBabyBorn(true);
-                  setShowDueDatePicker(false);
-                }}
-              >
-                <ThemedText style={[styles.booleanButtonText, isBabyBorn === true && styles.booleanButtonTextActive]}>{t('common.yes')}</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.booleanButton, isBabyBorn === false && styles.booleanButtonActive]}
-                onPress={() => {
-                  setIsBabyBorn(false);
-                  setShowBirthDatePicker(false);
-                  setWantsBabyPhotoUpload(null);
-                  setBabyPhotoUrl(null);
-                }}
-              >
-                <ThemedText style={[styles.booleanButtonText, isBabyBorn === false && styles.booleanButtonTextActive]}>{t('common.no')}</ThemedText>
-              </TouchableOpacity>
+          <View style={styles.stepContainer}>
+            <ThemedText style={styles.stepTitle}>{t('flow.stageTitle')}</ThemedText>
+            <ThemedText style={styles.description}>{t('flow.stageBody')}</ThemedText>
+            <View style={styles.stageOptions}>
+              {[false, true].map(born => (
+                <OnboardingChoice key={String(born)} selected={isBabyBorn === born} tone={born ? brand.softAccent : 'rgba(255,205,206,0.25)'}
+                  accessibilityLabel={t(born ? 'flow.born' : 'flow.expecting')}
+                  accessibilityHint={t(born ? 'flow.bornDetail' : 'flow.expectingDetail')}
+                  contentStyle={styles.stageOption}
+                  onPress={() => { setIsBabyBorn(born); setShowDueDatePicker(false); setShowBirthDatePicker(false); }}>
+                  <Image source={born ? require('@/assets/images/babyborn.png') : require('@/assets/images/BabyBirth.png')} style={{ width: 106, height: 106, alignSelf: 'center' }} resizeMode="contain" accessible={false} />
+                  <ThemedText style={styles.stageTitle}>{t(born ? 'flow.born' : 'flow.expecting')}</ThemedText>
+                  <ThemedText style={styles.stageDetail}>{t(born ? 'flow.bornDetail' : 'flow.expectingDetail')}</ThemedText>
+                  {isBabyBorn === born && <View style={styles.stageCheck}><IconSymbol name="checkmark.circle.fill" size={23} color={brand.accentText} /></View>}
+                </OnboardingChoice>
+              ))}
             </View>
-          </ThemedView>
+          </View>
         );
 
       case 'dates': { // Datum abhängig vom Baby-Status
@@ -919,19 +725,19 @@ export default function GetUserInfoScreen() {
         maxDueDate.setFullYear(maxDueDate.getFullYear() + 2);
         const birthDatePickerValue = getSafePickerDate(selectedDate, maxBirthDate, maxBirthDate);
         const dueDatePickerValue = getSafePickerDate(selectedDate, defaultDueDate, maxDueDate);
-        const title = isBorn ? t('dates.birthQuestion') : t('dates.dueQuestion');
+        const title = t('flow.detailsTitle');
         const placeholder = isBorn ? t('dates.chooseBirth') : t('dates.chooseDue');
 
         return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/BabyBirth.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
+          <View style={styles.stepContainer}>
             <ThemedText style={styles.stepTitle}>{title}</ThemedText>
+            <ThemedText style={styles.description}>{t(isBorn ? 'flow.birthReason' : 'flow.dueReason')}</ThemedText>
+            <OnboardingSurface style={{ padding: 20 }}>
+            <ThemedText style={styles.fieldLabel}>{t(isBorn ? 'flow.birthLabel' : 'flow.dueLabel')}</ThemedText>
             <TouchableOpacity
               style={styles.dateButton}
+              accessibilityRole="button"
+              accessibilityLabel={placeholder}
               onPress={() => (isBorn ? setShowBirthDatePicker(true) : setShowDueDatePicker(true))}
             >
               <ThemedText style={styles.dateButtonText}>
@@ -939,6 +745,13 @@ export default function GetUserInfoScreen() {
               </ThemedText>
               <IconSymbol name="calendar" size={20} color={theme.tabIconDefault} />
             </TouchableOpacity>
+
+            <ThemedText style={styles.fieldLabel}>{t('flow.babyNameLabel')}</ThemedText>
+            <TextInput style={styles.input} value={babyName} onChangeText={setBabyName}
+              placeholder={t('babyInfo.namePlaceholder')} placeholderTextColor={brand.muted}
+              accessibilityLabel={t('flow.babyNameLabel')} autoCapitalize="words" returnKeyType="done" onSubmitEditing={Keyboard.dismiss} />
+            <ThemedText style={styles.optionalHint}>{t('flow.optional')}</ThemedText>
+            </OnboardingSurface>
 
             {isBorn && showBirthDatePicker && Platform.OS !== 'ios' && (
               <DateTimePicker
@@ -995,354 +808,37 @@ export default function GetUserInfoScreen() {
                 initialVariant="calendar"
               />
             )}
-          </ThemedView>
+          </View>
         );
       }
 
-      case 'babyInfo': // Baby-Informationen (Name, Geschlecht)
+      case 'mood':
+      case 'energy':
+        return <WellbeingStep key={currentStepKey} locale={ACTIVE_ONBOARDING_LOCALE} kind={currentStepKey} value={wellbeing[currentStepKey]} onChange={value => setWellbeing(previous => ({ ...previous, [currentStepKey]: value }))} />;
+      case 'needs':
+        return <SurveyStep locale={ACTIVE_ONBOARDING_LOCALE} kind="needs" isBabyBorn={momentBabyBorn} value={need} onSelect={value => setNeed(value as OnboardingNeed)} />;
+      case 'challenge':
+        return <SurveyStep locale={ACTIVE_ONBOARDING_LOCALE} kind="challenge" isBabyBorn={momentBabyBorn} value={challenge} onSelect={value => setChallenge(value as OnboardingChallenge)} />;
+      case 'support':
+        return <SurveyStep locale={ACTIVE_ONBOARDING_LOCALE} kind="support" isBabyBorn={momentBabyBorn} value={support} onSelect={value => setSupport(value as OnboardingSupport)} />;
+      case 'productMoment':
+        return <ProductTryout onCompletionChange={setDemoCompleted} key={selectedStart} locale={ACTIVE_ONBOARDING_LOCALE} need={selectedStart} dueDate={isPartnerFlow ? parseSafeDate(invitationInfo?.dueDate) : dueDate} />;
+      case 'feedback':
+        return <FeedbackStep locale={ACTIVE_ONBOARDING_LOCALE} helpful={helpful} onHelpful={() => setHelpful(true)} onChooseAnother={() => { setHelpful(false); setCurrentStep(onboardingSteps.indexOf('needs')); }} />;
+      case 'habit':
+        return <HabitStep locale={ACTIVE_ONBOARDING_LOCALE} need={selectedStart} habit={habit} onSelect={setHabit} />;
+      case 'plan':
         return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/BabyName.png')}
-              style={styles.babyImageSmall}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('babyInfo.title')}</ThemedText>
-            <TextInput
-              style={[styles.input, { color: theme.text }]}
-              value={babyName}
-              onChangeText={setBabyName}
-              placeholder={t('babyInfo.namePlaceholder')}
-              placeholderTextColor={theme.tabIconDefault}
-              autoFocus
-            />
-
-            <ThemedText style={styles.stepSubtitle}>{t('babyInfo.genderQuestion')}</ThemedText>
-            <View style={styles.genderContainer}>
-              <TouchableOpacity
-                style={[styles.genderButton, babyGender === 'male' && styles.genderButtonActive]}
-                onPress={() => setBabyGender('male')}
-              >
-                <IconSymbol
-                  name="person.fill"
-                  size={24}
-                  color={babyGender === 'male' ? '#FFFFFF' : theme.tabIconDefault}
-                />
-                <ThemedText style={[styles.genderButtonText, babyGender === 'male' && styles.genderButtonTextActive]}>
-                  {t('babyInfo.boy')}
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.genderButton, babyGender === 'female' && styles.genderButtonActive]}
-                onPress={() => setBabyGender('female')}
-              >
-                <IconSymbol
-                  name="person.fill"
-                  size={24}
-                  color={babyGender === 'female' ? '#FFFFFF' : theme.tabIconDefault}
-                />
-                <ThemedText style={[styles.genderButtonText, babyGender === 'female' && styles.genderButtonTextActive]}>
-                  {t('babyInfo.girl')}
-                </ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.genderButton, babyGender === 'unknown' && styles.genderButtonActive]}
-                onPress={() => setBabyGender('unknown')}
-              >
-                <IconSymbol
-                  name="questionmark.circle"
-                  size={24}
-                  color={babyGender === 'unknown' ? '#FFFFFF' : theme.tabIconDefault}
-                />
-                <ThemedText style={[styles.genderButtonText, babyGender === 'unknown' && styles.genderButtonTextActive]}>
-                  {t('babyInfo.unknown')}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          </ThemedView>
-        );
-
-      case 'babyPhoto': // Babyfoto-Upload (nur wenn Baby bereits geboren ist)
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <Image
-              source={require('@/assets/images/Baby_Take_Pic.gif')}
-              style={styles.babyTakePicImage}
-              resizeMode="contain"
-            />
-            <ThemedText style={styles.stepTitle}>{t('babyPhoto.title')}</ThemedText>
-            <View style={styles.booleanButtonsContainer}>
-              <TouchableOpacity
-                style={[styles.booleanButton, wantsBabyPhotoUpload === true && styles.booleanButtonActive]}
-                onPress={() => setWantsBabyPhotoUpload(true)}
-              >
-                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === true && styles.booleanButtonTextActive]}>{t('common.yes')}</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.booleanButton, wantsBabyPhotoUpload === false && styles.booleanButtonActive]}
-                onPress={() => {
-                  setWantsBabyPhotoUpload(false);
-                  setBabyPhotoUrl(null);
-                }}
-              >
-                <ThemedText style={[styles.booleanButtonText, wantsBabyPhotoUpload === false && styles.booleanButtonTextActive]}>{t('common.no')}</ThemedText>
-              </TouchableOpacity>
-            </View>
-
-            {wantsBabyPhotoUpload === true && (
-              <View style={styles.photoUploadContainer}>
-                {babyPhotoUrl ? (
-                  <Image source={{ uri: babyPhotoUrl }} style={styles.onboardingBabyPhoto} />
-                ) : (
-                  <View style={styles.onboardingPhotoPlaceholder}>
-                    <IconSymbol name="photo" size={28} color={theme.tabIconDefault} />
-                    <ThemedText style={styles.onboardingPhotoPlaceholderText}>{t('babyPhoto.noneSelected')}</ThemedText>
-                  </View>
-                )}
-
-                <TouchableOpacity style={styles.photoUploadButton} onPress={pickBabyPhoto}>
-                  <ThemedText style={styles.photoUploadButtonText}>
-                    {babyPhotoUrl ? t('babyPhoto.change') : t('babyPhoto.choose')}
-                  </ThemedText>
-                </TouchableOpacity>
-
-                {!!babyPhotoUrl && (
-                  <TouchableOpacity style={styles.photoRemoveButton} onPress={() => setBabyPhotoUrl(null)}>
-                    <ThemedText style={styles.photoRemoveButtonText}>{t('babyPhoto.remove')}</ThemedText>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </ThemedView>
-        );
-
-      case 'background': // Hintergrundauswahl
-        return (
-          <ThemedView style={styles.stepContainer} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            <ThemedText style={styles.stepTitle}>{t('background.title')}</ThemedText>
-            <ThemedText style={[styles.stepSubtitle, { textAlign: 'center', marginTop: 0, marginBottom: 14 }]}>
-              {t('background.description')}
-            </ThemedText>
-
-            <View style={styles.onboardingBackgroundPreviewContainer}>
-              <Image
-                source={backgroundSource}
-                style={styles.onboardingBackgroundPreview}
-                resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
-              />
-              <View style={styles.onboardingBackgroundPreviewOverlay}>
-                <ThemedText style={styles.onboardingBackgroundPreviewLabel}>
-                  {selectedBackground === 'custom'
-                    ? t('background.customPreview', {
-                        mode: isDarkBackground ? t('background.modeDark') : t('background.modeLight'),
-                      })
-                    : t(ONBOARDING_PRESET_OPTIONS.find((option) => option.id === selectedBackground)?.labelKey
-                      ?? 'preset.default')}
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.onboardingBackgroundPresetRow}>
-              {ONBOARDING_PRESET_OPTIONS.map((option) => {
-                const isSelected = selectedBackground === option.id;
-                return (
-                  <TouchableOpacity
-                    key={option.id}
-                    style={[
-                      styles.onboardingBackgroundPresetButton,
-                      isSelected && styles.onboardingBackgroundPresetButtonActive,
-                    ]}
-                    onPress={() => {
-                      void handleSelectPresetBackground(option.id);
-                    }}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.onboardingBackgroundPresetButtonLabel,
-                        isSelected && styles.onboardingBackgroundPresetButtonLabelActive,
-                      ]}
-                    >
-                      {t(option.labelKey)}
-                    </ThemedText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.onboardingBackgroundActionButton, isPickingBackground && styles.buttonDisabled]}
-              onPress={handlePickCustomBackground}
-              disabled={isPickingBackground}
-            >
-              {isPickingBackground ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <IconSymbol name="photo" size={18} color="#FFFFFF" />
-                  <ThemedText style={styles.onboardingBackgroundActionButtonText}>{t('background.chooseCustom')}</ThemedText>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {hasCustomBackground && (
-              <TouchableOpacity
-                style={styles.onboardingBackgroundModeButton}
-                onPress={() => {
-                  void setBackgroundMode(!isDarkBackground);
-                }}
-              >
-                <IconSymbol name={isDarkBackground ? 'sun.max' : 'moon'} size={18} color="#7D5A50" />
-                <ThemedText style={styles.onboardingBackgroundModeButtonText}>
-                  {isDarkBackground ? t('background.textModeLight') : t('background.textModeDark')}
-                </ThemedText>
-              </TouchableOpacity>
-            )}
-          </ThemedView>
-        );
-
-      case 'summary': // Zusammenfassung und Speichern
-        return (
-          <ThemedView style={[styles.stepContainer, styles.summaryStepContainer]} lightColor="#FFFFFF" darkColor="#FFFFFF">
-            {/* Baby-Foto oder Illustration */}
-            {!isPartnerFlow && babyPhotoUrl ? (
-              <View style={styles.summaryPhotoSection}>
-                <Image source={{ uri: babyPhotoUrl }} style={styles.summaryBabyPhoto} />
-                {babyName ? <ThemedText style={styles.summaryBabyName}>{babyName}</ThemedText> : null}
-              </View>
-            ) : (
-              <Image
-                source={require('@/assets/images/BabyBirth.png')}
-                style={styles.babyImageSmall}
-                resizeMode="contain"
-              />
-            )}
-
-            <ThemedText style={styles.stepTitle}>{t('summary.title')}</ThemedText>
-
-            <View style={styles.infoCard}>
-              {/* Name */}
-              <View style={styles.infoRow}>
-                <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
-                  <IconSymbol name="person.fill" size={18} color="#9DBEBB" />
-                </View>
-                <View style={styles.infoRowContent}>
-                  <ThemedText style={styles.infoRowLabel}>{t('summary.name')}</ThemedText>
-                  <ThemedText style={styles.infoRowValue}>{firstName} {lastName}</ThemedText>
-                </View>
-              </View>
-
-              <View style={styles.infoCardDivider} />
-
-              {/* Rolle */}
-              <View style={styles.infoRow}>
-                <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(232,160,191,0.15)' }]}>
-                  <IconSymbol name="heart.fill" size={18} color="#E8A0BF" />
-                </View>
-                <View style={styles.infoRowContent}>
-                  <ThemedText style={styles.infoRowLabel}>{t('summary.role')}</ThemedText>
-                  <ThemedText style={styles.infoRowValue}>
-                    {userRole === 'mama'
-                      ? t('role.mama')
-                      : userRole === 'papa'
-                        ? t('role.papa')
-                        : t('common.notSet')}
-                  </ThemedText>
-                </View>
-              </View>
-
-              {/* Partner-Flow */}
-              {isPartnerFlow && (
-                <>
-                  <View style={styles.infoCardDivider} />
-                  <View style={styles.infoRow}>
-                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
-                      <IconSymbol name="person.2.fill" size={16} color="#8E4EC6" />
-                    </View>
-                    <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>{t('invitation.partner')}</ThemedText>
-                      <ThemedText style={styles.infoRowValue}>
-                        {invitationInfo?.partnerName || t('invitation.linked')}
-                      </ThemedText>
-                    </View>
-                  </View>
-                  {invitationInfo?.dueDate && (
-                    <>
-                      <View style={styles.infoCardDivider} />
-                      <View style={styles.infoRow}>
-                        <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
-                          <IconSymbol name="calendar" size={18} color="#8E4EC6" />
-                        </View>
-                        <View style={styles.infoRowContent}>
-                          <ThemedText style={styles.infoRowLabel}>{t('summary.sharedDueDate')}</ThemedText>
-                          <ThemedText style={styles.infoRowValue}>
-                            {formatDate(parseSafeDate(invitationInfo.dueDate))}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </>
-                  )}
-                </>
-              )}
-
-              {/* Normaler Flow */}
-              {!isPartnerFlow && (
-                <>
-                  <View style={styles.infoCardDivider} />
-                  <View style={styles.infoRow}>
-                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(142,78,198,0.12)' }]}>
-                      <IconSymbol name="calendar" size={18} color="#8E4EC6" />
-                    </View>
-                    <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>
-                        {isBabyBorn ? t('summary.birthDate') : t('summary.dueDate')}
-                      </ThemedText>
-                      <ThemedText style={styles.infoRowValue}>
-                        {isBabyBorn
-                          ? (birthDate ? formatDate(birthDate) : t('common.notSet'))
-                          : (dueDate ? formatDate(dueDate) : t('common.notSet'))}
-                      </ThemedText>
-                    </View>
-                  </View>
-
-                  {babyName ? (
-                    <>
-                      <View style={styles.infoCardDivider} />
-                      <View style={styles.infoRow}>
-                        <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(232,160,191,0.15)' }]}>
-                          <IconSymbol name="star.fill" size={18} color="#E8A0BF" />
-                        </View>
-                        <View style={styles.infoRowContent}>
-                          <ThemedText style={styles.infoRowLabel}>{t('summary.babyName')}</ThemedText>
-                          <ThemedText style={styles.infoRowValue}>{babyName}</ThemedText>
-                        </View>
-                      </View>
-                    </>
-                  ) : null}
-
-                  <View style={styles.infoCardDivider} />
-                  <View style={styles.infoRow}>
-                    <View style={[styles.infoRowIcon, { backgroundColor: 'rgba(157,190,187,0.15)' }]}>
-                      <IconSymbol name={babyGender === 'unknown' ? 'questionmark.circle' : 'person.fill'} size={18} color="#9DBEBB" />
-                    </View>
-                    <View style={styles.infoRowContent}>
-                      <ThemedText style={styles.infoRowLabel}>{t('summary.gender')}</ThemedText>
-                      <ThemedText style={styles.infoRowValue}>
-                        {babyGender === 'male'
-                          ? t('babyInfo.boy')
-                          : babyGender === 'female'
-                            ? t('babyInfo.girl')
-                            : t('summary.genderUnknown')}
-                      </ThemedText>
-                    </View>
-                  </View>
-                </>
-              )}
-            </View>
-
-          </ThemedView>
+          <OnboardingProductMoment wellbeing={wellbeing} habit={habit}
+            selectedStart={selectedStart}
+            support={support ?? 'later'}
+            locale={ACTIVE_ONBOARDING_LOCALE}
+            isBabyBorn={momentBabyBorn}
+            isPartner={isPartnerFlow}
+            babyName={isPartnerFlow ? activeBaby?.name : babyName}
+            partnerName={invitationInfo?.partnerName}
+            dueDate={isPartnerFlow ? parseSafeDate(invitationInfo?.dueDate) : dueDate}
+          />
         );
 
       default:
@@ -1350,35 +846,30 @@ export default function GetUserInfoScreen() {
     }
   };
 
+  const answerMissing = currentStepKey === 'firstName' ? !firstName.trim()
+    : currentStepKey === 'role' ? !userRole
+    : currentStepKey === 'babyStatus' ? isBabyBorn === null
+    : currentStepKey === 'dates' ? !(isBabyBorn ? birthDate : dueDate)
+    : currentStepKey === 'needs' ? !need
+    : currentStepKey === 'challenge' ? !challenge
+    : currentStepKey === 'support' ? !support
+    : false;
+  const continueDisabled = answerMissing || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection);
+
   return (
-    <ImageBackground
-      source={backgroundSource}
-      style={styles.backgroundImage}
-      resizeMode={hasCustomBackground ? 'cover' : 'repeat'}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+    <ImageBackground source={require('@/assets/images/heller-background.png')} resizeMode="cover" style={styles.backgroundImage}>
         <SafeAreaView style={styles.container}>
           <Stack.Screen options={{ headerShown: false }} />
-          <StatusBar hidden={true} />
-
+          <StatusBar barStyle="dark-content" />
           <View style={styles.header}>
-            <ThemedText type="title" style={styles.title}>
-              {t('screen.title')}
-            </ThemedText>
-            <ThemedText style={styles.subtitle}>
-              {t('screen.subtitle')}
-            </ThemedText>
-          </View>
-
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[styles.progressFill, { width: `${(boundedCurrentStep + 1) / totalSteps * 100}%` }]}
-              />
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.back')}
+              disabled={boundedCurrentStep === 0 || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection)}
+              style={[styles.backButton, boundedCurrentStep === 0 && { opacity: 0 }]} onPress={goToPreviousStep}>
+              <IconSymbol name="chevron.left" size={20} color={brand.secondary} />
+            </TouchableOpacity>
+            <View accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: totalSteps, now: boundedCurrentStep + 1 }} accessibilityLabel={t('screen.progress', { current: boundedCurrentStep + 1, total: totalSteps })} style={styles.progressContainer}>
+              <View style={[styles.progressSegmentActive, { width: `${((boundedCurrentStep + 1) / totalSteps) * 100}%` }]} />
             </View>
-            <ThemedText style={styles.progressText}>
-              {t('screen.progress', { current: boundedCurrentStep + 1, total: totalSteps })}
-            </ThemedText>
           </View>
 
           {isLoading ? (
@@ -1396,46 +887,34 @@ export default function GetUserInfoScreen() {
                 ref={scrollViewRef}
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="never"
+                keyboardShouldPersistTaps="handled"
                 keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                 onScrollBeginDrag={Keyboard.dismiss}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+                alwaysBounceVertical={false}
               >
                 <View style={styles.content}>
-                  {renderCurrentStep()}
+                  <OnboardingTransition key={currentStepKey}>{renderCurrentStep()}</OnboardingTransition>
                 </View>
               </ScrollView>
 
               <View style={styles.footerContainer}>
-                {currentStepKey === 'summary' && (
-                  <ThemedText style={styles.footerSummaryNote} allowFontScaling={false}>
-                    {t('screen.changeLater')}
-                  </ThemedText>
-                )}
-
                 <View style={styles.buttonsContainer}>
-                  {boundedCurrentStep > 0 && (
-                    <TouchableOpacity
-                      style={styles.backButton}
-                      onPress={goToPreviousStep}
-                    >
-                      <IconSymbol name="chevron.left" size={20} color={theme.text} />
-                      <ThemedText style={styles.backButtonText}>{t('common.back')}</ThemedText>
-                    </TouchableOpacity>
-                  )}
-
                   <TouchableOpacity
-                    style={[styles.nextButton, (isSaving || isRedeemingInvitation) && styles.buttonDisabled]}
+                    style={[styles.nextButton, continueDisabled && styles.buttonDisabled]}
                     onPress={goToNextStep}
-                    disabled={isSaving || isRedeemingInvitation}
+                    disabled={continueDisabled}
+                    accessibilityState={{ disabled: continueDisabled }}
+                    accessibilityRole="button"
                   >
                     <ThemedText style={styles.nextButtonText}>
                       {boundedCurrentStep === totalSteps - 1
-                        ? (isSaving ? t('common.saving') : t('common.done'))
-                        : t('common.next')}
+                        ? (isSaving ? t('common.saving') : t(selectedStart === 'memories' ? 'flow.startMemories' : momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
+                        : (currentStepKey === 'mood' || currentStepKey === 'energy') && wellbeing[currentStepKey] === null ? wellbeingCopy(ACTIVE_ONBOARDING_LOCALE).skip : currentStepKey === 'welcome' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).welcomeCta : t(currentStepKey === 'productMoment' && !demoCompleted ? 'survey.skipDemo' : 'common.next')}
                     </ThemedText>
                     {boundedCurrentStep < totalSteps - 1 && (
-                      <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                      <IconSymbol name="chevron.right" size={20} color={brand.white} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -1468,504 +947,66 @@ export default function GetUserInfoScreen() {
             }}
           />
         </SafeAreaView>
-      </TouchableWithoutFeedback>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-  },
-  header: {
-    alignItems: 'center',
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#7D5A50',
-  },
-  subtitle: {
-    fontSize: 18,
-    color: '#7D5A50',
-    opacity: 0.8,
-  },
-  progressContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: 'rgba(200, 200, 200, 0.3)',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#9DBEBB',
-    borderRadius: 4,
-  },
-  progressText: {
-    textAlign: 'center',
-    marginTop: 8,
-    fontSize: 14,
-    color: '#7D5A50',
-  },
-  content: {
-    paddingHorizontal: 20,
-  },
-  stepContainer: {
-    padding: 20,
-    borderRadius: 22,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  summaryStepContainer: {
-    paddingTop: 12,
-    paddingBottom: 28,
-  },
-  babyImage: {
-    width: 180,
-    height: 180,
-    alignSelf: 'center',
-    marginBottom: 20,
-  },
-  babyImageSmall: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 20,
-  },
-  stepTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#7D5A50',
-    textAlign: 'center',
-  },
-  stepSubtitle: {
-    fontSize: 16,
-    marginTop: 20,
-    marginBottom: 10,
-    color: '#7D5A50',
-  },
-  input: {
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 14,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  dateButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    height: 50,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 14,
-    paddingHorizontal: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  dateButtonText: {
-    fontSize: 16,
-    color: '#7D5A50',
-  },
-  booleanButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  booleanButton: {
-    flex: 1,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 14,
-    marginHorizontal: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  booleanButtonActive: {
-    backgroundColor: '#9DBEBB',
-    borderColor: '#9DBEBB',
-  },
-  booleanButtonText: {
-    fontSize: 16,
-    color: '#7D5A50',
-  },
-  booleanButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  roleButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  roleButton: {
-    flex: 1,
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 14,
-    marginHorizontal: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  roleButtonActive: {
-    backgroundColor: '#9DBEBB',
-    borderColor: '#9DBEBB',
-  },
-  roleButtonText: {
-    fontSize: 16,
-    marginTop: 5,
-    color: '#7D5A50',
-  },
-  roleButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  genderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-  },
-  genderButton: {
-    width: '30%',
-    height: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 14,
-    marginBottom: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  genderButtonActive: {
-    backgroundColor: '#9DBEBB',
-    borderColor: '#9DBEBB',
-  },
-  genderButtonText: {
-    fontSize: 14,
-    marginTop: 5,
-    textAlign: 'center',
-    color: '#7D5A50',
-  },
-  genderButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  photoUploadContainer: {
-    marginTop: 14,
-    alignItems: 'center',
-  },
-  babyTakePicImage: {
-    width: 120,
-    height: 120,
-    alignSelf: 'center',
-    marginTop: 6,
-    marginBottom: 10,
-  },
-  onboardingBabyPhoto: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    marginBottom: 12,
-  },
-  onboardingPhotoPlaceholder: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 10,
-  },
-  onboardingPhotoPlaceholderText: {
-    fontSize: 12,
-    color: '#7D5A50',
-    textAlign: 'center',
-    marginTop: 6,
-  },
-  photoUploadButton: {
-    backgroundColor: '#9DBEBB',
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  photoUploadButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  photoRemoveButton: {
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-  },
-  photoRemoveButtonText: {
-    color: '#7D5A50',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  onboardingBackgroundPreviewContainer: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    height: 140,
-    marginBottom: 12,
-    position: 'relative',
-  },
-  onboardingBackgroundPreview: {
-    width: '100%',
-    height: '100%',
-  },
-  onboardingBackgroundPreviewOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  onboardingBackgroundPreviewLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  onboardingBackgroundPresetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  onboardingBackgroundPresetButton: {
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  onboardingBackgroundPresetButtonActive: {
-    backgroundColor: '#9DBEBB',
-    borderColor: '#9DBEBB',
-  },
-  onboardingBackgroundPresetButtonLabel: {
-    color: '#7D5A50',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  onboardingBackgroundPresetButtonLabelActive: {
-    color: '#FFFFFF',
-  },
-  onboardingBackgroundActionButton: {
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: '#9DBEBB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 10,
-  },
-  onboardingBackgroundActionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  onboardingBackgroundModeButton: {
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E9C9B6',
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  onboardingBackgroundModeButtonText: {
-    color: '#7D5A50',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  infoCard: {
-    backgroundColor: 'rgba(247,239,229,0.6)',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(233,201,182,0.5)',
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-  },
-  infoRowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  infoRowContent: {
-    flex: 1,
-  },
-  infoRowLabel: {
-    fontSize: 12,
-    color: '#7D5A50',
-    opacity: 0.65,
-    marginBottom: 1,
-  },
-  infoRowValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  infoCardDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(125,90,80,0.12)',
-    marginHorizontal: 14,
-  },
-  invitationSkipNote: {
-    fontSize: 14,
-    color: '#9DBEBB',
-    fontWeight: '600',
-    textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 20,
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#B71C1C',
-    marginTop: 8,
-  },
-  summaryPhotoSection: {
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  summaryBabyPhoto: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3,
-    borderColor: 'rgba(157,190,187,0.5)',
-  },
-  summaryBabyName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginTop: 6,
-  },
-  footerContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  footerSummaryNote: {
-    marginBottom: 10,
-    textAlign: 'center',
-    fontSize: 14,
-    lineHeight: 20,
-    fontStyle: 'italic',
-    color: '#7D5A50',
-    opacity: 0.75,
-  },
-  buttonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#FFCCCB', // Pastellrot
-    borderRadius: 20,
-  },
-  backButtonText: {
-    fontSize: 16,
-    marginLeft: 5,
-    color: '#7D5A50',
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#9DBEBB',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 30,
-    minWidth: 120,
-  },
-  nextButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginRight: 5,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-  },
-  keyboardAccessory: {
-    backgroundColor: '#F3E6DA',
-    borderTopWidth: 1,
-    borderTopColor: '#E9C9B6',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  keyboardAccessoryButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  keyboardAccessoryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7D5A50',
-  },
+  container: { flex: 1 },
+  babyIllustration: { width: 180, height: 180, alignSelf: 'center', marginBottom: 12, borderRadius: 28 },
+  backgroundImage: { flex: 1, backgroundColor: brand.background },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14, gap: 24 },
+  stepCount: { width: 46, textAlign: 'right', color: brand.muted, fontSize: 13, fontVariant: ['tabular-nums'] },
+  backButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.3)', alignItems: 'center', justifyContent: 'center' },
+  progressContainer: { flex: 1, height: 4, borderRadius: 2, backgroundColor: brand.border, overflow: 'hidden', marginRight: 4 },
+  progressSegment: { flex: 1, height: 5, borderRadius: 3, backgroundColor: brand.border },
+  progressSegmentActive: { height: '100%', backgroundColor: brand.accent },
+  content: { flexGrow: 1, flexShrink: 0, paddingHorizontal: 24, width: '100%', maxWidth: 540, alignSelf: 'center' },
+  stepContainer: { flexGrow: 1, flexShrink: 0, paddingVertical: 14 },
+  questionArea: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 16, paddingVertical: 36 },
+  roleChoice: { flexDirection: 'row', gap: 18, alignItems: 'center', padding: 22, minHeight: 88 },
+  stepTitle: { fontSize: 34, lineHeight: 41, letterSpacing: -0.9, fontWeight: '700', color: brand.text, marginBottom: 18 },
+  description: { color: brand.secondary, fontSize: 17, lineHeight: 25, marginBottom: 24 },
+  fieldLabel: { color: brand.secondary, fontSize: 15, fontWeight: '600', marginTop: 8, marginBottom: 10 },
+  stepSubtitle: { color: brand.secondary, fontSize: 16, lineHeight: 24 },
+  input: { minHeight: 56, borderWidth: 1, borderColor: brand.border, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 18, color: brand.text, backgroundColor: 'rgba(255,255,255,0.55)' },
+  optionalHint: { color: brand.muted, fontSize: 13, lineHeight: 20, marginTop: 9 },
+  roleButtonsContainer: { flexDirection: 'row', gap: 12 },
+  roleButton: { flex: 1, minHeight: 56, borderWidth: 1.5, borderColor: brand.border, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.55)', padding: 12 },
+  roleButtonActive: { borderColor: brand.accent, backgroundColor: brand.selected },
+  roleButtonText: { color: brand.secondary, fontSize: 17, fontWeight: '600' },
+  roleButtonTextActive: { color: brand.accentText },
+  textLink: { minHeight: 48, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 24 },
+  linkText: { color: brand.accentText, fontSize: 14, lineHeight: 21 },
+  stageOptions: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 16, paddingVertical: 24 },
+  stageOption: { padding: 20, gap: 8 },
+  stageSelected: { borderColor: brand.accent, backgroundColor: brand.selected },
+  stageIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: brand.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  stageTitle: { color: brand.text, fontSize: 20, lineHeight: 26, fontWeight: '600' },
+  stageDetail: { color: brand.secondary, fontSize: 15, lineHeight: 23 },
+  stageCheck: { position: 'absolute', right: 20, top: 24 },
+  dateButton: { minHeight: 58, borderWidth: 1, borderColor: brand.border, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, gap: 12, backgroundColor: 'rgba(255,255,255,0.55)' },
+  dateButtonText: { flex: 1, color: brand.secondary, fontSize: 17, lineHeight: 24 },
+  keyboardAvoidingView: { flex: 1 }, scrollView: { flex: 1 }, scrollContent: { flexGrow: 1, paddingBottom: 16 },
+  footerContainer: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 8, backgroundColor: 'transparent', width: '100%', maxWidth: 540, alignSelf: 'center' },
+  footerHint: { color: brand.muted, fontSize: 12, lineHeight: 18, textAlign: 'center', marginBottom: 8 },
+  buttonsContainer: { paddingVertical: 6 },
+  nextButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: brand.accent, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)', minHeight: 60, padding: 16, borderRadius: 30 },
+  nextButtonText: { flexShrink: 1, textAlign: 'center', color: brand.white, fontSize: 17, lineHeight: 23, fontWeight: '600' },
+  buttonDisabled: { opacity: 0.45 },
+  booleanButtonsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  booleanButton: { flex: 1, minWidth: 120, minHeight: 52, padding: 12, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: brand.border, backgroundColor: brand.soft },
+  booleanButtonText: { color: brand.secondary, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  infoCard: { backgroundColor: brand.soft, borderRadius: 20, overflow: 'hidden', marginTop: 12 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
+  infoRowIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  infoRowContent: { flex: 1 },
+  infoRowLabel: { color: brand.muted, fontSize: 12, marginBottom: 3 },
+  infoRowValue: { color: brand.secondary, fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  infoCardDivider: { height: StyleSheet.hairlineWidth, backgroundColor: brand.border, marginHorizontal: 16 },
+  invitationSkipNote: { color: brand.accentText, fontSize: 14, lineHeight: 22, marginTop: 16 },
+  errorText: { color: '#B44F5F', fontSize: 14, lineHeight: 21, marginTop: 12 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' }, loadingText: { marginTop: 10 },
+  keyboardAccessory: { backgroundColor: brand.background, alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 8 },
+  keyboardAccessoryButton: { padding: 10 }, keyboardAccessoryButtonText: { color: brand.accentText, fontSize: 16, fontWeight: '600' },
 });

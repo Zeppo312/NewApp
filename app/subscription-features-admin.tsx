@@ -634,7 +634,7 @@ export default function SubscriptionFeaturesAdminScreen() {
                       </View>
 
                       {localizedPaywallRows.map((row, index) => {
-                        const featureKey = row.featureKey;
+                        const featureKey = row.featureKey === 'caregiverMode' ? undefined : row.featureKey;
                         const editable = featureKey
                           ? FEATURE_ADMIN_COPY[featureKey].editable
                           : false;

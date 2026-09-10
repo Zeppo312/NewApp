@@ -15,7 +15,7 @@ import { AppState, View, ActivityIndicator, Alert, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import FloatingVoiceButton from '@/components/FloatingVoiceButton';
 import 'react-native-reanimated';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 
 import { StartupMessageModal } from '@/components/StartupMessageModal';
 import { LottiMomentToast } from '@/components/LottiMomentToast';
@@ -54,7 +54,7 @@ import {
 } from '@/lib/appCache';
 import { maybeCleanupCache } from '@/lib/imageCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
-import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
+import { shouldShowPaywall } from '@/lib/paywall';
 import { subscribeToRevenueCatCustomerInfoUpdates } from '@/lib/revenuecat';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
@@ -136,6 +136,8 @@ const PAYWALL_EXCLUDED_PATHS = new Set([
   '/impressum',
   '/nutzungsbedingungen',
   '/dsgvo',
+  '/caregiver',
+  '/caregiver-join',
 ]);
 
 type TermsConsentCheck = {
@@ -174,6 +176,11 @@ function RootLayoutNav() {
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const [appStateRevision, setAppStateRevision] = useState(0);
   const paywallCheckInFlight = useRef(false);
+  const [verifiedPaywallCheck, setVerifiedPaywallCheck] = useState<{
+    userId: string;
+    pathname: string;
+    revision: number;
+  } | null>(null);
   const startupMessageCheckInFlight = useRef(false);
   const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
   const isLegalConsentRoute = pathname === '/nutzungsbedingungen' || pathname === '/datenschutz';
@@ -184,6 +191,11 @@ function RootLayoutNav() {
 
     return primarySegment === '(auth)' || primarySegment === 'auth';
   }, [pathname, primarySegment]);
+  const isPaywallCheckBlocking = Boolean(userId) && !shouldSkipGlobalPaywallCheck && (
+    verifiedPaywallCheck?.userId !== userId ||
+    verifiedPaywallCheck?.pathname !== pathname ||
+    verifiedPaywallCheck?.revision !== appStateRevision
+  );
   const shouldSkipStartupMessageCheck = useMemo(() => {
     if (!pathname) {
       return true;
@@ -193,7 +205,7 @@ function RootLayoutNav() {
       return true;
     }
 
-    return pathname === '/paywall';
+    return pathname === '/paywall' || pathname === '/caregiver' || pathname === '/caregiver-join';
   }, [pathname, primarySegment]);
   const sleepEntriesService = useMemo(() => {
     if (!userId) return null;
@@ -326,25 +338,27 @@ function RootLayoutNav() {
     paywallCheckInFlight.current = true;
 
     const checkGlobalPaywallGate = async () => {
+      let requiresSubscription = true;
       try {
-        const { shouldShow, state } = await shouldShowPaywall();
-        if (!shouldShow || cancelled || !pathname) return;
-
-        await markPaywallShown(pathname);
-        if (cancelled) return;
-
+        const { shouldShow } = await shouldShowPaywall();
+        requiresSubscription = shouldShow;
+      } catch (error) {
+        console.error('Global paywall check failed:', error);
+      } finally {
+        paywallCheckInFlight.current = false;
+      }
+      if (!requiresSubscription && !cancelled && pathname) {
+        setVerifiedPaywallCheck({ userId, pathname, revision: appStateRevision });
+      }
+      if (requiresSubscription && !cancelled && pathname) {
         router.replace({
           pathname: '/paywall',
           params: {
             next: pathname,
             origin: pathname,
-            trialExpired: state.isTrialExpired ? '1' : '0',
+            trialExpired: '1',
           },
         });
-      } catch (error) {
-        console.error('Global paywall check failed:', error);
-      } finally {
-        paywallCheckInFlight.current = false;
       }
     };
 
@@ -865,8 +879,16 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? customDarkTheme : customLightTheme}>
+        {/* Der Navigator bleibt montiert, die App ist bis zur Zugangsprüfung
+            aber auch bei Neustarts und Deep Links nicht bedienbar. */}
+        <View
+          style={{ flex: 1, opacity: isPaywallCheckBlocking ? 0 : 1 }}
+          pointerEvents={isPaywallCheckBlocking ? 'none' : 'auto'}
+          accessibilityElementsHidden={isPaywallCheckBlocking}
+          importantForAccessibility={isPaywallCheckBlocking ? 'no-hide-descendants' : 'auto'}
+        >
         <Stack
-          initialRouteName={initialRoute}
+          initialRouteName={initialRoute ?? undefined}
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: 'transparent' },
@@ -876,11 +898,6 @@ function RootLayoutNav() {
         <Stack.Screen name="index" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
-        <Stack.Screen name="community" />
-        <Stack.Screen name="groups/index" />
-        <Stack.Screen name="groups/[groupId]" />
-        <Stack.Screen name="chat/[userId]" />
-        <Stack.Screen name="group-chat/[groupId]" />
         <Stack.Screen name="paywall" />
         <Stack.Screen name="dsgvo" />
         <Stack.Screen name="subscription" />
@@ -898,16 +915,16 @@ function RootLayoutNav() {
         <Stack.Screen name="milestones" />
         <Stack.Screen name="wochenmoment" />
         <Stack.Screen name="admin-dashboard" />
-        <Stack.Screen name="blocked-users" />
         <Stack.Screen name="moderation-admin" />
-        <Stack.Screen name="account-linking" />
         <Stack.Screen name="invite" />
+        <Stack.Screen name="caregiver" />
+        <Stack.Screen name="caregiver-join" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
         <Stack.Screen name="auth/reset-password" />
       </Stack>
       <StartupMessageModal
-        visible={Boolean(startupMessage)}
+        visible={!isPaywallCheckBlocking && Boolean(startupMessage)}
         message={startupMessage}
         isSubmitting={isAcknowledgingStartupMessage}
         onConfirm={() => {
@@ -930,9 +947,16 @@ function RootLayoutNav() {
         }}
       />
       <LottiMomentToast />
-      <FloatingVoiceButton />
+      {!isPaywallCheckBlocking && <FloatingVoiceButton />}
       <ImageCacheMaintenance />
       <StatusBar hidden={true} />
+        </View>
+        {isPaywallCheckBlocking && (
+          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+            <ActivityIndicator size="large" color="#E9C9B6" />
+            <Text style={{ marginTop: 10, color: '#7D5A50' }}>{layoutCopy.loading}</Text>
+          </View>
+        )}
     </ThemeProvider>
     </GestureHandlerRootView>
   );

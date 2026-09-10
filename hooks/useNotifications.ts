@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
@@ -59,6 +59,17 @@ export function useNotifications() {
         return false;
       }
 
+      // Android 13+ needs a channel before requesting notification permission.
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#8E4EC6',
+          sound: 'default',
+        });
+      }
+
       // Check current permission status
       const existingPermissions = await Notifications.getPermissionsAsync();
       let granted = existingPermissions.granted;
@@ -77,22 +88,15 @@ export function useNotifications() {
         return false;
       }
 
-      // Setup Android notification channel
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#8E4EC6',
-          sound: 'default',
-        });
-      }
-
       // Get Expo push token
       try {
         const tokenData = await Notifications.getExpoPushTokenAsync({
           projectId: Constants.expoConfig?.extra?.eas?.projectId,
         });
+        if (!tokenData) {
+          setExpoPushToken(null);
+          return true; // Local notification permission is still valid in Expo Go.
+        }
         setExpoPushToken(tokenData.data);
 
         // Save token to database

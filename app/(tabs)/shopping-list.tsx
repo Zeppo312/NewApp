@@ -15,7 +15,6 @@ import {
   Switch,
   TextInput,
   TouchableOpacity,
-  UIManager,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -194,10 +193,6 @@ const formatNutrientValue = (value: number, unit: string) => {
 const SCAN_DEBOUNCE_MS = 2500;
 const SHOPPING_CARD_RADIUS = 16;
 const INVENTORY_CARD_RADIUS = 16;
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 type ZoomStep = { label: string; lens?: string; zoom: number };
 

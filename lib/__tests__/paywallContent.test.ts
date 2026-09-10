@@ -29,7 +29,7 @@ describe("paywall feature comparison", () => {
   });
 
   it("lists every current feature group exactly once", () => {
-    expect(germanRows).toHaveLength(27);
+    expect(germanRows).toHaveLength(28);
     expect(new Set(germanRows.map(({ label }) => label)).size).toBe(
       germanRows.length,
     );
@@ -59,7 +59,7 @@ describe("paywall feature comparison", () => {
       .flatMap((row) => (row.featureKey ? [row.featureKey] : []))
       .sort();
     expect(dynamicKeys).toEqual(
-      APP_FEATURES.filter((feature) => feature !== "basisTracker").sort(),
+      [...APP_FEATURES.filter((feature) => feature !== "basisTracker"), "caregiverMode"].sort(),
     );
 
     germanRows.forEach((row) => {
@@ -107,10 +107,10 @@ describe("paywall feature comparison", () => {
     expect(english.comparisonRows).toHaveLength(germanRows.length);
     expect(spanish.comparisonRows).toHaveLength(germanRows.length);
     expect(english.comparisonRows.at(-1)?.label).toBe(
-      "✨ AI: Ask Lotti – evidence-backed answers from your data",
+      "Caregiver mode: time-limited access for grandparents & trusted people",
     );
     expect(spanish.comparisonRows.at(-1)?.label).toBe(
-      "✨ IA: Pregunta a Lotti – respuestas basadas en tus datos",
+      "Modo cuidador: acceso temporal para abuelos y personas de confianza",
     );
     expect(
       english.comparisonRows.map(({ lite, standard, premium }) => ({
@@ -142,6 +142,28 @@ describe("paywall feature comparison", () => {
 
   it("uses the complete defaults for older saved content without plan rows", () => {
     expect(sanitizePaywallContent({}).plans.comparisonRows).toEqual(germanRows);
+  });
+
+  it("adds caregiver mode to saved content once and localizes it beside custom premium copy", () => {
+    const saved = {
+      plans: {
+        comparisonRows: germanRows.filter((row) => row.featureKey !== "caregiverMode"),
+        tiers: { premium: { bullets: ["Unser eigener Premium-Text"] } },
+      },
+    };
+    const sanitized = sanitizePaywallContent(saved);
+    expect(sanitizePaywallContent(sanitized)).toEqual(sanitized);
+    expect(sanitized.plans.comparisonRows.at(-1)).toMatchObject({
+      featureKey: "caregiverMode", ...premiumOnly,
+    });
+    expect(sanitized.plans.tiers.premium.bullets[0]).toBe("Unser eigener Premium-Text");
+    expect(sanitized.plans.tiers.premium.bullets).toHaveLength(2);
+    expect(localizePaywallPlansContent("en", sanitized.plans).tiers.premium.bullets.at(-1)).toBe(
+      "Caregiver mode: invite grandparents & trusted people – no subscription of their own needed",
+    );
+    expect(localizePaywallPlansContent("es", sanitized.plans).tiers.premium.bullets.at(-1)).toBe(
+      "Modo cuidador: invita a abuelos y personas de confianza sin que necesiten su propia suscripción",
+    );
   });
 
   it("backfills feature keys for already saved comparison rows", () => {

@@ -1295,7 +1295,7 @@ const createStyles = (isDark: boolean) => StyleSheet.create({
       : "0 5px 18px rgba(77,51,112,0.07)",
   },
   composerGlass: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 23,
     borderCurve: "continuous",
     overflow: "hidden",

@@ -51,6 +51,7 @@ import {
 
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
+import { DailyQuickAction } from '@/components/tracking/DailyQuickAction';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import CustomActivityDefinitionModal from '@/components/CustomActivityDefinitionModal';
@@ -731,35 +732,16 @@ const QuickActionRow: React.FC<{
 
     return (
       <View style={s.circleButtonWrap}>
-        <GlassCard
-          style={s.circleButton}
-          intensity={30}
-          overlayColor="rgba(255,255,255,0.32)"
-          borderColor="rgba(255,255,255,0.70)"
-        >
-          <TouchableOpacity
-            style={[s.circleInner, disabled && !isEditMode && s.actionDisabled]}
-            onPress={() => {
-              if (isEditMode || disabled) return;
-              onPressAction(item.item.action);
-            }}
-            onLongPress={() => {
-              if (!isEditMode) {
-                setIsEditMode(true);
-                return;
-              }
-
-              drag?.();
-            }}
-            delayLongPress={250}
-            activeOpacity={isEditMode ? 1 : 0.9}
-          >
-            <Text style={s.circleEmoji} numberOfLines={1}>{item.item.icon}</Text>
-            <Text style={[s.circleLabel, { color: textSecondary }]} numberOfLines={2}>
-              {item.item.label}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
+        <DailyQuickAction emoji={item.item.icon} label={item.item.label} textColor={textSecondary}
+          dimmed={disabled && !isEditMode} activeOpacity={isEditMode ? 1 : .9}
+          onPress={() => {
+            if (isEditMode || disabled) return;
+            onPressAction(item.item.action);
+          }}
+          onLongPress={() => {
+            if (!isEditMode) { setIsEditMode(true); return; }
+            drag?.();
+          }} />
         {isEditMode ? (
           <TouchableOpacity
             style={[

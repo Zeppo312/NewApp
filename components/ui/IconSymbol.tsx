@@ -48,6 +48,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'wallet.pass.fill': 'account-balance-wallet',
   'shippingbox': 'inventory-2',
   'barcode.viewfinder': 'qr-code-scanner',
+  'qrcode': 'qr-code',
   'flashlight.on.fill': 'flashlight-on',
   'flashlight.off.fill': 'flashlight-off',
   'clock.badge': 'alarm',

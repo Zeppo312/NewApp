@@ -98,8 +98,8 @@ export type PaywallPlansTierContent = {
 
 export type PaywallPlansComparisonRow = {
   label: string;
-  /** Verknüpft die Anzeige mit derselben dynamischen Matrix wie das Gating. */
-  featureKey?: AppFeature;
+  /** Matrix-Feature oder der separat auf Premium begrenzte Aufpasser-Modus. */
+  featureKey?: AppFeature | "caregiverMode";
   lite: boolean;
   standard: boolean;
   premium: boolean;
@@ -107,15 +107,17 @@ export type PaywallPlansComparisonRow = {
 
 /**
  * Eine einzige Auswertung für Live-Paywall, Paywall-Vorschau und Admin-Matrix.
- * Zeilen ohne Feature-Key sind feste Basisleistungen; alle anderen kommen
- * ausschließlich aus der veröffentlichten bzw. im Admin angezeigten Policy.
+ * Der Aufpasser-Modus ist separat auf Premium begrenzt; Matrix-Features
+ * folgen der veröffentlichten bzw. im Admin angezeigten Policy.
  */
 export const isPaywallComparisonIncluded = (
   row: PaywallPlansComparisonRow,
   tier: AppSubscriptionTier,
   policy: SubscriptionFeaturePolicy,
 ): boolean =>
-  row.featureKey
+  row.featureKey === "caregiverMode"
+    ? tier === "premium"
+    : row.featureKey
     ? featureAllowedByPolicy(policy, row.featureKey, tier)
     : row[tier];
 
@@ -240,6 +242,9 @@ const DEFAULT_YEARLY_PLAN: PaywallPlanCopy = {
   buttonLabel: "Jahresabo starten",
   savingsInline: "Spare {{yearlySavings}}",
 };
+
+const CAREGIVER_PREMIUM_BULLET =
+  "Aufpasser-Modus: Oma, Opa & vertraute Menschen einladen – ohne eigenes Abo";
 
 const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
   brandLogo: "Lotti Baby",
@@ -423,6 +428,13 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
       standard: false,
       premium: true,
     },
+    {
+      label: "Aufpasser-Modus: zeitlich begrenzter Zugang für Oma, Opa & vertraute Menschen",
+      featureKey: "caregiverMode",
+      lite: false,
+      standard: false,
+      premium: true,
+    },
   ],
   quoteText:
     "„Nachts um 3 mit einer Hand den Still-Timer starten – und mein Partner sieht morgens direkt, wie die Nacht war. Genau das haben wir gebraucht.“",
@@ -443,6 +455,7 @@ const DEFAULT_PLANS_CONTENT: PaywallPlansContent = {
         "✨ Persönliches Schwangerschafts-Briefing",
         "✨ Sprach-Logging & Lottis Fürsorge",
         "✨ Frag Lotti mit passenden Daten aus eurem Alltag",
+        CAREGIVER_PREMIUM_BULLET,
       ],
     },
     standard: {
@@ -827,12 +840,15 @@ const sanitizeComparisonRows = (
     return cloneArray(DEFAULT_PLANS_CONTENT.comparisonRows);
   }
 
-  const originalDefaults = DEFAULT_PLANS_CONTENT.comparisonRows.filter(
+  const beforeCaregiverDefaults = DEFAULT_PLANS_CONTENT.comparisonRows.filter(
+    (row) => row.featureKey !== "caregiverMode",
+  );
+  const originalDefaults = beforeCaregiverDefaults.filter(
     (row) =>
       row.featureKey !== "sleepMonthView" &&
       row.featureKey !== "dailyMonthView",
   );
-  const sleepMonthDefaults = DEFAULT_PLANS_CONTENT.comparisonRows.filter(
+  const sleepMonthDefaults = beforeCaregiverDefaults.filter(
     (row) => row.featureKey !== "dailyMonthView",
   );
   const positionalDefaults =
@@ -845,9 +861,12 @@ const sanitizeComparisonRows = (
   const items = value
     .map((item, index) => {
       if (!isRecord(item)) return null;
-      const featureKey = isAppFeature(item.featureKey)
+      const labelDefault = DEFAULT_PLANS_CONTENT.comparisonRows.find(
+        (row) => row.label === item.label,
+      );
+      const featureKey = isAppFeature(item.featureKey) || item.featureKey === "caregiverMode"
         ? item.featureKey
-        : positionalDefaults[index]?.featureKey;
+        : labelDefault?.featureKey ?? positionalDefaults[index]?.featureKey;
       return {
         label: pickString(item.label, ""),
         ...(featureKey ? { featureKey } : {}),
@@ -901,6 +920,15 @@ export const sanitizePaywallPlansContent = (
   const source = isRecord(value) ? value : {};
   const tiers = isRecord(source.tiers) ? source.tiers : {};
   const fallback = DEFAULT_PLANS_CONTENT;
+  const premium = sanitizePlansTier(tiers.premium, fallback.tiers.premium);
+  const hasCaregiverRow = Array.isArray(source.comparisonRows) && source.comparisonRows.some(
+    (row) => isRecord(row) && row.featureKey === "caregiverMode",
+  );
+  // Gespeicherte Inhalte aus der Zeit vor dem Aufpasser-Modus ergänzen,
+  // während individuell bearbeitete Premium-Texte erhalten bleiben.
+  if (!hasCaregiverRow && !premium.bullets.includes(CAREGIVER_PREMIUM_BULLET)) {
+    premium.bullets.push(CAREGIVER_PREMIUM_BULLET);
+  }
 
   return {
     brandLogo: pickString(source.brandLogo, fallback.brandLogo),
@@ -922,7 +950,7 @@ export const sanitizePaywallPlansContent = (
     cancelLabel: pickString(source.cancelLabel, fallback.cancelLabel),
     legalText: pickString(source.legalText, fallback.legalText),
     tiers: {
-      premium: sanitizePlansTier(tiers.premium, fallback.tiers.premium),
+      premium,
       standard: {
         ...sanitizePlansTier(tiers.standard, fallback.tiers.standard),
         // Standard bleibt ein Bestandstier, wird aber nicht mehr beworben.

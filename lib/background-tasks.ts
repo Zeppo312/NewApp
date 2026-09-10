@@ -1,6 +1,6 @@
 import * as TaskManager from 'expo-task-manager';
 
-import * as Notifications from 'expo-notifications';
+import * as Notifications from '@/lib/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 

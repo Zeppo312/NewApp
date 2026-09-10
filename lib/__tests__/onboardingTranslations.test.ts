@@ -17,8 +17,8 @@ describe('onboarding translations', () => {
       .toBe('Schritt 2 von 9');
     expect(translateOnboardingText('en', 'invitation.linkedWith', { name: 'Alex' }))
       .toBe('You are now connected with Alex.');
-    expect(translateOnboardingText('es', 'background.customPreview', { mode: 'oscura' }))
-      .toBe('Imagen propia (oscura)');
+    expect(translateOnboardingText('es', 'moment.week', { week: 24 }))
+      .toBe('Semana 24');
   });
 
   it('provides date locale tags for each language', () => {

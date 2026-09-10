@@ -1,5 +1,1 @@
-import CommunityScreen from '../community';
-
-export default function BlogTabScreen() {
-  return <CommunityScreen />;
-}
+export { default } from '@/components/screens/blog-screen';

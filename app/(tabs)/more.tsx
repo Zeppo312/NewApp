@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { caretakerCopy } from '@/lib/caretaker-copy';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useState } from 'react';
 import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
@@ -222,6 +223,17 @@ export default function MoreScreen() {
                 <ThemedText style={styles.menuItemDescription}>
                   {t('settings.profileDescription')}
                 </ThemedText>
+              </View>
+              <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/caregiver')}>
+              <View style={styles.menuItemIcon}>
+                <IconSymbol name="person.2.fill" size={24} color={iconAccentColor} />
+              </View>
+              <View style={styles.menuItemContent}>
+                <ThemedText style={styles.menuItemTitle}>{caretakerCopy(ACTIVE_MORE_LOCALE).title} · Premium</ThemedText>
+                <ThemedText style={styles.menuItemDescription}>{caretakerCopy(ACTIVE_MORE_LOCALE).subtitle}</ThemedText>
               </View>
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
