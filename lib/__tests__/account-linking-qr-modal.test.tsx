@@ -47,7 +47,7 @@ describe('account invitation scanner', () => {
     await mount();
     expect(tree.root.findAllByType(Modal)).toHaveLength(0);
     const handleBack = subscribe.mock.calls[0][1];
-    act(() => { expect(handleBack()).toBe(true); });
+    act(() => { expect(handleBack({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(true); });
     expect(onClose).toHaveBeenCalledTimes(1);
     act(() => tree.unmount());
     expect(remove).toHaveBeenCalledTimes(1);
@@ -69,6 +69,13 @@ describe('account invitation scanner', () => {
     expect(tree.root.findAllByType(Text).some(node => String(node.props.children).includes('kein gültiger'))).toBe(true);
     act(() => scan({ data: link }));
     expect(onScanned).toHaveBeenCalledWith('ABCD2345');
+  });
+
+  it('passes a server-issued family invitation from the camera to redemption', async () => {
+    await mount();
+    const code = 'aabbccdd001142228333aabbccddeeff';
+    act(() => tree.root.findByType(CameraView).props.onBarcodeScanned({ data: `com.lottibaby.app://invite?code=${code}` }));
+    expect(onScanned).toHaveBeenCalledWith(code.toUpperCase());
   });
 
   it('unmounts the camera in the background and restores it on return', async () => {

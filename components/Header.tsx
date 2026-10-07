@@ -1,7 +1,8 @@
 // src/components/Header/Header.tsx (oder dein Pfad)
 
 import React from 'react';
-import { StyleSheet, View, TouchableOpacity } from 'react-native';
+import { Platform, StyleSheet, View, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -15,9 +16,12 @@ export interface HeaderProps {
   subtitle?: string;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  backAccessibilityLabel?: string;
   leftContent?: React.ReactNode;
   rightContent?: React.ReactNode;
   showBabySwitcher?: boolean;
+  /** Set when the parent already applies the Android top safe area (e.g. safe-area-context's SafeAreaView). */
+  topSafeAreaHandled?: boolean;
 }
 
 // Original-Farben für hellen Modus
@@ -29,14 +33,21 @@ const Header: React.FC<HeaderProps> = ({
   subtitle,
   showBackButton = false,
   onBackPress,
+  backAccessibilityLabel = 'Zurück',
   leftContent,
   rightContent,
-  showBabySwitcher = true
+  showBabySwitcher = true,
+  topSafeAreaHandled = false,
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const navigation = useNavigation();
   const adaptiveColors = useAdaptiveColors();
+  const insets = useSafeAreaInsets();
+  // React Native's legacy SafeAreaView only protects iOS. Include Android's
+  // camera/status-bar inset unless the screen already applies it.
+  const topSpacing = styles.header.paddingTop
+    + (Platform.OS === 'android' && !topSafeAreaHandled ? insets.top : 0);
 
   // Nur bei dunklem Hintergrundbild die adaptiven Farben verwenden
   const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
@@ -59,12 +70,14 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: topSpacing }]}>
       {/* Linker Bereich - absolut positioniert */}
-      <View style={[styles.sideContainer, styles.left]}>
+      <View style={[styles.sideContainer, styles.left, { top: topSpacing }]}>
         <View style={styles.leftContentWrapper}>
           {showBackButton && (
             <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={backAccessibilityLabel}
               style={styles.backButton}
               onPress={handleBackPress}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -87,7 +100,7 @@ const Header: React.FC<HeaderProps> = ({
       </View>
       
       {/* Rechter Bereich - absolut positioniert */}
-      <View style={[styles.sideContainer, styles.right]}>
+      <View style={[styles.sideContainer, styles.right, { top: topSpacing }]}>
         <View style={styles.rightContentRow}>
           {rightContent}
           {showBabySwitcher && <BabySwitcherButton />}

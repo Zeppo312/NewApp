@@ -1,0 +1,17 @@
+{
+  "de": {
+    "question": "Wie werden meine App-Daten gespeichert?",
+    "answer": "Lotti Baby speichert Daten auf deinem Gerät und in der Cloud. Für Konto, Familieninhalte und Synchronisierung nutzen wir Supabase. KI-Funktionen verarbeiten ausgewählte Eingaben über OpenAI; Sentry erhält Diagnosedaten und maskierte Sitzungsaufzeichnungen, RevenueCat verwaltet Abo-Daten. Welche Daten dabei übermittelt werden und wie du ihre Löschung anfordern kannst, erklären wir in unserer Datenschutzerklärung.",
+    "trust": "Transparent über Speicherung und Datenverarbeitung – alle Details in unserer Datenschutzerklärung."
+  },
+  "en": {
+    "question": "How is my app data stored?",
+    "answer": "Lotti Baby stores data on your device and in the cloud. We use Supabase for accounts, family content and synchronization. AI features process selected input through OpenAI; Sentry receives diagnostics and masked session recordings, and RevenueCat manages subscription data. Our privacy policy explains what is transmitted and how to request deletion.",
+    "trust": "Clear information about storage and data processing – see our privacy policy for details."
+  },
+  "es": {
+    "question": "¿Cómo se guardan mis datos de la app?",
+    "answer": "Lotti Baby guarda datos en tu dispositivo y en la nube. Usamos Supabase para cuentas, contenido familiar y sincronización. Las funciones de IA procesan entradas seleccionadas mediante OpenAI; Sentry recibe diagnósticos y grabaciones de sesiones enmascaradas, y RevenueCat gestiona las suscripciones. Nuestra política de privacidad explica qué se transmite y cómo solicitar su eliminación.",
+    "trust": "Información clara sobre almacenamiento y tratamiento de datos: consulta nuestra política de privacidad."
+  }
+}

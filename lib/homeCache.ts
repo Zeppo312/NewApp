@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { runtimeConsentAllowed } from './dataConsentRuntime';
 
 /**
  * Home Cache Module
@@ -71,6 +72,7 @@ export interface CachedHomeData {
  * Speichere alle Home-Daten im Cache
  */
 export async function cacheHomeData(data: Partial<CachedHomeData>, scope?: HomeCacheScope): Promise<void> {
+  if (!runtimeConsentAllowed('health')) return;
   try {
     const timestamp = new Date().toISOString();
     const entries: [string, string][] = [
@@ -118,6 +120,7 @@ export async function cacheHomeData(data: Partial<CachedHomeData>, scope?: HomeC
  * Lade gecachte Home-Daten
  */
 export async function loadCachedHomeData(scope?: HomeCacheScope): Promise<CachedHomeData | null> {
+  if (!runtimeConsentAllowed('health')) return null;
   try {
     const keys = [
       scopedKey(CACHE_KEYS.VERSION, scope),

@@ -5,6 +5,7 @@
 // wie die manuellen Modals auf dem Home-Screen bzw. die Einkaufsliste).
 
 import * as FileSystem from 'expo-file-system/legacy';
+import { requireDataConsent } from '@/lib/dataConsents';
 
 import { supabase, addBabyCareEntry, saveDoctorQuestion } from '@/lib/supabase';
 import {
@@ -231,6 +232,7 @@ export const parseVoiceRecording = async (
   locale: DailyLocale = 'de',
   mode: VoiceLogMode = 'baby',
 ): Promise<VoiceLogParseResult> => {
+  await requireDataConsent('ai');
   const [audioBase64, recentMilkPreference] = await Promise.all([
     FileSystem.readAsStringAsync(localUri, { encoding: 'base64' }),
     mode === 'baby' ? fetchRecentMilkPreference(babyId) : Promise.resolve(null),
@@ -256,6 +258,7 @@ const invokeEntryParser = async (
   locale: DailyLocale,
   mode: VoiceLogMode,
 ): Promise<VoiceLogParseResult> => {
+  await requireDataConsent('ai');
   const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const { data, error } = await supabase.functions.invoke<VoiceLogParseResult>(
     'voice-log-parse',

@@ -35,6 +35,7 @@ import {
   RADIUS,
 } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useResumeInputFocus } from '@/hooks/use-resume-input-focus';
 import {
   DEFAULT_SHOPPING_LOCALE,
   formatShoppingDate,
@@ -327,6 +328,19 @@ function ShoppingListScreenContent() {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const newItemInputRef = useRef<TextInput>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  const unknownNameInputRef = useRef<TextInput>(null);
+  const inventoryNameInputRef = useRef<TextInput>(null);
+  const inventoryQuantityInputRef = useRef<TextInput>(null);
+  const resumableInputRefs = useMemo(() => [
+    newItemInputRef,
+    searchInputRef,
+    unknownNameInputRef,
+    inventoryNameInputRef,
+    inventoryQuantityInputRef,
+  ], []);
+  useResumeInputFocus(resumableInputRefs);
   const shoppingSuggestions = useMemo(
     () => getShoppingSuggestions(shoppingItems, newItemTitle),
     [shoppingItems, newItemTitle]
@@ -1088,6 +1102,7 @@ function ShoppingListScreenContent() {
           <View style={styles.searchRow}>
             <IconSymbol name="magnifyingglass" size={18} color={PRIMARY} />
             <TextInput
+              ref={searchInputRef}
               style={styles.searchInput}
               placeholder={section === 'inventory' ? t('search.inventory') : t('search.shopping')}
               placeholderTextColor="rgba(125,90,80,0.5)"
@@ -1222,6 +1237,7 @@ function ShoppingListScreenContent() {
               ) : null}
               <View style={styles.addRow}>
                 <TextInput
+                  ref={newItemInputRef}
                   style={styles.addInput}
                   placeholder={t('shopping.newPlaceholder')}
                   placeholderTextColor="rgba(125,90,80,0.5)"
@@ -1901,6 +1917,7 @@ function ShoppingListScreenContent() {
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <Header
+          topSafeAreaHandled
           title={t('screen.title')}
           subtitle={t('screen.subtitle')}
           showBackButton
@@ -2137,6 +2154,7 @@ function ShoppingListScreenContent() {
                     {t('scan.unknownBody', { barcode: scanSheet.barcode })}
                   </ThemedText>
                   <TextInput
+                    ref={unknownNameInputRef}
                     style={styles.modalInput}
                     placeholder={t('scan.productName')}
                     placeholderTextColor="rgba(125,90,80,0.5)"
@@ -2213,6 +2231,7 @@ function ShoppingListScreenContent() {
                   <View style={styles.fieldBlock}>
                     <ThemedText style={styles.fieldLabel}>{t('common.name')}</ThemedText>
                     <TextInput
+                      ref={inventoryNameInputRef}
                       style={styles.modalInput}
                       placeholder={t('form.namePlaceholder')}
                       placeholderTextColor="rgba(125,90,80,0.5)"
@@ -2288,6 +2307,7 @@ function ShoppingListScreenContent() {
                         <IconSymbol name="minus" size={18} color={isDark ? '#C496F0' : PRIMARY} />
                       </TouchableOpacity>
                       <TextInput
+                        ref={inventoryQuantityInputRef}
                         style={[styles.modalInput, styles.formStepperInput]}
                         keyboardType="number-pad"
                         value={String(Math.max(0, Math.round(editingInventory?.current_quantity ?? 0)))}

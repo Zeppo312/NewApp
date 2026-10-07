@@ -55,9 +55,10 @@ export function GlassAvatar({
   showStatusDot?: boolean;
 }) {
   const radius = size / 2;
+  // Without a BlurTargetView, Android must use the translucent tint fallback.
   const androidBlurProps: Partial<BlurViewProps> =
     Platform.OS === 'android'
-      ? { blurMethod: 'dimezisBlurView', blurReductionFactor: 1 }
+      ? { blurMethod: 'none' }
       : {};
 
   return (

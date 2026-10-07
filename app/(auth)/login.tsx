@@ -1,22 +1,26 @@
 import { caretakerCopy } from '@/lib/caretaker-copy';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
-import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, TouchableOpacity, View, TextInput, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Alert, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Linking from 'expo-linking';
+import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
+import { translateAccountLinkingText } from '@/lib/accountLinkingTranslations';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { acceptTerms, TERMS_VERSION } from '@/lib/termsConsent';
+import { googleAuthErrorKey } from '@/lib/google-auth';
 import {
   AuthTranslationKey,
   DEFAULT_AUTH_LOCALE,
@@ -27,8 +31,50 @@ let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
 const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
   translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
 
+const isAndroid = Platform.OS === 'android';
+
 export default function LoginScreen() {
   ACTIVE_AUTH_LOCALE = useLocale().locale;
+  const [androidKeyboardVisible, setAndroidKeyboardVisible] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const invitationRef = useRef<TextInput>(null);
+  const focusedInputRef = useRef<TextInput | null>(null);
+  useEffect(() => {
+    if (!isAndroid) return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setAndroidKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  const scrollFocusedAndroidInput = useCallback(() => {
+    if (!isAndroid || !Keyboard.isVisible() || !focusedInputRef.current) return;
+    scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(
+      focusedInputRef.current,
+      24,
+      true,
+    );
+  }, []);
+
+  // Run after the compact keyboard layout is committed; layout/content callbacks
+  // also handle the native resize arriving before or after the keyboard event.
+  useEffect(() => {
+    if (androidKeyboardVisible) scrollFocusedAndroidInput();
+  }, [androidKeyboardVisible, scrollFocusedAndroidInput]);
+
+  const focusAndroidInput = (input: TextInput | null) => {
+    focusedInputRef.current = input;
+    scrollFocusedAndroidInput();
+  };
+  const { fontScale } = useWindowDimensions();
+  // Keep larger accessibility text inside the field instead of clipping it.
+  const androidInputStyle = isAndroid
+    ? { height: Math.max(47, Math.ceil(24 * fontScale + 20)) }
+    : undefined;
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
@@ -40,13 +86,12 @@ export default function LoginScreen() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
   const [showInvitationField, setShowInvitationField] = useState(prefilledInvitationCode.length > 0);
-  // EULA-Gate: ohne Zustimmung ist keine Anmeldung und keine Registrierung möglich
-  // (App Store Guideline 1.2).
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showInvitationScanner, setShowInvitationScanner] = useState(false);
   const accentColor = Colors.light.accent;
   const primaryTextColor = Colors.light.textPrimary;
   const secondaryTextColor = Colors.light.textSecondary;
-  const { signInWithEmail, signUpWithEmail, signInWithApple, signOut } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInWithApple, signInWithGoogle, signOut } = useAuth();
+  const googleBusyRef = useRef(false);
   const normalizedInvitationCode = showInvitationField && invitationCode
     ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
     : undefined;
@@ -139,22 +184,18 @@ export default function LoginScreen() {
     return null;
   };
 
-  const ensureTermsAccepted = () => {
-    if (termsAccepted) return true;
-    Alert.alert(t('login.termsRequiredTitle'), t('login.termsRequiredMessage'), [
-      { text: t('common.ok') },
-    ]);
-    return false;
-  };
-
   const handleAuth = async () => {
+    if (isLoading) return;
     // Reset error state
     setError('');
 
-    if (!ensureTermsAccepted()) return;
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+    setEmail(normalizedEmail);
+    setPassword(normalizedPassword);
 
     // Basic validation
-    if (!email || !password) {
+    if (!normalizedEmail || !normalizedPassword) {
       setError(t('login.credentialsRequired'));
       return;
     }
@@ -164,7 +205,7 @@ export default function LoginScreen() {
 
       if (isRegistering) {
         // Registrierung mit Supabase
-        const { data, error: signUpError } = await signUpWithEmail(email, password, {
+        const { data, error: signUpError } = await signUpWithEmail(normalizedEmail, normalizedPassword, {
           version: TERMS_VERSION,
           acceptedAt: new Date().toISOString(),
         });
@@ -189,7 +230,7 @@ export default function LoginScreen() {
           router.replace({
             pathname: './verify-otp',
             params: {
-              email: email,
+              email: normalizedEmail,
               invitationCode: normalizedInvitationCode
             }
           });
@@ -199,7 +240,7 @@ export default function LoginScreen() {
           router.replace({
             pathname: './verify-otp', 
             params: {
-              email: email,
+              email: normalizedEmail,
               invitationCode: normalizedInvitationCode
             }
           });
@@ -207,7 +248,7 @@ export default function LoginScreen() {
         }
       } else {
         // Anmeldung mit Supabase
-        const { data, error: signInError } = await signInWithEmail(email, password);
+        const { data, error: signInError } = await signInWithEmail(normalizedEmail, normalizedPassword);
 
         if (signInError) {
           console.error('Sign in error:', signInError);
@@ -256,9 +297,35 @@ export default function LoginScreen() {
     }
   };
 
-  const handleAppleSignIn = async () => {
+  const handleGoogleSignIn = async () => {
+    if (googleBusyRef.current || isLoading) return;
     setError('');
-    if (!ensureTermsAccepted()) return;
+    googleBusyRef.current = true;
+    setIsLoading(true);
+    try {
+      const result = await signInWithGoogle({
+        source: isRegistering ? 'signup' : 'login',
+        termsVersion: TERMS_VERSION,
+        invitationCode: normalizedInvitationCode,
+      });
+      if (result.status === 'callback') {
+        const callback = new URL(result.url);
+        router.replace({
+          pathname: '/auth/google-callback',
+          params: Object.fromEntries(callback.searchParams),
+        });
+      }
+    } catch (failure) {
+      setError(t(googleAuthErrorKey(failure)));
+    } finally {
+      googleBusyRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    if (isLoading) return;
+    setError('');
     setIsLoading(true);
     
     try {
@@ -312,19 +379,59 @@ export default function LoginScreen() {
     }
   };
 
+  if (showInvitationScanner) {
+    return (
+      <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1 }}>
+          <TouchableOpacity accessibilityRole="button"
+            accessibilityLabel={translateAccountLinkingText(ACTIVE_AUTH_LOCALE, 'common.cancel')}
+            style={{ padding: 20 }} onPress={() => setShowInvitationScanner(false)}>
+            <IconSymbol name="chevron.left" size={24} color={primaryTextColor} />
+          </TouchableOpacity>
+          <AccountLinkingQrModal code={null}
+            invitationLink={Linking.createURL('invite', { queryParams: { code: '' } })}
+            locale={ACTIVE_AUTH_LOCALE} isDark={false}
+            onClose={() => setShowInvitationScanner(false)}
+            onScanned={code => {
+              setInvitationCode(code);
+              setShowInvitationField(true);
+              setShowInvitationScanner(false);
+            }} />
+        </SafeAreaView>
+      </ThemedBackground>
+    );
+  }
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
         <KeyboardAvoidingView
           style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          // Padding uses only the current overlap, unlike 'height', which retains
+          // the pre-keyboard height. This also covers fullscreen Android devices
+          // where adjustResize does not resize the activity itself.
+          behavior={Platform.OS === 'ios' || isAndroid ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' || isAndroid ? 0 : 20}
         >
-          <SafeAreaView style={styles.safeArea}>
+          <SafeAreaView
+            style={styles.safeArea}
+            edges={androidKeyboardVisible ? ['top', 'left', 'right'] : undefined}
+          >
             <StatusBar hidden={true} />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.logoContainer}>
+            <ScrollView
+              ref={scrollRef}
+              style={isAndroid ? styles.container : undefined}
+              contentContainerStyle={[
+                styles.scrollContent,
+                androidKeyboardVisible && styles.androidKeyboardContent,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              onLayout={isAndroid ? scrollFocusedAndroidInput : undefined}
+              onContentSizeChange={isAndroid ? scrollFocusedAndroidInput : undefined}
+            >
+              <View style={[styles.logoContainer, androidKeyboardVisible && styles.androidKeyboardLogo]}>
                 <ThemedText type="title" style={styles.appTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                   Lotti Baby
                 </ThemedText>
@@ -334,11 +441,23 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.formContainer}>
-                <BlurView intensity={25} tint="light" style={StyleSheet.absoluteFill} />
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                  style={StyleSheet.absoluteFill}
-                />
+                {isAndroid ? (
+                  // Match the warm iOS frosted surface without Android's unconfigured
+                  // BlurView fallback or stacked native shadow/transparent layers.
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['#FFF8F3', '#FAEAE0', '#FFF8F3']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : (
+                  <>
+                    <BlurView intensity={25} tint="light" style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  </>
+                )}
                 <View style={styles.formContent}>
                   <ThemedText type="subtitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                     {isRegistering ? t('login.register') : t('common.login')}
@@ -346,7 +465,7 @@ export default function LoginScreen() {
 
                   {error ? (
                     <View style={styles.errorContainer}>
-                      <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                      {!isAndroid && <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />}
                       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(244,67,54,0.15)' }]} />
                       <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#B71C1C">
                         {error}
@@ -359,10 +478,17 @@ export default function LoginScreen() {
                     {t('login.email')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
-                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                     <TextInput
-                      style={styles.input}
+                      ref={emailRef}
+                      onFocus={isAndroid ? () => focusAndroidInput(emailRef.current) : undefined}
+                      onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                      returnKeyType={isAndroid ? 'next' : undefined}
+                      submitBehavior={isAndroid ? 'submit' : undefined}
+                      onSubmitEditing={isAndroid ? () => passwordRef.current?.focus() : undefined}
+                      style={[styles.input, androidInputStyle]}
+                      underlineColorAndroid="transparent"
                       placeholder={t('login.emailPlaceholder')}
                       placeholderTextColor="#9D9D9D"
                       value={email}
@@ -378,10 +504,14 @@ export default function LoginScreen() {
                     {t('login.password')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
-                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                     <TextInput
-                      style={styles.input}
+                      ref={passwordRef}
+                      onFocus={isAndroid ? () => focusAndroidInput(passwordRef.current) : undefined}
+                      onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                      style={[styles.input, androidInputStyle]}
+                      underlineColorAndroid="transparent"
                       placeholder="••••••••"
                       placeholderTextColor="#9D9D9D"
                       value={password}
@@ -403,68 +533,19 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
-                <View style={styles.termsContainer}>
-                    <TouchableOpacity
-                      style={styles.termsCheckboxRow}
-                      onPress={() => setTermsAccepted((current) => !current)}
-                      disabled={isLoading}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: termsAccepted }}
-                      activeOpacity={0.8}
-                    >
-                      <IconSymbol
-                        name={termsAccepted ? 'checkmark.circle.fill' : 'circle'}
-                        size={24}
-                        color={termsAccepted ? accentColor : secondaryTextColor}
-                      />
-                      <View style={styles.termsTextWrap}>
-                        <ThemedText
-                          style={styles.termsText}
-                          lightColor={primaryTextColor}
-                          darkColor={primaryTextColor}
-                        >
-                          {t('login.termsIntro')}{' '}
-                          <ThemedText
-                            style={styles.termsLink}
-                            lightColor={accentColor}
-                            darkColor={accentColor}
-                            onPress={() => router.push('/nutzungsbedingungen')}
-                          >
-                            {t('login.termsLink')}
-                          </ThemedText>{' '}
-                          {t('login.termsAnd')}{' '}
-                          <ThemedText
-                            style={styles.termsLink}
-                            lightColor={accentColor}
-                            darkColor={accentColor}
-                            onPress={() => router.push('/datenschutz')}
-                          >
-                            {t('login.privacyLink')}
-                          </ThemedText>
-                          .
-                        </ThemedText>
-                      </View>
-                    </TouchableOpacity>
-                    <ThemedText
-                      style={styles.termsHint}
-                      lightColor={secondaryTextColor}
-                      darkColor={secondaryTextColor}
-                    >
-                      {t('login.termsRulesHint')}
-                    </ThemedText>
-                  </View>
-
                 <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
                   style={[
                     styles.button,
                     styles.loginButton,
-                    (isLoading || !termsAccepted) && styles.buttonDisabled,
+                    isLoading && styles.buttonDisabled,
                   ]}
                   onPress={handleAuth}
-                  disabled={isLoading || !termsAccepted}
+                  disabled={isLoading}
                   activeOpacity={0.9}
                 >
-                  <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+                  {!isAndroid && <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />}
                   <LinearGradient
                     colors={['#9DBEBB', 'rgba(157, 190, 187, 0.9)']}
                     style={StyleSheet.absoluteFill}
@@ -476,15 +557,31 @@ export default function LoginScreen() {
                   </ThemedText>
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={t('login.google')}
+                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
+                  style={[styles.googleButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleGoogleSignIn}
+                  disabled={isLoading}
+                  activeOpacity={0.85}
+                >
+                  <Image source={require('@/assets/images/google-sign-in-logo.png')}
+                    style={styles.googleLogo} contentFit="contain" accessibilityIgnoresInvertColors />
+                  <ThemedText style={styles.googleButtonText}>{t('login.google')}</ThemedText>
+                </TouchableOpacity>
+
                 {Platform.OS === 'ios' && (
                   <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isLoading, busy: isLoading }}
                     style={[
                       styles.button,
                       styles.appleButton,
-                      (isLoading || !termsAccepted) && styles.buttonDisabled,
+                      isLoading && styles.buttonDisabled,
                     ]}
                     onPress={handleAppleSignIn}
-                    disabled={isLoading || !termsAccepted}
+                    disabled={isLoading}
                     activeOpacity={0.9}
                   >
                     <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
@@ -501,11 +598,29 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
+                <View style={styles.termsContainer}>
+                  <ThemedText style={styles.termsText} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.termsPassiveIntro')}{' '}
+                    <ThemedText style={styles.termsLink} lightColor={primaryTextColor} darkColor={primaryTextColor}
+                      accessibilityRole="link" onPress={() => router.push('/nutzungsbedingungen')}>
+                      {t('login.termsLink')}
+                    </ThemedText>.{' '}
+                    {t('login.privacyNoticeIntro')}{' '}
+                    <ThemedText style={styles.termsLink} lightColor={primaryTextColor} darkColor={primaryTextColor}
+                      accessibilityRole="link" onPress={() => router.push('/datenschutz')}>
+                      {t('login.privacyLink')}
+                    </ThemedText>.
+                  </ThemedText>
+                  <ThemedText style={styles.termsHint} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.termsRulesHint')}
+                  </ThemedText>
+                </View>
+
                 <TouchableOpacity accessibilityRole="button" disabled={isLoading}
                   onPress={() => router.push('/caregiver-join')}
-                  style={[styles.button, { backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 1, borderColor: accentColor }]}>
-                  <ThemedText style={{ color: primaryTextColor, fontWeight: '700', fontSize: 16 }}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestEntry}</ThemedText>
-                  <ThemedText style={{ color: secondaryTextColor, fontSize: 12, marginTop: 4 }}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestHint}</ThemedText>
+                  style={[styles.button, { backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 1, borderColor: accentColor }, isAndroid && styles.androidGuestButton]}>
+                  <ThemedText style={[{ color: primaryTextColor, fontWeight: '700', fontSize: 16 }, isAndroid && styles.androidGuestTitle]}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestEntry}</ThemedText>
+                  <ThemedText style={[{ color: secondaryTextColor, fontSize: 12, marginTop: 4 }, isAndroid && styles.androidGuestHint]}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestHint}</ThemedText>
                 </TouchableOpacity>
 
                 {isRegistering && (
@@ -522,14 +637,25 @@ export default function LoginScreen() {
 
                     {showInvitationField && (
                       <>
+                        <TouchableOpacity accessibilityRole="button" style={styles.invitationToggle}
+                          disabled={isLoading}
+                          onPress={() => { Keyboard.dismiss(); setShowInvitationScanner(true); }}>
+                          <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
+                            {translateAccountLinkingText(ACTIVE_AUTH_LOCALE, 'qr.scan')}
+                          </ThemedText>
+                        </TouchableOpacity>
                         <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
                           {t('login.invitationOptional')}
                         </ThemedText>
                         <View style={styles.inputWrapper}>
-                          <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                          {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                           <TextInput
-                            style={styles.input}
+                            ref={invitationRef}
+                            onFocus={isAndroid ? () => focusAndroidInput(invitationRef.current) : undefined}
+                            onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                            style={[styles.input, androidInputStyle]}
+                            underlineColorAndroid="transparent"
                             placeholder={t('login.invitationPlaceholder')}
                             placeholderTextColor="#9D9D9D"
                             value={invitationCode}
@@ -547,9 +673,8 @@ export default function LoginScreen() {
                   style={styles.switchModeButton}
                   onPress={() => {
                     setIsRegistering(!isRegistering);
-                    setTermsAccepted(false);
-                    setShowInvitationField(false);
-                    setInvitationCode('');
+                    setShowInvitationField(prefilledInvitationCode.length > 0);
+                    setInvitationCode(prefilledInvitationCode);
                   }}
                   disabled={isLoading}
                 >
@@ -570,6 +695,9 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
+    // Let the Android activity's available height (including keyboard resizing)
+    // determine the viewport rather than ThemedBackground's fixed screen size.
+    ...(isAndroid && { width: '100%' as const, height: undefined }),
   },
   safeArea: {
     flex: 1,
@@ -581,6 +709,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 16,
+    ...(isAndroid && { paddingVertical: 24 }),
+  },
+  androidKeyboardContent: {
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  androidKeyboardLogo: {
+    display: 'none',
   },
   logoContainer: {
     alignItems: 'center',
@@ -602,6 +739,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    ...(isAndroid && { textAlign: 'center' as const }),
   },
   formContainer: {
     padding: 0,
@@ -615,6 +753,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 16,
     backgroundColor: 'rgba(255,255,255,0.12)',
+    ...(isAndroid && {
+      elevation: 0,
+      flexShrink: 0,
+      backgroundColor: '#FFF8F3',
+      boxShadow: '0 4px 20px rgba(92, 64, 51, 0.06)',
+    }),
   },
   formContent: {
     padding: 24,
@@ -666,6 +810,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.3)',
     position: 'relative',
+    ...(isAndroid && { height: undefined, minHeight: 50 }),
   },
   input: {
     height: 50,
@@ -675,9 +820,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     position: 'relative',
     zIndex: 1,
+    ...(isAndroid && {
+      paddingVertical: 0,
+      includeFontPadding: false,
+      textAlignVertical: 'center' as const,
+    }),
   },
   button: {
-    height: 54,
+    minHeight: 54,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
@@ -691,17 +843,52 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     position: 'relative',
+    ...(isAndroid && {
+      height: undefined,
+      minHeight: 54,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      elevation: 0,
+    }),
   },
   loginButton: {
     marginTop: 24,
   },
+  androidGuestButton: {
+    paddingVertical: 6,
+  },
+  androidGuestTitle: {
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  androidGuestHint: {
+    textAlign: 'center',
+    lineHeight: 17,
+  },
   appleButton: {
     marginTop: 16,
   },
+  googleButton: {
+    marginTop: 16,
+    minHeight: 54,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#747775',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  googleLogo: { width: 20, height: 20 },
+  googleButtonText: { color: '#1F1F1F', fontSize: 16, fontWeight: '500', flexShrink: 1, textAlign: 'center' },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: '100%',
     position: 'relative',
     zIndex: 1,
   },
@@ -723,6 +910,8 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
     position: 'relative',
     zIndex: 1,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   switchModeButton: {
     marginTop: 20,
@@ -743,20 +932,13 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   termsContainer: {
-    marginTop: 20,
-  },
-  termsCheckboxRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  termsTextWrap: {
-    flex: 1,
+    marginTop: 8,
+    marginBottom: 20,
   },
   termsText: {
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '500',
+    textAlign: 'center',
   },
   termsLink: {
     fontSize: 14,
@@ -768,18 +950,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     lineHeight: 17,
-  },
-  termsPassive: {
-    marginTop: 20,
-    fontSize: 12,
-    lineHeight: 18,
     textAlign: 'center',
-  },
-  termsPassiveLink: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',

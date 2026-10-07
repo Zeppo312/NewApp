@@ -12,7 +12,6 @@ import { router } from 'expo-router';
 // Konfiguriere das Verhalten von Benachrichtigungen
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -225,13 +224,14 @@ export function setupNotificationListeners(
 ) {
   // Listener für Benachrichtigungen im Vordergrund
   const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-    console.log('Benachrichtigung im Vordergrund erhalten:', notification);
+    // Log scalar metadata only; the SDK object contains deprecated getters.
+    console.log('Benachrichtigung im Vordergrund erhalten:', notification.request.identifier);
     onNotification(notification);
   });
 
   // Listener für Interaktionen mit Benachrichtigungen
   const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-    console.log('Benutzerinteraktion mit Benachrichtigung:', response);
+    console.log('Benutzerinteraktion mit Benachrichtigung:', response.notification.request.identifier, response.actionIdentifier);
     
     // Daten aus der Benachrichtigung extrahieren
     const data = response.notification.request.content.data as any;

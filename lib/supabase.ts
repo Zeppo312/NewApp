@@ -4,11 +4,20 @@ import { createClient } from '@supabase/supabase-js';
 import { AppState, type AppStateStatus } from 'react-native';
 import * as Linking from 'expo-linking';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
+import { resolveBackendEnvironment } from './backendEnvironment';
+import { assertGoogleProviderEnabled, startGoogleSignIn, type GoogleAuthOptions } from './google-auth';
+import { consentAwareFetch, setConsentIdentity } from './dataConsentRuntime';
 
 // Supabase-Konfiguration
 // Ersetzen Sie diese Werte mit Ihren eigenen Supabase-Projektdaten
-export const supabaseUrl = 'https://kwniiyayhzgjfqjsjcfu.supabase.co';
-export const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bmlpeWF5aHpnamZxanNqY2Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzEyNjIsImV4cCI6MjA1OTU0NzI2Mn0.h0CL1_SXhfp9BXSPy0ipprs57qSZ8A_26wh2hP-8vZk';
+const testBackend = resolveBackendEnvironment(
+  process.env.EXPO_PUBLIC_BACKEND_ENV,
+  process.env.EXPO_PUBLIC_QA_SUPABASE_URL,
+  process.env.EXPO_PUBLIC_QA_SUPABASE_KEY,
+  process.env.EXPO_PUBLIC_QA_PROJECT_REF,
+);
+export const supabaseUrl = testBackend?.url ?? 'https://kwniiyayhzgjfqjsjcfu.supabase.co';
+export const supabaseAnonKey = testBackend?.key ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3bmlpeWF5aHpnamZxanNqY2Z1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM5NzEyNjIsImV4cCI6MjA1OTU0NzI2Mn0.h0CL1_SXhfp9BXSPy0ipprs57qSZ8A_26wh2hP-8vZk';
 
 // Laufzeit-Erkennung:
 // - Web: window verfügbar
@@ -20,6 +29,7 @@ const isClient = typeof window !== 'undefined' || isReactNativeRuntime;
 
 // Erstellen des Supabase-Clients mit einer Prüfung, ob wir im Browser oder in Node.js sind
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: consentAwareFetch },
   auth: {
     storage: isClient ? AsyncStorage : undefined,
     autoRefreshToken: true,
@@ -153,6 +163,7 @@ export const invalidateUserCache = () => {
 
 // Listen to auth state changes and invalidate cache
 supabase.auth.onAuthStateChange((event, session) => {
+  setConsentIdentity(session?.user?.id ?? null);
   if (event === 'SIGNED_OUT' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
     invalidateUserCache();
   }
@@ -400,11 +411,9 @@ export const signInWithMagicLink = async (email: string) => {
 };
 
 // Social Logins
-export const signInWithGoogle = async () => {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-  });
-  return { data, error };
+export const signInWithGoogle = async (options: GoogleAuthOptions) => {
+  await assertGoogleProviderEnabled(supabaseUrl, supabaseAnonKey);
+  return startGoogleSignIn(supabase, options);
 };
 
 export const signInWithApple = async () => {
@@ -803,16 +812,17 @@ export const getContractions = async () => {
     });
 
     if (rpcError) {
-      const isBrokenRpcDefinition = rpcError.code === '42803';
-      const log = isBrokenRpcDefinition ? console.warn : console.error;
-      log('Falling back from get_contractions_with_sync_info:', rpcError);
-
       // Fallback auf die alte Methode
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('contractions')
         .select('*')
         .eq('user_id', userData.user.id)
         .order('start_time', { ascending: false });
+
+      // A recovered legacy RPC error must not open React Native's warning overlay.
+      // Keep actual load failures visible, including a failed fallback.
+      const log = rpcError.code === '42803' && !fallbackError ? console.info : console.error;
+      log('Falling back from get_contractions_with_sync_info:', rpcError);
 
       return { data: fallbackData, error: fallbackError };
     }
@@ -821,7 +831,12 @@ export const getContractions = async () => {
 
     // Umwandeln des Formats, um mit der bestehenden Implementierung kompatibel zu sein
     return {
-      data: rpcData.contractions,
+      // The RPC uses camelCase, while table queries and tracker callers use snake_case.
+      data: rpcData.contractions.map((contraction: any) => ({
+        ...contraction,
+        start_time: contraction.start_time ?? contraction.startTime,
+        end_time: contraction.end_time ?? contraction.endTime ?? null,
+      })),
       error: null,
       syncInfo: rpcData.syncInfo
     };
@@ -1791,8 +1806,8 @@ export const createInvitationLink = async (userId: string, relationshipType: str
 
   return {
     success: true,
-    invitationCode,
-    invitationLink: buildInvitationLink(invitationCode)
+    invitationCode: data[0].invitation_code,
+    invitationLink: buildInvitationLink(data[0].invitation_code)
   };
 };
 

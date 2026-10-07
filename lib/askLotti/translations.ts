@@ -2,6 +2,14 @@ import type { AppLocale } from "@/lib/localization";
 
 const de = {
   title: "Frag Lotti",
+  reportAnswer: "Antwort melden",
+  answerReported: "Antwort gemeldet",
+  reportThanks: "Danke für deine Meldung",
+  reportSuccess: "Deine Meldung wurde an unser Moderationsteam gesendet. Wir prüfen die Antwort und nutzen deine Meldung, um Lottis Antworten und Sicherheitsfilter zu verbessern.",
+  reportPrivacy: "Mit deiner Meldung werden diese Antwort einschließlich ihres Hinweises, dein Meldegrund und dein optionaler Kommentar an unser Moderationsteam gesendet und zur Prüfung gespeichert. Dein Konto wird der Meldung zugeordnet. Der übrige Chatverlauf wird nicht übertragen.",
+  reportSubmit: "Meldung senden",
+  reportSending: "Meldung wird gesendet …",
+
   importEntries: "Einträge übernehmen",
   importLoading: "Vorschläge werden vorbereitet …",
 
@@ -76,6 +84,14 @@ const de = {
 type Key = keyof typeof de;
 const en: Record<Key, string> = {
   title: "Ask Lotti",
+  reportAnswer: "Report answer",
+  answerReported: "Answer reported",
+  reportThanks: "Thank you for your report",
+  reportSuccess: "Your report was sent to our moderation team. We will review the answer and use your report to improve Lotti’s answers and safety filters.",
+  reportPrivacy: "Submitting sends this answer including its disclaimer, your reason and optional comment to our moderation team for storage and review. Your account is associated with the report. The rest of the conversation is not sent.",
+  reportSubmit: "Send report",
+  reportSending: "Sending report …",
+
   importEntries: "Save entries",
   importLoading: "Preparing suggestions …",
 
@@ -149,6 +165,14 @@ const en: Record<Key, string> = {
 };
 const es: Record<Key, string> = {
   title: "Pregunta a Lotti",
+  reportAnswer: "Denunciar respuesta",
+  answerReported: "Respuesta denunciada",
+  reportThanks: "Gracias por tu denuncia",
+  reportSuccess: "Tu denuncia se ha enviado a nuestro equipo de moderación. Revisaremos la respuesta y utilizaremos tu denuncia para mejorar las respuestas y los filtros de seguridad de Lotti.",
+  reportPrivacy: "Al enviar la denuncia, esta respuesta con su aviso, el motivo y tu comentario opcional se enviarán a nuestro equipo de moderación para guardarlos y revisarlos. Tu cuenta se asociará a la denuncia. No se enviará el resto de la conversación.",
+  reportSubmit: "Enviar denuncia",
+  reportSending: "Enviando denuncia …",
+
   importEntries: "Guardar entradas",
   importLoading: "Preparando sugerencias …",
 

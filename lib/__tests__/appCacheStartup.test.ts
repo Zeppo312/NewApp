@@ -227,3 +227,24 @@ describe('in-flight deduplication', () => {
     expect(settingsQuery.maybeSingle).toHaveBeenCalledTimes(2);
   });
 });
+
+it('wartet vor der Bereinigung auf bereits gestartete native Speicherzugriffe', async () => {
+  const entered = createDeferred<void>();
+  const release = createDeferred<void>();
+  const originalSetItem = AsyncStorage.setItem;
+  const spy = jest.spyOn(AsyncStorage, 'setItem').mockImplementationOnce(async (key, value) => {
+    entered.resolve();
+    await release.promise;
+    await originalSetItem(key, value);
+  });
+  try {
+    profileQuery.maybeSingle.mockResolvedValueOnce({ data: { id: 'user-1' }, error: null });
+    const load = getCachedUserProfile('user-1');
+    await entered.promise;
+    const clear = invalidateAllCaches();
+    release.resolve();
+    await Promise.all([load, clear]);
+    const keys = await AsyncStorage.getAllKeys();
+    expect(keys.filter(key => key.includes('user-1'))).toEqual([]);
+  } finally { spy.mockRestore(); }
+});

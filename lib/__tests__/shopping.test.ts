@@ -289,8 +289,7 @@ describe('addRecipeIngredientsToShoppingList', () => {
     mockedFrom.mockReturnValueOnce(existingChain).mockReturnValueOnce(insertChain);
 
     const { data, error } = await addRecipeIngredientsToShoppingList(
-      { id: 'recipe-1', ingredients: ['2 Bananen', '100 g Haferflocken', '  '] },
-      'baby-1'
+      { id: 'recipe-1', ingredients: ['2 Bananen', '100 g Haferflocken', '  '] }
     );
 
     expect(error).toBeNull();
@@ -298,7 +297,6 @@ describe('addRecipeIngredientsToShoppingList', () => {
     const insertedRows = insertChain.insert.mock.calls[0][0];
     expect(insertedRows).toHaveLength(1);
     expect(insertedRows[0]).toMatchObject({
-      baby_id: 'baby-1',
       created_by: 'user-1',
       normalized_name: 'haferflocke',
       quantity_value: 100,
@@ -306,6 +304,7 @@ describe('addRecipeIngredientsToShoppingList', () => {
       source_type: 'recipe',
       source_recipe_id: 'recipe-1',
     });
+    expect(insertedRows[0]).not.toHaveProperty('baby_id');
   });
 
   it('fügt nichts ein, wenn alle Zutaten schon vorhanden sind', async () => {
@@ -313,8 +312,7 @@ describe('addRecipeIngredientsToShoppingList', () => {
     mockedFrom.mockReturnValueOnce(existingChain);
 
     const { data } = await addRecipeIngredientsToShoppingList(
-      { id: 'recipe-1', ingredients: ['1 Banane'] },
-      'baby-1'
+      { id: 'recipe-1', ingredients: ['1 Banane'] }
     );
 
     expect(data).toEqual({ added: 0, skipped: 1 });
@@ -325,8 +323,7 @@ describe('addRecipeIngredientsToShoppingList', () => {
     mockedGetCachedUser.mockResolvedValue({ data: { user: null }, error: null });
 
     const { data, error } = await addRecipeIngredientsToShoppingList(
-      { id: 'recipe-1', ingredients: ['1 Banane'] },
-      'baby-1'
+      { id: 'recipe-1', ingredients: ['1 Banane'] }
     );
 
     expect(data).toBeNull();
@@ -577,7 +574,7 @@ describe('fetchLowStockCount', () => {
       })
     );
 
-    const { count, error } = await fetchLowStockCount('baby-1');
+    const { count, error } = await fetchLowStockCount();
 
     expect(error).toBeNull();
     expect(count).toBe(4);
@@ -586,7 +583,7 @@ describe('fetchLowStockCount', () => {
   it('liefert 0 bei Fehler', async () => {
     mockedFrom.mockReturnValueOnce(chainResolving({ data: null, error: { message: 'boom' } }));
 
-    const { count, error } = await fetchLowStockCount('baby-1');
+    const { count, error } = await fetchLowStockCount();
 
     expect(count).toBe(0);
     expect(error).not.toBeNull();

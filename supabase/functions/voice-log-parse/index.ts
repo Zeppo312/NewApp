@@ -17,6 +17,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { localize, normalizeLocale, SupportedLocale } from '../_shared/localization.ts';
 import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
 import { sanitizeNewCustomActivityEmoji } from '../_shared/customActivityEmoji.ts';
+import { dataProcessingAllowed } from '../_shared/dataConsent.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
 
@@ -563,6 +564,7 @@ serve(async (req: Request) => {
     const mode: VoiceMode = body.mode === 'pregnancy' ? 'pregnancy' : 'baby';
 
     const admin = createClient(supabaseUrl, serviceKey);
+    if (!await dataProcessingAllowed(admin, user.id, 'ai')) return json({ error: 'ai_consent_required' }, 403);
     const featureAccess = await verifySubscriptionFeatureAccess(
       admin,
       user.id,
@@ -682,6 +684,7 @@ serve(async (req: Request) => {
 
       const transcribeController = new AbortController();
       const transcribeTimeout = setTimeout(() => transcribeController.abort(), 30_000);
+      if (!await dataProcessingAllowed(admin, user.id, 'ai')) return json({ error: 'ai_consent_required' }, 403);
       const transcribeRes = await fetch(OPENAI_TRANSCRIBE_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${openAiKey}` },
@@ -702,6 +705,7 @@ serve(async (req: Request) => {
     // 2) Strukturierte Einträge extrahieren.
     const chatController = new AbortController();
     const chatTimeout = setTimeout(() => chatController.abort(), 20_000);
+    if (!await dataProcessingAllowed(admin, user.id, 'ai')) return json({ error: 'ai_consent_required' }, 403);
     const chatRes = await fetch(OPENAI_CHAT_URL, {
       method: 'POST',
       headers: {
@@ -752,8 +756,10 @@ serve(async (req: Request) => {
       mode,
       customActivities,
     );
+    if (!await dataProcessingAllowed(admin, user.id, 'ai')) return json({ error: 'consent_withdrawn' }, 403);
     return json({ transcript, entries: isText ? entries.filter((entry) => ['doctor_question', 'shopping', 'planner'].includes(entry.type)) : entries });
   } catch (error) {
+    if (error instanceof Error && error.message === 'consent_check_unavailable') return json({ error: 'consent_check_unavailable' }, 503);
     console.error('voice-log-parse error:', error);
     return json({ error: 'Internal error' }, 500);
   }

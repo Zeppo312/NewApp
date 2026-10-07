@@ -11,11 +11,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { BlurView } from 'expo-blur';
+import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
 
 import { Colors } from '@/constants/Colors';
-import { RADIUS } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLocale } from '@/contexts/LocaleContext';
 import { CustomActivityType } from '@/lib/customActivities';
@@ -64,13 +64,13 @@ export default function CustomActivityEntryModal({
   startTimerByDefault = false,
 }: Props) {
   const { locale } = useLocale();
+  const insets = useSafeAreaInsets();
   const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const localeTag = getDailyLocaleTag(locale);
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#342824';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const panelBackground = isDark ? 'rgba(35,31,32,0.97)' : 'rgba(248,245,241,0.98)';
   const fieldBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)';
   const borderColor = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(125,90,80,0.14)';
 
@@ -168,16 +168,12 @@ export default function CustomActivityEntryModal({
   if (!definition) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        style={[styles.overlay, { backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
+        style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10), backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <BlurView
-          intensity={isDark ? 40 : 70}
-          tint={isDark ? 'dark' : 'light'}
-          style={[styles.panel, { backgroundColor: panelBackground, borderColor }]}
-        >
+        <GlassSheetSurface isDark={isDark} style={styles.panel}>
           <View style={[styles.handle, { backgroundColor: borderColor }]} />
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
             <View style={styles.header}>
@@ -199,7 +195,7 @@ export default function CustomActivityEntryModal({
               <Text style={[styles.timeDay, { color: textSecondary }]}>
                 {startTime.toLocaleDateString(localeTag, { weekday: 'short', day: '2-digit', month: '2-digit' })}
               </Text>
-              <Text style={[styles.timeValue, { color: definition.color }]}>{formattedTime}</Text>
+              <Text style={[styles.timeValue, { color: isDark ? textPrimary : definition.color }]}>{formattedTime}</Text>
             </TouchableOpacity>
 
             {pickerVisible ? (
@@ -327,42 +323,42 @@ export default function CustomActivityEntryModal({
               </Text>
             </TouchableOpacity>
           </View>
-        </BlurView>
+        </GlassSheetSurface>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  panel: { maxHeight: '92%', borderTopLeftRadius: RADIUS, borderTopRightRadius: RADIUS, borderWidth: 1, overflow: 'hidden' },
+  overlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
+  panel: { maxHeight: '100%', flexShrink: 1 },
   handle: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 9 },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18, gap: 10 },
+  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18, gap: 14 },
   header: { alignItems: 'center', marginBottom: 4 },
   headerEmoji: { fontSize: 38 },
-  title: { fontSize: 21, fontWeight: '900', marginTop: 4 },
+  title: { fontSize: 21, fontWeight: '700', marginTop: 4 },
   subtitle: { fontSize: 13, fontWeight: '700', marginTop: 3 },
-  label: { fontSize: 14, fontWeight: '800', marginTop: 8 },
-  timeButton: { minHeight: 72, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, justifyContent: 'center' },
+  label: { fontSize: 14, fontWeight: '600', marginTop: 8 },
+  timeButton: { minHeight: 72, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, justifyContent: 'center' },
   timeDay: { fontSize: 12, fontWeight: '700' },
-  timeValue: { fontSize: 25, fontWeight: '900', marginTop: 2, fontVariant: ['tabular-nums'] },
-  pickerCard: { borderRadius: 16, borderWidth: 1, padding: 8 },
+  timeValue: { fontSize: 25, fontWeight: '700', marginTop: 2, fontVariant: ['tabular-nums'] },
+  pickerCard: { borderRadius: 22, borderWidth: 1, padding: 8 },
   pickerDone: { alignSelf: 'flex-end', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 8 },
-  pickerDoneText: { color: '#FFFFFF', fontWeight: '800' },
-  quantityField: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 16, borderWidth: 1, paddingHorizontal: 14 },
-  quantityInput: { flex: 1, fontSize: 22, fontWeight: '800', paddingVertical: 10 },
-  unit: { fontSize: 16, fontWeight: '800', paddingLeft: 10 },
+  pickerDoneText: { color: '#FFFFFF', fontWeight: '600' },
+  quantityField: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 22, borderWidth: 1, paddingHorizontal: 14 },
+  quantityInput: { flex: 1, minWidth: 0, fontSize: 22, fontWeight: '600', paddingVertical: 10 },
+  unit: { flexShrink: 1, fontSize: 16, fontWeight: '600', paddingLeft: 10 },
   timerChoiceRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  timerChoice: { flex: 1, minHeight: 48, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  timerChoiceText: { fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  timerChoice: { flex: 1, minHeight: 48, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  timerChoiceText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
   timerHint: { fontSize: 13, lineHeight: 19, paddingVertical: 8 },
-  notes: { minHeight: 92, borderRadius: 16, borderWidth: 1, padding: 14, textAlignVertical: 'top', fontSize: 15 },
+  notes: { minHeight: 92, borderRadius: 22, borderWidth: 1, padding: 14, textAlignVertical: 'top', fontSize: 15 },
   deleteButton: { alignItems: 'center', paddingVertical: 13 },
-  deleteText: { color: '#E25555', fontSize: 14, fontWeight: '800' },
-  bottomBar: { flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === 'ios' ? 28 : 18 },
-  cancelButton: { flex: 1, minHeight: 50, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontSize: 15, fontWeight: '800' },
-  saveButton: { flex: 1.4, minHeight: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  saveText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', textAlign: 'center' },
+  deleteText: { color: '#E25555', fontSize: 14, fontWeight: '600' },
+  bottomBar: { flexShrink: 0, flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18 },
+  cancelButton: { flex: 1, minHeight: 50, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 15, fontWeight: '600' },
+  saveButton: { flex: 1.4, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  saveText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center' },
   disabled: { opacity: 0.55 },
 });

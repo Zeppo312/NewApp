@@ -11,7 +11,7 @@ import {
   View,
   TextInputProps,
 } from "react-native";
-import { BlurView } from "expo-blur";
+import { GlassSheetSurface } from "@/components/ui/glass-sheet-surface";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { useLocale } from '@/contexts/LocaleContext';
 
@@ -80,9 +80,8 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
         keyboardVerticalOffset={0}
         style={[styles.center, { paddingBottom: bottomLift }]}
       >
-        <BlurView
-          intensity={92}
-          tint={blurTint}
+        <GlassSheetSurface
+          isDark={blurTint === 'dark'}
           style={[
             styles.card,
             { backgroundColor: palette.card, borderColor: palette.cardBorder },
@@ -133,7 +132,7 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
               <Text style={styles.actionPrimaryLabel}>{submitLabel || actions.done}</Text>
             </TouchableOpacity>
           </View>
-        </BlurView>
+        </GlassSheetSurface>
       </KeyboardAvoidingView>
     </>
   );
@@ -220,11 +219,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.72)",
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
   },
   label: {
     fontSize: 17,
@@ -256,7 +250,9 @@ const styles = StyleSheet.create({
   actionGhost: {
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 12,
+    borderRadius: 22,
+    minHeight: 44,
+    justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.05)",
   },
   actionGhostLabel: {
@@ -267,7 +263,9 @@ const styles = StyleSheet.create({
   actionPrimary: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 22,
+    minHeight: 44,
+    justifyContent: "center",
   },
   actionPrimaryLabel: {
     fontSize: 14,

@@ -11,6 +11,15 @@ export type SubscriptionLocale = 'de' | 'en' | 'es';
 export const DEFAULT_SUBSCRIPTION_LOCALE: SubscriptionLocale = 'de';
 
 const de = {
+  'family.unknown': 'Zugang derzeit nicht bestätigt',
+  'family.plan': "{{tier}} · Familienabo",
+  'family.status': "Aktiv über dein Familienabo",
+  'family.detail': "Dein verknüpfter Partner teilt diesen Tarif mit dir. Zahlung und Kündigung verwaltet die Person, die das Abo abgeschlossen hat.",
+  'family.renewal': "Über den Abo-Inhaber",
+  'family.refresh': "Zugang aktualisieren",
+  'family.alsoOwn': "Du hast zusätzlich einen Familienzugang. Dein eigenes Abo wird dadurch nicht automatisch gekündigt. Du kannst es weiterhin im Herkunftsstore verwalten.",
+  'family.unavailable': "Der Familienzugang konnte gerade nicht bestätigt werden. Bitte aktualisiere den Zugang bei bestehender Internetverbindung.",
+
   'screen.title': 'Abo',
   'screen.subtitle': 'Dein Zugang zu Lotti Baby',
   'screen.loading': 'Abo-Status wird geladen …',
@@ -23,7 +32,7 @@ const de = {
   'status.noSubscription': 'Derzeit kein aktives Abo',
   'detail.admin': 'Für diesen Account ist Lotti Baby ohne Store-Abo freigeschaltet.',
   'detail.special': 'Dein Sonderzugang „{{role}}“ schaltet Lotti Baby ohne Store-Kauf frei.',
-  'detail.activeRenewing': 'Alles ist freigeschaltet. Dein Abo verlängert sich automatisch.',
+  'detail.activeRenewing': 'Die Leistungen deines Tarifs sind freigeschaltet. Dein Abo verlängert sich automatisch.',
   'detail.activeEnding': 'Alles bleibt bis zum Ablaufdatum freigeschaltet. Danach endet dein Abo.',
   'detail.inactive': 'Wähle ein passendes Abo, um Lotti Baby vollständig zu nutzen.',
   'plan.admin': 'Admin-Zugang',
@@ -51,7 +60,7 @@ const de = {
   'plans.eyebrow': 'TARIFE & LEISTUNGEN',
   'plans.title.active': 'Passt dein Abo noch zu euch?',
   'plans.title.inactive': 'Finde das Abo, das zu euch passt',
-  'plans.description.active': 'Vergleiche Standard und Premium oder wechsle zu einem anderen Tarif.',
+  'plans.description.active': 'Vergleiche Lite und Premium oder wechsle zu einem anderen Tarif.',
   'plans.description.inactive': 'Vergleiche alle Tarife und wähle den Umfang, der euren Alltag am besten begleitet.',
   'plans.button.active': 'Alle Abos ansehen',
   'plans.button.inactive': 'Abo auswählen',
@@ -88,6 +97,15 @@ export type SubscriptionTranslationKey = keyof typeof de;
 type Catalog = Record<SubscriptionTranslationKey, string>;
 
 const en: Catalog = {
+  'family.unknown': 'Access not currently confirmed',
+  'family.plan': "{{tier}} · Family subscription",
+  'family.status': "Active through your family subscription",
+  'family.detail': "Your linked partner shares this plan with you. The person who purchased the subscription manages billing and cancellation.",
+  'family.renewal': "Managed by the subscriber",
+  'family.refresh': "Refresh access",
+  'family.alsoOwn': "You also have family access. This does not automatically cancel your own subscription. You can still manage it in its original store.",
+  'family.unavailable': "Family access could not be confirmed. Please refresh access when you are connected to the internet.",
+
   'screen.title': 'Subscription',
   'screen.subtitle': 'Your access to Lotti Baby',
   'screen.loading': 'Loading subscription status …',
@@ -100,7 +118,7 @@ const en: Catalog = {
   'status.noSubscription': 'No active subscription right now',
   'detail.admin': 'Lotti Baby is unlocked for this account without a store subscription.',
   'detail.special': 'Your “{{role}}” special access unlocks Lotti Baby without a store purchase.',
-  'detail.activeRenewing': 'Everything is unlocked. Your subscription renews automatically.',
+  'detail.activeRenewing': 'The features included in your plan are unlocked. Your subscription renews automatically.',
   'detail.activeEnding': 'Everything remains unlocked until the expiration date. Your subscription will then end.',
   'detail.inactive': 'Choose the plan that suits you to use all of Lotti Baby.',
   'plan.admin': 'Admin access',
@@ -128,7 +146,7 @@ const en: Catalog = {
   'plans.eyebrow': 'PLANS & FEATURES',
   'plans.title.active': 'Does your plan still suit you?',
   'plans.title.inactive': 'Find the plan that suits you',
-  'plans.description.active': 'Compare Standard and Premium or switch to a different plan.',
+  'plans.description.active': 'Compare Lite and Premium or switch to a different plan.',
   'plans.description.inactive': 'Compare all plans and choose the level that best supports your family life.',
   'plans.button.active': 'View all plans',
   'plans.button.inactive': 'Choose a plan',
@@ -162,6 +180,15 @@ const en: Catalog = {
 };
 
 const es: Catalog = {
+  'family.unknown': 'Acceso sin confirmar',
+  'family.plan': "{{tier}} · Suscripción familiar",
+  'family.status': "Acceso mediante tu suscripción familiar",
+  'family.detail': "Tu pareja vinculada comparte este plan contigo. La persona que contrató la suscripción gestiona los pagos y la cancelación.",
+  'family.renewal': "A cargo del titular",
+  'family.refresh': "Actualizar acceso",
+  'family.alsoOwn': "También tienes acceso familiar. Esto no cancela automáticamente tu propia suscripción. Puedes seguir gestionándola en la tienda de origen.",
+  'family.unavailable': "No se ha podido confirmar el acceso familiar. Actualiza el acceso cuando tengas conexión a internet.",
+
   'screen.title': 'Suscripción',
   'screen.subtitle': 'Tu acceso a Lotti Baby',
   'screen.loading': 'Cargando el estado de la suscripción …',
@@ -174,7 +201,7 @@ const es: Catalog = {
   'status.noSubscription': 'Ahora mismo no hay una suscripción activa',
   'detail.admin': 'Lotti Baby está desbloqueado para esta cuenta sin una suscripción de la tienda.',
   'detail.special': 'Tu acceso especial «{{role}}» desbloquea Lotti Baby sin una compra en la tienda.',
-  'detail.activeRenewing': 'Todo está desbloqueado. Tu suscripción se renueva automáticamente.',
+  'detail.activeRenewing': 'Las funciones incluidas en tu plan están desbloqueadas. Tu suscripción se renueva automáticamente.',
   'detail.activeEnding': 'Todo seguirá desbloqueado hasta la fecha de vencimiento. Después finalizará tu suscripción.',
   'detail.inactive': 'Elige el plan que mejor se adapte a ti para disfrutar de todo Lotti Baby.',
   'plan.admin': 'Acceso de administración',
@@ -202,7 +229,7 @@ const es: Catalog = {
   'plans.eyebrow': 'PLANES Y FUNCIONES',
   'plans.title.active': '¿Tu plan sigue encajando contigo?',
   'plans.title.inactive': 'Encuentra el plan ideal para ti',
-  'plans.description.active': 'Compara Estándar y Premium o cambia a otro plan.',
+  'plans.description.active': 'Compara Lite y Premium o cambia a otro plan.',
   'plans.description.inactive': 'Compara todos los planes y elige el que mejor acompañe a tu familia.',
   'plans.button.active': 'Ver todos los planes',
   'plans.button.inactive': 'Elegir un plan',

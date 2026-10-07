@@ -70,6 +70,7 @@ export const generateAiText = async (
       },
       body: JSON.stringify({
         model: MODEL,
+        store: false,
         max_tokens: 300,
         temperature: 0.7,
         response_format: { type: 'json_object' },

@@ -114,9 +114,11 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // EAS injects its remote keystore via eas-build.gradle before packaging.
+            // Local debug-signed release APKs require an explicit opt-in.
+            if (findProperty('lotti.allowDebugReleaseSigning') == 'true') {
+                signingConfig signingConfigs.debug
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
@@ -133,6 +135,21 @@ android {
     }
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+// Check the effective config after EAS has injected signing, not during evaluation.
+gradle.taskGraph.whenReady { graph ->
+    def packagesRelease = graph.allTasks.any {
+        it.project == project && it.name in ['packageRelease', 'packageReleaseBundle', 'signReleaseBundle']
+    }
+    if (packagesRelease && findProperty('lotti.allowDebugReleaseSigning') != 'true') {
+        def signing = android.buildTypes.release.signingConfig
+        if (signing == null || signing.storeFile == null ||
+            signing.storeFile.canonicalFile == android.signingConfigs.debug.storeFile.canonicalFile ||
+            signing.keyAlias == 'androiddebugkey') {
+            throw new GradleException('Release signing is missing or uses the debug key. Use EAS with existing remote credentials. For a local smoke APK only, explicitly pass -Plotti.allowDebugReleaseSigning=true.')
+        }
     }
 }
 

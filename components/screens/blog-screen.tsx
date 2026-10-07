@@ -382,7 +382,7 @@ export default function BlogScreen() {
   const hero = (
     <View style={[styles.hero, { backgroundColor: isDarkMode ? '#3A2E2A' : '#FFE7D6' }]}>
       <TouchableOpacity style={styles.heroImageContainer} onPress={openInstagram} activeOpacity={0.8}>
-        <Image source={require('@/assets/images/LottiPic.png')} style={styles.heroImage} />
+        <Image source={require('@/assets/images/LottiPic.jpg')} style={styles.heroImage} />
       </TouchableOpacity>
       <View style={styles.heroBubbleTwo} />
       <View style={styles.heroTextBlock}>

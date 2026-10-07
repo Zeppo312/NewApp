@@ -1,4 +1,5 @@
 import * as Crypto from "expo-crypto";
+import { requireDataConsent } from '@/lib/dataConsents';
 
 import { supabase } from "@/lib/supabase";
 import {
@@ -61,6 +62,7 @@ export const askLotti = async (
   // A cryptographically random id makes one tap one billable request. The
   // database rejects accidental or malicious replays atomically.
   const requestId = Crypto.randomUUID();
+  await requireDataConsent('ai');
   const { data, error } = await supabase.functions.invoke<AskLottiResponse>(
     "ask-lotti",
     {

@@ -4,12 +4,14 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BabyInfo, createBaby, listBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
+import { refreshBabyListWithRetry, type BabyListLoadResult } from '@/lib/babyListLoading';
 import {
   getActiveBabyResolutionScope,
   isResolutionCurrent,
@@ -44,8 +46,21 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   const [resolvedScope, setResolvedScope] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const currentScope = getActiveBabyResolutionScope(user?.id);
+  const isDataForCurrentUser = isResolutionCurrent(resolvedScope, currentScope);
   const isReadyForCurrentUser =
-    isReady && isResolutionCurrent(resolvedScope, currentScope);
+    isReady && isDataForCurrentUser;
+  const userId = user?.id;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const latestState = useRef({ babies, activeBabyId, resolvedScope });
+  latestState.current = { babies, activeBabyId, resolvedScope };
+  const selectionRevision = useRef(0);
+  const pendingLoad = useRef<{
+    userId: string;
+    forced: boolean;
+    controller: AbortController;
+    promise: Promise<void>;
+  } | null>(null);
 
   const getActiveBabyStorageKey = useCallback((userId: string) => {
     return `${ACTIVE_BABY_STORAGE_KEY_PREFIX}:${userId}`;
@@ -103,7 +118,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
   /**
    * Resolves which baby should be active:
-   * 1) Stored baby id (AsyncStorage)
+   * 1) Current selection, then stored baby id (AsyncStorage)
    * 2) First baby in list
    * 3) null
    *
@@ -111,37 +126,42 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
    * - Returns resolvedId so caller can decide when state is stable
    */
   const resolveActiveBabyId = useCallback(
-    async (nextBabies: BabyInfo[]): Promise<string | null> => {
+    async (nextBabies: BabyInfo[], isCurrent: () => boolean): Promise<string | null> => {
       if (!user?.id) {
-        setActiveBabyIdState(null);
         return null;
       }
 
       const scopedStorageKey = getActiveBabyStorageKey(user.id);
+      const revision = selectionRevision.current;
       const storedId =
         await AsyncStorage.getItem(scopedStorageKey) ??
         await AsyncStorage.getItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+      if (!isCurrent() || revision !== selectionRevision.current) return latestState.current.activeBabyId;
       const firstWithBirthDate = nextBabies.find((b) => Boolean(b.birth_date))?.id ?? null;
+      const currentId = latestState.current.resolvedScope === currentScope
+        ? latestState.current.activeBabyId
+        : null;
 
       const resolvedId =
+        nextBabies.find((b) => b.id === currentId)?.id ??
         nextBabies.find((b) => b.id === storedId)?.id ??
         firstWithBirthDate ??
         nextBabies[0]?.id ??
         null;
 
-      setActiveBabyIdState(resolvedId);
-
       await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
+      if (!isCurrent() || revision !== selectionRevision.current) return latestState.current.activeBabyId;
 
       if (resolvedId) {
         await AsyncStorage.setItem(scopedStorageKey, resolvedId);
       } else {
         await AsyncStorage.removeItem(scopedStorageKey);
       }
+      if (!isCurrent() || revision !== selectionRevision.current) return latestState.current.activeBabyId;
 
       return resolvedId;
     },
-    [getActiveBabyStorageKey, user?.id],
+    [currentScope, getActiveBabyStorageKey, user?.id],
   );
 
   /**
@@ -151,131 +171,182 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
    *
    * OPTIMIZATION: Nutzt Cache für schnelles Laden (5 Min Cache)
    */
-  const loadBabies = useCallback(async (forceRefresh = false) => {
-    if (!user) {
+  const loadBabies = useCallback((forceRefresh = false): Promise<void> => {
+    if (!userId) {
+      pendingLoad.current?.controller.abort();
+      pendingLoad.current = null;
       setBabies([]);
       setActiveBabyIdState(null);
       setIsLoading(false);
       setIsReady(true);
       setResolvedScope(getActiveBabyResolutionScope(null));
       setLoadError(null);
-      return;
+      return Promise.resolve();
     }
 
-    setIsLoading(true);
-    setIsReady(false);
-
-    const { data, error } = await listBabies(forceRefresh);
-    if (error) {
-      console.error('Error loading babies:', error);
-      setBabies([]);
-      setActiveBabyIdState(null);
+    const existing = pendingLoad.current;
+    if (existing?.userId === userId && !existing.controller.signal.aborted && (!forceRefresh || existing.forced)) return existing.promise;
+    existing?.controller.abort();
+    const request = {
+      userId,
+      forced: forceRefresh,
+      controller: new AbortController(),
+      promise: Promise.resolve(),
+    };
+    pendingLoad.current = request;
+    const isCurrent = () => pendingLoad.current === request &&
+      userIdRef.current === userId && !request.controller.signal.aborted;
+    const scope = getActiveBabyResolutionScope(userId);
+    const handleError = (result: BabyListLoadResult) => {
+      if (!isCurrent()) return;
+      const canKeepExisting = result.retryable === true &&
+        latestState.current.resolvedScope === scope && latestState.current.babies.length > 0;
+      if (!canKeepExisting) {
+        setBabies([]);
+        setActiveBabyIdState(null);
+      }
       setIsLoading(false);
       setIsReady(true);
-      setResolvedScope(getActiveBabyResolutionScope(user.id));
-      setLoadError(formatLoadError(error));
-      return;
-    }
+      setResolvedScope(scope);
+      setLoadError(formatLoadError(result.error));
+    };
+    const readFresh = () => refreshBabyListWithRetry(
+      (signal) => listBabies(true, signal), request.controller.signal,
+    );
 
-    let nextBabies = data ?? [];
-    setLoadError(null);
-
-    // Try to pull shared babies from linked accounts before creating a placeholder
-    if (nextBabies.length === 0) {
-      const syncResult = await syncBabiesForLinkedUsers();
-      if (syncResult.success) {
-        const { data: reloaded } = await listBabies(true);
-        nextBabies = reloaded ?? [];
+    request.promise = (async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      // Refreshing the selector must not invalidate a usable active child.
+      if (latestState.current.resolvedScope !== scope || latestState.current.babies.length === 0) {
+        setIsReady(false);
       }
-    }
 
-    // Skip auto-creation while the profile is unfinished (early onboarding)
-    if (nextBabies.length === 0) {
-      try {
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('first_name')
-          .eq('id', user.id)
-          .maybeSingle();
+      const result = forceRefresh ? await readFresh() : await listBabies(false, request.controller.signal);
+      if (!isCurrent()) return;
+      if (result.error) { handleError(result); return; }
 
-        if (!profileError || profileError?.code === 'PGRST116') {
-          if (!profileData || !profileData.first_name) {
+      let nextBabies = result.data ?? [];
+      setLoadError(null);
+
+      // Try to pull shared babies from linked accounts before creating a placeholder
+      if (nextBabies.length === 0) {
+        const syncResult = await syncBabiesForLinkedUsers();
+        if (!isCurrent()) return;
+        if (syncResult.success) {
+          const reloaded = await readFresh();
+          if (!isCurrent()) return;
+          if (reloaded.error) { handleError(reloaded); return; }
+          nextBabies = reloaded.data ?? [];
+        }
+      }
+
+      // Skip auto-creation while the profile is unfinished (early onboarding)
+      if (nextBabies.length === 0) {
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('first_name')
+            .eq('id', userId)
+            .maybeSingle();
+          if (!isCurrent()) return;
+
+          if (!profileError || profileError?.code === 'PGRST116') {
+            if (!profileData || !profileData.first_name) {
+              setBabies([]);
+              setActiveBabyIdState(null);
+              setIsLoading(false);
+              setIsReady(true);
+              setResolvedScope(scope);
+              setLoadError(null);
+              return;
+            }
+          }
+
+          if (profileError && profileError.code !== 'PGRST116') {
             setBabies([]);
             setActiveBabyIdState(null);
             setIsLoading(false);
             setIsReady(true);
-            setResolvedScope(getActiveBabyResolutionScope(user.id));
+            setResolvedScope(scope);
             setLoadError(null);
+            console.error('Error loading profile during baby sync:', profileError);
             return;
           }
+        } catch (profileCheckError) {
+          if (!isCurrent()) return;
+          console.error('Unexpected error during profile check:', profileCheckError);
         }
+      }
 
-        if (profileError && profileError.code !== 'PGRST116') {
+      // Ensure at least one baby exists
+      if (nextBabies.length === 0) {
+        // Give partner sync one final chance before creating a local placeholder baby.
+        const finalSyncResult = await syncBabiesForLinkedUsers();
+        if (!isCurrent()) return;
+        if (finalSyncResult.success) {
+          const reloaded = await readFresh();
+          if (!isCurrent()) return;
+          if (reloaded.error) { handleError(reloaded); return; }
+          nextBabies = reloaded.data ?? [];
+        }
+      }
+
+      if (nextBabies.length === 0) {
+        const skipPlaceholderBabyCreation = await shouldSkipPlaceholderBabyCreation();
+        if (!isCurrent()) return;
+        if (skipPlaceholderBabyCreation) {
           setBabies([]);
           setActiveBabyIdState(null);
           setIsLoading(false);
           setIsReady(true);
-          setResolvedScope(getActiveBabyResolutionScope(user.id));
+          setResolvedScope(scope);
           setLoadError(null);
-          console.error('Error loading profile during baby sync:', profileError);
           return;
         }
-      } catch (profileCheckError) {
-        console.error('Unexpected error during profile check:', profileCheckError);
-      }
-    }
 
-    // Ensure at least one baby exists
-    if (nextBabies.length === 0) {
-      // Give partner sync one final chance before creating a local placeholder baby.
-      const finalSyncResult = await syncBabiesForLinkedUsers();
-      if (finalSyncResult.success) {
-        const { data: reloaded } = await listBabies(true);
-        nextBabies = reloaded ?? [];
-      }
-    }
-
-    if (nextBabies.length === 0) {
-      const skipPlaceholderBabyCreation = await shouldSkipPlaceholderBabyCreation();
-      if (skipPlaceholderBabyCreation) {
-        setBabies([]);
-        setActiveBabyIdState(null);
-        setIsLoading(false);
-        setIsReady(true);
-        setResolvedScope(getActiveBabyResolutionScope(user.id));
-        setLoadError(null);
-        return;
+        const { error: createError } = await createBaby({});
+        if (!isCurrent()) return;
+        if (createError) {
+          console.error('Error creating default baby:', createError);
+          setLoadError(formatLoadError(createError));
+        } else {
+          // Force refresh after creating baby to skip cache
+          const reloaded = await readFresh();
+          if (!isCurrent()) return;
+          if (reloaded.error) { handleError(reloaded); return; }
+          nextBabies = reloaded.data ?? [];
+        }
       }
 
-      const { error: createError } = await createBaby({});
-      if (createError) {
-        console.error('Error creating default baby:', createError);
-        setLoadError(formatLoadError(createError));
-      } else {
-        // Force refresh after creating baby to skip cache
-        const { data: reloaded } = await listBabies(true);
-        nextBabies = reloaded ?? [];
+      const resolvedId = await resolveActiveBabyId(nextBabies, isCurrent);
+      if (!isCurrent()) return;
+      // Commit list and selection together, keeping the old active child usable
+      // while persisted selection is being resolved.
+      setBabies(nextBabies);
+      setActiveBabyIdState(resolvedId);
+
+      if (!resolvedId) {
+        console.warn('[ActiveBaby] No active baby could be resolved');
       }
-    }
 
-    setBabies(nextBabies);
-
-    const resolvedId = await resolveActiveBabyId(nextBabies);
-
-    if (!resolvedId) {
-      console.warn('[ActiveBaby] No active baby could be resolved');
-    }
-
-    setIsLoading(false);
-    setIsReady(true);
-    setResolvedScope(getActiveBabyResolutionScope(user.id));
-  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, user]);
+      setIsLoading(false);
+      setIsReady(true);
+      setResolvedScope(scope);
+    })().catch((error: unknown) => {
+      handleError({ data: null, error, retryable: false });
+    }).finally(() => {
+      if (pendingLoad.current === request) pendingLoad.current = null;
+    });
+    return request.promise;
+  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, userId]);
 
   /**
    * Initial load + reload on login change
    */
   useEffect(() => {
-    loadBabies();
+    void loadBabies();
+    return () => { pendingLoad.current?.controller.abort(); };
   }, [loadBabies]);
 
   /**
@@ -288,9 +359,12 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
 
     setIsReady(false);
 
+    selectionRevision.current += 1;
+    latestState.current.activeBabyId = babyId;
     setActiveBabyIdState(babyId);
     await AsyncStorage.removeItem(ACTIVE_BABY_STORAGE_KEY_PREFIX);
     await AsyncStorage.setItem(getActiveBabyStorageKey(user.id), babyId);
+    if (userIdRef.current !== user.id) return;
 
     setIsReady(true);
     setResolvedScope(getActiveBabyResolutionScope(user.id));
@@ -308,10 +382,10 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <ActiveBabyContext.Provider
       value={{
-        babies,
-        activeBabyId,
-        activeBaby,
-        isLoading,
+        babies: isDataForCurrentUser ? babies : [],
+        activeBabyId: isDataForCurrentUser ? activeBabyId : null,
+        activeBaby: isDataForCurrentUser ? activeBaby : null,
+        isLoading: isLoading || !isDataForCurrentUser,
         isReady: isReadyForCurrentUser,
         loadError,
         setActiveBabyId,

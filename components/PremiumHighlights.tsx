@@ -16,7 +16,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import { useFontScale } from '@/lib/fontScaling';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -206,7 +206,12 @@ const PremiumHighlights: React.FC<Props> = ({ items, onUnlock }) => {
   return (
     <View style={styles.wrapper}>
       <View style={styles.panel}>
-        <BlurView style={StyleSheet.absoluteFill} intensity={40} tint="dark" />
+        <HomeGlassSurface
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          intensity={40}
+          tint="dark"
+        />
         <LinearGradient
           colors={PANEL_GRADIENT}
           start={{ x: 0, y: 0 }}
@@ -242,21 +247,23 @@ const PremiumHighlights: React.FC<Props> = ({ items, onUnlock }) => {
           <Sparkle key={`${sparkle.left}-${sparkle.top}`} {...sparkle} />
         ))}
 
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {hasLockedItems ? '🔒 ' : ''}Lotti <Text style={styles.headerTitleAccent}>Premium</Text>
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {hasLockedItems
-              ? { de: 'Mit Lotti Premium freischalten', en: 'Unlock with Lotti Premium', es: 'Desbloquear con Lotti Premium' }[locale]
-              : { de: 'Exklusiv für dich freigeschaltet', en: 'Unlocked exclusively for you', es: 'Desbloqueado en exclusiva para ti' }[locale]}
-          </Text>
-        </View>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>
+              {hasLockedItems ? '🔒 ' : ''}Lotti <Text style={styles.headerTitleAccent}>Premium</Text>
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {hasLockedItems
+                ? { de: 'Mit Lotti Premium freischalten', en: 'Unlock with Lotti Premium', es: 'Desbloquear con Lotti Premium' }[locale]
+                : { de: 'Exklusiv für dich freigeschaltet', en: 'Unlocked exclusively for you', es: 'Desbloqueado en exclusiva para ti' }[locale]}
+            </Text>
+          </View>
 
-        <View style={[styles.featureRow, isStacked ? styles.featureRowStacked : null]}>
-          {items.map((item, index) => (
-            <FeatureButton key={item.key} item={item} pulseDelay={index * 700} onUnlock={onUnlock} />
-          ))}
+          <View style={[styles.featureRow, isStacked ? styles.featureRowStacked : null]}>
+            {items.map((item, index) => (
+              <FeatureButton key={item.key} item={item} pulseDelay={index * 700} onUnlock={onUnlock} />
+            ))}
+          </View>
         </View>
       </View>
     </View>
@@ -273,14 +280,18 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    ...androidHomeShadow,
   },
   panel: {
     borderRadius: 28,
-    paddingVertical: 20,
-    paddingHorizontal: 18,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.28)',
+  },
+  content: {
+    // Keep padding off the clipped backdrop so Android fills the whole panel.
+    paddingVertical: 20,
+    paddingHorizontal: 18,
   },
   shimmerStrip: {
     position: 'absolute',

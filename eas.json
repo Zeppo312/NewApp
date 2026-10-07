@@ -10,15 +10,22 @@
       "channel": "development",
       "environment": "development",
       "env": {
-        "SENTRY_ALLOW_FAILURE": "true"
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "environment": "preview",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "remote",
+        "image": "ubuntu-26.04-jdk-17-ndk-r27b-sdk-57"
+      },
       "env": {
-        "SENTRY_ALLOW_FAILURE": "true"
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
       }
     },
     "preview-testflight": {
@@ -27,15 +34,41 @@
       "environment": "preview",
       "autoIncrement": true,
       "env": {
-        "SENTRY_ALLOW_FAILURE": "true"
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "environment": "production",
+      "android": {
+        "buildType": "app-bundle",
+        "credentialsSource": "remote",
+        "image": "ubuntu-26.04-jdk-17-ndk-r27b-sdk-57"
+      },
       "env": {
-        "SENTRY_ALLOW_FAILURE": "true"
+        "SENTRY_ALLOW_FAILURE": "true",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
+    },
+    "store-internal": {
+      "extends": "production",
+      "distribution": "store",
+      "channel": "store-internal",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
+    },
+    "release-candidate": {
+      "extends": "production",
+      "distribution": "store",
+      "channel": "release-candidate-20261003",
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_ENV": "production",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
       }
     },
     "development-simulator": {
@@ -44,7 +77,47 @@
       "ios": {
         "simulator": true
       },
-      "environment": "development"
+      "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
+    },
+    "family-qa-android": {
+      "extends": "preview",
+      "channel": "family-subscription-qa",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_ENV": "family-qa",
+        "EXPO_PUBLIC_QA_PROJECT_REF": "ggyonianphloycmqrwvj",
+        "EXPO_PUBLIC_QA_SUPABASE_URL": "https://ggyonianphloycmqrwvj.supabase.co",
+        "EXPO_PUBLIC_QA_SUPABASE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW9uaWFucGhsb3ljbXFyd3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzODQ5NDUsImV4cCI6MjEwNDk2MDk0NX0.EzlEKubJvJIXY0fExhCgShPd8omMDVwPTTJi3lgMk9c",
+        "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_jlVDvgKXjYwzNvYCvJnQsThTRaQ",
+        "EXPO_PUBLIC_RC_IOS_KEY": "appl_uUfmpELgczBXGRShafaEOoKyVIf",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
+    },
+    "family-qa-ios": {
+      "extends": "preview-testflight",
+      "channel": "family-subscription-qa",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_ENV": "family-qa",
+        "EXPO_PUBLIC_QA_PROJECT_REF": "ggyonianphloycmqrwvj",
+        "EXPO_PUBLIC_QA_SUPABASE_URL": "https://ggyonianphloycmqrwvj.supabase.co",
+        "EXPO_PUBLIC_QA_SUPABASE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneW9uaWFucGhsb3ljbXFyd3ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzODQ5NDUsImV4cCI6MjEwNDk2MDk0NX0.EzlEKubJvJIXY0fExhCgShPd8omMDVwPTTJi3lgMk9c",
+        "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_jlVDvgKXjYwzNvYCvJnQsThTRaQ",
+        "EXPO_PUBLIC_RC_IOS_KEY": "appl_uUfmpELgczBXGRShafaEOoKyVIf",
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
+    },
+    "family-qa-play": {
+      "extends": "family-qa-android",
+      "distribution": "store",
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_DATA_CONSENTS_ENABLED": "true"
+      }
     }
   },
   "submit": {

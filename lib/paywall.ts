@@ -11,7 +11,7 @@ import { DEFAULT_PAYWALL_TRIAL_DAYS } from './paywallDefaults';
 import { getCachedPaywallContent, getPaywallTrialDays } from './paywallContent';
 import { shouldShowPaywallForState } from './paywallDecision';
 
-export { shouldShowPaywallForState } from './paywallDecision';
+export { shouldShowPaywallForState, shouldRedirectToPaywallForState } from './paywallDecision';
 
 export const PAYWALL_INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 Stunden
 export const PAYWALL_TRIAL_DAYS = DEFAULT_PAYWALL_TRIAL_DAYS;
@@ -48,7 +48,7 @@ const mapRowToState = (
 ): PaywallState => {
   const isPro = premiumStatus.status === 'active';
   const accessReason: PaywallAccessReason = isPro
-    ? 'subscription'
+    ? premiumStatus.source === 'family' ? 'family_subscription' : 'subscription'
     : isAdmin
       ? 'admin'
       : paywallAccessRole ?? 'none';
@@ -69,12 +69,18 @@ const mapRowToState = (
   };
 };
 
-export const fetchPaywallState = async (): Promise<PaywallState> => {
-  const { data: userData } = await getCachedUser();
+export const fetchPaywallState = async (expectedUserId?: string): Promise<PaywallState> => {
+  const { data: userData, error: userError } = await getCachedUser();
+  if (expectedUserId && userData.user?.id !== expectedUserId) {
+    // An Auth cache from another account must never verify the current session.
+    throw new Error('paywall_session_changed');
+  }
   if (!userData.user) {
     return {
       isPro: false,
-      subscriptionStatus: 'inactive',
+      // getUser() fragt den Auth-Server ab. Ein Netzfehler bedeutet nicht,
+      // dass die laufende Sitzung oder ihr Abo beendet wurde.
+      subscriptionStatus: userError ? 'unavailable' : 'inactive',
       isAdmin: false,
       paywallAccessRole: null,
       accessReason: 'none',
@@ -100,7 +106,7 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       ? profile.paywall_access_role
       : null;
     const trialDays = getPaywallTrialDays(paywallContent.content);
-    return mapRowToState(
+    const state = mapRowToState(
       settings,
       premiumStatus,
       isAdmin,
@@ -108,6 +114,12 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
       accountCreatedAt,
       trialDays,
     );
+    // Nach einem Profilfehler ist auch eine Sonderrolle nicht verlässlich
+    // ausgeschlossen. Nicht aus dem fehlenden Datensatz auf "kein Zugang"
+    // schließen und während eines Netzausfalls die Paywall erzwingen.
+    return !profile && !state.isPro
+      ? { ...state, subscriptionStatus: 'unavailable' }
+      : state;
   } catch (err) {
     console.error('Exception while fetching paywall state:', err);
     return {
@@ -126,8 +138,9 @@ export const fetchPaywallState = async (): Promise<PaywallState> => {
 
 export const shouldShowPaywall = async (
   intervalMs: number = PAYWALL_INTERVAL_MS,
+  expectedUserId?: string,
 ): Promise<{ shouldShow: boolean; state: PaywallState }> => {
-  const state = await fetchPaywallState();
+  const state = await fetchPaywallState(expectedUserId);
   return {
     shouldShow: shouldShowPaywallForState(state, intervalMs),
     state,

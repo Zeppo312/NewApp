@@ -155,6 +155,8 @@ const de = {
   'target.group_message': 'Gruppen-Nachricht',
   'target.direct_message': 'Direktnachricht',
   'target.profile': 'Profil',
+  'target.ai_answer': 'KI-Antwort (Frag Lotti)',
+  'admin.resolveAiAnswer': 'Als geprüft abschließen',
 };
 
 export type ModerationTranslationKey = keyof typeof de;
@@ -311,6 +313,8 @@ const en: Catalog = {
   'target.group_message': 'Group message',
   'target.direct_message': 'Direct message',
   'target.profile': 'Profile',
+  'target.ai_answer': 'AI answer (Ask Lotti)',
+  'admin.resolveAiAnswer': 'Mark as reviewed',
 };
 
 const es: Catalog = {
@@ -464,6 +468,8 @@ const es: Catalog = {
   'target.group_message': 'Mensaje de grupo',
   'target.direct_message': 'Mensaje directo',
   'target.profile': 'Perfil',
+  'target.ai_answer': 'Respuesta de IA (Pregunta a Lotti)',
+  'admin.resolveAiAnswer': 'Marcar como revisada',
 };
 
 const MODERATION_TRANSLATIONS: Record<AppLocale, Catalog> = { de, en, es };

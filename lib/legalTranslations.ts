@@ -1,18 +1,19 @@
 import type { AppLocale } from '@/lib/localization';
+import appPrivacySections from '@/lib/appPrivacySections.json';
 
 export type LegalSection = { title: string; paragraphs?: string[]; bullets?: string[] };
 export type LegalDocument = { headerTitle: string; headerSubtitle: string; pageTitle: string; updated?: string; sections: LegalSection[] };
 
 const privacy: Record<'en' | 'es', LegalDocument> = {
   en: {
-    headerTitle: 'Privacy', headerSubtitle: 'Privacy policy', pageTitle: 'Privacy policy', updated: 'Last updated: February 3, 2026',
+    headerTitle: 'Privacy', headerSubtitle: 'Privacy policy', pageTitle: 'Privacy policy', updated: 'Last updated: September 11, 2026',
     sections: [
       { title: 'Introduction', paragraphs: ['This policy explains what personal data we process, for which purposes, and to what extent when providing Lotti Baby, our websites, mobile applications, and related online presences. Terms apply to all people regardless of gender.'] },
       { title: 'Controller', paragraphs: ['Laura-Michelle Zeppenfeld, Tilburger Str. 31, 28259 Bremen, Germany', 'Email: support@lottibaby.de'] },
+      ...appPrivacySections.en,
       { title: 'Data and people concerned', paragraphs: ['We may process account, contact, content, usage, device, communication, process, and log data relating to users and communication partners.'], bullets: ['Purposes include providing contractual services, communication, account login, security, administration, feedback, user-friendly operation, and technical infrastructure.'] },
       { title: 'Legal bases', bullets: ['Consent (Art. 6(1)(a) GDPR).', 'Performance of a contract and pre-contractual requests (Art. 6(1)(b) GDPR).', 'Compliance with legal obligations (Art. 6(1)(c) GDPR), where applicable.', 'Legitimate interests in secure, reliable, and user-friendly operation (Art. 6(1)(f) GDPR).'] },
       { title: 'Security', paragraphs: ['We use appropriate technical and organizational safeguards based on risk, including access controls, encrypted transmission, data minimization, availability measures, and procedures for exercising data-subject rights.'] },
-      { title: 'Recipients and processors', paragraphs: ['Data is shared only where needed for the service, required by law, based on consent, or covered by a valid processing agreement. Service providers may include hosting and database infrastructure, authentication providers, notification services, weather data from Open-Meteo, and an AI service for personalized Care wording when that feature is enabled.'], bullets: ['Approximate weather location is rounded to about 1 km; precise location is not sent to Open-Meteo.', "Care may send daily values (sleep, feeds, diapers, weather), plus the baby's first name and age, to an AI service for personalized wording.", 'The at-my-limit selection is stored in your account but is not sent to the AI service.'] },
       { title: 'International transfers', paragraphs: ['If data is processed outside the EU/EEA, we use an adequacy decision, EU Standard Contractual Clauses, another legally recognized safeguard, or your explicit consent as required.'] },
       { title: 'Storage and deletion', paragraphs: ['We retain personal data only for as long as required for its purpose, contractual obligations, legal retention periods, security, or the establishment and defense of claims. Data is deleted or anonymized when the purpose and retention obligations no longer apply. Backups may be removed on a delayed cycle.'] },
       { title: 'Your rights', bullets: ['Withdraw consent at any time for the future.', 'Object to processing based on legitimate interests and to direct marketing.', 'Request access, correction, deletion, restriction, and data portability.', 'Lodge a complaint with a competent data protection authority.'] },
@@ -27,14 +28,14 @@ const privacy: Record<'en' | 'es', LegalDocument> = {
     ],
   },
   es: {
-    headerTitle: 'Privacidad', headerSubtitle: 'Política de privacidad', pageTitle: 'Política de privacidad', updated: 'Última actualización: 3 de febrero de 2026',
+    headerTitle: 'Privacidad', headerSubtitle: 'Política de privacidad', pageTitle: 'Política de privacidad', updated: 'Última actualización: 11 de septiembre de 2026',
     sections: [
       { title: 'Introducción', paragraphs: ['Esta política explica qué datos personales tratamos, con qué fines y en qué medida al ofrecer Lotti Baby, nuestros sitios web, aplicaciones móviles y presencias en línea relacionadas. Los términos se aplican a todas las personas con independencia de su género.'] },
       { title: 'Responsable', paragraphs: ['Laura-Michelle Zeppenfeld, Tilburger Str. 31, 28259 Bremen, Alemania', 'Correo electrónico: support@lottibaby.de'] },
+      ...appPrivacySections.es,
       { title: 'Datos y personas afectadas', paragraphs: ['Podemos tratar datos de cuenta, contacto, contenido, uso, dispositivo, comunicación, procedimiento y registro relativos a usuarios y contactos.'], bullets: ['Los fines incluyen prestar los servicios contratados, comunicación, inicio de sesión, seguridad, administración, comentarios, facilidad de uso e infraestructura técnica.'] },
       { title: 'Bases jurídicas', bullets: ['Consentimiento (art. 6.1.a del RGPD).', 'Ejecución de un contrato y medidas precontractuales (art. 6.1.b del RGPD).', 'Cumplimiento de obligaciones legales (art. 6.1.c del RGPD), cuando corresponda.', 'Intereses legítimos en un funcionamiento seguro, fiable y fácil de usar (art. 6.1.f del RGPD).'] },
       { title: 'Seguridad', paragraphs: ['Aplicamos medidas técnicas y organizativas adecuadas al riesgo, como controles de acceso, transmisión cifrada, minimización de datos, medidas de disponibilidad y procedimientos para ejercer los derechos de las personas.'] },
-      { title: 'Destinatarios y encargados', paragraphs: ['Solo compartimos datos cuando es necesario para el servicio, lo exige la ley, existe consentimiento o hay un contrato válido de encargo. Los proveedores pueden incluir alojamiento y bases de datos, autenticación, notificaciones, información meteorológica de Open-Meteo y un servicio de IA para personalizar los textos de Cuidados cuando la función está activada.'], bullets: ['La ubicación meteorológica aproximada se redondea a unos 1 km; no se envía la posición exacta a Open-Meteo.', 'Cuidados puede enviar valores diarios (sueño, tomas, pañales y tiempo), además del nombre y la edad del bebé, a un servicio de IA para personalizar el texto.', 'La selección del modo al límite se guarda en tu cuenta, pero no se envía al servicio de IA.'] },
       { title: 'Transferencias internacionales', paragraphs: ['Si se tratan datos fuera de la UE/EEE, usamos una decisión de adecuación, las cláusulas contractuales tipo de la UE, otra garantía reconocida o tu consentimiento explícito, según corresponda.'] },
       { title: 'Conservación y supresión', paragraphs: ['Conservamos los datos solo durante el tiempo necesario para su finalidad, obligaciones contractuales o legales, seguridad o defensa de reclamaciones. Después se eliminan o anonimizan. Las copias de seguridad pueden borrarse con cierto retraso.'] },
       { title: 'Tus derechos', bullets: ['Retirar el consentimiento en cualquier momento para el futuro.', 'Oponerte al tratamiento basado en intereses legítimos y al marketing directo.', 'Solicitar acceso, rectificación, supresión, limitación y portabilidad.', 'Presentar una reclamación ante una autoridad de protección de datos competente.'] },

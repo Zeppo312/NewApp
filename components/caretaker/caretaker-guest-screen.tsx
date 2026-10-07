@@ -77,7 +77,7 @@ function GuestFlow({ initialCode }: { initialCode: string }) {
   return <ThemedBackground style={{ flex: 1 }}>
     <Stack.Screen options={{ headerShown: false, gestureEnabled: step !== 'session' }} />
     <SafeAreaView style={{ flex: 1 }}>
-      <Header title={step === 'session' ? (trackingTab === 'sleep' ? translateSleepTrackerText(s.locale, 'screen.title') : translateDailyText(s.locale, 'screen.title')) : step === 'scan' ? t.scanCode : t.guestEntry} subtitle={step === 'session' ? t.subtitle : t.guestHint}
+      <Header topSafeAreaHandled title={step === 'session' ? (trackingTab === 'sleep' ? translateSleepTrackerText(s.locale, 'screen.title') : translateDailyText(s.locale, 'screen.title')) : step === 'scan' ? t.scanCode : t.guestEntry} subtitle={step === 'session' ? t.subtitle : t.guestHint}
         showBabySwitcher={false} showBackButton onBackPress={() => {
           if (busy) return;
           if (step !== 'manual') setStep('manual');

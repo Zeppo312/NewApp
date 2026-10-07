@@ -4,7 +4,6 @@ import {
   AlertButton,
   Animated,
   Easing,
-  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -50,6 +49,11 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     es: { error: 'Error', switchFailed: 'No se pudo cambiar el niño activo.', child: 'Niño', createFailed: 'No se pudo crear el nuevo niño.', pregnancyFailed: 'No se pudo preparar el embarazo.', deleteFailed: 'No se pudo eliminar el niño.', notPossible: 'No es posible', needOne: 'Necesitas al menos un niño en la aplicación.', deleteQuestion: '¿Eliminar niño?', deleteBody: (name: string) => `¿Seguro que quieres eliminar a «${name}»? Esta acción no se puede deshacer.`, cancel: 'Cancelar', delete: 'Eliminar', editOpenFailed: 'No se pudo abrir el niño para editarlo.', edit: 'Editar', deleteChild: 'Eliminar niño', manage: (name: string) => `Gestionar «${name}»`, whatDo: '¿Qué quieres hacer?', cannotDelete: (name: string) => `No se puede eliminar a «${name}» porque debe quedar al menos un niño.`, permission: 'Permiso necesario', photoPermission: 'Permite el acceso a tus fotos.', imageProcess: 'No se pudo procesar la imagen.', imageSave: 'No se pudo guardar la foto del bebé.', imageChange: 'No se pudo cambiar la foto del bebé.', select: 'Seleccionar niño', none: 'No se encontraron niños.', active: 'Activo', activeChild: 'Niño activo', updating: 'Actualizando foto…', changeImage: 'Cambiar foto', view: 'Vista', pregnancyMode: 'Ver modo embarazo', babyMode: 'Ver modo bebé', temporary: 'Activo temporalmente (máx. 10 minutos)', createNew: 'Crear nuevo', creating: 'Creando…', createChild: 'Añadir niño', preparing: 'Preparando…', createPregnancy: 'Añadir embarazo' },
   }[locale];
   const colorScheme = useColorScheme() ?? 'light';
+  const listCopy = {
+    de: { loading: 'Kinder werden aktualisiert …', failed: 'Kinder konnten nicht aktualisiert werden.', retry: 'Erneut versuchen' },
+    en: { loading: 'Updating children …', failed: 'Could not update children.', retry: 'Try again' },
+    es: { loading: 'Actualizando niños …', failed: 'No se pudieron actualizar los niños.', retry: 'Volver a intentar' },
+  }[locale];
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
   const modalBgColor = isDark ? Colors.dark.cardLight : '#FFF7F3';
@@ -90,6 +94,10 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const [isChangingPhoto, setIsChangingPhoto] = useState(false);
   const modalIsOpen = isOpen ?? internalIsOpen;
 
+  useEffect(() => {
+    if (modalIsOpen && user?.id) void refreshBabies();
+  }, [modalIsOpen, refreshBabies, user?.id]);
+
   const setModalOpen = (nextIsOpen: boolean) => {
     if (isOpen === undefined) {
       setInternalIsOpen(nextIsOpen);
@@ -107,14 +115,15 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
     setModalOpen(false);
 
-    InteractionManager.runAfterInteractions(() => {
+    // Defer navigation so the modal's close update can be processed first.
+    setTimeout(() => {
       if (options?.replace) {
         router.replace(href as any);
         return;
       }
 
       router.push(href as any);
-    });
+    }, 0);
   };
 
   const displayInitial = useMemo(() => {
@@ -432,7 +441,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
           onPressIn={() => animatePress(true)}
           onPressOut={() => animatePress(false)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          disabled={isLoading}
+          disabled={isLoading && babies.length === 0}
         >
          <Animated.View style={[styles.avatarButton, { width: size, height: size, transform: [{ scale: pressScale }] }]}>
           <View
@@ -541,7 +550,14 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
         </TouchableOpacity>
       )}
 
-      <Modal visible={modalIsOpen} transparent animationType="fade" onRequestClose={() => setModalOpen(false)}>
+      <Modal
+        visible={modalIsOpen}
+        transparent
+        statusBarTranslucent
+        navigationBarTranslucent
+        animationType="fade"
+        onRequestClose={() => setModalOpen(false)}
+      >
         <Pressable style={[styles.modalBackdrop, { backgroundColor: backdropColor }]} onPress={() => setModalOpen(false)}>
           <Pressable
             style={[
@@ -558,16 +574,26 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
             </View>
 
             <View style={styles.listContainer}>
-              {!isLoading && babies.length === 0 && (
+              {isLoading && (
+                <ThemedText accessibilityRole="text" style={[styles.emptyStateHint, { color: subtitleColor }]}>
+                  {listCopy.loading}
+                </ThemedText>
+              )}
+              {!isLoading && loadError && (
+                <View style={styles.emptyState}>
+                  <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
+                    {listCopy.failed}
+                  </ThemedText>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => { void refreshBabies(); }}>
+                    <ThemedText style={[styles.retryText, { color: textColor }]}>{listCopy.retry}</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
+              {!isLoading && !loadError && babies.length === 0 && (
                 <View style={styles.emptyState}>
                   <ThemedText style={[styles.emptyStateTitle, { color: textColor }]}>
                     {c.none}
                   </ThemedText>
-                  {loadError && (
-                    <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
-                      {c.error}: {loadError}
-                    </ThemedText>
-                  )}
                 </View>
               )}
               {babies.map((baby, index) => {
@@ -805,6 +831,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     // color wird dynamisch gesetzt
     marginTop: 4,
+  },
+  retryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    paddingVertical: 8,
   },
   babyRow: {
     flexDirection: 'row',

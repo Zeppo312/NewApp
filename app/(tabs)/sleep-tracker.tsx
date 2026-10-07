@@ -18,6 +18,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useFocusEffect , useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
 import { showHistoryLimitAlert } from '@/lib/historyLimit';
@@ -28,7 +29,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
 
@@ -44,7 +45,6 @@ import ActivityInputModal from '@/components/ActivityInputModal';
 // SplashOverlay Import entfernt - keine Popups
 import { useAuth } from '@/contexts/AuthContext';
 import { useBackend } from '@/contexts/BackendContext';
-import { useConvex } from '@/contexts/ConvexContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { SleepCaptureButton } from '@/components/tracking/SleepCaptureButton';
@@ -70,7 +70,8 @@ import {
   type NightWindowSettings,
 } from '@/lib/nightWindowSettings';
 import NightSleepEditor, { MiniNightTimeline } from '@/components/NightSleepEditor';
-import { isStaleActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import { useSleepEntriesSync } from '@/hooks/useSleepEntriesSync';
 import {
   getSleepPeriodForEntry,
   getSleepPeriodForStart,
@@ -1239,21 +1240,22 @@ export default function SleepTrackerScreen() {
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const modalSubtitleColor = isDark ? Colors.dark.textSecondary : '#A8978E';
+  const modalSubtitleColor = isDark ? Colors.dark.textSecondary : '#7D6B62';
   const modalOverlayColor = isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)';
-  const modalPanelColor = isDark ? 'rgba(10,10,12,0.86)' : 'transparent';
+  // An opaque sheet keeps the timeline and tab bar from bleeding through on Android.
+  const modalPanelColor = isDark ? '#1C1C1E' : '#F7F4F0';
   const modalPanelBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'transparent';
-  const modalGhostButtonColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-  const modalFieldColor = isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.8)';
-  const modalFieldBorderColor = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)';
-  const modalPickerColor = isDark ? 'rgba(22,22,26,0.95)' : 'rgba(255,255,255,0.9)';
-  const modalQualityDefaultColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(230,230,230,0.8)';
+  const modalGhostButtonColor = isDark ? '#38383A' : '#EAE5DF';
+  const modalFieldColor = isDark ? '#2C2C2E' : '#FFFFFF';
+  const modalFieldBorderColor = isDark ? '#414144' : '#E8E1DB';
+  const modalPickerColor = modalFieldColor;
+  const modalQualityDefaultColor = modalFieldColor;
   const modalAccentColor = isDark ? '#A26BFF' : '#8E4EC6';
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const userId = user?.id;
   const { activeBackend } = useBackend();
-  const { convexClient } = useConvex();
   const { activeBabyId } = useActiveBaby();
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const sleepService = useSleepEntriesService(user?.id);
@@ -1277,6 +1279,9 @@ export default function SleepTrackerScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const loadSleepDataRequestIdRef = useRef(0);
   const loadSleepDataRef = useRef<(() => Promise<void>) | null>(null);
+  const sleepDataScopeKey = `${userId ?? ''}|${activeBackend}|${activeBabyId ?? ''}`;
+  const sleepDataScopeRef = useRef(sleepDataScopeKey);
+  const sleepMutationRef = useRef({ scope: sleepDataScopeKey, pending: 0 });
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
   const activeSleepEntryRef = useRef<ClassifiedSleepEntry | null>(null);
   const activeEntryPeriodOverridesRef = useRef<Record<string, SleepPeriod>>({});
@@ -1561,12 +1566,50 @@ export default function SleepTrackerScreen() {
   const pulseAnim = React.useState(() => new Animated.Value(1))[0];
   const appearAnim = React.useState(() => new Animated.Value(0))[0];
 
+  const invalidateSleepDataRequests = useCallback(() => {
+    loadSleepDataRequestIdRef.current += 1;
+    setIsLoading(false);
+    setRefreshing(false);
+  }, []);
+
+  // A read from another account/baby must never become this screen's timer.
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void loadSleepDataRef.current?.();
-    }, 0);
-    return () => clearTimeout(timeoutId);
-  }, [activeBabyId, activeBackend, convexClient]);
+    sleepDataScopeRef.current = sleepDataScopeKey;
+    sleepMutationRef.current = { scope: sleepDataScopeKey, pending: 0 };
+    invalidateSleepDataRequests();
+    activeSleepEntryRef.current = null;
+    activeEntryPeriodOverridesRef.current = {};
+    hasAutoSelectedDateRef.current = false;
+    setActiveSleepEntry(null);
+    setSleepEntries([]);
+    setPausedNightState(null);
+    setIsLiveStatusLoaded(false);
+    setIsStartingSleep(false);
+    setIsStoppingSleep(false);
+    setIsSplittingSegment(false);
+    return () => {
+      sleepDataScopeRef.current = '';
+      loadSleepDataRequestIdRef.current += 1;
+    };
+  }, [invalidateSleepDataRequests, sleepDataScopeKey]);
+
+  const beginSleepMutation = useCallback(() => {
+    const mutations = sleepMutationRef.current;
+    const scope = sleepDataScopeKey;
+    mutations.pending += 1;
+    invalidateSleepDataRequests();
+    let finished = false;
+    return {
+      isCurrentScope: () => sleepDataScopeRef.current === scope && sleepMutationRef.current === mutations,
+      finish: () => {
+        if (finished) return false;
+        finished = true;
+        mutations.pending -= 1;
+        if (sleepMutationRef.current === mutations) invalidateSleepDataRequests();
+        return true;
+      },
+    };
+  }, [invalidateSleepDataRequests, sleepDataScopeKey]);
 
   useEffect(() => {
     activeSleepEntryRef.current = activeSleepEntry;
@@ -1851,8 +1894,12 @@ export default function SleepTrackerScreen() {
       isActive
     };
   }, [nightWindowSettings]);
+  const classifySleepEntryRef = useRef(classifySleepEntry);
+  const nightWindowSettingsRef = useRef(nightWindowSettings);
 
   useEffect(() => {
+    classifySleepEntryRef.current = classifySleepEntry;
+    nightWindowSettingsRef.current = nightWindowSettings;
     setSleepEntries((prevEntries) =>
       prevEntries.map((entry) => {
         const forced = entry.id ? activeEntryPeriodOverridesRef.current[entry.id] : undefined;
@@ -1865,7 +1912,7 @@ export default function SleepTrackerScreen() {
       const forced = prevActive.id ? activeEntryPeriodOverridesRef.current[prevActive.id] : undefined;
       return classifySleepEntry(prevActive, forced);
     });
-  }, [classifySleepEntry]);
+  }, [classifySleepEntry, nightWindowSettings]);
 
   // Sync function removed - now using dual-write via SleepEntriesService
 
@@ -1925,149 +1972,57 @@ export default function SleepTrackerScreen() {
     [activeBackend, sleepService, user?.id]
   );
 
-  // Load LIVE status (active sleep entry) - NEVER cache!
-  const loadLiveStatus = async () => {
-    try {
-      const { success, entries } = await loadVisibleSleepEntries(activeBabyId ?? undefined);
-      if (success && entries) {
-        const active = entries.find((entry) => !entry.end_time && !isStaleActiveSleepEntry(entry)) ?? null;
-        if (!active) {
-          activeEntryPeriodOverridesRef.current = {};
-          return null;
-        }
-        let periodOverride = active.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
-        if (!periodOverride) {
-          periodOverride = await loadStoredActiveSleepPeriodOverride(active);
-          if (active.id && periodOverride) {
-            activeEntryPeriodOverridesRef.current[active.id] = periodOverride;
-          }
-        }
-        return classifySleepEntry(active, periodOverride);
-      }
-    } catch (error) {
-      console.error('Failed to load live status:', error);
-    }
-    return null;
-  };
-
-  // Load sleep history (finished entries).
-  // Night sleep is derived from multiple entries across the night window. Showing
-  // stale history first can render a partial night and then a different full
-  // night after background refresh, which looks like data corruption.
-  const loadSleepHistory = async () => {
-    const fetchFinishedEntries = async () => {
-      const result = await loadVisibleSleepEntries(activeBabyId ?? undefined);
-      if (!result.success) {
-        const message = 'error' in result ? result.error : undefined;
-        throw new Error(message || t('alert.loadHistoryFailed'));
-      }
-      return (result.entries || []).filter(entry => entry.end_time);
-    };
-
-    return {
-      data: await fetchFinishedEntries(),
-      isStale: false,
-      refresh: fetchFinishedEntries,
-    };
-  };
-
-  // Load sleep data (combines live + cached history)
+  // Timer and history must describe the same fresh server snapshot. A failed
+  // read preserves the previous display; a successful empty/ended read clears it.
   async function loadSleepData() {
+    if (sleepDataScopeRef.current !== sleepDataScopeKey || sleepMutationRef.current.pending > 0) return;
     const requestId = loadSleepDataRequestIdRef.current + 1;
     loadSleepDataRequestIdRef.current = requestId;
-    const isLatestRequest = () => loadSleepDataRequestIdRef.current === requestId;
+    const isLatestRequest = () =>
+      loadSleepDataRequestIdRef.current === requestId &&
+      sleepDataScopeRef.current === sleepDataScopeKey;
+    const canCommit = () => isLatestRequest() && sleepMutationRef.current.pending === 0;
 
     try {
       setIsLoading(true);
-      setIsLiveStatusLoaded(false);
-
-      // LIVE: Always fresh, no cache
-      const activeSleep = await loadLiveStatus();
-      const knownActiveSleep =
-        activeSleep ??
-        (
-          activeSleepEntryRef.current &&
-          !activeSleepEntryRef.current.end_time &&
-          !isStaleActiveSleepEntry(activeSleepEntryRef.current)
-            ? activeSleepEntryRef.current
-            : null
-        );
-
-      if (!isLatestRequest()) return;
-
-      // Nur auf null setzen wenn die DB explizit keinen aktiven Eintrag zurückgibt.
-      // Wenn activeSleep null ist und wir bereits einen gesetzten Eintrag haben, behalten wir
-      // ihn — sonst tritt eine Race Condition auf: handleStartSleep setzt activeSleepEntry
-      // sofort, aber loadLiveStatus findet den Eintrag noch nicht in der DB, was den Timer
-      // auf elapsedTime=0 zurücksetzt und den Interval zerstört.
-      setActiveSleepEntry(prev => {
-        if (activeSleep !== null) {
-          activeSleepEntryRef.current = activeSleep;
-          return activeSleep;
-        }
-        // null von DB: nur zurücksetzen wenn kein laufender Eintrag bekannt ist,
-        // oder wenn der bekannte Eintrag bereits eine end_time hat (also gestoppt wurde).
-        if (knownActiveSleep !== null) {
-          activeSleepEntryRef.current = knownActiveSleep;
-          return knownActiveSleep;
-        }
-        if (prev === null || prev.end_time) {
-          activeSleepEntryRef.current = null;
-          return null;
-        }
-        // Andernfalls: aktuellen Wert behalten (DB noch nicht synced)
-        activeSleepEntryRef.current = prev;
-        return prev;
-      });
-
-      // HISTORY: Always fresh. Nachtschlaf-Gruppen are too sensitive to partial cached histories.
-      const { data: finishedEntries, isStale, refresh } = await loadSleepHistory();
-
-      if (!isLatestRequest()) return;
-
-      // Handle null data gracefully
-      const safeFinishedEntries = finishedEntries || [];
-
-      // Combine active + finished entries
-      const allEntries = knownActiveSleep
-        ? [
-            knownActiveSleep,
-            ...safeFinishedEntries
-              .filter((entry) => entry.id !== knownActiveSleep.id)
-              .map((entry) => classifySleepEntry(entry)),
-          ]
-        : safeFinishedEntries.map((entry) => classifySleepEntry(entry));
-
-      setSleepEntries(allEntries);
-
-      // Background refresh if cache was stale
-      if (isStale) {
-        refresh().then(freshEntries => {
-          if (!isLatestRequest()) return;
-          const safeFreshEntries = freshEntries || [];
-          const freshActiveSleep =
-            activeSleepEntryRef.current &&
-            !activeSleepEntryRef.current.end_time &&
-            !isStaleActiveSleepEntry(activeSleepEntryRef.current)
-              ? activeSleepEntryRef.current
-              : null;
-          const combinedFresh = freshActiveSleep
-            ? [
-                freshActiveSleep,
-                ...safeFreshEntries
-                  .filter((entry) => entry.id !== freshActiveSleep.id)
-                  .map((entry) => classifySleepEntry(entry)),
-              ]
-            : safeFreshEntries.map((entry) => classifySleepEntry(entry));
-          setSleepEntries(combinedFresh);
-        });
+      const result = await loadVisibleSleepEntries(activeBabyId ?? undefined);
+      if (!canCommit()) return;
+      if (!result.success || !Array.isArray(result.entries)) {
+        throw new Error('error' in result && typeof result.error === 'string'
+          ? result.error
+          : t('alert.loadHistoryFailed'));
       }
+
+      const active = findFreshActiveSleepEntry<(typeof result.entries)[number]>(result.entries);
+      let periodOverride = active?.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
+      if (active && !periodOverride) {
+        periodOverride = await loadStoredActiveSleepPeriodOverride(active) ?? undefined;
+      }
+      // Storage reads can also finish after a stop, a newer load or a baby switch.
+      if (!canCommit()) return;
+
+      // Use the current settings even if this read began before they loaded.
+      const classify = classifySleepEntryRef.current;
+      const currentNightWindow = nightWindowSettingsRef.current;
+      const activeSleep = active ? classify(active, periodOverride) : null;
+      const finishedEntries = result.entries
+        .filter((entry) => entry.end_time)
+        .map((entry) => classify(entry));
+      const allEntries = activeSleep ? [activeSleep, ...finishedEntries] : finishedEntries;
+
+      activeEntryPeriodOverridesRef.current = active?.id && periodOverride
+        ? { [active.id]: periodOverride }
+        : {};
+      activeSleepEntryRef.current = activeSleep;
+      setActiveSleepEntry(activeSleep);
+      setSleepEntries(allEntries);
+      setIsLiveStatusLoaded(true);
 
       // Auto-select latest entry logic
       if (
         !hasAutoSelectedDateRef.current &&
         allEntries.length > 0 &&
-        !allEntries.some((entry) => isEntryAssignedToDate(entry, selectedDate, nightWindowSettings))
+        !allEntries.some((entry) => isEntryAssignedToDate(entry, selectedDate, currentNightWindow))
       ) {
         const latest = allEntries.reduce((latestEntry, entry) => {
           if (!latestEntry) return entry;
@@ -2079,17 +2034,18 @@ export default function SleepTrackerScreen() {
         if (latest) {
           hasAutoSelectedDateRef.current = true;
           selectTab('day');
-          setSelectedDate(getAssignedDateForEntry(latest, nightWindowSettings));
+          setSelectedDate(getAssignedDateForEntry(latest, currentNightWindow));
         }
       }
     } catch (error) {
+      if (!isLatestRequest()) return;
       console.error('Failed to load sleep data:', error);
       setPredictionLoading(false);
     } finally {
-      if (!isLatestRequest()) return;
-      setIsLiveStatusLoaded(true);
-      setIsLoading(false);
-      setRefreshing(false);
+      if (isLatestRequest()) {
+        setIsLoading(false);
+        setRefreshing(false);
+      }
     }
   }
   useEffect(() => {
@@ -2102,11 +2058,21 @@ export default function SleepTrackerScreen() {
     await loadSleepData();
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadSleepDataRef.current?.();
-    }, [activeBabyId, activeBackend, convexClient, sleepService, user?.id, nightWindowSettings])
+  const refreshSleepData = useCallback(async () => {
+    await loadSleepDataRef.current?.();
+  }, []);
+  const visibleSleepEntryIds = useMemo(
+    () => sleepEntries.flatMap((entry) => entry.id ? [entry.id] : []),
+    [sleepEntries]
   );
+  useSleepEntriesSync({
+    userId,
+    babyId: activeBabyId,
+    enabled: activeBackend === 'supabase',
+    entryIds: visibleSleepEntryIds,
+    onRefresh: refreshSleepData,
+    onInvalidate: invalidateSleepDataRequests,
+  });
 
   const applyNightQualityToSession = useCallback(async (
     quality: NonNullable<SleepQuality>,
@@ -2158,8 +2124,10 @@ export default function SleepTrackerScreen() {
     }
 
     setIsStartingSleep(true);
+    const mutation = beginSleepMutation();
     try {
       const effectivePartnerId = await getEffectivePartnerId();
+      if (!mutation.isCurrentScope()) return false;
       const now = new Date();
       const startTime = now.toISOString();
 
@@ -2174,6 +2142,7 @@ export default function SleepTrackerScreen() {
         duration_minutes: null,
         partner_id: effectivePartnerId ?? null,
       });
+      if (!mutation.isCurrentScope()) return false;
 
       if (result.primary.error) {
         console.error('❌ Start sleep error:', result.primary.error);
@@ -2184,6 +2153,29 @@ export default function SleepTrackerScreen() {
       if (result.secondary.error) {
         console.warn('[SleepTracker] Secondary backend write failed:', result.secondary.error);
       }
+
+      // Commit the confirmed write before reminder/storage work can yield to an
+      // older read. Reads started during the write are invalidated by finish().
+      const entry = result.primary.data!;
+      if (period === 'night') {
+        activeEntryPeriodOverridesRef.current[entry.id] = period;
+      } else {
+        delete activeEntryPeriodOverridesRef.current[entry.id];
+      }
+      const classifiedEntry = classifySleepEntry(entry, period === 'night' ? period : undefined);
+      activeSleepEntryRef.current = classifiedEntry;
+      setActiveSleepEntry(classifiedEntry);
+      setSleepEntries((prevEntries) => [
+        classifiedEntry,
+        ...prevEntries.filter((existingEntry) => existingEntry.id !== classifiedEntry.id),
+      ]);
+      setIsLiveStatusLoaded(true);
+      hasAutoSelectedDateRef.current = true;
+      selectTab('day');
+      setSelectedDate(getAssignedDateForEntry(classifiedEntry, nightWindowSettings));
+      mutation.finish();
+      await rememberActiveSleepPeriodOverride(entry.id, period, entry.start_time);
+      if (!mutation.isCurrentScope()) return true;
 
       // Aktiver Schlaf läuft jetzt: ausstehende Schlaffenster-Erinnerungen sofort entfernen.
       try {
@@ -2198,25 +2190,7 @@ export default function SleepTrackerScreen() {
       } catch (reminderError) {
         console.error('Failed to cancel pending sleep window reminders:', reminderError);
       }
-
-      // Use primary result to set active sleep entry
-      const entry = result.primary.data!;
-      if (period === 'night') {
-        activeEntryPeriodOverridesRef.current[entry.id] = period;
-      } else {
-        delete activeEntryPeriodOverridesRef.current[entry.id];
-      }
-      await rememberActiveSleepPeriodOverride(entry.id, period, entry.start_time);
-      const classifiedEntry = classifySleepEntry(entry, period === 'night' ? period : undefined);
-      activeSleepEntryRef.current = classifiedEntry;
-      setActiveSleepEntry(classifiedEntry);
-      setSleepEntries((prevEntries) => [
-        classifiedEntry,
-        ...prevEntries.filter((existingEntry) => existingEntry.id !== classifiedEntry.id),
-      ]);
-      hasAutoSelectedDateRef.current = true;
-      selectTab('day');
-      setSelectedDate(getAssignedDateForEntry(classifiedEntry, nightWindowSettings));
+      if (!mutation.isCurrentScope()) return true;
 
       if (predictionRef.current) {
         try {
@@ -2231,16 +2205,20 @@ export default function SleepTrackerScreen() {
         } catch (personalizationError) {
           console.error('Failed to update sleep personalization:', personalizationError);
         } finally {
-          predictionRef.current = null;
-          setSleepPrediction(null);
-          setPredictionError(null);
-          setPredictionLoading(true);
+          if (mutation.isCurrentScope()) {
+            predictionRef.current = null;
+            setSleepPrediction(null);
+            setPredictionError(null);
+            setPredictionLoading(true);
+          }
         }
       }
+      if (!mutation.isCurrentScope()) return true;
 
       // Invalidate cache and reload
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
+      if (!mutation.isCurrentScope()) return true;
 
       // Splash anzeigen
       // Function declaration is intentionally hoisted; this handler only runs after user interaction.
@@ -2256,7 +2234,8 @@ export default function SleepTrackerScreen() {
       Alert.alert(t('common.error'), t('alert.unexpectedStart'));
       return false;
     } finally {
-      setIsStartingSleep(false);
+      if (mutation.isCurrentScope()) setIsStartingSleep(false);
+      if (mutation.finish() && mutation.isCurrentScope()) void loadSleepDataRef.current?.();
     }
   };
 
@@ -2265,6 +2244,7 @@ export default function SleepTrackerScreen() {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
     setIsStoppingSleep(true);
+    const mutation = beginSleepMutation();
 
     try {
       const endTime = new Date();
@@ -2274,6 +2254,7 @@ export default function SleepTrackerScreen() {
 
       if (durationMs < MIN_PERSISTED_SLEEP_DURATION_MS) {
         const deleteResult = await sleepService.deleteEntry(activeSleepEntry.id);
+        if (!mutation.isCurrentScope()) return;
         if (deleteResult.primary.error) {
           console.error('❌ Delete sub-minute sleep error:', deleteResult.primary.error);
           Alert.alert(t('common.error'), t('alert.shortDeleteFailed'));
@@ -2284,17 +2265,22 @@ export default function SleepTrackerScreen() {
           console.warn('[SleepTracker] Secondary backend delete failed:', deleteResult.secondary.error);
         }
 
+        activeSleepEntryRef.current = null;
+        setActiveSleepEntry(null);
+        setSleepEntries((entries) => entries.filter((entry) => entry.id !== activeSleepEntry.id));
+        setPausedNightState(null);
+        mutation.finish();
+
         try {
           await sleepActivityService.endAllSleepActivities();
         } catch (liveActivityError) {
           console.error('Failed to end sleep live activity after deleting sub-minute entry:', liveActivityError);
         }
+        if (!mutation.isCurrentScope()) return;
 
         delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
         await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
-        activeSleepEntryRef.current = null;
-        setActiveSleepEntry(null);
-        setPausedNightState(null);
+        if (!mutation.isCurrentScope()) return;
 
         Alert.alert(t('common.notice'), t('alert.shortDeleted'));
 
@@ -2310,6 +2296,7 @@ export default function SleepTrackerScreen() {
         notes: notes ?? null,
         duration_minutes: durationMinutes,
       });
+      if (!mutation.isCurrentScope()) return;
 
       if (result.primary.error) {
         console.error('❌ Stop sleep error:', result.primary.error);
@@ -2321,8 +2308,17 @@ export default function SleepTrackerScreen() {
         console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
       }
 
+      activeSleepEntryRef.current = null;
+      setActiveSleepEntry(null);
+      setPausedNightState(null);
+      setSleepEntries((entries) => entries.map((entry) => entry.id === activeSleepEntry.id
+        ? classifySleepEntry({ ...entry, ...result.primary.data, end_time: endTime.toISOString() })
+        : entry));
+      mutation.finish();
+
       if (activeSleepEntry.period === 'night') {
         const propagated = await applyNightQualityToSession(quality, startTime, [activeSleepEntry.id]);
+        if (!mutation.isCurrentScope()) return;
         if (propagated.failed > 0) {
           Alert.alert(t('common.notice'), t('alert.qualitySegments'));
         }
@@ -2336,12 +2332,11 @@ export default function SleepTrackerScreen() {
       } catch (liveActivityError) {
         console.error('Failed to end sleep live activity:', liveActivityError);
       }
+      if (!mutation.isCurrentScope()) return;
 
       delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
       await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
-      activeSleepEntryRef.current = null;
-      setActiveSleepEntry(null);
-      setPausedNightState(null);
+      if (!mutation.isCurrentScope()) return;
 
       const splashKind = quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
       const splashColor = QUALITY_VISUALS[quality].color;
@@ -2355,7 +2350,8 @@ export default function SleepTrackerScreen() {
       console.error('❌ Unexpected stop sleep error:', error);
       Alert.alert(t('common.error'), t('alert.unexpectedStop'));
     } finally {
-      setIsStoppingSleep(false);
+      if (mutation.isCurrentScope()) setIsStoppingSleep(false);
+      if (mutation.finish() && mutation.isCurrentScope()) void loadSleepDataRef.current?.();
     }
   };
 
@@ -2370,6 +2366,7 @@ export default function SleepTrackerScreen() {
     }
 
     setIsStoppingSleep(true);
+    const mutation = beginSleepMutation();
     try {
       const pausedAt = new Date();
       const durationMs = pausedAt.getTime() - activeStart.getTime();
@@ -2386,6 +2383,7 @@ export default function SleepTrackerScreen() {
         end_time: pausedAt.toISOString(),
         duration_minutes: durationMinutes,
       });
+      if (!mutation.isCurrentScope()) return;
 
       if (result.primary.error) {
         console.error('❌ Pause night sleep error:', result.primary.error);
@@ -2397,20 +2395,27 @@ export default function SleepTrackerScreen() {
         console.warn('[SleepTracker] Secondary backend update failed:', result.secondary.error);
       }
 
+      setPausedNightState({
+        lastPausedEntryId: activeSleepEntry.id,
+        pausedAt: pausedAt.toISOString(),
+      });
+      activeSleepEntryRef.current = null;
+      setActiveSleepEntry(null);
+      setSleepEntries((entries) => entries.map((entry) => entry.id === activeSleepEntry.id
+        ? classifySleepEntry({ ...entry, ...result.primary.data, end_time: pausedAt.toISOString() })
+        : entry));
+      mutation.finish();
+
       try {
         await sleepActivityService.endAllSleepActivities();
       } catch (liveActivityError) {
         console.error('Failed to pause sleep live activity:', liveActivityError);
       }
+      if (!mutation.isCurrentScope()) return;
 
-      setPausedNightState({
-        lastPausedEntryId: activeSleepEntry.id,
-        pausedAt: pausedAt.toISOString(),
-      });
       delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
       await forgetActiveSleepPeriodOverride(activeSleepEntry.id);
-      activeSleepEntryRef.current = null;
-      setActiveSleepEntry(null);
+      if (!mutation.isCurrentScope()) return;
 
       showSuccessSplash('#F2C78A', '⏸️', 'sleep_pause_night');
 
@@ -2420,15 +2425,18 @@ export default function SleepTrackerScreen() {
       console.error('❌ Unexpected pause sleep error:', error);
       Alert.alert(t('common.error'), t('alert.unexpectedPause'));
     } finally {
-      setIsStoppingSleep(false);
+      if (mutation.isCurrentScope()) setIsStoppingSleep(false);
+      if (mutation.finish() && mutation.isCurrentScope()) void loadSleepDataRef.current?.();
     }
   };
 
   const handleResumeNightSleep = async () => {
     if (!ensureWritableInCurrentMode()) return;
     if (!pausedNightState || activeSleepEntry || isStartingSleep) return;
+    const scope = sleepDataScopeKey;
+    const mutations = sleepMutationRef.current;
     const started = await handleStartSleep('night');
-    if (started) {
+    if (started && sleepDataScopeRef.current === scope && sleepMutationRef.current === mutations) {
       setPausedNightState(null);
     }
   };
@@ -2915,8 +2923,10 @@ export default function SleepTrackerScreen() {
     const safeSplitTime = sanitizeManualDate(paramSplitTime, segmentStart);
 
     setIsSplittingSegment(true);
+    const mutation = beginSleepMutation();
     try {
       const effectivePartnerId = await getEffectivePartnerId();
+      if (!mutation.isCurrentScope()) return null;
 
       const result = await splitNightSleepSegment({
         service: sleepService,
@@ -2939,6 +2949,7 @@ export default function SleepTrackerScreen() {
         babyName,
         targetPeriodIsNight: resolvedTarget.period === 'night',
       });
+      if (!mutation.isCurrentScope()) return null;
 
       if (!result.ok) {
         if (result.reason === 'invalid-split-time') {
@@ -3002,6 +3013,10 @@ export default function SleepTrackerScreen() {
         activeSleepEntryRef.current = savedSecondEntry;
         setActiveSleepEntry(savedSecondEntry);
       }
+      mutation.finish();
+      // Realtime reloads received during the split were intentionally blocked.
+      // Re-read after its final write so a concurrent partner stop is included.
+      void loadSleepDataRef.current?.();
 
       showSuccessSplash('#4A90E2', '✂️', 'sleep_split_save');
 
@@ -3021,7 +3036,8 @@ export default function SleepTrackerScreen() {
       Alert.alert(t('common.error'), t('alert.unexpectedSplit'));
       return null;
     } finally {
-      setIsSplittingSegment(false);
+      if (mutation.isCurrentScope()) setIsSplittingSegment(false);
+      if (mutation.finish() && mutation.isCurrentScope()) void loadSleepDataRef.current?.();
     }
   };
 
@@ -4857,6 +4873,8 @@ export default function SleepTrackerScreen() {
         <Modal 
           visible={showInputModal} 
           transparent={true} 
+          statusBarTranslucent
+          navigationBarTranslucent
           animationType="slide" 
           onRequestClose={closeManualSleepModal}
         >
@@ -4871,32 +4889,33 @@ export default function SleepTrackerScreen() {
               activeOpacity={1}
             />
 
-            <BlurView
+            <View
               style={[
                 styles.modalContent,
                 {
                   backgroundColor: modalPanelColor,
+                  paddingBottom: Math.max(insets.bottom, 20),
                   borderTopWidth: isDark ? 1 : 0,
                   borderTopColor: modalPanelBorderColor,
                 },
               ]}
-              tint={isDark ? 'dark' : 'extraLight'}
-              intensity={80}
             >
               {/* Header */}
               <View style={styles.header}>
                 <TouchableOpacity 
                   style={[styles.headerButton, { backgroundColor: modalGhostButtonColor }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.cancel')}
                   onPress={() => {
                     triggerHaptic();
                     closeManualSleepModal();
                   }}
                 >
-                  <Text style={[styles.closeHeaderButtonText, { color: textSecondary }]}>✕</Text>
+                  <IconSymbol name="xmark" size={20} color={textSecondary} weight="semibold" />
                 </TouchableOpacity>
 
                 <View style={styles.headerCenter}>
-                  <Text style={[styles.modalTitle, { color: textSecondary }]}>
+                  <Text style={[styles.modalTitle, { color: textPrimary }]}>
                     {editingEntry ? t('form.edit') : t('form.add')}
                   </Text>
                   <Text style={[styles.modalSubtitle, { color: modalSubtitleColor }]}>
@@ -4905,7 +4924,9 @@ export default function SleepTrackerScreen() {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.headerButton, styles.saveHeaderButton, { backgroundColor: modalAccentColor }]}
+                  style={[styles.headerButton, { backgroundColor: modalAccentColor }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('common.done')}
                   onPress={() => {
                     triggerHaptic();
                     handleSaveEntry({
@@ -4916,11 +4937,11 @@ export default function SleepTrackerScreen() {
                     });
                   }}
                 >
-                  <Text style={styles.saveHeaderButtonText}>✓</Text>
+                  <IconSymbol name="checkmark" size={22} color="#FFFFFF" weight="semibold" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={{width: '100%', alignItems: 'center'}}>
                     
                     {/* Zeit Sektion */}
@@ -4994,6 +5015,7 @@ export default function SleepTrackerScreen() {
                             themeVariant={isDark ? 'dark' : 'light'}
                             accentColor={modalAccentColor}
                             onChange={(event, date) => {
+                              setShowStartPicker(false);
                               if (event.type === 'dismissed') return;
                               const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
                               applyStartPickerValue(nextStart);
@@ -5033,6 +5055,7 @@ export default function SleepTrackerScreen() {
                             themeVariant={isDark ? 'dark' : 'light'}
                             accentColor={modalAccentColor}
                             onChange={(event, date) => {
+                              setShowEndPicker(false);
                               if (event.type === 'dismissed') return;
                               const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
                               applyEndPickerValue(nextEnd);
@@ -5213,10 +5236,10 @@ export default function SleepTrackerScreen() {
                                   ? QUALITY_VISUALS[q].color
                                   : modalQualityDefaultColor,
                                 borderColor: sleepModalData.quality === q ? 'transparent' : modalFieldBorderColor,
-                                flex: 1,
-                                marginHorizontal: 3
                               }
                             ]}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: sleepModalData.quality === q }}
                             onPress={() => {
                               triggerHaptic();
                               setSleepModalData(prev => ({ ...prev, quality: q }));
@@ -5287,7 +5310,7 @@ export default function SleepTrackerScreen() {
 
                 </View>
               </ScrollView>
-	            </BlurView>
+	            </View>
 	          </View>
 
 	          <TextInputOverlay
@@ -6116,7 +6139,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
 
-  // Sleep Modal Styles - wie ActivityInputModal
+  // Solid, rounded form surfaces avoid Android elevation artifacts inside the sheet.
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -6125,10 +6148,10 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
+    borderCurve: 'continuous',
     width: '100%',
     height: '85%',
     maxHeight: 700,
-    minHeight: 650,
     overflow: 'hidden',
     padding: 20,
     paddingBottom: 40,
@@ -6146,35 +6169,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 22,
   },
-  closeHeaderButtonText: {
-    fontSize: 20,
-    fontWeight: '400',
-    // color wird dynamisch gesetzt
-  },
   headerCenter: {
+    flex: 1,
+    paddingHorizontal: 8,
     alignItems: 'center',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
+    textAlign: 'center',
     // color wird dynamisch gesetzt
   },
   modalSubtitle: {
     fontSize: 14,
     marginTop: 2,
+    textAlign: 'center',
     // color wird dynamisch gesetzt
-  },
-  saveHeaderButton: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  saveHeaderButtonText: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
   },
   section: {
     marginBottom: 30,
@@ -6185,23 +6195,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     width: '100%',
-    paddingHorizontal: 10,
+    gap: 10,
   },
   optionButton: {
+    flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 18,
+    paddingHorizontal: 8,
     borderRadius: 20,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
     borderWidth: 1,
     justifyContent: 'center',
-    marginHorizontal: 5,
     minHeight: 80,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
   },
   optionIcon: {
     fontSize: 30,
@@ -6215,22 +6222,18 @@ const styles = StyleSheet.create({
   timeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    width: '90%',
-    gap: 15,
+    width: '100%',
+    gap: 12,
   },
   timeButton: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderWidth: 1,
     borderColor: 'transparent',
-    borderRadius: 15,
+    borderRadius: 20,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
     padding: 15,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
   },
   timeLabel: {
     fontSize: 12,
@@ -6244,18 +6247,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   notesInput: {
-    width: '90%',
+    width: '100%',
     minHeight: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderWidth: 1,
     borderColor: 'transparent',
-    borderRadius: 15,
+    borderRadius: 20,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
     padding: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
   },
   notesText: {
     fontSize: 16,
@@ -6270,11 +6269,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
   },
   deleteButtonText: {
     color: '#FFFFFF',
@@ -6286,17 +6282,13 @@ const styles = StyleSheet.create({
   // DatePicker Styles - im Modal integriert
   datePickerContainer: {
     marginTop: 15,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderWidth: 1,
     borderColor: 'transparent',
     borderRadius: 15,
+    borderCurve: 'continuous',
+    overflow: 'hidden',
     padding: 15,
     width: '90%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
   },
   dateTimePicker: {
     width: '100%',

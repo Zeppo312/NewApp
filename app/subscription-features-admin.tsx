@@ -451,6 +451,7 @@ export default function SubscriptionFeaturesAdminScreen() {
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
+          topSafeAreaHandled
           title={c.title}
           subtitle={c.subtitle}
           showBackButton

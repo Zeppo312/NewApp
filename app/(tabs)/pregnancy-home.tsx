@@ -1,12 +1,13 @@
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedBackground } from '@/components/ThemedBackground';
+import { HomeBackground, HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { PregnancyProgressRing } from '@/components/PregnancyProgressRing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -23,7 +24,6 @@ import { BIRTH_PREP_SECTION_START_WEEK, birthPreparationMeasures } from '@/const
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Haptics from 'expo-haptics';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
@@ -39,6 +39,9 @@ import {
   translatePregnancyHomeText,
 } from '@/lib/pregnancyHomeTranslations';
 import { useFontScale, useLineLimit, useTileGridMetrics } from '@/lib/fontScaling';
+import PregnancyOverviewCarousel from '@/components/pregnancy-guide/overview-carousel';
+import { DEFAULT_OVERVIEW_HEIGHT, PregnancyNumbersSlide } from '@/components/pregnancy-guide/overview-card';
+import { usePregnancyAge } from '@/hooks/use-pregnancy-age';
 
 let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
 let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
@@ -477,18 +480,17 @@ export default function PregnancyHomeScreen() {
   const voiceLogAccess = useVoiceLogAccess();
   const askLottiAccess = useAskLottiAccess();
   const [showVoiceLogModal, setShowVoiceLogModal] = useState(false);
-  const DEFAULT_OVERVIEW_HEIGHT = 230;
-  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
-  const OVERVIEW_SLIDE_COUNT = 2;
 
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const age = usePregnancyAge(dueDate);
   const [userName, setUserName] = useState('');
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
+  useEffect(() => {
+    setCurrentWeek(age?.runningWeek ?? null);
+    setCurrentDay(age?.day ?? null);
+  }, [age?.runningWeek, age?.day]);
   const [refreshing, setRefreshing] = useState(false);
-  const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
-  const [overviewIndex, setOverviewIndex] = useState(0);
   const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
   const [quickAccessOrder, setQuickAccessOrder] = useState<PregnancyQuickAccessCardId[]>([...PREGNANCY_QUICK_ACCESS_ORDER]);
   const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<PregnancyQuickAccessCardId[]>([]);
@@ -497,6 +499,9 @@ export default function PregnancyHomeScreen() {
   // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
   // Beschreibung bei großer Schrift nicht abgeschnitten werden.
   const tileMetrics = useTileGridMetrics();
+  const { width: windowWidth } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
+  const isCompactAndroid = Platform.OS === 'android' && windowWidth < 400;
   // Enge Zeilen-Layouts (Text + Button nebeneinander) brechen bei großer
   // Schrift auseinander — ab ~130 % stapeln wir sie stattdessen.
   const isStackedLayout = useFontScale() >= 1.3;
@@ -527,15 +532,10 @@ export default function PregnancyHomeScreen() {
     viewportHeight: 0,
     contentHeight: 0,
   });
-  const overviewScrollRef = useRef<ScrollView | null>(null);
   // Animation für Erfolgsmeldung
   const fadeAnim = React.useState(() => new Animated.Value(0))[0];
   const [updateSuccess, setUpdateSuccess] = useState(false);
 
-  const androidBlurProps =
-    Platform.OS === 'android'
-      ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
-      : {};
   const quickAccessOrderStorageKey = useMemo(
     () => buildPregnancyQuickAccessOrderStorageKey(user?.id),
     [user?.id],
@@ -670,22 +670,6 @@ export default function PregnancyHomeScreen() {
     void persistQuickAccessHiddenIds([]);
   }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
 
-  useEffect(() => {
-    if (!overviewCarouselWidth) return;
-
-    const interval = setInterval(() => {
-      setOverviewIndex((current) => {
-        const nextIndex = (current + 1) % OVERVIEW_SLIDE_COUNT;
-        overviewScrollRef.current?.scrollTo({
-          x: overviewCarouselWidth * nextIndex,
-          animated: true,
-        });
-        return nextIndex;
-      });
-    }, OVERVIEW_ROTATION_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, OVERVIEW_SLIDE_COUNT]);
 
   useEffect(() => {
     let isActive = true;
@@ -891,14 +875,9 @@ export default function PregnancyHomeScreen() {
 
   // Lädt Benutzerinformationen und aktualisiert die Anzeige
   const loadUserData = async () => {
-    if (!user?.id) {
-      setIsLoading(false);
-      return;
-    }
+    if (!user?.id) return;
 
     try {
-      setIsLoading(true);
-
       // Load with cache - all data in parallel, instant if cached
       const { profile, dueDate: dueDateData, isStale } =
         await loadPregnancyHomeDataWithCache(user.id);
@@ -909,13 +888,10 @@ export default function PregnancyHomeScreen() {
       setCurrentWeek(dueDateData.currentWeek);
       setCurrentDay(dueDateData.currentDay);
 
-      setIsLoading(false);
-
       // Background refresh happens automatically in the cache layer if isStale
       // No need to manually refresh here!
     } catch (error) {
       console.error('Fehler beim Laden der Benutzerdaten:', error);
-      setIsLoading(false);
     }
   };
 
@@ -1014,99 +990,12 @@ export default function PregnancyHomeScreen() {
     router.push('/prints-shop' as any);
   };
 
-  const renderPregnancyOverviewCard = (wrapperStyle?: StyleProp<ViewStyle>) => (
-    <TouchableOpacity
-      onPress={() => router.push('/(tabs)/countdown')}
-      activeOpacity={0.9}
-      style={[styles.liquidGlassWrapper, wrapperStyle]}
-      onLayout={(event) => {
-        const nextHeight = Math.round(event.nativeEvent.layout.height);
-        if (nextHeight && nextHeight !== overviewSummaryHeight) {
-          setOverviewSummaryHeight(nextHeight);
-        }
-      }}
-    >
-      <BlurView
-        {...androidBlurProps}
-        intensity={22}
-        tint={colorScheme === 'dark' ? 'dark' : 'light'}
-        style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
-      >
-        <ThemedView
-          style={[styles.summaryContainer, styles.liquidGlassContainer, { backgroundColor: glassCardBg }]}
-          lightColor="rgba(255, 255, 255, 0.04)"
-          darkColor="rgba(255, 255, 255, 0.02)"
-        >
-          <View style={styles.sectionTitleContainer}>
-            <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
-              {t('overview.title')}
-            </ThemedText>
-            <View style={styles.liquidGlassChevron}>
-              <IconSymbol name="chevron.right" size={20} color={textSecondary} />
-            </View>
-          </View>
-
-          <View style={styles.statsContainer}>
-            <View style={[styles.statItem, styles.liquidGlassStatItem, {
-              backgroundColor: 'rgba(94, 61, 179, 0.13)',
-              borderColor: 'rgba(94, 61, 179, 0.35)'
-            }]}>
-              <View style={styles.liquidGlassStatIcon}>
-                <Text style={styles.statEmoji}>📅</Text>
-              </View>
-              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: accentPurple,
-                textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-              }]}>{currentWeek || 0}</ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.week')}</ThemedText>
-            </View>
-
-            <View style={[styles.statItem, styles.liquidGlassStatItem, {
-              backgroundColor: 'rgba(94, 61, 179, 0.08)',
-              borderColor: 'rgba(94, 61, 179, 0.22)'
-            }]}>
-              <View style={styles.liquidGlassStatIcon}>
-                <Text style={styles.statEmoji}>🔢</Text>
-              </View>
-              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: accentPurple,
-                textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-              }]}>
-                {currentWeek && currentWeek <= 13
-                  ? "1"
-                  : currentWeek && currentWeek <= 26
-                    ? "2"
-                    : "3"}
-              </ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.trimester')}</ThemedText>
-            </View>
-
-            <View style={[styles.statItem, styles.liquidGlassStatItem, {
-              backgroundColor: 'rgba(94, 61, 179, 0.05)',
-              borderColor: 'rgba(94, 61, 179, 0.15)'
-            }]}>
-              <View style={styles.liquidGlassStatIcon}>
-                <Text style={styles.statEmoji}>📊</Text>
-              </View>
-              <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                color: accentPurple,
-                textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                textShadowOffset: { width: 0, height: 1 },
-                textShadowRadius: 2,
-              }]}>
-                {pregnancyProgressPercent}%
-              </ThemedText>
-              <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('overview.progress')}</ThemedText>
-            </View>
-          </View>
-        </ThemedView>
-      </BlurView>
-    </TouchableOpacity>
-  );
+  const renderPregnancyOverviewCard = () => <PregnancyNumbersSlide locale={locale} currentWeek={currentWeek}
+    progress={pregnancyProgressPercent} compact={isCompactAndroid} stacked={isStackedLayout}
+    onPress={() => router.push('/(tabs)/countdown')} onLayout={event => {
+      const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+      if (nextHeight > 0) setOverviewSummaryHeight(current => current === nextHeight ? current : nextHeight);
+    }} />;
 
   const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
     const cardHeightStyle = { height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT };
@@ -1115,8 +1004,7 @@ export default function PregnancyHomeScreen() {
 
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
-        <BlurView
-          {...androidBlurProps}
+        <HomeGlassSurface
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, cardHeightStyle, { backgroundColor: glassBlurBg }]}
@@ -1195,63 +1083,18 @@ export default function PregnancyHomeScreen() {
               </View>
             )}
           </ThemedView>
-        </BlurView>
+        </HomeGlassSurface>
       </View>
     );
   };
 
-  const renderOverviewSection = () => (
-    <View
-      style={styles.overviewCarouselWrapper}
-      onLayout={(event) => {
-        const nextWidth = event.nativeEvent.layout.width;
-        if (nextWidth && nextWidth !== overviewCarouselWidth) {
-          setOverviewCarouselWidth(nextWidth);
-        }
-      }}
-    >
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        ref={overviewScrollRef}
-        style={styles.overviewCarousel}
-        decelerationRate="fast"
-        onMomentumScrollEnd={(event) => {
-          if (!overviewCarouselWidth) return;
-          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
-          setOverviewIndex(nextIndex);
-        }}
-        scrollEventThrottle={16}
-      >
-        {[renderPregnancyOverviewCard(styles.carouselCardWrapper), renderRecommendationCard(styles.carouselCardWrapper)].map(
-          (slide, index) => (
-            <View
-              key={`overview-slide-${index}`}
-              style={[
-                styles.overviewSlide,
-                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
-              ]}
-            >
-              {slide}
-            </View>
-          )
-        )}
-      </ScrollView>
-      <View style={styles.carouselDots}>
-        {Array.from({ length: OVERVIEW_SLIDE_COUNT }, (_, index) => (
-          <View
-            key={`overview-dot-${index}`}
-            style={[
-              styles.carouselDot,
-              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(107, 76, 59, 0.25)' },
-              overviewIndex === index && { backgroundColor: isDark ? Colors.dark.text : '#6B4C3B' },
-            ]}
-          />
-        ))}
-      </View>
-    </View>
-  );
+  const renderOverviewSection = () => {
+    const height = overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT;
+    return <PregnancyOverviewCarousel height={height}>
+      {renderPregnancyOverviewCard()}
+      {renderRecommendationCard(styles.carouselCardWrapper)}
+    </PregnancyOverviewCarousel>;
+  };
 
   const shouldShowBirthPreparationCard = Boolean(
     currentWeek && currentWeek >= BIRTH_PREP_SECTION_START_WEEK
@@ -1283,8 +1126,7 @@ export default function PregnancyHomeScreen() {
           options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
         ]}
       >
-        <BlurView
-          {...androidBlurProps}
+        <HomeGlassSurface
           intensity={24}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={styles.liquidGlassCardBackground}
@@ -1332,6 +1174,7 @@ export default function PregnancyHomeScreen() {
                   shadowOpacity: 0.3,
                   shadowRadius: 4,
                   elevation: 4,
+                  ...androidHomeShadow,
                 },
               ]}
             >
@@ -1344,7 +1187,7 @@ export default function PregnancyHomeScreen() {
               {item.description}
             </ThemedText>
           </View>
-        </BlurView>
+        </HomeGlassSurface>
       </View>
     );
   };
@@ -1394,8 +1237,7 @@ export default function PregnancyHomeScreen() {
               activeOpacity={0.86}
               onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
-              <BlurView
-                {...androidBlurProps}
+              <HomeGlassSurface
                 intensity={24}
                 tint={colorScheme === 'dark' ? 'dark' : 'light'}
                 style={styles.liquidGlassCardBackground}
@@ -1429,6 +1271,7 @@ export default function PregnancyHomeScreen() {
                         shadowOpacity: 0.3,
                         shadowRadius: 4,
                         elevation: 4,
+                        ...androidHomeShadow,
                       },
                     ]}
                   >
@@ -1441,7 +1284,7 @@ export default function PregnancyHomeScreen() {
                     {t('quick.restore')}
                   </ThemedText>
                 </View>
-              </BlurView>
+              </HomeGlassSurface>
             </TouchableOpacity>
           ))}
         </View>
@@ -1556,12 +1399,12 @@ export default function PregnancyHomeScreen() {
   );
 
   // Route-Guard in _layout.tsx handles mode-based redirects centrally.
-  // An inline redirect here fires before isLoading settles and breaks
+  // An inline redirect here fires before user data loads and breaks
   // navigation flows like "Schwangerschaft anlegen".
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
+    <HomeBackground style={styles.backgroundImage}>
+      <SafeAreaView style={[styles.container, Platform.OS === 'android' && { paddingTop: safeAreaInsets.top }]}>
         <StatusBar hidden={true} />
         
         {/* Erfolgs-Animation für iOS */}
@@ -1579,7 +1422,7 @@ export default function PregnancyHomeScreen() {
         <ScrollView 
           ref={mainScrollRef}
           style={styles.scrollView} 
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, isCompactAndroid && styles.contentContainerCompact]}
           scrollEnabled={!isQuickAccessDragging}
           onLayout={(event) => {
             quickAccessScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
@@ -1604,14 +1447,13 @@ export default function PregnancyHomeScreen() {
         >
           {/* Begrüßung - Liquid Glass Design */}
           <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
-            <BlurView
-              {...androidBlurProps}
+            <HomeGlassSurface
               intensity={22}
               tint={colorScheme === 'dark' ? 'dark' : 'light'}
               style={[styles.liquidGlassBackground, styles.greetingGlassBackground, { backgroundColor: glassBlurBg }]}
             >
               <ThemedView
-                style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, { backgroundColor: glassCardBg }]}
+                style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, isCompactAndroid && styles.greetingContainerCompact, { backgroundColor: glassCardBg }]}
                 lightColor="rgba(255, 255, 255, 0.04)"
                 darkColor="rgba(255, 255, 255, 0.02)"
               >
@@ -1626,10 +1468,10 @@ export default function PregnancyHomeScreen() {
 
                 <View style={styles.greetingHeader}>
                   <View style={styles.greetingTextBlock}>
-                    <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
+                    <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, isCompactAndroid && styles.greetingCompact, { color: textPrimary }]}>
                       {t('greeting.hello', { name: userName || t('greeting.fallbackName') })}
                     </ThemedText>
-                    <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
+                    <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, isCompactAndroid && styles.dateTextCompact, { color: textPrimary }]}>
                       {formatDate()}
                     </ThemedText>
                   </View>
@@ -1674,7 +1516,7 @@ export default function PregnancyHomeScreen() {
                   </TouchableOpacity>
                 ) : null}
               </ThemedView>
-            </BlurView>
+            </HomeGlassSurface>
             <GlassBorderGlint radius={30} />
           </View>
 
@@ -1694,7 +1536,7 @@ export default function PregnancyHomeScreen() {
         onClose={() => setShowVoiceLogModal(false)}
         onSaved={() => {}}
       />
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 
@@ -1713,6 +1555,27 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
+  },
+  contentContainerCompact: {
+    paddingHorizontal: 16,
+  },
+  greetingContainerCompact: {
+    paddingHorizontal: 16,
+    paddingTop: 22,
+    paddingBottom: 18,
+  },
+  greetingCompact: {
+    fontSize: 26,
+    lineHeight: 32,
+    includeFontPadding: false,
+  },
+  dateTextCompact: {
+    fontSize: 16,
+    lineHeight: 22,
+    includeFontPadding: false,
+  },
+  summaryContainerCompact: {
+    padding: 16,
   },
 
   // Overview Carousel
@@ -1741,6 +1604,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(107, 76, 59, 0.25)',
     marginHorizontal: 4,
   },
+  carouselDotButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   carouselDotActive: {
     backgroundColor: '#6B4C3B',
   },
@@ -1885,6 +1749,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 14,
     elevation: 8,
+    ...androidHomeShadow,
   },
   greetingCardWrapper: {
     borderRadius: 30,
@@ -1952,6 +1817,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 4,
+    ...androidHomeShadow,
   },
   tipHighlightContainer: {
     ...StyleSheet.absoluteFill,
@@ -1964,6 +1830,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.6,
     shadowRadius: 6,
     elevation: 3,
+    ...androidHomeShadow,
   },
   tipHighlightDotOne: {
     width: 10,
@@ -2037,6 +1904,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    ...androidHomeShadow,
   },
   weeklyInfoContainer: {
     borderRadius: 16,
@@ -2047,6 +1915,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    ...androidHomeShadow,
   },
   infoSection: {
     marginBottom: 16,
@@ -2079,6 +1948,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    ...androidHomeShadow,
   },
   symptomsList: {
     paddingLeft: 8,
@@ -2093,6 +1963,9 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   sectionTitle: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
@@ -2143,6 +2016,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 5,
+    ...androidHomeShadow,
   },
   iconContainer: {
     width: 54,
@@ -2195,6 +2069,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 5,
     elevation: 6,
+    ...androidHomeShadow,
   },
   updateSuccessText: {
     fontSize: 16,
@@ -2218,6 +2093,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    ...androidHomeShadow,
     borderLeftWidth: 4,
     borderLeftColor: '#E57373',
   },
@@ -2263,6 +2139,21 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+  },
+  statsContainerAndroid: {
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  statsContainerStacked: {
+    flexDirection: 'column',
+  },
+  statItemAndroid: {
+    marginHorizontal: 0,
+    minWidth: 0,
+  },
+  statItemStacked: {
+    flex: 0,
+    width: '100%',
   },
   statItem: {
     alignItems: 'center',
@@ -2318,6 +2209,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
   featureText: {
     fontSize: 12,
@@ -2339,6 +2231,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 5,
+    ...androidHomeShadow,
     minHeight: 66,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2354,6 +2247,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
+    ...androidHomeShadow,
     width: 64,
     height: 64,
     justifyContent: 'center',
@@ -2397,6 +2291,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
 
   // Quick Access Cards Section

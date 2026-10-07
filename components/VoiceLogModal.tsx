@@ -6,6 +6,10 @@
 // werden sie zur Bestätigung angezeigt und erst dann gespeichert.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requireDataConsent } from '@/lib/dataConsents';
+import { DATA_CONSENTS_ENABLED, DataConsentRequiredError, runtimeConsentAllowed, subscribeDataConsents } from '@/lib/dataConsentRuntime';
+import { activeDataConsentCopy } from '@/lib/dataConsentCopy';
+import { useRouter } from 'expo-router';
 import {
   AccessibilityInfo,
   Alert,
@@ -24,7 +28,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn, FadeInUp, FadeOut } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
@@ -225,6 +229,7 @@ const VoiceLogModal: React.FC<Props> = ({
   onSaved,
 }) => {
   const { locale } = useLocale();
+  const consentRouter = useRouter();
   const insets = useSafeAreaInsets();
   const [reduceTransparency, setReduceTransparency] = useState(false);
   useEffect(() => {
@@ -320,28 +325,44 @@ const VoiceLogModal: React.FC<Props> = ({
   const startRecording = useCallback(async () => {
     if (Platform.OS === 'web' || phase !== 'idle') return;
     try {
+      await requireDataConsent('ai');
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(t('voice.microphone'), t('voice.permission'));
         return;
       }
+      await requireDataConsent('ai');
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
         interruptionMode: 'duckOthers',
       });
       await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+      if (!runtimeConsentAllowed('ai')) throw new DataConsentRequiredError('ai');
       recorder.record();
       recordingStartedAtRef.current = Date.now();
       setPhase('recording');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } catch (error) {
+      if (error instanceof DataConsentRequiredError) {
+        const copy = activeDataConsentCopy[locale];
+        Alert.alert(copy.aiTitle, copy.aiRequired, [{ text: copy.cancel }, { text: copy.viewConsent, onPress: () => { closeModal(); consentRouter.push({ pathname: '/data-consents', params: { scope: 'ai' } }); } }]);
+        return;
+      }
       console.error('Failed to start voice log recording:', error);
       await disableRecordingMode();
       Alert.alert(t('voice.recording'), t('voice.startFailed'));
       setPhase('idle');
     }
-  }, [disableRecordingMode, phase, recorder, t]);
+  }, [disableRecordingMode, phase, recorder, t, locale, closeModal, consentRouter]);
+  useEffect(() => {
+    if (!DATA_CONSENTS_ENABLED) return;
+    return subscribeDataConsents(() => {
+      if (!runtimeConsentAllowed('ai')) {
+        void recorder.stop().catch(() => {}); void disableRecordingMode(); reset();
+      }
+    });
+  }, [recorder, disableRecordingMode, reset]);
 
   const stopAndProcess = useCallback(async () => {
     if (phase !== 'recording') return;

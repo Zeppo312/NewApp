@@ -41,4 +41,15 @@ describe('account invitation QR data', () => {
       'https://lottibaby.example/invite?code=',
     )).toBeNull();
   });
+
+  it.each([
+    'aabbccdd001142228333aabbccddeeff',
+    'com.lottibaby.app://invite?code=aabbccdd001142228333aabbccddeeff',
+  ])('reads a server-generated family invitation %s', data => {
+    expect(parseAccountLinkingQr(data, nativeLink)).toBe('AABBCCDD001142228333AABBCCDDEEFF');
+  });
+
+  it.each(['A'.repeat(31), 'A'.repeat(33), 'Z'.repeat(32)])('rejects malformed long code %s', data => {
+    expect(parseAccountLinkingQr(data, nativeLink)).toBeNull();
+  });
 });

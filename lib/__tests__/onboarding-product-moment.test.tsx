@@ -14,6 +14,7 @@ jest.mock('@/hooks/useColorScheme', () => ({ useColorScheme: () => 'light' }));
 jest.mock('@/hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light', hasCustomBackground: false, isDarkBackground: false }) }));
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
 jest.mock('@/components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
+jest.mock('@/components/ThemedBackground', () => ({ ThemedBackground: ({ children }: { children: React.ReactNode }) => children }));
 jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'));
 jest.mock('react-native-reanimated', () => ({
   ...require('react-native-reanimated/mock'),

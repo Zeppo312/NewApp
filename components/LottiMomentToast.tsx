@@ -144,7 +144,7 @@ export function LottiMomentToast() {
       >
         <BlurView
           {...(Platform.OS === 'android'
-            ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+            ? { blurMethod: 'none' as const }
             : {})}
           intensity={28}
           tint={isDark ? 'dark' : 'light'}

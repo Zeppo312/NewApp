@@ -1,3 +1,4 @@
+import { refreshFamilyAccess } from './familySubscriptionAccess';
 /**
  * 🚀 APP CACHE - Zentrales Caching für häufig geladene Daten
  *
@@ -9,6 +10,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { runtimeConsentAllowed } from './dataConsentRuntime';
 import { supabase, getCachedUser } from './supabase';
 import type { PaywallAccessRole } from './paywallAccess';
 import { getRevenueCatEntitlementStatus } from './revenuecat';
@@ -34,6 +36,7 @@ const CACHE_KEY_PREFIXES_TO_CLEAR = [
   'active_baby_id',
   'screen_cache_baby_info_',
   'subscription_access_v1',
+  'onboarding_complete_v1',
 ] as const;
 
 // Cache Durations (in Millisekunden)
@@ -64,6 +67,7 @@ const isExpired = (entry: CacheEntry<any>): boolean => {
 };
 
 const getFromMemory = <T>(key: string): T | null => {
+  if (!runtimeConsentAllowed('health')) return null;
   const entry = memoryCache.get(key);
   if (entry && !isExpired(entry)) {
     return entry.data as T;
@@ -83,6 +87,7 @@ const setToMemory = <T>(key: string, data: T, ttl: number): void => {
 };
 
 const getFromStorage = async <T>(key: string, ttl: number): Promise<T | null> => {
+  if (!runtimeConsentAllowed('health')) return null;
   try {
     const stored = await AsyncStorage.getItem(key);
     if (!stored) return null;
@@ -143,14 +148,21 @@ const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): 
   return request;
 };
 
+const pendingStorageWrites = new Set<Promise<void>>();
 const setToStorage = async <T>(key: string, data: T): Promise<void> => {
+  if (!runtimeConsentAllowed('health')) return;
+  let pending: Promise<void> | undefined;
   try {
-    await AsyncStorage.setItem(key, JSON.stringify({
+    pending = AsyncStorage.setItem(key, JSON.stringify({
       data,
       timestamp: Date.now(),
     }));
+    pendingStorageWrites.add(pending);
+    await pending;
   } catch (err) {
     console.warn('Cache storage error:', err);
+  } finally {
+    if (pending) pendingStorageWrites.delete(pending);
   }
 };
 
@@ -334,7 +346,7 @@ export interface PremiumStatus {
 export type PremiumStatusResult = {
   status: 'active' | 'inactive' | 'unavailable';
   isPro: boolean | null;
-  source: 'memory' | 'storage' | 'revenuecat' | 'stale_active';
+  source: 'memory' | 'storage' | 'revenuecat' | 'stale_active' | 'family';
 };
 
 const readStoredPremiumStatus = async (
@@ -361,13 +373,7 @@ const getPremiumStatusTtl = (isPro: boolean) =>
     ? CACHE_DURATIONS.PREMIUM_STATUS
     : CACHE_DURATIONS.PREMIUM_INACTIVE_STATUS;
 
-export const getCachedPremiumStatusResult = async (): Promise<PremiumStatusResult> => {
-  const { data: userData } = await getCachedUser();
-  const userId = userData.user?.id;
-  if (!userId) {
-    return { status: 'inactive', isPro: false, source: 'revenuecat' };
-  }
-
+const getCachedOwnPremiumStatusResult = async (userId: string): Promise<PremiumStatusResult> => {
   const key = getScopedCacheKey(CACHE_KEYS.PREMIUM_STATUS, userId);
 
   void cleanupLegacyCacheKey(CACHE_KEYS.PREMIUM_STATUS);
@@ -419,6 +425,26 @@ export const getCachedPremiumStatusResult = async (): Promise<PremiumStatusResul
   }
 };
 
+export const getCachedPremiumStatusResult = async (): Promise<PremiumStatusResult> => {
+  const { data, error } = await getCachedUser();
+  // Failed Auth verification says nothing about whether an existing purchase
+  // is active. Keep the result unknown so it cannot trigger the paywall.
+  if (error) return { status: 'unavailable', isPro: null, source: 'revenuecat' };
+  const userId = data.user?.id;
+  if (!userId) return { status: 'inactive', isPro: false, source: 'revenuecat' };
+  const familyRequest = refreshFamilyAccess(userId);
+  const own = await getCachedOwnPremiumStatusResult(userId);
+  // An already confirmed own subscription does not wait for the family backend.
+  if (own.status === 'active') return own;
+  const family = await familyRequest;
+  // Never copy a family grant into the legacy own-purchase cache, whose outage
+  // fallback is deliberately longer than the bounded family lease.
+  if (family.status === 'active') return { status: 'active', isPro: true, source: 'family' };
+  return family.status === 'unavailable' && own.status === 'inactive'
+    ? { status: 'unavailable', isPro: null, source: 'family' }
+    : own;
+};
+
 export const getCachedPremiumStatus = async (): Promise<boolean> => {
   const result = await getCachedPremiumStatusResult();
   return result.status === 'active';
@@ -465,6 +491,9 @@ export const invalidateAllCaches = async (): Promise<void> => {
   inFlightRequests.clear();
 
   try {
+    // Generation checks reject late network responses. Writes that already
+    // reached native storage must finish before their keys are removed.
+    await Promise.allSettled([...pendingStorageWrites]);
     const allKeys = await AsyncStorage.getAllKeys();
     const matchingKeys = allKeys.filter((key) =>
       CACHE_KEY_PREFIXES_TO_CLEAR.some((prefix) => matchesCachePrefix(key, prefix))

@@ -1,3 +1,6 @@
+import { secureEqual } from '../_shared/accountDeletion/contracts.ts';
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
+import { assertDataProcessingAllowed } from '../_shared/dataConsent.ts';
 // Supabase Edge Function to send push notifications for planner events and todos
 // This function is triggered by a database webhook when planner notifications are due
 
@@ -110,6 +113,10 @@ const getNotificationContent = (
 };
 
 serve(async (req) => {
+  const serviceKey = Deno.env.get('ACCOUNT_DELETION_NOTIFICATION_SECRET');
+  if (!serviceKey || !secureEqual(req.headers.get('authorization') ?? '', 'Bearer ' + serviceKey)) {
+    return new Response(JSON.stringify({ message: 'Unauthorized' }), {status:401,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+  }
   try {
     // Get the webhook payload
     const payload: PlannerNotificationPayload = await req.json();
@@ -130,6 +137,8 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { user_id, notification_type, reminder_minutes } = payload.notification;
+    await assertAccountActive(supabase, user_id);
+    await assertDataProcessingAllowed(supabase, user_id);
     const { baby_name } = payload.planner_item;
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
@@ -208,6 +217,7 @@ serve(async (req) => {
     console.log(`📬 Sending notification: ${emoji} ${title} - ${body}`);
 
     // Send push notification to each token
+    await assertDataProcessingAllowed(supabase,user_id);
     const pushPromises = tokens.map((tokenRecord) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',
@@ -281,7 +291,7 @@ serve(async (req) => {
     console.error('❌ Function error:', error);
     return new Response(
       JSON.stringify({
-        error: error.message,
+        error: error instanceof Error ? error.message : 'notification_failed',
       }),
       {
         headers: { 'Content-Type': 'application/json' },

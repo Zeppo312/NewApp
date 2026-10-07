@@ -1,6 +1,11 @@
 const mockLoadPushModule = jest.fn();
 const mockGetPushToken = jest.fn();
 const mockScheduleNotification = jest.fn();
+const mockSetNotificationChannel = jest.fn();
+
+jest.mock('expo-notifications/build/setNotificationChannelAsync', () => ({
+  setNotificationChannelAsync: (...args: unknown[]) => mockSetNotificationChannel(...args),
+}));
 
 jest.mock('expo-notifications', () => {
   mockLoadPushModule();
@@ -32,6 +37,47 @@ beforeEach(() => {
   mockLoadPushModule.mockReset();
   mockGetPushToken.mockReset();
   mockScheduleNotification.mockReset();
+  mockSetNotificationChannel.mockReset();
+});
+
+const missingChannelProvider = new Error(
+  "Call to function 'ExpoNotificationChannelManager.setNotificationChannelAsync' has been rejected. " +
+  'Caused by: java.lang.NullPointerException: null cannot be cast to non-null type ' +
+  'expo.modules.notifications.notifications.channels.NotificationsChannelsProvider',
+);
+
+it('allows permission setup to continue for the missing channel provider in Android Expo Go', async () => {
+  const info = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+  mockSetNotificationChannel.mockRejectedValue(missingChannelProvider);
+  const notifications = loadNotifications('android', true);
+  const channel = { name: 'default', importance: notifications.AndroidImportance.MAX };
+
+  await expect(notifications.setNotificationChannelAsync('default', channel)).resolves.toBeNull();
+  await expect(notifications.setNotificationChannelAsync('sleep-tracking', channel)).resolves.toBeNull();
+  expect(info).toHaveBeenCalledTimes(1);
+  expect(mockLoadPushModule).not.toHaveBeenCalled();
+  info.mockRestore();
+});
+
+it.each([
+  ['android', false, missingChannelProvider],
+  ['ios', true, missingChannelProvider],
+  ['android', true, new Error('Invalid channel configuration')],
+] as const)('preserves channel errors outside the specific Android Expo Go defect (%s, %s)', async (platform, expoGo, error) => {
+  mockSetNotificationChannel.mockRejectedValue(error);
+  const notifications = loadNotifications(platform, expoGo);
+  await expect(notifications.setNotificationChannelAsync('default', {
+    name: 'default', importance: notifications.AndroidImportance.MAX,
+  })).rejects.toBe(error);
+});
+
+it.each([true, false])('creates native Android channels when supported (Expo Go: %s)', async (expoGo) => {
+  const notifications = loadNotifications('android', expoGo);
+  const channel = { name: 'default', importance: notifications.AndroidImportance.MAX };
+  const result = { id: 'default', ...channel };
+  mockSetNotificationChannel.mockResolvedValue(result);
+  await expect(notifications.setNotificationChannelAsync('default', channel)).resolves.toBe(result);
+  expect(mockSetNotificationChannel).toHaveBeenCalledWith('default', channel);
 });
 
 it('can load and schedule local reminders in Android Expo Go without loading push registration', async () => {

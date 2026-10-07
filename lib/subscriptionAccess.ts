@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCachedFamilyAccess, refreshFamilyAccess } from './familySubscriptionAccess';
 
 import {
   getPaywallAccessTier,
@@ -17,6 +18,7 @@ import {
 
 export const SUBSCRIPTION_ACCESS_REFRESH_MS = 24 * 60 * 60 * 1000;
 export const SUBSCRIPTION_ACCESS_FAILED_RETRY_MS = 60 * 60 * 1000;
+export const SUBSCRIPTION_ACCESS_REQUEST_TIMEOUT_MS = 10_000;
 const CACHE_PREFIX = 'subscription_access_v1';
 
 export type SubscriptionAccessSource =
@@ -26,6 +28,7 @@ export type SubscriptionAccessSource =
   | 'tester'
   | 'cooperation_partner'
   | 'subscription'
+  | 'family_subscription'
   | 'trial_fallback';
 
 export type SubscriptionTierSnapshot = {
@@ -71,6 +74,21 @@ const failedRefreshAt = new Map<string, number>();
 
 const cacheKey = (userId: string) => `${CACHE_PREFIX}:${userId}`;
 
+async function boundedAccessRequest<T>(request: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('subscription_access_timeout')),
+          SUBSCRIPTION_ACCESS_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const cloneState = (state: SubscriptionAccessState): SubscriptionAccessState => ({
   ...state,
   policy: {
@@ -85,7 +103,10 @@ const cloneState = (state: SubscriptionAccessState): SubscriptionAccessState => 
 });
 
 const emit = (nextState: SubscriptionAccessState) => {
-  currentState = cloneState(nextState);
+  const family = nextState.userId ? getCachedFamilyAccess(nextState.userId) : null;
+  currentState = cloneState(nextState.source === 'family_subscription' && family?.status !== 'active'
+    ? { ...defaultState(), userId: nextState.userId, policy: nextState.policy, refreshing: nextState.refreshing }
+    : nextState);
   listeners.forEach((listener) => listener(cloneState(currentState)));
 };
 
@@ -99,6 +120,7 @@ const isSource = (value: unknown): value is SubscriptionAccessSource =>
   value === 'tester' ||
   value === 'cooperation_partner' ||
   value === 'subscription' ||
+  value === 'family_subscription' ||
   value === 'trial_fallback';
 
 export const sanitizeSubscriptionTierSnapshot = (
@@ -109,6 +131,8 @@ export const sanitizeSubscriptionTierSnapshot = (
   const source = value as Record<string, unknown>;
   if (
     source.schemaVersion !== 1 ||
+    // Family leases are kept in memory and must be reverified after restart.
+    source.source === 'family_subscription' ||
     source.userId !== expectedUserId ||
     !isTier(source.tier) ||
     !isSource(source.source) ||
@@ -168,7 +192,7 @@ const resolveVerifiedTier = async (
   previous: SubscriptionTierSnapshot | null,
 ): Promise<RefreshResult> => {
   const mockTier = process.env.EXPO_PUBLIC_MOCK_SUBSCRIPTION_TIER;
-  if (isTier(mockTier)) {
+  if (__DEV__ && isTier(mockTier)) {
     return {
       status: 'verified',
       snapshot: {
@@ -210,8 +234,24 @@ const resolveVerifiedTier = async (
   const {
     getRevenueCatSubscriptionSummary,
     getTierFromProductId,
-  } = await import('@/lib/revenuecat');
-  const summary = await getRevenueCatSubscriptionSummary(userId);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Load native purchases only when verifying access.
+  } = require('@/lib/revenuecat') as typeof import('@/lib/revenuecat');
+  const [summary] = await Promise.all([
+    getRevenueCatSubscriptionSummary(userId),
+    refreshFamilyAccess(userId),
+  ]);
+  const family = getCachedFamilyAccess(userId);
+  const ownTier = summary.isActive ? summary.tier ?? getTierFromProductId(summary.productId) ?? 'standard' : null;
+  const rank = { lite: 1, standard: 2, premium: 3 };
+  if (family.status === 'active' && (!ownTier || rank[family.tier] > rank[ownTier])) {
+    return {
+      status: 'verified',
+      snapshot: {
+        schemaVersion: 1, userId, tier: family.tier, source: 'family_subscription',
+        verifiedAt: Date.now(), subscriptionExpiresAt: family.expiresAt,
+      },
+    };
+  }
   if (summary.availability === 'unavailable') {
     return { status: 'unavailable', reason: 'revenuecat_unavailable' };
   }
@@ -259,7 +299,13 @@ const resolveVerifiedTier = async (
   };
 };
 
-export const getCurrentSubscriptionAccessState = () => cloneState(currentState);
+export const getCurrentSubscriptionAccessState = () => {
+  if (currentState.source === 'family_subscription' && currentState.userId &&
+      getCachedFamilyAccess(currentState.userId).status !== 'active') {
+    return cloneState({ ...defaultState(), userId: currentState.userId, policy: currentState.policy });
+  }
+  return cloneState(currentState);
+};
 
 /**
  * Imperativer Zugriff für Services außerhalb von React. getSession liest die
@@ -307,6 +353,12 @@ export const isSubscriptionAccessStale = (
 
 export const hydrateSubscriptionAccess = async (userId: string | null) => {
   const revision = ++hydrationRevision;
+  if (currentState.userId !== userId) {
+    // A previous offline request must not occupy the slot when the same
+    // account signs in again. Its late result is rejected by request identity.
+    refreshPromises.clear();
+    failedRefreshAt.clear();
+  }
   if (!userId) {
     emit(defaultState());
     return getCurrentSubscriptionAccessState();
@@ -355,6 +407,12 @@ export const refreshSubscriptionAccess = async (
   userId: string,
   options: { force?: boolean } = {},
 ) => {
+  // Lease revocation must reach mounted feature gates even while a profile,
+  // provider or policy request is still pending.
+  if (currentState.userId === userId && currentState.source === 'family_subscription' &&
+      getCachedFamilyAccess(userId).status !== 'active') {
+    emit(getCurrentSubscriptionAccessState());
+  }
   const existing = refreshPromises.get(userId);
   if (existing) return existing;
 
@@ -381,26 +439,34 @@ export const refreshSubscriptionAccess = async (
     return getCurrentSubscriptionAccessState();
   }
 
-  const promise = (async () => {
+  let promise!: Promise<SubscriptionAccessState>;
+  promise = (async () => {
     if (currentState.userId === userId) {
       emit({ ...currentState, refreshing: true });
     }
 
-    const previous = await readSnapshot(userId);
     const [tierResult, policyResult] = await Promise.allSettled([
-      resolveVerifiedTier(userId, previous),
-      refreshSubscriptionFeaturePolicy({ force: options.force }),
+      boundedAccessRequest((async () => resolveVerifiedTier(userId, await readSnapshot(userId)))()),
+      boundedAccessRequest(refreshSubscriptionFeaturePolicy({ force: options.force })),
     ]);
+
+    if (currentState.userId !== userId || refreshPromises.get(userId) !== promise) {
+      return getCurrentSubscriptionAccessState();
+    }
 
     if (tierResult.status === 'fulfilled' && tierResult.value.status === 'verified') {
       try {
-        await persistSnapshot(tierResult.value.snapshot);
+        if (tierResult.value.snapshot.source === 'family_subscription') {
+          await AsyncStorage.removeItem(cacheKey(userId));
+        } else {
+          await persistSnapshot(tierResult.value.snapshot);
+        }
       } catch (error) {
         console.warn('Subscription access cache could not be saved:', error);
       }
       failedRefreshAt.delete(userId);
 
-      if (currentState.userId === userId) {
+      if (currentState.userId === userId && refreshPromises.get(userId) === promise) {
         emit({
           userId,
           tier: tierResult.value.snapshot.tier,
@@ -417,7 +483,7 @@ export const refreshSubscriptionAccess = async (
       failedRefreshAt.set(userId, Date.now());
       if (currentState.userId === userId) {
         emit({
-          ...currentState,
+          ...getCurrentSubscriptionAccessState(),
           policy: getCurrentSubscriptionFeaturePolicy(),
           refreshing: false,
         });
@@ -433,7 +499,7 @@ export const refreshSubscriptionAccess = async (
 
     return getCurrentSubscriptionAccessState();
   })().finally(() => {
-    refreshPromises.delete(userId);
+    if (refreshPromises.get(userId) === promise) refreshPromises.delete(userId);
   });
 
   refreshPromises.set(userId, promise);

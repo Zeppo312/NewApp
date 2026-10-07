@@ -1,0 +1,28 @@
+-- Synthetic isolated PostgreSQL fixture. Never execute against a real project.
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS; CREATE ROLE authenticator;
+CREATE SCHEMA auth; CREATE SCHEMA storage;
+GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE TABLE auth.users(id uuid PRIMARY KEY,last_sign_in_at timestamptz,email text);
+CREATE TABLE auth.identities(user_id uuid,provider text,provider_id text);
+CREATE TABLE auth.sessions(id uuid,user_id uuid);
+CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,owner_id text);
+CREATE TABLE public.profiles(id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE);
+CREATE TABLE public.baby_info(id uuid PRIMARY KEY,user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE);
+CREATE TABLE public.baby_members(baby_id uuid REFERENCES public.baby_info(id) ON DELETE CASCADE,user_id uuid,role text);
+CREATE TABLE public.direct_messages(id uuid,sender_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,receiver_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,content text);
+CREATE TABLE public.user_settings(id uuid,user_id uuid);
+CREATE TABLE public.sleep_entries(id uuid,user_id uuid,partner_id uuid,shared_with_user_id uuid,updated_by uuid);
+CREATE TABLE public.shopping_items(id uuid,user_id uuid,partner_id uuid,name text);
+CREATE TABLE public.paywall_content_config(id text,content jsonb,updated_by uuid);
+CREATE TABLE public.startup_messages(id uuid,content text,created_by uuid,updated_by uuid);
+CREATE TABLE public.subscription_plan_features(id uuid,updated_by uuid);
+CREATE TABLE public.subscription_policy_state(id text,updated_by uuid);
+CREATE TABLE public.community_posts(id uuid,user_id uuid,image_url text);
+CREATE TABLE public.baby_milestone_entries(id uuid,baby_id uuid,user_id uuid);
+CREATE TABLE public.community_group_messages(id uuid,sender_id uuid,content text);
+CREATE TABLE public.blog_posts(id uuid,author_id uuid,cover_image_url text);
+CREATE TABLE public.baby_recipes(id uuid DEFAULT gen_random_uuid(),user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,is_global boolean,image_url text);
+CREATE TABLE public.account_links_audit_log(id uuid DEFAULT gen_random_uuid(),changed_by uuid,old_data jsonb,new_data jsonb);
+CREATE TABLE public.content_reports(id uuid DEFAULT gen_random_uuid(),reporter_id uuid,reported_user_id uuid,target_id uuid,target_snapshot text);
+CREATE TABLE public.subscription_policy_audit(id uuid DEFAULT gen_random_uuid(),changed_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT);

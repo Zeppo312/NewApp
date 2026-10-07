@@ -108,6 +108,7 @@ const callAi = async (
       },
       body: JSON.stringify({
         model: MODEL,
+        store: false,
         max_tokens: 300,
         temperature: 0.7,
         response_format: { type: 'json_object' },
@@ -116,8 +117,7 @@ const callAi = async (
           { role: 'user', content: JSON.stringify(payload) },
         ],
       }),
-    });
-    clearTimeout(timeout);
+    }).finally(() => clearTimeout(timeout));
     if (!res.ok) {
       console.error('OpenAI API error:', res.status, await res.text());
       return null;

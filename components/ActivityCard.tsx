@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Animated, Easing, Platform } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -8,7 +8,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { DailyEntry } from '@/lib/baby';
 import { Swipeable } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import { useLocale } from '@/contexts/LocaleContext';
 import { getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
@@ -349,11 +349,24 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
           delayPressIn={0}
         >
           {(() => { const tint = getTypeTint(); return (
-          <View style={[styles.card, expanded && styles.expandedCard, { borderColor: tint.border, marginHorizontal }] }>
-            <BlurView intensity={25} tint={colorScheme === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill as any, { backgroundColor: tint.bg }]} />
-            <LinearGradient colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFill} />
-            <View style={styles.cardHeader}>
+          <View style={[
+            styles.card,
+            expanded && styles.expandedCard,
+            androidHomeShadow,
+            { borderColor: tint.border, marginHorizontal },
+            Platform.OS === 'android' && {
+              backgroundColor: isDark ? 'rgba(35,31,32,0.96)' : 'rgba(248,245,241,0.96)',
+            },
+          ]}>
+            {/* Keep decorative layers outside the padded content. */}
+            {/* Avoid native blur in animated/swipeable Android cards: its surface
+                can turn black after navigation or dismissing a modal. */}
+            {Platform.OS !== 'android' && (
+              <HomeGlassSurface pointerEvents="none" intensity={25} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+            )}
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: tint.bg }]} />
+            <LinearGradient pointerEvents="none" colors={[ 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.10)' ]} style={StyleSheet.absoluteFill} />
+            <View style={[styles.cardContent, styles.cardHeader]}>
               <View style={[styles.iconContainer, { marginTop: 6 }]}><ThemedText style={{fontSize: 20}}>{detail.emoji}</ThemedText></View>
 
               <View style={styles.titleContainer}>
@@ -449,6 +462,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
             {/* Farbiger Akzent am linken Rand */}
             <View
+              pointerEvents="none"
               style={[
                 styles.colorAccent,
                 { backgroundColor: getTypeTint().accent }
@@ -466,7 +480,6 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 18,
-    padding: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
@@ -475,6 +488,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)'
+  },
+  cardContent: {
+    padding: 14,
   },
   expandedCard: {
     shadowOffset: { width: 0, height: 10 },

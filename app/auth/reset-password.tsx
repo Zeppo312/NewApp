@@ -177,6 +177,7 @@ export default function ResetPasswordScreen() {
       <ThemedBackground style={styles.background}>
         <SafeAreaView style={styles.safeArea}>
           <Header
+            topSafeAreaHandled
             title={t('reset.title')}
             subtitle={t('reset.subtitle')}
             showBackButton

@@ -1,13 +1,12 @@
 import { type User } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
 
 import { getCachedUser, supabase } from './supabase';
+import { requestAccountDeletion } from './accountDeletion';
 import { compressImage } from './imageCompression';
 import { getSubscriptionManagementStoreLabel } from './subscriptionManagement';
 
 const AVATAR_BUCKET = 'community-images';
 const APPLE_PROVIDER = 'apple';
-const REVOKE_APPLE_SIGN_IN_FUNCTION = 'revoke-apple-sign-in';
 
 export const uploadProfileAvatar = async (base64Data: string) => {
   try {
@@ -146,137 +145,21 @@ export const getAccountDeletionRequirements = async () => {
 export const buildAccountDeletionWarningMessage = (requirements?: AccountDeletionRequirements | null) => {
   const storeLabel = getSubscriptionManagementStoreLabel();
   const appleText = requirements?.hasAppleSignIn
-    ? '\n\nDa dein Konto mit "Mit Apple anmelden" verknüpft ist, fordern wir im nächsten Schritt noch eine Apple-Bestätigung an, damit der Apple-Zugriff vor dem Löschen widerrufen wird.'
+    ? '\n\nDa dein Konto mit "Mit Apple anmelden" verknüpft ist, wird auch der Widerruf des Apple-Zugriffs im Löschauftrag bearbeitet.'
     : '';
 
   return `Das Löschen deines Kontos beendet dein Abo im ${storeLabel} nicht automatisch. Falls du ein aktives Store-Abo hast, kann die Abrechnung sonst weiterlaufen. Bitte prüfe oder kündige dein Abo vorher über "Abo verwalten".${appleText}`;
 };
 
-const revokeAppleSignInBeforeDeletion = async () => {
-  const { data: requirements, error: requirementsError } = await getAccountDeletionRequirements();
-  if (requirementsError) {
-    return { error: requirementsError };
-  }
-
-  if (!requirements?.hasAppleSignIn) {
-    return { error: null };
-  }
-
-  if (Platform.OS !== 'ios') {
-    return {
-      error: new Error(
-        'Dieses Konto ist mit "Mit Apple anmelden" verknüpft. Bitte lösche dein Konto auf einem iPhone oder iPad, damit wir den Apple-Zugriff vorher widerrufen können.',
-      ),
-    };
-  }
-
-  try {
-    const AppleAuthentication = await import('expo-apple-authentication');
-    const isAvailable = await AppleAuthentication.isAvailableAsync();
-
-    if (!isAvailable) {
-      return {
-        error: new Error(
-          'Apple Sign-In ist auf diesem Gerät nicht verfügbar. Bitte lösche dein Konto auf einem Gerät mit aktivem Apple Sign-In.',
-        ),
-      };
-    }
-
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [],
-    });
-
-    if (!credential.authorizationCode) {
-      return {
-        error: new Error('Es konnte kein Apple-Bestätigungscode für die Kontolöschung erzeugt werden.'),
-      };
-    }
-
-    const { data, error } = await supabase.functions.invoke(REVOKE_APPLE_SIGN_IN_FUNCTION, {
-      body: {
-        authorizationCode: credential.authorizationCode,
-        appleUser: credential.user ?? null,
-      },
-    });
-
-    if (error) {
-      return {
-        error: new Error(error.message || 'Apple-Zugriff konnte vor dem Löschen nicht widerrufen werden.'),
-      };
-    }
-
-    if (data?.success !== true) {
-      return {
-        error: new Error(
-          typeof data?.error === 'string' && data.error.trim()
-            ? data.error
-            : 'Apple-Zugriff konnte vor dem Löschen nicht widerrufen werden.',
-        ),
-      };
-    }
-
-    return { error: null };
-  } catch (error: any) {
-    if (error?.code === 'ERR_REQUEST_CANCELED') {
-      return {
-        error: new Error('Die Apple-Bestätigung wurde abgebrochen. Das Konto wurde nicht gelöscht.'),
-      };
-    }
-
-    console.error('Error revoking Apple sign-in before deletion:', error);
-    return {
-      error: new Error(error?.message || 'Apple-Zugriff konnte vor dem Löschen nicht widerrufen werden.'),
-    };
-  }
-};
-
-const parseDeleteUserResponse = (data: any) => {
-  if (!data || typeof data !== 'object') {
-    return { error: null };
-  }
-
-  if (data.success === false) {
-    const message = typeof data.error === 'string' && data.error.trim()
-      ? data.error
-      : 'Unbekannter Fehler beim Löschen';
-    return { error: new Error(message) };
-  }
-
-  return { error: null };
-};
-
+// All entry points share the durable server workflow. Media selection and
+// Apple/provider handling are server responsibilities, never client URL input.
 export const deleteUserData = async (options: DeleteUserDataOptions = {}) => {
   try {
-    const { data: userData } = await getCachedUser();
-    if (!userData?.user) {
-      return { error: new Error('Nicht angemeldet') };
-    }
-
-    if (options?.avatarUrl) {
-      const { error } = await deleteProfileAvatar(options.avatarUrl);
-      if (error) {
-        return { error };
-      }
-    }
-    const { data, error } = await supabase.rpc('delete_user_data', {
-      delete_auth: options.deleteAuth ?? false,
-    });
-    if (error) {
-      return { error };
-    }
-
-    return parseDeleteUserResponse(data);
+    const receipt = await requestAccountDeletion(options.deleteAuth ? 'account' : 'data');
+    return { receipt, error: null };
   } catch (error) {
-    console.error('Error deleting user data:', error);
-    return { error: error as Error };
+    return { receipt: null, error: error as Error };
   }
 };
-
-export const deleteUserAccount = async (options?: { avatarUrl?: string | null }) => {
-  const { error: revokeError } = await revokeAppleSignInBeforeDeletion();
-  if (revokeError) {
-    return { error: revokeError };
-  }
-
-  return deleteUserData({ ...options, deleteAuth: true });
-};
+export const deleteUserAccount = async (_options?: { avatarUrl?: string | null }) =>
+  deleteUserData({ deleteAuth: true });

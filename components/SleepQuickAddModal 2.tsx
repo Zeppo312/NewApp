@@ -10,7 +10,7 @@ import {
   Platform,
   TextInput,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { BlurView } from 'expo-blur';
 import { getSafePickerDate } from '@/lib/safeDate';
 
@@ -115,6 +115,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
                       mode="datetime"
                       display={Platform.OS === 'ios' ? 'compact' : 'default'}
                       onChange={(_, date) => {
+                        if (Platform.OS === 'android') setShowStartPicker(false);
                         if (date) setStartTime(date);
                       }}
                       style={styles.picker}
@@ -134,6 +135,7 @@ const SleepQuickAddModal: React.FC<Props> = ({
                       mode="datetime"
                       display={Platform.OS === 'ios' ? 'compact' : 'default'}
                       onChange={(_, date) => {
+                        if (Platform.OS === 'android') setShowEndPicker(false);
                         if (date) setEndTime(date);
                       }}
                       style={styles.picker}

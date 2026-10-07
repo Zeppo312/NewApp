@@ -68,6 +68,8 @@ export function LinkedBabySelectionModal({
   const [selectedBabyIds, setSelectedBabyIds] = useState<string[]>([]);
   const [deleteUnselectedOwnedByCurrentUser, setDeleteUnselectedOwnedByCurrentUser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [isApplying, setIsApplying] = useState(false);
 
   const textPrimary = isDark ? Colors.dark.text : '#5C4033';
@@ -96,6 +98,7 @@ export function LinkedBabySelectionModal({
 
     let cancelled = false;
     setIsLoading(true);
+    setLoadFailed(false);
 
     getLinkedBabySelectionOptions(currentUserId, linkedUserId)
       .then((result) => {
@@ -115,6 +118,7 @@ export function LinkedBabySelectionModal({
       .catch((error: any) => {
         console.error('Failed to load linked baby selection modal:', error);
         if (!cancelled) {
+          setLoadFailed(true);
           Alert.alert(
             translateAccountLinkingText(locale, 'common.error'),
             error?.message || translateAccountLinkingText(locale, 'modal.loadFailed'),
@@ -132,7 +136,7 @@ export function LinkedBabySelectionModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, currentUserId, linkedUserId, locale]);
+  }, [visible, currentUserId, linkedUserId, locale, loadAttempt]);
 
   const currentUserBabies = useMemo(
     () => options.filter((baby) => baby.is_owned_by_current_user),
@@ -241,6 +245,17 @@ export function LinkedBabySelectionModal({
               <ThemedText style={[styles.centerStateText, { color: textSecondary }]}>
                 {t('modal.loading')}
               </ThemedText>
+            </View>
+          ) : loadFailed ? (
+            <View style={styles.centerState}>
+              <ThemedText style={[styles.centerStateText, { color: textSecondary }]}>
+                {t('modal.loadFailed')}
+              </ThemedText>
+              <TouchableOpacity accessibilityRole="button"
+                style={[styles.secondaryButton, { flex: 0, backgroundColor: secondaryButtonColor, marginTop: 16 }]}
+                onPress={() => setLoadAttempt(attempt => attempt + 1)}>
+                <ThemedText style={[styles.secondaryButtonText, { color: textPrimary }]}>{t('modal.retry')}</ThemedText>
+              </TouchableOpacity>
             </View>
           ) : (
             <>

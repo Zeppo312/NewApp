@@ -13,11 +13,12 @@ import {
   Image,
   Alert,
   TextInputProps,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
+import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
 import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
 import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
@@ -127,6 +128,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   initialData,
 }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width, fontScale } = useWindowDimensions();
+  const useWideOptions = width < 360 || fontScale > 1.2;
   const { locale } = useLocale();
   const recipesAccess = useFeatureAccess('recipes').hasAccess;
   const t = useCallback((key: DailyTranslationKey) => translateDailyText(locale, key), [locale]);
@@ -142,7 +146,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     textSecondary: Colors.dark.textTertiary, // Lighter gray for subtitles
     primary: '#4A90E2', // Solid blue for selected bottle
     accent: '#E5B9A0',  // Warm orange for save button
-    lightGray: 'rgba(60, 60, 60, 0.8)', // Dark gray for unselected buttons
+    lightGray: 'rgba(255, 255, 255, 0.08)', // Dark gray for unselected buttons
     mediumGray: 'rgba(80, 80, 80, 0.5)',
     green: '#38A169', // Solid green for BOTH
     orange: '#F5A623', // Orange for Beikost
@@ -154,7 +158,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     textSecondary: '#888888', // Lighter gray for subtitles
     primary: '#4A90E2', // Solid blue for selected bottle
     accent: '#E5B9A0',  // Warm orange for save button
-    lightGray: 'rgba(230, 230, 230, 0.8)', // Light gray for unselected buttons
+    lightGray: 'rgba(255, 255, 255, 0.64)', // Light gray for unselected buttons
     mediumGray: 'rgba(220, 220, 220, 0.5)',
     green: '#38A169', // Solid green for BOTH
     orange: '#F5A623', // Orange for Beikost
@@ -755,6 +759,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             themeVariant={isDark ? 'dark' : 'light'}
             accentColor={theme.accent}
             onChange={(event, date) => {
+              setShowStartPicker(false);
               if (event.type === 'dismissed') return;
               const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
               applyStartPickerValue(nextStart);
@@ -788,6 +793,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             themeVariant={isDark ? 'dark' : 'light'}
             accentColor={theme.accent}
             onChange={(event, date) => {
+              setShowEndPicker(false);
               if (event.type === 'dismissed') return;
               const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
               applyEndPickerValue(nextEnd);
@@ -1023,7 +1029,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <TouchableOpacity style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={onClose}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={onClose}>
         <Text style={styles.closeHeaderButtonText}>✕</Text>
       </TouchableOpacity>
       <View style={styles.headerCenter}>
@@ -1032,6 +1038,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </View>
       <TouchableOpacity 
         style={[styles.headerButton, { backgroundColor: theme.accent }]} 
+        accessibilityRole="button"
+        accessibilityLabel={t('custom.saveEntry')}
         disabled={saving}
         accessibilityState={{ disabled: saving, busy: saving }}
         onPress={handleSave}
@@ -1135,13 +1143,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               key={option.type}
               style={[
                 styles.optionButton,
+                useWideOptions && styles.optionButtonWide,
                 { backgroundColor: theme.lightGray },
-                feedingType === option.type && { backgroundColor: getButtonColor(option.type as FeedingType) }
+                feedingType === option.type && {
+                  backgroundColor: `${getButtonColor(option.type as FeedingType)}${isDark ? '38' : '20'}`,
+                  borderColor: getButtonColor(option.type as FeedingType),
+                }
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: feedingType === option.type }}
+              accessibilityLabel={option.label}
               onPress={() => setFeedingType(option.type as FeedingType)}
             >
               <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
-              <Text style={[styles.optionLabel, { color: feedingType === option.type ? '#FFFFFF' : theme.text }]}>
+              <Text style={[styles.optionLabel, { color: theme.text, fontWeight: feedingType === option.type ? '700' : '500' }]}>
                 {option.label}
               </Text>
             </TouchableOpacity>
@@ -1395,16 +1410,20 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               key={option.type}
               style={[
                 styles.optionButton,
+                useWideOptions && styles.optionButtonWide,
                 { backgroundColor: theme.lightGray },
                 diaperType === option.type && {
-                  backgroundColor:
-                    option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green,
+                  backgroundColor: `${option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green}${isDark ? '38' : '20'}`,
+                  borderColor: option.type === 'wet' ? '#3498DB' : option.type === 'dirty' ? '#8E5A2B' : theme.green,
                 }
               ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: diaperType === option.type }}
+              accessibilityLabel={option.label}
               onPress={() => setDiaperType(option.type as DiaperType)}
             >
               <FixedEmojiText style={styles.optionIcon}>{option.icon}</FixedEmojiText>
-              <Text style={[styles.optionLabel, { color: diaperType === option.type ? '#FFFFFF' : theme.text }]}>
+              <Text style={[styles.optionLabel, { color: theme.text, fontWeight: diaperType === option.type ? '700' : '500' }]}>
                 {option.label}
               </Text>
             </TouchableOpacity>
@@ -1667,10 +1686,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   );
 
   return (
-    <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <View
         style={[
           styles.modalOverlay,
+          { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10) },
           { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.62)' : 'rgba(0, 0, 0, 0.4)' },
         ]}
       >
@@ -1679,20 +1699,16 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
             <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
 
-        <BlurView
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: theme.modalBackground,
-                borderTopWidth: isDark ? 1 : 0,
-                borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'transparent',
-              },
-            ]}
-            tint={isDark ? 'dark' : 'extraLight'}
-            intensity={80} // Slightly less intense blur
-        >
+        <GlassSheetSurface isDark={isDark} style={styles.modalContent}>
+            <View style={[styles.sheetHandle, { backgroundColor: theme.mediumGray }]} />
             {renderHeader()}
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
                 {/* This wrapper ensures keyboard dismiss works inside the scroll view */}
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                     <View style={{width: '100%', alignItems: 'center'}}>
@@ -1714,7 +1730,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                     </View>
                 </TouchableWithoutFeedback>
             </ScrollView>
-        </BlurView>
+        </GlassSheetSurface>
       </View>
 
       <TextInputOverlay
@@ -1738,24 +1754,28 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dimming backdrop
+    paddingHorizontal: 10,
   },
   modalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    width: '100%',
-    height: '85%',
-    maxHeight: 700,
-    minHeight: 650,
-    overflow: 'hidden',
-    padding: 20,
-    paddingBottom: 40,
+    flexShrink: 1,
+    maxHeight: '100%',
   },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginTop: 10,
+  },
+  scrollView: { flexShrink: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 25,
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
   },
   headerButton: {
     width: 44,
@@ -1770,24 +1790,21 @@ const styles = StyleSheet.create({
     color: '#888888',
   },
   headerCenter: {
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    textAlign: 'center',
+    fontWeight: '700',
     color: '#7D5A50',
   },
   modalSubtitle: {
+    textAlign: 'center',
     fontSize: 14,
     marginTop: 2,
     color: '#A8978E',
-  },
-  saveHeaderButton: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
   },
   saveHeaderButtonText: {
     fontSize: 22,
@@ -1795,15 +1812,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   section: {
-    marginBottom: 30,
+    marginBottom: 28,
     width: '100%',
     alignItems: 'center',
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 20,
-    width: '90%',
+    marginBottom: 14,
+    width: '100%',
     textAlign: 'left',
   },
   sectionTitleEmoji: {
@@ -1812,36 +1829,39 @@ const styles = StyleSheet.create({
   },
   optionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    flexWrap: 'wrap',
     width: '100%',
-    paddingHorizontal: 10,
+    gap: 10,
   },
   optionButton: {
-    flexDirection: 'row',
+    flexBasis: '30%',
+    flexGrow: 1,
+    minWidth: 0,
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 20,
     justifyContent: 'center',
-    marginHorizontal: 5,
-    minHeight: 50,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    gap: 8,
+    borderRadius: 24,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: 'rgba(160,145,136,0.22)',
+    overflow: 'hidden',
+    minHeight: 96,
   },
+  optionButtonWide: { flexBasis: '45%' },
   optionIcon: {
-    fontSize: 30,
-    marginBottom: 8,
+    fontSize: 28,
+    backgroundColor: 'transparent',
   },
   optionLabel: {
     fontSize: 14,
     fontWeight: '500',
     textAlign: 'center',
+    backgroundColor: 'transparent',
   },
   hiddenOptionNotice: {
-    width: '90%',
+    width: '100%',
     borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 16,
@@ -1853,7 +1873,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   pumpNoticeCard: {
-    width: '90%',
+    width: '100%',
     borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 16,
@@ -1873,9 +1893,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   contentContainer: {
-    minHeight: 180, // Feste Höhe, um Springen zu verhindern
-    justifyContent: 'center',
-    paddingTop: 10,
+    width: '100%',
+    gap: 20,
+    paddingTop: 24,
   },
   volumeStepperContainer: {
     flexDirection: 'row',
@@ -1884,14 +1904,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
     borderRadius: 30,
     paddingVertical: 5,
-    paddingHorizontal: 20,
-    width: '90%',
+    paddingHorizontal: 12,
+    width: '100%',
     minHeight: 70,
   },
   stepperButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'white',
@@ -1908,34 +1928,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   volumeText: {
+    fontVariant: ['tabular-nums'],
     fontSize: 36,
     fontWeight: 'bold',
   },
   timeCard: {
-    width: '90%',
+    width: '100%',
     borderRadius: 18,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
     padding: 12,
   },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', width: '90%', gap: 15 },
+  timeRow: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', gap: 12 },
   timeRowSingle: { gap: 0 },
   timeButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 0,
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 15,
-    padding: 15,
+    borderRadius: 22,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: 'rgba(160,145,136,0.18)',
+    padding: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
   },
   timeButtonSingle: {
     width: '100%',
-    flex: 0,
+    flexBasis: '100%',
   },
   timeButtonDisabled: {
     opacity: 0.72,
@@ -1947,16 +1968,12 @@ const styles = StyleSheet.create({
   datePickerContainer: {
     marginTop: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    borderRadius: 15,
-    padding: 15,
-    width: '90%',
+    borderRadius: 22,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: 'rgba(160,145,136,0.18)',
+    padding: 16,
+    width: '100%',
   },
   dateTimePicker: { width: '100%', backgroundColor: 'transparent' },
   datePickerActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
@@ -1970,7 +1987,8 @@ const styles = StyleSheet.create({
   manualPickerCard: {
     marginHorizontal: 12,
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 22,
+    borderCurve: 'continuous',
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -2001,11 +2019,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 6,
   },
   roundStepperText: {
     fontSize: 18,
@@ -2021,21 +2034,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    marginTop: 15,
-    width: '90%',
+    marginTop: 16,
+    gap: 10,
+    width: '100%',
   },
   quickVolumeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 18,
-    margin: 5,
+    flexBasis: '30%',
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 22,
   },
   quickVolumeText: {
     fontSize: 14,
     fontWeight: '600',
   },
   recipeDropdown: {
-    width: '90%',
+    width: '100%',
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: 14,
@@ -2045,13 +2063,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
   },
   recipeDropdownLabel: {
+    flex: 1,
+    marginRight: 8,
     fontSize: 14,
     fontWeight: '700',
   },
@@ -2060,7 +2075,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   recipeList: {
-    width: '90%',
+    width: '100%',
     marginTop: 10,
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 14,
@@ -2135,7 +2150,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   timerToggle: {
-    width: '90%',
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -2143,14 +2158,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.8)',
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 22,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
   },
   timerToggleActive: {
     borderColor: 'rgba(74,144,226,0.45)',
@@ -2213,7 +2224,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   diaperHealthGroup: {
-    width: '90%',
+    width: '100%',
     marginTop: 16,
     gap: 10,
   },
@@ -2224,14 +2235,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 22,
+    borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
   },
   diaperHealthToggleActive: {
     borderColor: 'rgba(74,144,226,0.45)',
@@ -2289,7 +2296,7 @@ const styles = StyleSheet.create({
   sideSelectorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    width: '90%',
+    width: '100%',
     marginTop: 10,
   },
   sideSelectorButton: {
@@ -2302,6 +2309,7 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   sideSelectorButtonText: {
+    textAlign: 'center',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -2336,7 +2344,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   deleteButton: {
-    width: '90%',
+    width: '100%',
     marginTop: 30,
     marginBottom: 20,
     paddingVertical: 16,
@@ -2347,11 +2355,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 107, 107, 0.35)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
   deleteButtonText: {
     fontSize: 16,

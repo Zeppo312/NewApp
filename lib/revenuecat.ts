@@ -1,9 +1,11 @@
+import { checkFamilyPurchaseAccess, clearFamilyAccess } from './familySubscriptionAccess';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Crypto from 'expo-crypto';
 import * as Sentry from '@sentry/react-native';
 
 import Purchases from '@/lib/purchasesClient';
+import { REVENUECAT_PLANS, resolvePurchasablePlan, resolveSubscriptionProduct, resolveSubscriptionTier, type StorePlanPrice } from './revenuecatProducts';
 
 export const REVENUECAT_ENTITLEMENT_KEY = 'LottiBabyAbo';
 export const REVENUECAT_LITE_ENTITLEMENT_KEY = 'LottiBabyLite';
@@ -38,22 +40,15 @@ export type RevenueCatPlanKey =
   | 'liteYearly';
 
 export type RevenueCatPlanPricing = Partial<
-  Record<RevenueCatPlanKey, { price: number; priceString: string }>
+  Record<RevenueCatPlanKey, StorePlanPrice>
 >;
-
-const REVENUECAT_PRODUCT_IDS: RevenueCatProductId[] = [
-  REVENUECAT_MONTHLY_PRODUCT_ID,
-  REVENUECAT_YEARLY_PRODUCT_ID,
-  REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID,
-  REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID,
-  REVENUECAT_LITE_MONTHLY_PRODUCT_ID,
-  REVENUECAT_LITE_YEARLY_PRODUCT_ID,
-];
 
 export type RevenueCatSubscriptionSummary = {
   isActive: boolean;
   availability: 'available' | 'unavailable';
   productId: string | null;
+  store: string | null;
+  basePlanId: string | null;
   planType: RevenueCatPlanType | null;
   tier: SubscriptionTier | null;
   willRenew: boolean | null;
@@ -72,46 +67,50 @@ const isExpoGo = () => Constants.appOwnership === 'expo';
 
 const getRevenueCatApiKey = () => {
   if (Platform.OS === 'ios') {
-    return process.env.EXPO_PUBLIC_RC_IOS_KEY ?? process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY ?? null;
+    return process.env.EXPO_PUBLIC_RC_IOS_KEY?.trim() || process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY?.trim() || null;
   }
 
   if (Platform.OS === 'android') {
-    return process.env.EXPO_PUBLIC_RC_ANDROID_KEY ?? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY ?? null;
+    return process.env.EXPO_PUBLIC_RC_ANDROID_KEY?.trim() || process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY?.trim() || null;
   }
 
   return null;
 };
 
-let didWarnTestKey = false;
 
 export const getRevenueCatConfigurationIssue = () => {
   if (Platform.OS === 'web') return null;
 
   const apiKey = getRevenueCatApiKey();
   if (!apiKey) {
-    return 'RevenueCat API Key fehlt. Setze EXPO_PUBLIC_RC_IOS_KEY/EXPO_PUBLIC_REVENUECAT_IOS_API_KEY (iOS) und/oder EXPO_PUBLIC_RC_ANDROID_KEY/EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY (Android).';
+    return Platform.OS === 'android'
+      ? 'RevenueCat API Key für Android fehlt. Setze EXPO_PUBLIC_RC_ANDROID_KEY oder EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY in .env.local bzw. der EAS-Umgebung und starte Metro neu.'
+      : 'RevenueCat API Key für iOS fehlt. Setze EXPO_PUBLIC_RC_IOS_KEY oder EXPO_PUBLIC_REVENUECAT_IOS_API_KEY in .env.local bzw. der EAS-Umgebung und starte Metro neu.';
   }
 
-  if (Platform.OS === 'ios') {
-    if (isExpoGo() && !apiKey.startsWith('test_')) {
-      return 'In Expo Go (Preview API Mode) sind echte Käufe nicht verfügbar. Verwende den RevenueCat Test Store Key (beginnt mit "test_") für EXPO_PUBLIC_RC_IOS_KEY oder nutze eine Development Build/TestFlight für echte Käufe.';
-    }
-
-    if (!isExpoGo() && apiKey.startsWith('test_')) {
-      if (__DEV__) {
-        if (!didWarnTestKey) {
-          didWarnTestKey = true;
-          console.warn(
-            '[RevenueCat] Test-Key erkannt in Development Build. Käufe sind deaktiviert. Für echte Käufe EXPO_PUBLIC_RC_IOS_KEY auf einen appl_-Key setzen.',
-          );
-        }
-        return null;
-      }
-      return 'RevenueCat ist für diesen iOS-Build falsch konfiguriert. In TestFlight und App Store muss EXPO_PUBLIC_RC_IOS_KEY mit "appl_" beginnen.';
-    }
+  if (isExpoGo()) return 'Store-Käufe benötigen einen Development- oder Store-Build.';
+  const prefix = Platform.OS === 'android' ? 'goog_' : 'appl_';
+  if (!apiKey.startsWith(prefix)) {
+    return `RevenueCat ist für diesen Build falsch konfiguriert. Der Store-Schlüssel muss mit "${prefix}" beginnen.`;
   }
 
   return null;
+};
+
+class RevenueCatConfigurationError extends Error {}
+
+const loggedConfigurationIssues = new Set<string>();
+const warnRevenueCatFailure = (message: string, error: unknown) => {
+  // Missing local configuration is actionable in the paywall, but repeated
+  // background checks must not keep opening LogBox during development.
+  if (__DEV__ && error instanceof RevenueCatConfigurationError) {
+    if (!loggedConfigurationIssues.has(error.message)) {
+      loggedConfigurationIssues.add(error.message);
+      console.info('[RevenueCat]', error.message);
+    }
+    return;
+  }
+  console.warn(message, error);
 };
 
 const getErrorCode = (error: unknown): string | null => {
@@ -127,6 +126,7 @@ const reportRevenueCatFailure = async (
   userId: string,
   error: unknown,
 ) => {
+  if (__DEV__ && error instanceof RevenueCatConfigurationError) return;
   let userHash: string | null = null;
   try {
     userHash = (
@@ -162,8 +162,6 @@ const reportRevenueCatFailure = async (
 };
 
 const synchronizeRevenueCatUser = async (userId: string, apiKey: string) => {
-  if (lastInitializedUserId === userId) return;
-
   const isConfigured = await Purchases.isConfigured();
   if (!isConfigured) {
     // configure() liefert im React-Native-SDK void. isConfigured() ist der
@@ -180,6 +178,7 @@ const synchronizeRevenueCatUser = async (userId: string, apiKey: string) => {
   } else {
     const currentUserId = await Purchases.getAppUserID();
     if (currentUserId !== userId) {
+      lastInitializedUserId = null;
       await Purchases.logIn(userId);
     }
   }
@@ -187,117 +186,115 @@ const synchronizeRevenueCatUser = async (userId: string, apiKey: string) => {
   lastInitializedUserId = userId;
 };
 
+// Serialize the entire SDK operation, not just logIn: the SDK has one global identity.
+let sessionUserId: string | null | undefined;
+let sessionRevision = 0;
+const assertSession = (userId: string, revision = sessionRevision) => {
+  if (!userId.trim() || revision !== sessionRevision ||
+      (sessionUserId !== undefined && sessionUserId !== userId)) {
+    throw new Error('Das angemeldete Konto hat sich geändert. Bitte erneut versuchen.');
+  }
+};
+
+function withRevenueCatUser<T>(userId: string, action: () => Promise<T>): Promise<T> {
+  const revision = sessionRevision;
+  const operation = initializationQueue.then(async () => {
+    assertSession(userId, revision);
+    const issue = getRevenueCatConfigurationIssue();
+    const apiKey = getRevenueCatApiKey();
+    if (issue || !apiKey) throw new RevenueCatConfigurationError(issue ?? 'RevenueCat API Key fehlt.');
+    await synchronizeRevenueCatUser(userId, apiKey);
+    assertSession(userId, revision);
+    const result = await action();
+    assertSession(userId, revision);
+    return result;
+  });
+  initializationQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
+// Called synchronously by AuthContext, so stale screens/listeners are blocked
+// even while a previous purchase or native logout is still finishing.
+export function setRevenueCatSessionUser(userId: string | null) {
+  if (sessionUserId === userId) return;
+  clearFamilyAccess();
+  sessionUserId = userId;
+  sessionRevision += 1;
+  lastInitializedUserId = null;
+  if (userId !== null || Platform.OS === 'web') return;
+  const logout = initializationQueue.then(async () => {
+    if (await Purchases.isConfigured() && !(await Purchases.isAnonymous())) {
+      await Purchases.logOut();
+      lastInitializedUserId = null;
+    }
+  });
+  initializationQueue = logout.catch((error) => {
+    warnRevenueCatFailure('RevenueCat logout failed', error);
+  });
+}
+
 export async function initRevenueCat(userId: string) {
   if (Platform.OS === 'web') return;
-
-  const apiKey = getRevenueCatApiKey();
-  const configurationIssue = getRevenueCatConfigurationIssue();
-  if (configurationIssue) throw new Error(configurationIssue);
-  if (!apiKey) throw new Error('RevenueCat API Key fehlt.');
-
-  const initialization = initializationQueue.then(() =>
-    synchronizeRevenueCatUser(userId, apiKey),
-  );
-  initializationQueue = initialization.catch(() => undefined);
-  return initialization;
+  return withRevenueCatUser(userId, async () => undefined);
 }
 
 const getCurrentOffering = async () => {
   const offerings = await Purchases.getOfferings();
-  return offerings?.all?.[REVENUECAT_OFFERING_ID] ?? offerings?.current ?? null;
+  return offerings?.all?.[REVENUECAT_OFFERING_ID] ?? null;
 };
 
-const getPackageProductId = (pkg: any): string | null => {
-  return pkg?.product?.identifier ?? pkg?.product?.productIdentifier ?? null;
-};
+const getPlanTypeFromProductId = (productId: string | null, basePlan?: string | null): RevenueCatPlanType | null =>
+  productId ? resolveSubscriptionProduct(productId, basePlan)?.interval ?? 'unknown' : null;
 
-const MONTHLY_PRODUCT_IDS: string[] = [
-  REVENUECAT_MONTHLY_PRODUCT_ID,
-  REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID,
-  REVENUECAT_LITE_MONTHLY_PRODUCT_ID,
-];
+export const getTierFromProductId = resolveSubscriptionTier;
 
-const YEARLY_PRODUCT_IDS: string[] = [
-  REVENUECAT_YEARLY_PRODUCT_ID,
-  REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID,
-  REVENUECAT_LITE_YEARLY_PRODUCT_ID,
-];
-
-const LITE_PRODUCT_IDS: string[] = [
-  REVENUECAT_LITE_MONTHLY_PRODUCT_ID,
-  REVENUECAT_LITE_YEARLY_PRODUCT_ID,
-];
-
-const PREMIUM_PRODUCT_IDS: string[] = [
-  REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID,
-  REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID,
-];
-
-const STANDARD_PRODUCT_IDS: string[] = [
-  REVENUECAT_MONTHLY_PRODUCT_ID,
-  REVENUECAT_YEARLY_PRODUCT_ID,
-];
-
-const getPlanTypeFromProductId = (productId: string | null): RevenueCatPlanType | null => {
-  if (!productId) return null;
-  if (MONTHLY_PRODUCT_IDS.includes(productId)) return 'monthly';
-  if (YEARLY_PRODUCT_IDS.includes(productId)) return 'yearly';
-  return 'unknown';
-};
-
-export const getTierFromProductId = (
-  productId: string | null,
-): SubscriptionTier | null => {
-  if (!productId) return null;
-  if (LITE_PRODUCT_IDS.includes(productId)) return 'lite';
-  if (PREMIUM_PRODUCT_IDS.includes(productId)) return 'premium';
-  if (STANDARD_PRODUCT_IDS.includes(productId)) return 'standard';
-  return null;
-};
-
-const getProductIdCandidates = (
-  tier: SubscriptionTier,
-  interval: SubscriptionInterval,
-): RevenueCatProductId[] => {
-  if (tier === 'lite') {
-    return interval === 'yearly'
-      ? [REVENUECAT_LITE_YEARLY_PRODUCT_ID]
-      : [REVENUECAT_LITE_MONTHLY_PRODUCT_ID];
-  }
-
-  if (tier === 'standard') {
-    return interval === 'yearly'
-      ? [REVENUECAT_YEARLY_PRODUCT_ID]
-      : [REVENUECAT_MONTHLY_PRODUCT_ID];
-  }
-
-  return interval === 'yearly'
-    ? [REVENUECAT_PREMIUM_YEARLY_PRODUCT_ID]
-    : [REVENUECAT_PREMIUM_MONTHLY_PRODUCT_ID];
-};
+const getEntitlementTier = (entitlement: any, key: string): SubscriptionTier | null =>
+  getTierFromProductId(entitlement?.productIdentifier) ??
+  (key === REVENUECAT_PREMIUM_ENTITLEMENT_KEY ? 'premium' :
+    key === REVENUECAT_LITE_ENTITLEMENT_KEY ? 'lite' : null);
 
 const getActiveEntitlement = (customerInfo: any) => {
   const active = customerInfo?.entitlements?.active ?? {};
-  return active[REVENUECAT_PREMIUM_ENTITLEMENT_KEY]
-    ?? active[REVENUECAT_ENTITLEMENT_KEY]
-    ?? active[REVENUECAT_LITE_ENTITLEMENT_KEY]
-    ?? null;
+  const rank = { premium: 3, standard: 2, lite: 1 };
+  const entitlements = [REVENUECAT_PREMIUM_ENTITLEMENT_KEY, REVENUECAT_ENTITLEMENT_KEY, REVENUECAT_LITE_ENTITLEMENT_KEY]
+    .filter((key) => active[key] && active[key].isActive !== false)
+    .map((key) => ({ ...active[key], resolvedTier: getEntitlementTier(active[key], key) }));
+  if (!entitlements.length) return null;
+
+  // One legacy entitlement can represent several active products. RevenueCat
+  // may select longer-running Lite even when shorter family-shared Premium is
+  // active. Rank the SDK's verified subscriptions too, keeping each product's
+  // own expiry and renewal metadata rather than borrowing the Lite period.
+  const subscriptions = Object.values(customerInfo?.subscriptionsByProductIdentifier ?? {})
+    .filter((subscription: any) => subscription?.isActive === true && !subscription.refundedAt)
+    .flatMap((subscription: any) => {
+      const productId = subscription.productIdentifier;
+      const plan = resolveSubscriptionProduct(productId);
+      if (!plan || !(
+        (subscription.store === 'APP_STORE' && productId === plan.ios) ||
+        (subscription.store === 'PLAY_STORE' && productId === `${plan.google}:${plan.interval}`)
+      )) return [];
+      return [{
+        ...subscription,
+        resolvedTier: plan.tier,
+        productPlanIdentifier: subscription.store === 'PLAY_STORE' ? plan.interval : null,
+        expirationDate: subscription.gracePeriodExpiresDate ?? subscription.expiresDate,
+      }];
+    });
+  return [...entitlements, ...subscriptions]
+    .sort((a, b) => (rank[b.resolvedTier as SubscriptionTier] ?? 0) - (rank[a.resolvedTier as SubscriptionTier] ?? 0))[0] ?? null;
 };
 
 const hasAnyActiveEntitlement = (customerInfo: any) =>
   Boolean(getActiveEntitlement(customerInfo));
 
-export const findRevenueCatPackageByProductId = (packages: any[], productId: RevenueCatProductId) => {
-  return packages.find((pkg: any) => getPackageProductId(pkg) === productId) ?? null;
-};
-
 export async function getRevenueCatPackages(userId: string) {
   if (Platform.OS === 'web') return [];
 
-  await initRevenueCat(userId);
-
-  const offering = await getCurrentOffering();
-  return offering?.availablePackages ?? [];
+  return withRevenueCatUser(userId, async () => {
+    const offering = await getCurrentOffering();
+    return offering?.availablePackages ?? [];
+  });
 }
 
 export async function hasRevenueCatEntitlement(userId: string) {
@@ -320,13 +317,12 @@ export async function getRevenueCatEntitlementStatus(
   }
 
   try {
-    await initRevenueCat(userId);
-    const customerInfo = await Purchases.getCustomerInfo();
+    const customerInfo = await withRevenueCatUser(userId, () => Purchases.getCustomerInfo());
     return hasAnyActiveEntitlement(customerInfo)
       ? { status: 'active', customerInfo }
       : { status: 'inactive', customerInfo };
   } catch (error) {
-    console.warn('RevenueCat entitlement check unavailable', error);
+    warnRevenueCatFailure('RevenueCat entitlement check unavailable', error);
     await reportRevenueCatFailure('entitlement_check', userId, error);
     return { status: 'unavailable', error };
   }
@@ -338,18 +334,10 @@ export async function getActiveSubscriptionTier(
   if (Platform.OS === 'web') return null;
 
   try {
-    await initRevenueCat(userId);
-    const customerInfo = await Purchases.getCustomerInfo();
-    const active = customerInfo?.entitlements?.active ?? {};
-    if (active[REVENUECAT_PREMIUM_ENTITLEMENT_KEY]) return 'premium';
-    if (active[REVENUECAT_ENTITLEMENT_KEY]) {
-      const entitlement = active[REVENUECAT_ENTITLEMENT_KEY];
-      return getTierFromProductId(entitlement?.productIdentifier) ?? 'standard';
-    }
-    if (active[REVENUECAT_LITE_ENTITLEMENT_KEY]) return 'lite';
-    return null;
+    const customerInfo = await withRevenueCatUser(userId, () => Purchases.getCustomerInfo());
+    return getActiveEntitlement(customerInfo)?.resolvedTier ?? null;
   } catch (err) {
-    console.warn('RevenueCat tier check failed', err);
+    warnRevenueCatFailure('RevenueCat tier check failed', err);
     return null;
   }
 }
@@ -362,6 +350,8 @@ export async function getRevenueCatSubscriptionSummary(
       isActive: false,
       availability: 'available',
       productId: null,
+      store: null,
+      basePlanId: null,
       planType: null,
       tier: null,
       willRenew: null,
@@ -376,6 +366,8 @@ export async function getRevenueCatSubscriptionSummary(
         isActive: false,
         availability: 'unavailable',
         productId: null,
+        store: null,
+        basePlanId: null,
         planType: null,
         tier: null,
         willRenew: null,
@@ -393,8 +385,10 @@ export async function getRevenueCatSubscriptionSummary(
       isActive: Boolean(entitlement),
       availability: 'available',
       productId,
-      planType: getPlanTypeFromProductId(productId),
-      tier: getTierFromProductId(productId),
+      store: entitlement?.store ?? null,
+      basePlanId: entitlement?.store === 'PLAY_STORE' ? entitlement?.productPlanIdentifier ?? resolveSubscriptionProduct(productId)?.interval ?? null : null,
+      planType: getPlanTypeFromProductId(productId, entitlement?.productPlanIdentifier),
+      tier: entitlement?.resolvedTier ?? null,
       willRenew:
         typeof entitlement?.willRenew === 'boolean'
           ? entitlement.willRenew
@@ -405,12 +399,14 @@ export async function getRevenueCatSubscriptionSummary(
           : null,
     };
   } catch (err) {
-    console.warn('RevenueCat subscription summary failed', err);
+    warnRevenueCatFailure('RevenueCat subscription summary failed', err);
     await reportRevenueCatFailure('subscription_summary', userId, err);
     return {
       isActive: false,
       availability: 'unavailable',
       productId: null,
+      store: null,
+      basePlanId: null,
       planType: null,
       tier: null,
       willRenew: null,
@@ -419,91 +415,85 @@ export async function getRevenueCatSubscriptionSummary(
   }
 }
 
+export class RevenueCatPurchaseBlockedError extends Error {
+  constructor(public readonly reason: 'activeSubscription' | 'familySubscription' | 'unavailable' | 'priceChanged') {
+    super(reason);
+  }
+}
+
+export const isRevenueCatPurchaseCancelled = (error: unknown) => {
+  const value = error as { userCancelled?: boolean; code?: string | number } | null;
+  // purchases-typescript-internal: PURCHASE_CANCELLED_ERROR = '1'.
+  return value?.userCancelled === true || String(value?.code) === '1';
+};
+
 export async function purchaseRevenueCatProduct(userId: string, productId: RevenueCatProductId) {
-  if (Platform.OS === 'web') {
-    throw new Error('Käufe sind auf Web nicht verfügbar.');
-  }
-
-  const packages = await getRevenueCatPackages(userId);
-  const pkg = findRevenueCatPackageByProductId(packages, productId);
-
-  if (!pkg) {
-    throw new Error(`RevenueCat product "${productId}" im Offering "${REVENUECAT_OFFERING_ID}" nicht gefunden.`);
-  }
-
-  const purchaseResult = await Purchases.purchasePackage(pkg as any);
-  const customerInfo = purchaseResult?.customerInfo ?? purchaseResult;
-  return hasAnyActiveEntitlement(customerInfo);
+  const plan = REVENUECAT_PLANS.find((candidate) => candidate.ios === productId);
+  if (!plan) throw new RevenueCatPurchaseBlockedError('unavailable');
+  return purchaseSubscriptionPlan(userId, plan.tier, plan.interval);
 }
 
 export async function purchaseSubscriptionPlan(
   userId: string,
   tier: SubscriptionTier,
   interval: SubscriptionInterval,
+  displayedPrice?: StorePlanPrice,
 ) {
-  if (Platform.OS === 'web') {
-    throw new Error('Käufe sind auf Web nicht verfügbar.');
+  if (Platform.OS === 'web') throw new RevenueCatPurchaseBlockedError('unavailable');
+  const revision = sessionRevision;
+  const familyCheck = await checkFamilyPurchaseAccess(userId);
+  assertSession(userId, revision);
+  if (familyCheck !== 'allowed') {
+    throw new RevenueCatPurchaseBlockedError(familyCheck === 'family' ? 'familySubscription' : 'unavailable');
   }
-
-  const packages = await getRevenueCatPackages(userId);
-  const candidates = getProductIdCandidates(tier, interval);
-
-  for (const productId of candidates) {
-    const pkg = findRevenueCatPackageByProductId(packages, productId);
-    if (!pkg) continue;
-
-    const purchaseResult = await Purchases.purchasePackage(pkg as any);
-    const customerInfo = purchaseResult?.customerInfo ?? purchaseResult;
-    return hasAnyActiveEntitlement(customerInfo);
-  }
-
-  throw new Error(
-    `Kein passendes Produkt (${candidates.join(', ')}) im Offering "${REVENUECAT_OFFERING_ID}" gefunden.`,
-  );
+  return withRevenueCatUser(userId, async () => {
+    // Fail closed on a status error. A cancelled renewal still blocks another
+    // subscription while entitlement/access remains active.
+    await Purchases.invalidateCustomerInfoCache();
+    const current = await Purchases.getCustomerInfo();
+    const active = Object.values(current.entitlements.active).filter((value) => value.isActive !== false);
+    const hasSubscription = active.length > 0 || current.activeSubscriptions.length > 0;
+    const sameProduct = active.some((value) => {
+      const plan = resolveSubscriptionProduct(value.productIdentifier, value.productPlanIdentifier);
+      return plan?.tier === tier && plan.interval === interval;
+    });
+    if (hasSubscription && (Platform.OS === 'android' || sameProduct || active.length === 0 ||
+        active.some((value) => value.store !== 'APP_STORE'))) {
+      throw new RevenueCatPurchaseBlockedError('activeSubscription');
+    }
+    const offering = await getCurrentOffering();
+    const plan = REVENUECAT_PLANS.find((value) => value.tier === tier && value.interval === interval);
+    const selection = plan && resolvePurchasablePlan(offering?.availablePackages ?? [], plan, Platform.OS);
+    if (!selection) throw new RevenueCatPurchaseBlockedError('unavailable');
+    if (displayedPrice && (Object.keys(selection.pricing) as (keyof StorePlanPrice)[])
+      .some((key) => displayedPrice[key] !== selection.pricing[key])) {
+      throw new RevenueCatPurchaseBlockedError('priceChanged');
+    }
+    assertSession(userId, revision);
+    const result = selection.option
+      ? await Purchases.purchaseSubscriptionOption(selection.option)
+      : await Purchases.purchasePackage(selection.pkg);
+    // Any old entitlement is not proof that the requested plan is now active.
+    return Object.entries(result.customerInfo.entitlements.active).some(([key, value]) => {
+      const purchased = resolveSubscriptionProduct(value.productIdentifier, value.productPlanIdentifier);
+      return value.isActive !== false && value.store === (Platform.OS === 'android' ? 'PLAY_STORE' : 'APP_STORE') &&
+        getEntitlementTier(value, key) === tier && purchased?.interval === interval;
+    });
+  });
 }
 
-export async function getRevenueCatPlanPricing(
-  userId: string,
-): Promise<RevenueCatPlanPricing> {
+export async function getRevenueCatPlanPricing(userId: string): Promise<RevenueCatPlanPricing> {
   if (Platform.OS === 'web') return {};
-
   try {
-    await initRevenueCat(userId);
-
-    // Preise direkt über die exakten Store-Produkt-IDs laden. Dadurch kann eine
-    // veraltete oder falsch zugeordnete Offering-Preisanzeige nicht vom späteren
-    // nativen Kaufdialog abweichen.
-    const products = await Purchases.getProducts(REVENUECAT_PRODUCT_IDS);
+    const packages = await getRevenueCatPackages(userId);
     const pricing: RevenueCatPlanPricing = {};
-
-    const assign = (
-      key: RevenueCatPlanKey,
-      tier: SubscriptionTier,
-      interval: SubscriptionInterval,
-    ) => {
-      for (const productId of getProductIdCandidates(tier, interval)) {
-        const product = products.find((candidate: any) =>
-          (candidate?.identifier ?? candidate?.productIdentifier) === productId,
-        );
-        const price = product?.price;
-        const priceString = product?.priceString;
-        if (typeof price === 'number' && typeof priceString === 'string') {
-          pricing[key] = { price, priceString };
-          return;
-        }
-      }
-    };
-
-    assign('premiumMonthly', 'premium', 'monthly');
-    assign('premiumYearly', 'premium', 'yearly');
-    assign('standardMonthly', 'standard', 'monthly');
-    assign('standardYearly', 'standard', 'yearly');
-    assign('liteMonthly', 'lite', 'monthly');
-    assign('liteYearly', 'lite', 'yearly');
-
+    for (const plan of REVENUECAT_PLANS) {
+      const selection = resolvePurchasablePlan(packages, plan, Platform.OS);
+      if (selection) pricing[plan.key] = selection.pricing;
+    }
     return pricing;
-  } catch (err) {
-    console.warn('RevenueCat plan pricing lookup failed', err);
+  } catch (error) {
+    warnRevenueCatFailure('RevenueCat plan pricing lookup failed', error);
     return {};
   }
 }
@@ -520,11 +510,10 @@ export async function restoreRevenueCatPurchases(userId: string) {
   if (Platform.OS === 'web') return false;
 
   try {
-    await initRevenueCat(userId);
-    const customerInfo = await Purchases.restorePurchases();
+    const customerInfo = await withRevenueCatUser(userId, () => Purchases.restorePurchases());
     return hasAnyActiveEntitlement(customerInfo);
   } catch (err) {
-    console.warn('RevenueCat restorePurchases failed', err);
+    warnRevenueCatFailure('RevenueCat restorePurchases failed', err);
     await reportRevenueCatFailure('restore_purchases', userId, err);
     throw err;
   }
@@ -536,21 +525,22 @@ export const subscribeToRevenueCatCustomerInfoUpdates = (
 ) => {
   if (Platform.OS === 'web') return () => undefined;
 
+  const revision = sessionRevision;
   let disposed = false;
   let registered = false;
 
   const customerInfoListener = (customerInfo: any) => {
-    if (!disposed) listener(customerInfo);
+    if (!disposed && revision === sessionRevision && lastInitializedUserId === userId) listener(customerInfo);
   };
 
   void initRevenueCat(userId)
     .then(() => {
-      if (disposed) return;
+      if (disposed || revision !== sessionRevision || lastInitializedUserId !== userId) return;
       Purchases.addCustomerInfoUpdateListener(customerInfoListener);
       registered = true;
     })
     .catch(async (error) => {
-      console.warn('RevenueCat customer info listener setup failed', error);
+      warnRevenueCatFailure('RevenueCat customer info listener setup failed', error);
       await reportRevenueCatFailure('listener_setup', userId, error);
     });
 

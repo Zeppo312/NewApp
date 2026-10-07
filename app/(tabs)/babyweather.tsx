@@ -1635,7 +1635,7 @@ export default function BabyWeatherScreen() {
         <SafeAreaView style={styles.container}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           
-          <Header title={t('screen.title')} showBackButton />
+          <Header topSafeAreaHandled title={t('screen.title')} showBackButton />
           
           <ScrollView
             style={styles.scrollView}

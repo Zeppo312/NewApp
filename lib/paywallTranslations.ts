@@ -7,6 +7,13 @@ import {
 
 const ui = {
   de: {
+    redeemFamilyCode: "Familiencode einlösen",
+    familySubscription: "Dein Familienabo ist aktiv. Du brauchst kein zusätzliches Abo.",
+    paymentPending: "Die Zahlung wartet noch auf Bestätigung. Dein Zugang wird nach erfolgreicher Zahlung freigeschaltet. Bitte aktualisiere danach den Status.",
+    priceUnavailable: "Preis derzeit nicht verfügbar",
+    activeSubscription: "Du hast bereits ein aktives Abo. Verwalte es im Herkunftsstore. Für einen Wechsel zu Google Play muss es zuerst abgelaufen sein. Google-Tarifwechsel in der App sind derzeit nicht verfügbar.",
+    priceChanged: "Der Store-Preis hat sich geändert. Bitte prüfe den aktualisierten Preis.",
+    manageSubscription: "Abo verwalten",
     billingApple: "Abrechnung über den App Store",
     billingGoogle: "Abrechnung über Google Play",
     billing: "Abrechnung",
@@ -35,6 +42,13 @@ const ui = {
     data: "Konto & Daten verwalten",
   },
   en: {
+    redeemFamilyCode: "Redeem family code",
+    familySubscription: "Your family subscription is active. You do not need another subscription.",
+    paymentPending: "Your payment is awaiting confirmation. Access will be unlocked after successful payment. Please refresh the status afterwards.",
+    priceUnavailable: "Price currently unavailable",
+    activeSubscription: "You already have an active subscription. Manage it in its original store. It must expire before switching to Google Play. In-app Google plan changes are currently unavailable.",
+    priceChanged: "The store price changed. Please review the updated price.",
+    manageSubscription: "Manage subscription",
     billingApple: "Billed through the App Store",
     billingGoogle: "Billed through Google Play",
     billing: "Billing",
@@ -62,6 +76,13 @@ const ui = {
     data: "Manage account & data",
   },
   es: {
+    redeemFamilyCode: "Canjear código familiar",
+    familySubscription: "Tu suscripción familiar está activa. No necesitas otra suscripción.",
+    paymentPending: "Tu pago está pendiente de confirmación. El acceso se activará después del pago. Actualiza el estado cuando se haya confirmado.",
+    priceUnavailable: "Precio no disponible",
+    activeSubscription: "Ya tienes una suscripción activa. Gestiónala en la tienda de origen. Debe caducar antes de cambiar a Google Play. Los cambios de plan de Google en la app no están disponibles actualmente.",
+    priceChanged: "El precio de la tienda ha cambiado. Revisa el precio actualizado.",
+    manageSubscription: "Gestionar suscripción",
     billingApple: "Facturación mediante App Store",
     billingGoogle: "Facturación mediante Google Play",
     billing: "Facturación",

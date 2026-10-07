@@ -1,16 +1,14 @@
 import { useState, useCallback } from 'react';
 import { useBackend } from '@/contexts/BackendContext';
-import { useConvex } from '@/contexts/ConvexContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { BabyService, BabyInfo, CreateBabyInput, UpdateBabyInput } from '@/lib/services/BabyService';
 
 /**
  * Hook to access baby data service
- * Automatically uses the active backend (Supabase or Convex)
+ * Uses Supabase for baby data
  */
 export function useBabyService() {
   const { activeBackend } = useBackend();
-  const { convexClient } = useConvex();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -18,8 +16,8 @@ export function useBabyService() {
   // Create service instance
   const getService = useCallback(() => {
     if (!user) throw new Error('User not authenticated');
-    return new BabyService(activeBackend, convexClient, user.id);
-  }, [activeBackend, convexClient, user]);
+    return new BabyService(user.id);
+  }, [activeBackend, user]);
 
   // List all babies
   const listBabies = useCallback(async () => {

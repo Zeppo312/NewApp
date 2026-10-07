@@ -16,6 +16,7 @@ import {
   subscribeToSubscriptionAccess,
   type SubscriptionAccessState,
 } from '@/lib/subscriptionAccess';
+import { FAMILY_ACCESS_POLL_MS, refreshFamilyAccess, subscribeToFamilyAccess } from '@/lib/familySubscriptionAccess';
 import { isSubscriptionFeaturePolicyStale } from '@/lib/subscriptionFeaturePolicy';
 
 type SubscriptionAccessContextValue = SubscriptionAccessState & {
@@ -37,6 +38,22 @@ export function SubscriptionAccessProvider({ children }: { children: React.React
     // Nur der lokale Cache wird abgewartet. Die Netzaktualisierung wird vom
     // Service anschließend fire-and-forget im Hintergrund angestoßen.
     void hydrateSubscriptionAccess(userId);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const check = () => {
+      if (AppState.currentState === 'active') void refreshFamilyAccess(userId);
+    };
+    const unsubscribe = subscribeToFamilyAccess((changedUserId) => {
+      if (changedUserId === userId) void refreshSubscriptionAccess(userId, { force: true });
+    });
+    void refreshFamilyAccess(userId, { force: true });
+    const timer = setInterval(check, FAMILY_ACCESS_POLL_MS);
+    const appState = AppState.addEventListener('change', state => {
+      if (state === 'active') void refreshFamilyAccess(userId, { force: true });
+    });
+    return () => { clearInterval(timer); appState.remove(); unsubscribe(); };
   }, [userId]);
 
   const refresh = useCallback(

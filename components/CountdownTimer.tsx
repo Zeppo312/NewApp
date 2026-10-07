@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, AppState, AppStateStatus, TouchableOpacity, useWindowDimensions } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { router } from 'expo-router';
+import { usePregnancyAge } from '@/hooks/use-pregnancy-age';
 import Svg, { Circle, G, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { PRIMARY, TEXT_PRIMARY, FONT_SM, FONT_MD, RADIUS } from '@/constants/DesignGuide';
 import {
@@ -59,107 +60,14 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? adaptiveColors.textPrimary : TEXT_PRIMARY;
   const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
-  const [daysLeft, setDaysLeft] = useState<number | null>(null);
-  const [currentWeek, setCurrentWeek] = useState<number | null>(null);
-  const [currentDay, setCurrentDay] = useState<number | null>(null);
-  const [progress, setProgress] = useState<number>(0);
-  const [isOverdue, setIsOverdue] = useState<boolean>(false);
+  const age = usePregnancyAge(dueDate);
+  const daysLeft = age?.daysToDueDate ?? null;
+  const currentWeek = age?.runningWeek ?? null;
+  const currentDay = age?.day ?? null;
+  const progress = Math.min(1, Math.max(0, (age?.totalDays ?? 0) / 280));
+  const isOverdue = (daysLeft ?? 0) < 0;
   const t = (key: Parameters<typeof translateCountdownText>[1], params?: Record<string, string | number>) =>
     translateCountdownText(locale, key, params);
-
-  useEffect(() => {
-    if (!dueDate) return;
-
-    const calculateTimeLeft = () => {
-      // Aktuelles Datum ohne Uhrzeit (nur Tag)
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      // Geburtstermin ohne Uhrzeit (nur Tag)
-      const dueDateCopy = new Date(dueDate);
-      dueDateCopy.setHours(0, 0, 0, 0);
-
-      // Berechne die Differenz in Millisekunden
-      const difference = dueDateCopy.getTime() - now.getTime();
-
-      // Berechne die Tage bis zum Geburtstermin (immer ganze Tage)
-      const days = Math.round(difference / (1000 * 60 * 60 * 24));
-      setDaysLeft(days);
-
-      // Setze den Überfälligkeitsstatus
-      setIsOverdue(days < 0);
-
-      // Berechne die aktuelle SSW
-      // Schwangerschaft dauert ca. 40 Wochen
-      const totalDaysInPregnancy = 280; // 40 Wochen * 7 Tage
-
-      // Berechne die Tage der Schwangerschaft.
-      // Die Werte werden auf den gültigen Bereich einer Schwangerschaft begrenzt,
-      // damit bei einem sehr weit entfernten ET keine SSW 0 oder negativ entsteht.
-      const daysRemaining = Math.max(0, days);
-      const daysPregnant = Math.min(
-        totalDaysInPregnancy,
-        Math.max(0, totalDaysInPregnancy - daysRemaining)
-      );
-
-      // Berechne SSW und Tag
-      const weeksPregnant = Math.floor(daysPregnant / 7);
-      const daysInCurrentWeek = daysPregnant % 7;
-
-      // In der SSW-Zählung ist man bereits in der nächsten Woche, selbst bei 0 Tagen
-      // Das heißt: 36+6 bedeutet 37. SSW
-      const currentSSW = Math.max(1, weeksPregnant + 1);
-
-      setCurrentWeek(currentSSW);
-      setCurrentDay(daysInCurrentWeek);
-
-      // Berechne den Fortschritt (0-1)
-      setProgress(Math.min(1, Math.max(0, daysPregnant / totalDaysInPregnancy)));
-    };
-
-    // Initiale Berechnung
-    calculateTimeLeft();
-
-    // Stündliches Update
-    const hourlyTimer = setInterval(calculateTimeLeft, 1000 * 60 * 60); // Update every hour
-
-    // Tägliches Update um Mitternacht
-    const setMidnightTimer = () => {
-      const now = new Date();
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(0, 0, 0, 0);
-
-      const timeUntilMidnight = tomorrow.getTime() - now.getTime();
-
-      return setTimeout(() => {
-        calculateTimeLeft(); // Aktualisiere sofort um Mitternacht
-        const dailyTimer = setInterval(calculateTimeLeft, 1000 * 60 * 60 * 24); // Dann täglich
-
-        // Speichere den Timer, um ihn später zu löschen
-        return () => clearInterval(dailyTimer);
-      }, timeUntilMidnight);
-    };
-
-    const midnightTimer = setMidnightTimer();
-
-    // AppState-Listener für Aktualisierung, wenn die App in den Vordergrund kommt
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        // App ist wieder im Vordergrund, Countdown aktualisieren
-        calculateTimeLeft();
-      }
-    };
-
-    // AppState-Listener registrieren
-    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
-
-    return () => {
-      clearInterval(hourlyTimer);
-      clearTimeout(midnightTimer);
-      appStateSubscription.remove(); // AppState-Listener entfernen
-    };
-  }, [dueDate]);
 
   if (dueDate === null) {
     return (
@@ -297,9 +205,9 @@ const CountdownTimer: React.FC<CountdownTimerProps> = ({
             >
               {isOverdue
                 ? t('timer.overdue')
-                : currentWeek && currentWeek <= 13 ? t('timer.trimesterOne') :
-                  currentWeek && currentWeek <= 27 ? t('timer.trimesterTwo') :
-                  currentWeek && currentWeek >= 28 ? t('timer.trimesterThree') : ''}
+                : currentWeek && currentWeek <= 14 ? t('timer.trimesterOne') :
+                  currentWeek && currentWeek <= 28 ? t('timer.trimesterTwo') :
+                  currentWeek && currentWeek >= 29 ? t('timer.trimesterThree') : ''}
             </SvgText>
 
             <G>

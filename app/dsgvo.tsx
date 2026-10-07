@@ -8,11 +8,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { exportUserData } from '@/lib/dataExport';
-import {
-  deleteUserAccount,
-  getAccountDeletionRequirements,
-} from '@/lib/profile';
-import { openSubscriptionManagement } from '@/lib/subscriptionManagement';
 
 const COPY = {
   de: { error: 'Fehler', exportFailed: 'Datenexport fehlgeschlagen.', exportDone: 'Export abgeschlossen', exported: 'Deine Daten wurden exportiert{{records}}.', records: ' ({{count}} Einträge)', deleteTitle: 'Konto löschen', deleteWarning: 'Das Löschen deines Kontos beendet dein Store-Abo nicht automatisch. Falls du ein aktives Store-Abo hast, kann die Abrechnung weiterlaufen. Bitte prüfe oder kündige dein Abo vorher über „Abo verwalten“.{{apple}}', appleWarning: '\n\nDa dein Konto mit „Mit Apple anmelden“ verknüpft ist, ist im nächsten Schritt eine Apple-Bestätigung nötig.', cancel: 'Abbrechen', manage: 'Abo verwalten', delete: 'Konto löschen', deleteFailed: 'Konto konnte nicht gelöscht werden.', deletedTitle: 'Konto gelöscht', deleted: 'Dein Konto und alle zugehörigen Daten wurden gelöscht. Du wirst jetzt abgemeldet.', ok: 'OK', signOut: 'Ausloggen', signOutQuestion: 'Möchtest du dich wirklich ausloggen?', signOutFailed: 'Ausloggen fehlgeschlagen.', title: 'Konto & Daten verwalten', body: 'Auch ohne aktives Abo kannst du hier deine Daten exportieren oder dein Konto dauerhaft löschen.', exporting: 'Export läuft …', export: 'Daten exportieren', waiting: 'Bitte warten …', deleteData: 'Konto & Daten löschen', signingOut: 'Wird ausgeloggt …', back: 'Zurück zur Paywall' },
@@ -30,7 +25,7 @@ export default function DsgvoScreen() {
     return value.replaceAll(/\{\{\w+\}\}/g, '');
   };
   const [isExporting, setIsExporting] = useState(false);
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const isDeletingAccount = false;
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   const handleExportData = async () => {
@@ -63,69 +58,7 @@ export default function DsgvoScreen() {
     }
   };
 
-  const handleDeleteAccount = async () => {
-    if (!user || isDeletingAccount) {
-      return;
-    }
-
-    try {
-      const { data: requirements, error } = await getAccountDeletionRequirements();
-      if (error) {
-        throw error;
-      }
-
-      Alert.alert(
-        t('deleteTitle'),
-        t('deleteWarning', { apple: requirements?.hasAppleSignIn ? t('appleWarning') : '' }),
-        [
-          { text: t('cancel'), style: 'cancel' },
-          { text: t('manage'), onPress: () => void openSubscriptionManagement() },
-          {
-            text: t('delete'),
-            style: 'destructive',
-            onPress: () => {
-              void confirmDeleteAccount();
-            },
-          },
-        ],
-      );
-    } catch (error: any) {
-      console.error('Failed to load DSGVO deletion requirements:', error);
-      Alert.alert(t('error'), t('deleteFailed'));
-    }
-  };
-
-  const confirmDeleteAccount = async () => {
-    if (!user || isDeletingAccount) {
-      return;
-    }
-
-    try {
-      setIsDeletingAccount(true);
-      const { error } = await deleteUserAccount();
-      if (error) {
-        throw error;
-      }
-
-      Alert.alert(
-        t('deletedTitle'),
-        t('deleted'),
-        [
-          {
-            text: t('ok'),
-            onPress: async () => {
-              await signOut();
-            },
-          },
-        ],
-      );
-    } catch (error: any) {
-      console.error('DSGVO account deletion failed:', error);
-      Alert.alert(t('error'), t('deleteFailed'));
-    } finally {
-      setIsDeletingAccount(false);
-    }
-  };
+  const handleDeleteAccount = () => router.push('/account-deletion');
 
   const confirmSignOut = () => {
     if (isSigningOut) {

@@ -1,27 +1,22 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { getAppSettings, saveAppSettings } from '@/lib/supabase';
 
 /**
  * BackendContext
  *
- * Manages the active backend selection (Supabase or Convex).
- * The preference is stored in user_settings table and persisted across sessions.
- * Only admins can see and toggle the backend switch.
+ * Provides the active Supabase backend and local admin status.
  */
 
-export type BackendType = 'supabase' | 'convex';
+export type BackendType = 'supabase';
 
 interface BackendContextValue {
   activeBackend: BackendType;
-  setActiveBackend: (backend: BackendType) => Promise<void>;
   isAdmin: boolean;
   isLoading: boolean;
 }
 
 const BackendContext = createContext<BackendContextValue>({
   activeBackend: 'supabase',
-  setActiveBackend: async () => {},
   isAdmin: false,
   isLoading: true,
 });
@@ -68,41 +63,10 @@ export const BackendProvider: React.FC<BackendProviderProps> = ({ children }) =>
     setIsLoading(false);
   }, [user]);
 
-  // Function to update backend preference
-  const setActiveBackend = async (backend: BackendType) => {
-    if (!user) {
-      console.warn('Cannot set backend preference: user not logged in');
-      return;
-    }
-
-    try {
-      // Update local state immediately for better UX
-      setActiveBackendState(backend);
-
-      // Persist to database
-      const { error } = await saveAppSettings({
-        preferred_backend: backend,
-      } as any);
-
-      if (error) {
-        console.error('Error saving backend preference:', error);
-        // Revert on error
-        setActiveBackendState(activeBackend);
-      } else {
-        console.log(`Backend preference saved: ${backend}`);
-      }
-    } catch (err) {
-      console.error('Failed to save backend preference:', err);
-      // Revert on error
-      setActiveBackendState(activeBackend);
-    }
-  };
-
   return (
     <BackendContext.Provider
       value={{
         activeBackend,
-        setActiveBackend,
         isAdmin,
         isLoading,
       }}

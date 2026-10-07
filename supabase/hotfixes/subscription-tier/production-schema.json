@@ -1,0 +1,59 @@
+{
+  "columns": [
+    {
+      "default": null,
+      "name": "user_id",
+      "nullable": "NO",
+      "type": "uuid"
+    },
+    {
+      "default": "false",
+      "name": "is_premium",
+      "nullable": "NO",
+      "type": "boolean"
+    },
+    {
+      "default": null,
+      "name": "product_id",
+      "nullable": "YES",
+      "type": "text"
+    },
+    {
+      "default": null,
+      "name": "expires_at",
+      "nullable": "YES",
+      "type": "timestamp with time zone"
+    },
+    {
+      "default": null,
+      "name": "source",
+      "nullable": "NO",
+      "type": "text"
+    },
+    {
+      "default": "now()",
+      "name": "checked_at",
+      "nullable": "NO",
+      "type": "timestamp with time zone"
+    },
+    {
+      "default": "now()",
+      "name": "updated_at",
+      "nullable": "NO",
+      "type": "timestamp with time zone"
+    },
+    {
+      "default": null,
+      "name": "tier",
+      "nullable": "YES",
+      "type": "text"
+    }
+  ],
+  "constraints": [
+    "PRIMARY KEY (user_id)",
+    "CHECK ((source = ANY (ARRAY['revenuecat_api'::text, 'revenuecat_webhook'::text])))",
+    "CHECK (((tier IS NULL) OR (tier = ANY (ARRAY['lite'::text, 'standard'::text, 'premium'::text]))))",
+    "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+  ],
+  "triggers": null
+}

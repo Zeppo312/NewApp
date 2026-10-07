@@ -1,6 +1,8 @@
+import { useFamilySubscriptionAccess } from '@/hooks/useFamilySubscriptionAccess';
+import { hasCheckedFamilyAccess, refreshFamilyAccess } from '@/lib/familySubscriptionAccess';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +30,8 @@ import {
 } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { getCachedUserProfile } from '@/lib/appCache';
+import { getCachedUserProfile, invalidatePremiumStatusCache } from '@/lib/appCache';
+import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
 import {
   isPaywallAccessRole,
   type PaywallAccessRole,
@@ -69,6 +72,7 @@ type SubscriptionViewState = {
   planType: RevenueCatPlanType | null;
   tier: SubscriptionTier | null;
   productId: string | null;
+  store: string | null;
   expiresDate: string | null;
   willRenew: boolean | null;
 };
@@ -80,6 +84,7 @@ const EMPTY_STATE: SubscriptionViewState = {
   planType: null,
   tier: null,
   productId: null,
+  store: null,
   expiresDate: null,
   willRenew: null,
 };
@@ -106,7 +111,12 @@ export default function SubscriptionScreen() {
   const adaptiveColors = useAdaptiveColors();
   const router = useRouter();
   const { session, user } = useAuth();
-  const [state, setState] = useState<SubscriptionViewState>(EMPTY_STATE);
+  const family = useFamilySubscriptionAccess();
+  const hasFamilyAccess = family?.status === 'active';
+  const [isRefreshingAccess, setIsRefreshingAccess] = useState(false);
+  const [loadedState, setLoadedState] = useState<{ userId: string | null; value: SubscriptionViewState }>({ userId: null, value: EMPTY_STATE });
+  const loadSequence = useRef(0);
+  const state = loadedState.userId === user?.id ? loadedState.value : EMPTY_STATE;
   const [isLoading, setIsLoading] = useState(true);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isFeedbackModalVisible, setIsFeedbackModalVisible] = useState(false);
@@ -131,6 +141,10 @@ export default function SubscriptionScreen() {
     : '#9C8178';
 
   const loadState = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    const setState = (value: SubscriptionViewState) => {
+      if (sequence === loadSequence.current) setLoadedState({ userId: user?.id ?? null, value });
+    };
     if (!user) {
       setState(EMPTY_STATE);
       setIsLoading(false);
@@ -173,6 +187,7 @@ export default function SubscriptionScreen() {
         planType: summary.planType,
         tier: summary.tier,
         productId: summary.productId,
+        store: summary.store,
         expiresDate: summary.expiresDate,
         willRenew: summary.willRenew,
       });
@@ -180,13 +195,14 @@ export default function SubscriptionScreen() {
       console.error('Failed to load subscription state:', error);
       setState(EMPTY_STATE);
     } finally {
-      setIsLoading(false);
+      if (sequence === loadSequence.current) setIsLoading(false);
     }
   }, [user]);
 
   useFocusEffect(
     useCallback(() => {
       void loadState();
+      return () => { loadSequence.current += 1; };
     }, [loadState]),
   );
 
@@ -197,6 +213,7 @@ export default function SubscriptionScreen() {
   const continueToStoreManagement = async () => {
     setIsFeedbackModalVisible(false);
     await openSubscriptionManagement({
+      store: state.store,
       failureTitle: t('alert.manageErrorTitle'),
       failureMessage: t('alert.manageErrorMessage'),
     });
@@ -221,7 +238,7 @@ export default function SubscriptionScreen() {
         reason,
         details,
         source: 'subscription_screen',
-        store: getSubscriptionManagementStoreLabel(),
+        store: getSubscriptionManagementStoreLabel(state.store),
         productId: state.productId,
         planType: state.planType,
         expiresAt: state.expiresDate,
@@ -247,6 +264,8 @@ export default function SubscriptionScreen() {
           t('alert.restoreNoneMessage'),
         );
       }
+      invalidateSubscriptionTierCache();
+      await invalidatePremiumStatusCache();
       await loadState();
     } catch (error) {
       console.error('Restore purchases failed:', error);
@@ -272,14 +291,17 @@ export default function SubscriptionScreen() {
         state.accessRole,
       )
     : null;
+  const usesFamilyAccess = hasFamilyAccess && !state.isAdmin && !state.accessRole && (!state.isPremium ||
+    ({ lite: 1, standard: 2, premium: 3 }[family.tier] > ({ lite: 1, standard: 2, premium: 3 }[state.tier ?? 'standard'])));
   const intervalLabel =
     state.planType === 'monthly'
       ? t('plan.monthly')
       : state.planType === 'yearly'
         ? t('plan.yearly')
         : null;
-  const tierLabel = state.tier ? t(`tier.${state.tier}`) : null;
-  const planLabel = state.isAdmin
+  const tierLabel = usesFamilyAccess ? t(`tier.${family.tier}`) : state.tier ? t(`tier.${state.tier}`) : null;
+  const accessUnconfirmed = family?.status === 'unavailable' && !state.isPremium && !state.isAdmin && !state.accessRole;
+  const planLabel = accessUnconfirmed ? t('family.unknown') : usesFamilyAccess ? t('family.plan', { tier: tierLabel ?? '' }) : state.isAdmin
     ? t('plan.admin')
     : roleLabel
       ? t('plan.special', { role: roleLabel })
@@ -287,14 +309,14 @@ export default function SubscriptionScreen() {
         ? t('plan.withTier', { tier: tierLabel, interval: intervalLabel })
         : intervalLabel ?? (state.isPremium ? t('plan.active') : t('plan.none'));
 
-  const statusLabel = state.isAdmin
+  const statusLabel = accessUnconfirmed ? t('family.unknown') : usesFamilyAccess ? t('family.status') : state.isAdmin
     ? t('status.admin')
     : roleLabel
       ? t('status.special', { role: roleLabel })
       : state.isPremium
         ? t('status.subscription')
         : t('status.noSubscription');
-  const detailLabel = state.isAdmin
+  const detailLabel = accessUnconfirmed ? t('family.unavailable') : usesFamilyAccess ? t('family.detail') : state.isAdmin
     ? t('detail.admin')
     : roleLabel
       ? t('detail.special', { role: roleLabel })
@@ -304,12 +326,13 @@ export default function SubscriptionScreen() {
           : t('detail.activeRenewing')
         : t('detail.inactive');
 
-  const hasActiveAccess = state.isAdmin || !!state.accessRole || state.isPremium;
-  const expirationLabel = formatDate(state.expiresDate);
-  const canManageStore = state.isPremium && !state.isAdmin && !state.accessRole;
-  const canRestore = !state.isAdmin && !state.accessRole;
+  const hasActiveAccess = state.isAdmin || !!state.accessRole || state.isPremium || hasFamilyAccess;
+  const expirationLabel = formatDate(usesFamilyAccess ? family.expiresAt : state.expiresDate);
+  const canManageStore = state.isPremium && !state.isAdmin && !state.accessRole &&
+    (state.store === 'APP_STORE' || state.store === 'MAC_APP_STORE' || state.store === 'PLAY_STORE');
+  const canRestore = !state.isAdmin && !state.accessRole && !hasFamilyAccess;
   const showActions = canManageStore || canRestore;
-  const renewalLabel =
+  const renewalLabel = usesFamilyAccess ? t('family.renewal') :
     state.isAdmin || state.accessRole
       ? t('renewal.notApplicable')
       : state.willRenew === false
@@ -365,6 +388,7 @@ export default function SubscriptionScreen() {
           />
 
           <Header
+            topSafeAreaHandled
             title={t('screen.title')}
             subtitle={t('screen.subtitle')}
             showBackButton
@@ -389,7 +413,7 @@ export default function SubscriptionScreen() {
                   { backgroundColor: hasActiveAccess ? '#9DBEBB' : '#E9C9B6' },
                 ]}
               />
-              {isLoading ? (
+              {isLoading || (accessUnconfirmed && user && !hasCheckedFamilyAccess(user.id)) ? (
                 <View style={styles.loadingWrap}>
                   <View style={[styles.loadingIcon, { backgroundColor: softSurface }]}>
                     <ActivityIndicator color={iconAccentColor} />
@@ -489,7 +513,7 @@ export default function SubscriptionScreen() {
                     {expirationLabel
                       ? renderSummaryRow(
                           'calendar',
-                          state.willRenew === false
+                          usesFamilyAccess || state.willRenew === false
                             ? t('summary.accessUntil')
                             : t('summary.nextRenewal'),
                           expirationLabel,
@@ -501,7 +525,33 @@ export default function SubscriptionScreen() {
               )}
             </LiquidGlassCard>
 
-            {!isLoading ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel={t('family.refresh')}
+              disabled={isRefreshingAccess || !user}
+              onPress={async () => {
+                if (!user || isRefreshingAccess) return;
+                setIsRefreshingAccess(true);
+                try {
+                  await Promise.all([refreshFamilyAccess(user.id, { force: true }), loadState()]);
+                  await invalidatePremiumStatusCache();
+                  invalidateSubscriptionTierCache();
+                } finally { setIsRefreshingAccess(false); }
+              }}
+              style={{ padding: 16 }}
+            >
+              <ThemedText style={{ color: textPrimary }}>
+                {isRefreshingAccess ? t('screen.loading') : t('family.refresh')}
+              </ThemedText>
+            </TouchableOpacity>
+            {hasFamilyAccess && state.isPremium ? (
+              <ThemedText style={[styles.detailText, { color: textSecondary }]}>{t('family.alsoOwn')}</ThemedText>
+            ) : null}
+            {family?.status === 'unavailable' && !accessUnconfirmed && user && hasCheckedFamilyAccess(user.id) ? (
+              <ThemedText style={[styles.detailText, { color: textSecondary }]}>{t('family.unavailable')}</ThemedText>
+            ) : null}
+
+            {!isLoading && !hasFamilyAccess && !accessUnconfirmed ? (
               <View style={styles.plansCard}>
                 <LinearGradient
                   colors={isDark ? ['#493783', '#7655B8'] : ['#7052C7', '#9A72DD']}
@@ -606,7 +656,7 @@ export default function SubscriptionScreen() {
                         ]}
                       >
                         {t('actions.manageDescription', {
-                          store: getSubscriptionManagementStoreLabel(),
+                          store: getSubscriptionManagementStoreLabel(state.store),
                         })}
                       </ThemedText>
                     </View>

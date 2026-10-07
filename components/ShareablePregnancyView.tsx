@@ -72,7 +72,7 @@ const ShareablePregnancyView: React.FC<ShareablePregnancyViewProps> = ({
     <ScrollView style={styles.container}>
       <ViewShot ref={viewShotRef} style={styles.shareableContent}>
         <ImageBackground
-          source={require('@/assets/images/Background_Hell.png')}
+          source={require('@/assets/images/Background_Hell.jpg')}
           style={styles.backgroundImage}
           resizeMode="cover"
         >

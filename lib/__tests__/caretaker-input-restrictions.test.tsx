@@ -8,6 +8,7 @@ jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
 jest.mock('@/contexts/ActiveBabyContext', () => ({ useActiveBaby: () => ({ activeBabyId: 'parent-baby' }) }));
 jest.mock('@/hooks/useColorScheme', () => ({ useColorScheme: () => 'light' }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 16, left: 0 }) }));
 jest.mock('@/lib/entitlements', () => ({ useFeatureAccess: () => ({ hasAccess: true }) }));
 jest.mock('@/lib/shopping', () => ({ fetchDiaperInventoryItems: jest.fn(), fetchFormulaInventoryItems: jest.fn(), computeTotalQuantity: () => 0 }));
 jest.mock('@/lib/recipes', () => ({ fetchRecipes: jest.fn() }));

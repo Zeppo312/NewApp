@@ -252,13 +252,14 @@ export function useNotifications() {
   useEffect(() => {
     // Listener for notifications received while app is in foreground
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('📱 Notification received in foreground:', notification);
+      // Logging the entire SDK object evaluates its deprecated dataString getter.
+      console.log('📱 Notification received in foreground:', notification.request.identifier);
       // Notification is automatically displayed by the system
     });
 
     // Listener for user tapping on notification
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('📱 User tapped notification:', response);
+      console.log('📱 User tapped notification:', response.notification.request.identifier, response.actionIdentifier);
       handleNotificationNavigation(response.notification);
     });
 

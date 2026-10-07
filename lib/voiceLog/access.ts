@@ -16,11 +16,9 @@
  * RevenueCat-Produkte verknüpft sind.
  */
 
-import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-
 import { getCachedUserProfile } from '@/lib/appCache';
 import { hasFeatureAccess } from '@/lib/entitlements';
+import { usePremiumFeatureAccess } from '@/lib/premiumFeatureAccess';
 
 export const fetchVoiceLogAccess = async (): Promise<boolean> => {
   try {
@@ -47,19 +45,5 @@ export const fetchVoiceLogAccess = async (): Promise<boolean> => {
  * Wird bei jedem Fokus neu geladen (Rolle kann sich serverseitig ändern).
  */
 export const useVoiceLogAccess = (): boolean | null => {
-  const [access, setAccess] = useState<boolean | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      fetchVoiceLogAccess().then((allowed) => {
-        if (active) setAccess(allowed);
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
-
-  return access;
+  return usePremiumFeatureAccess('voiceLog');
 };

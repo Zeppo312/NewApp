@@ -25,7 +25,7 @@ import { showHistoryLimitAlert } from '@/lib/historyLimit';
 import * as Linking from 'expo-linking';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { ThemedBackground } from '@/components/ThemedBackground';
+import { HomeBackground } from '@/components/ui/home-glass';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -2997,7 +2997,7 @@ export default function DailyScreen() {
     : t('screen.subtitle');
 
   return (
-    <ThemedBackground style={s.backgroundImage}>
+    <HomeBackground style={s.backgroundImage}>
       <SafeAreaView style={s.container}>
         <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
 
@@ -3587,7 +3587,7 @@ export default function DailyScreen() {
           </View>
         </Animated.View>
       )}
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 

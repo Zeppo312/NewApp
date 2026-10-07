@@ -9,23 +9,7 @@ import { getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { useLocale } from '@/contexts/LocaleContext';
 import { translateBabySizeText, type BabySizeTranslationKey } from '@/lib/babySizeTranslations';
 import { LAYOUT_PAD, TIMELINE_INSET } from '@/constants/DesignGuide';
-
-const DAYS_IN_PREGNANCY = 280;
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
-const deriveWeekFromDueDate = (dueDate: Date) => {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
-
-  const due = new Date(dueDate);
-  due.setHours(0, 0, 0, 0);
-
-  const diffMs = due.getTime() - now.getTime();
-  const daysRemaining = Math.max(0, Math.round(diffMs / MS_PER_DAY));
-  const daysPregnant = Math.min(DAYS_IN_PREGNANCY, Math.max(0, DAYS_IN_PREGNANCY - daysRemaining));
-  const weeksPregnant = Math.floor(daysPregnant / 7);
-  return clampBabySizeWeek(weeksPregnant + 1);
-};
+import { usePregnancyAge } from '@/hooks/use-pregnancy-age';
 
 export default function BabySizePage() {
   return (
@@ -44,7 +28,9 @@ function BabySizeContent() {
   const params = useLocalSearchParams<{ week?: string | string[] }>();
   const weekParam = params.week;
   const { user } = useAuth();
-  const [dueWeek, setDueWeek] = useState<number | null>(null);
+  const [dueDate, setDueDate] = useState<unknown>(null);
+  const age = usePregnancyAge(dueDate);
+  const dueWeek = age ? clampBabySizeWeek(age.runningWeek) : null;
 
   useEffect(() => {
     let isMounted = true;
@@ -52,7 +38,7 @@ function BabySizeContent() {
     const fetchDueWeek = async () => {
       if (!user?.id) {
         if (isMounted) {
-          setDueWeek(null);
+          setDueDate(null);
         }
         return;
       }
@@ -65,15 +51,14 @@ function BabySizeContent() {
         }
 
         if (result?.success && result.dueDate) {
-          const week = deriveWeekFromDueDate(new Date(result.dueDate));
-          setDueWeek(week);
+          setDueDate(result.dueDate);
         } else {
-          setDueWeek(null);
+          setDueDate(null);
         }
       } catch (error) {
         console.error('Failed to load due date for baby size view:', error);
         if (isMounted) {
-          setDueWeek(null);
+          setDueDate(null);
         }
       }
     };

@@ -33,6 +33,8 @@ import type {
 
 export type PaywallPlanPrice = {
   amount: number;
+  currencyCode?: string;
+  verified?: boolean;
   label: string;
 };
 
@@ -64,6 +66,8 @@ type PaywallPlansExperienceProps = {
   onChangeField?: (path: string, value: string) => void;
   onPurchase?: (tier: SubscriptionTier, interval: SubscriptionInterval) => void;
   onRestorePress?: () => void;
+  onRedeemFamilyCode?: () => void;
+  onManageSubscription?: () => void;
   onClose?: () => void;
   onOpenPrivacy?: () => void;
   onOpenTerms?: () => void;
@@ -139,6 +143,8 @@ export function PaywallPlansExperience({
   onChangeField,
   onPurchase,
   onRestorePress,
+  onRedeemFamilyCode,
+  onManageSubscription,
   onClose,
   onOpenPrivacy,
   onOpenTerms,
@@ -182,7 +188,7 @@ export function PaywallPlansExperience({
     : enabledTiers[0];
 
   const showCloseButton = allowClose && !isTrialExpired;
-  const purchaseDisabled =
+  const actionDisabled =
     editable ||
     previewOnly ||
     isPurchaseActionDisabled ||
@@ -258,6 +264,7 @@ export function PaywallPlansExperience({
 
   const tierSavings = (tierId: PaywallPlansTierId) => {
     const { monthly, yearly } = tierPrices(tierId);
+    if (monthly.verified === false || yearly.verified === false || monthly.currencyCode !== yearly.currencyCode) return 0;
     return yearlySavingsPercent(monthly.amount, yearly.amount);
   };
 
@@ -269,13 +276,20 @@ export function PaywallPlansExperience({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interval, prices, tier]);
 
-  const perMonthLabel = (price: PaywallPlanPrice) =>
-    price.amount > 0 ? `${formatEuroAmount(price.amount / 12, localeTag)} / ${t('month')}` : '';
+  const purchaseDisabled = actionDisabled || selectedPrice.verified !== true;
+  const perMonthLabel = (price: PaywallPlanPrice) => {
+    if (price.verified === false || price.amount <= 0) return '';
+    const amount = price.currencyCode
+      ? new Intl.NumberFormat(localeTag, { style: 'currency', currency: price.currencyCode }).format(price.amount / 12)
+      : formatEuroAmount(price.amount / 12, localeTag);
+    return `${amount} / ${t('month')}`;
+  };
 
   const selectedTierContent = plans.tiers[tier];
   const ctaLabel =
     pendingAction === 'purchase'
       ? t('moment')
+      : selectedPrice.verified === false ? t('priceUnavailable')
       : `${resolveText(selectedTierContent.ctaLabel)} · ${selectedPrice.label}`;
 
   const renderCheck = (included: boolean, emphasized: boolean) => (
@@ -366,7 +380,7 @@ export function PaywallPlansExperience({
         <View style={styles.tierPriceRow}>
           <Text style={styles.tierPrice}>{price.label}</Text>
           <Text style={styles.tierPriceMeta}>
-            {interval === 'yearly' ? t('perYear') : t('perMonth')}
+            {price.verified === false ? '' : interval === 'yearly' ? t('perYear') : t('perMonth')}
           </Text>
         </View>
         {interval === 'yearly' ? (
@@ -485,6 +499,8 @@ export function PaywallPlansExperience({
       <Pressable
         onPress={() => onPurchase?.(tier, interval)}
         disabled={purchaseDisabled}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: purchaseDisabled }}
         style={[
           styles.ctaButton,
           purchaseDisabled && !editable && !previewOnly && styles.actionDisabled,
@@ -505,6 +521,12 @@ export function PaywallPlansExperience({
 
       {visiblePurchaseError ? (
         <Text style={styles.errorText}>{visiblePurchaseError}</Text>
+      ) : null}
+
+      {onManageSubscription ? (
+        <Pressable onPress={onManageSubscription} accessibilityRole="button" style={styles.restoreButton}>
+          <Text style={styles.restoreText}>{t('manageSubscription')}</Text>
+        </Pressable>
       ) : null}
 
       <View style={styles.compareCard}>
@@ -578,13 +600,19 @@ export function PaywallPlansExperience({
         ))}
       </View>
 
+      {onRedeemFamilyCode && (
+        <Pressable onPress={onRedeemFamilyCode} accessibilityRole="button" style={styles.restoreButton}>
+          <Text style={styles.restoreText}>{t('redeemFamilyCode')}</Text>
+        </Pressable>
+      )}
+
       <Pressable
         onPress={onRestorePress}
         hitSlop={8}
-        disabled={purchaseDisabled && !editable}
+        disabled={actionDisabled}
         style={[
           styles.restoreButton,
-          purchaseDisabled && !editable && !previewOnly && styles.actionDisabled,
+          actionDisabled && !editable && !previewOnly && styles.actionDisabled,
         ]}
       >
         {pendingAction === 'restore' ? (

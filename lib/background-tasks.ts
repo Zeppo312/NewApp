@@ -1,4 +1,5 @@
 import * as TaskManager from 'expo-task-manager';
+import { runtimeConsentAllowed } from './dataConsentRuntime';
 
 import * as Notifications from '@/lib/notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -57,6 +58,7 @@ const readTimerDataFromStorage = async (): Promise<ContractionTimerData | null> 
 
 // Register the background task
 TaskManager.defineTask(CONTRACTION_TIMER_TASK, async () => {
+  if (!runtimeConsentAllowed('health')) return 'noData';
   try {
     // Get current timer data
     const timerData = await readTimerDataFromStorage();
@@ -113,7 +115,6 @@ export const setupNotifications = async () => {
   // Set notification handler
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
       shouldShowBanner: true,
@@ -159,6 +160,7 @@ const updateTimerNotification = async (timerData: ContractionTimerData) => {
 
 // Start the timer in background
 export const startContractionTimer = async () => {
+  if (!runtimeConsentAllowed('health')) throw new Error('health_consent_required');
   const now = Date.now();
   
   const timerData: ContractionTimerData = {
@@ -206,6 +208,7 @@ export const stopContractionTimer = async () => {
 
 // Get current timer state
 export const getContractionTimerState = async (): Promise<ContractionTimerData> => {
+  if (!runtimeConsentAllowed('health')) return DEFAULT_TIMER_DATA;
   const timerData = await readTimerDataFromStorage();
   if (!timerData) {
     return DEFAULT_TIMER_DATA;

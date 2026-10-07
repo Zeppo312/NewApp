@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -40,6 +40,7 @@ const KIND_META: Record<
 function TimelineSkeleton({ color }: { color: string }) {
   const [opacity] = useState(() => new Animated.Value(0.42));
   useEffect(() => {
+    if (Platform.OS === 'android') return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.9, duration: 700, useNativeDriver: true }),

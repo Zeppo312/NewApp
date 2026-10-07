@@ -19,3 +19,8 @@ export const shouldShowPaywallForState = (
   // Bereits bestätigte Abos bleiben bei Netzfehlern über den Premium-Cache aktiv.
   return state.subscriptionStatus !== 'active' && state.accessReason === 'none';
 };
+
+/** A background refresh must not interrupt an open screen on an unknown result. */
+export const shouldRedirectToPaywallForState = (state: PaywallDecisionState): boolean =>
+  state.subscriptionStatus === 'inactive' &&
+  shouldShowPaywallForState(state, 0);

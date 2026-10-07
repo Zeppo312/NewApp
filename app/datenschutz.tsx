@@ -11,6 +11,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { useLocale } from '@/contexts/LocaleContext';
 import { getLegalDocument } from '@/lib/legalTranslations';
 import { LocalizedLegalDocument } from '@/components/LocalizedLegalDocument';
+import appPrivacySections from '@/lib/appPrivacySections.json';
 
 type BulletItem = string | { label: string; text: string };
 
@@ -85,7 +86,7 @@ export default function DatenschutzScreen() {
                   wie z. B. unserer Social-Media-Profile (nachfolgend zusammenfassend bezeichnet als „Onlineangebot“).
                 </ThemedText>
                 <ThemedText style={styles.paragraph}>Die verwendeten Begriffe sind nicht geschlechtsspezifisch.</ThemedText>
-                <ThemedText style={styles.paragraph}>Stand: 3. Februar 2026</ThemedText>
+                <ThemedText style={styles.paragraph}>Stand: 11. September 2026</ThemedText>
               </Section>
 
               <Section title="Inhaltsübersicht">
@@ -93,6 +94,7 @@ export default function DatenschutzScreen() {
                   items={[
                     'Präambel',
                     'Verantwortlicher',
+                    ...appPrivacySections.de.map((section) => section.title),
                     'Übersicht der Verarbeitungen',
                     'Maßgebliche Rechtsgrundlagen',
                     'Sicherheitsmaßnahmen',
@@ -118,6 +120,16 @@ export default function DatenschutzScreen() {
                 <ThemedText style={styles.paragraph}>28259, Bremen, Deutschland</ThemedText>
                 <ThemedText style={styles.paragraph}>E-Mail-Adresse: support@lottibaby.de</ThemedText>
               </Section>
+
+              {appPrivacySections.de.map((section) => (
+                <Section key={section.title} title={section.title}>
+                  {section.paragraphs.map((paragraph, index) => (
+                    <ThemedText key={index} selectable style={styles.paragraph}>
+                      {paragraph}
+                    </ThemedText>
+                  ))}
+                </Section>
+              ))}
 
               <Section title="Übersicht der Verarbeitungen">
                 <ThemedText style={styles.paragraph}>
@@ -242,39 +254,10 @@ export default function DatenschutzScreen() {
 
               <Section title="Internationale Datentransfers">
                 <ThemedText style={styles.paragraph}>
-                  Datenverarbeitung in Drittländern: Sofern wir Daten in ein Drittland (d. h. außerhalb der Europäischen
-                  Union (EU) oder des Europäischen Wirtschaftsraums (EWR)) übermitteln oder dies im Rahmen der Nutzung
-                  von Diensten Dritter oder der Offenlegung bzw. Übermittlung von Daten an andere Personen, Stellen oder
-                  Unternehmen geschieht (was erkennbar wird anhand der Postadresse des jeweiligen Anbieters oder wenn in
-                  der Datenschutzerklärung ausdrücklich auf den Datentransfer in Drittländer hingewiesen wird), erfolgt
-                  dies stets im Einklang mit den gesetzlichen Vorgaben.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Für Datenübermittlungen in die USA stützen wir uns vorrangig auf das Data Privacy Framework (DPF),
-                  welches durch einen Angemessenheitsbeschluss der EU-Kommission vom 10.07.2023 als sicherer Rechtsrahmen
-                  anerkannt wurde. Zusätzlich haben wir mit den jeweiligen Anbietern Standardvertragsklauseln
-                  abgeschlossen, die den Vorgaben der EU-Kommission entsprechen und vertragliche Verpflichtungen zum
-                  Schutz Ihrer Daten festlegen.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Diese zweifache Absicherung gewährleistet einen umfassenden Schutz Ihrer Daten: Das DPF bildet die
-                  primäre Schutzebene, während die Standardvertragsklauseln als zusätzliche Sicherheit dienen. Sollten
-                  sich Änderungen im Rahmen des DPF ergeben, greifen die Standardvertragsklauseln als zuverlässige
-                  Rückfalloption ein. So stellen wir sicher, dass Ihre Daten auch bei etwaigen politischen oder
-                  rechtlichen Veränderungen stets angemessen geschützt bleiben.
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Bei den einzelnen Diensteanbietern informieren wir Sie darüber, ob sie nach dem DPF zertifiziert sind
-                  und ob Standardvertragsklauseln vorliegen. Weitere Informationen zum DPF und eine Liste der
-                  zertifizierten Unternehmen finden Sie auf der Website des US-Handelsministeriums unter
-                  https://www.dataprivacyframework.gov/ (in englischer Sprache).
-                </ThemedText>
-                <ThemedText style={styles.paragraph}>
-                  Für Datenübermittlungen in andere Drittländer gelten entsprechende Sicherheitsmaßnahmen, insbesondere
-                  Standardvertragsklauseln, ausdrückliche Einwilligungen oder gesetzlich erforderliche Übermittlungen.
-                  Informationen zu Drittlandtransfers und geltenden Angemessenheitsbeschlüssen können Sie dem
-                  Informationsangebot der EU-Kommission entnehmen:
-                  https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection_en?prefLang=de.
+                  Die Empfänger und möglichen Verarbeitungen außerhalb der EU/des EWR sind in den vorstehenden
+                  App-Abschnitten erläutert. Maßgeblich sind die für den jeweiligen Empfänger tatsächlich geltenden
+                  Übermittlungsgrundlagen und Garantien. Informationen und eine Kopie der eingesetzten Garantien
+                  können Sie über support@lottibaby.de anfordern.
                 </ThemedText>
               </Section>
 

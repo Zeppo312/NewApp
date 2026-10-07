@@ -1,3 +1,4 @@
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -68,6 +69,8 @@ serve(async (req: Request) => {
         status: 401,
       });
     }
+
+    await assertAccountActive(serviceClient, user.id);
 
     const body = (await req.json()) as { scope?: ChatScope; messageId?: string };
     const scope = body.scope;

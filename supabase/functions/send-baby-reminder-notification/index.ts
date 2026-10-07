@@ -1,3 +1,6 @@
+import { secureEqual } from '../_shared/accountDeletion/contracts.ts';
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
+import { assertDataProcessingAllowed } from '../_shared/dataConsent.ts';
 // Supabase Edge Function to send push notifications for due baby reminders.
 // Triggered by DB webhook from baby_reminder_notifications.
 
@@ -38,6 +41,10 @@ const resolveNotificationDataType = (reminderType: 'sleep_window' | 'feeding') =
 };
 
 serve(async (req: Request) => {
+  const serviceKey = Deno.env.get('ACCOUNT_DELETION_NOTIFICATION_SECRET');
+  if (!serviceKey || !secureEqual(req.headers.get('authorization') ?? '', 'Bearer ' + serviceKey)) {
+    return new Response(JSON.stringify({ message: 'Unauthorized' }), {status:401,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+  }
   try {
     const payload: BabyReminderPayload = await req.json();
 
@@ -53,6 +60,8 @@ serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    await assertAccountActive(supabase, reminder.user_id);
+    await assertDataProcessingAllowed(supabase, reminder.user_id);
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
@@ -120,6 +129,7 @@ serve(async (req: Request) => {
       ...payloadData,
     };
 
+    await assertDataProcessingAllowed(supabase,reminder.user_id);
     const pushPromises = targetTokens.map((tokenRecord: { token: string }) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',

@@ -62,7 +62,7 @@ export default function TabTwoScreen() {
   const retryButtonBorder = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.5)';
 
   // State für die Checkliste
-  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [storedChecklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +93,10 @@ export default function TabTwoScreen() {
       };
     });
   };
+
+  // Keep server records unchanged in state; localize every display path, including
+  // mutation responses, before grouping so translated categories cannot split.
+  const checklist = deduplicateChecklist(localizeStoredItems(storedChecklist));
 
   const hasSeededDefaults = useRef(false);
 
@@ -135,10 +139,10 @@ export default function TabTwoScreen() {
           }
         }
 
-        setChecklist(deduplicateChecklist(localizeStoredItems(initializedItems)));
+        setChecklist(initializedItems);
       } else {
         // Wenn bereits Daten vorhanden sind, verwenden wir diese
-        setChecklist(deduplicateChecklist(localizeStoredItems(data || [])));
+        setChecklist(data || []);
       }
     } catch (err) {
       console.error('Error loading checklist:', err);
@@ -188,7 +192,7 @@ export default function TabTwoScreen() {
       const { data, error } = await addChecklistItem(newItem);
       if (error) throw error;
       if (data) {
-        setChecklist(prev => deduplicateChecklist([...prev, data]));
+        setChecklist(prev => [...prev, data]);
       }
     } catch (err) {
       console.error('Error adding checklist item:', err);
@@ -202,7 +206,7 @@ export default function TabTwoScreen() {
       const { data, error } = await toggleChecklistItem(id, isChecked);
       if (error) throw error;
       if (data) {
-        setChecklist(checklist.map(item => item.id === id ? data : item));
+        setChecklist(prev => prev.map(item => item.id === id ? data : item));
       }
     } catch (err) {
       console.error('Error toggling checklist item:', err);
@@ -224,7 +228,7 @@ export default function TabTwoScreen() {
             try {
               const { error } = await deleteChecklistItem(id);
               if (error) throw error;
-              setChecklist(checklist.filter(item => item.id !== id));
+              setChecklist(prev => prev.filter(item => item.id !== id));
             } catch (err) {
               console.error('Error deleting checklist item:', err);
               Alert.alert(t('common.error'), t('error.delete'));
@@ -246,16 +250,9 @@ export default function TabTwoScreen() {
   }, {});
 
   // Berechne den Gesamtfortschritt über alle Kategorien
-  const totalProgress = useMemo(() => {
-    const totalItems = checklist.length;
-    if (totalItems === 0) return 0;
-
-    const checkedItems = checklist.filter(item => item.is_checked).length;
-    return Math.round((checkedItems / totalItems) * 100);
-  }, [checklist]);
-
-  const checkedItems = useMemo(() => checklist.filter(item => item.is_checked).length, [checklist]);
+  const checkedItems = checklist.filter(item => item.is_checked).length;
   const totalItems = checklist.length;
+  const totalProgress = totalItems === 0 ? 0 : Math.round((checkedItems / totalItems) * 100);
   const totalCategories = Object.keys(groupedItems).length || categories.length;
 
   const progressNote = useMemo(() => {

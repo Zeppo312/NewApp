@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, StatusBar, Text, TouchableWithoutFeedback, Platform, TextInputProps, useWindowDimensions } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
@@ -1161,7 +1161,7 @@ export default function WeightTrackerScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
           
-          <Header title={t('weight.title')} subtitle={headerSubtitle} showBackButton />
+          <Header topSafeAreaHandled title={t('weight.title')} subtitle={headerSubtitle} showBackButton />
 
           {isReadOnlyPreviewMode && (
             <View style={styles.readOnlyPreviewBanner}>
@@ -1194,7 +1194,11 @@ export default function WeightTrackerScreen() {
             )}
             </ScrollView>
           </View>
-          <FloatingAddButton onPress={() => openWeightModal(selectedSubject)} bottomInset={Math.max(88, insets.bottom + 54)} rightInset={18} />
+          <FloatingAddButton
+            onPress={() => openWeightModal(selectedSubject)}
+            bottomInset={Math.max(88, insets.bottom + 54) - (process.env.EXPO_OS === 'android' ? 20 : 0)}
+            rightInset={18}
+          />
         </SafeAreaView>
       </ThemedBackground>
     </>

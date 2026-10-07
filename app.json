@@ -2,7 +2,7 @@
   "expo": {
     "name": "Lotti Baby",
     "slug": "LottiBaby",
-    "version": "1.0.23",
+    "version": "1.0.24",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "com.lottibaby.app",
@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "appleTeamId": "FWCPXYUKA2",
       "buildNumber": "1.0.51",
-      "version": "1.0.23",
+      "runtimeVersion": "1.0.24",
+      "version": "1.0.24",
       "bundleIdentifier": "com.LottiBaby.app",
       "privacyManifests": {
         "NSPrivacyAccessedAPITypes": [
@@ -52,10 +53,9 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "READ_CALENDAR",
-        "WRITE_CALENDAR",
-        "FOREGROUND_SERVICE",
-        "WAKE_LOCK",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE",
         "android.permission.READ_CALENDAR",
         "android.permission.WRITE_CALENDAR",
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -98,8 +98,8 @@
         "expo-image-picker",
         {
           "photosPermission": "Lotti Baby benötigt Zugriff auf deine Fotomediathek, damit du Bilder für Profile, Meilensteine, Rezepte, Empfehlungen und Beiträge auswählen kannst.",
-          "cameraPermission": false,
-          "microphonePermission": false
+          "cameraPermission": "Lotti Baby benötigt Zugriff auf deine Kamera, damit du Barcodes scannen kannst.",
+          "microphonePermission": "Lotti Baby benötigt Zugriff auf dein Mikrofon, damit du Sprachnachrichten aufnehmen kannst."
         }
       ],
       [

@@ -33,14 +33,8 @@ import { setLocalProfileName } from '@/lib/localProfile';
 import * as ImagePicker from 'expo-image-picker';
 import {
   deleteProfileAvatar,
-  deleteUserAccount,
-  getAccountDeletionRequirements,
   uploadProfileAvatar,
 } from '@/lib/profile';
-import {
-  getSubscriptionManagementStoreLabel,
-  openSubscriptionManagement,
-} from '@/lib/subscriptionManagement';
 import {
   DEFAULT_PROFILE_LOCALE,
   ProfileTranslationKey,
@@ -116,7 +110,7 @@ export default function ProfilScreen() {
   const [isLoading, setIsLoading]                   = useState(true);
   const [isSaving, setIsSaving]                     = useState(false);
   const [isDeletingAvatar, setIsDeletingAvatar]     = useState(false);
-  const [isDeletingProfile, setIsDeletingProfile]   = useState(false);
+  const isDeletingProfile = false;
   const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [emailOverlayVisible, setEmailOverlayVisible] = useState(false);
@@ -261,62 +255,7 @@ export default function ProfilScreen() {
     void confirmDeleteProfileRequest();
   };
 
-  const confirmDeleteProfileRequest = async () => {
-    try {
-      const { data: requirements, error } = await getAccountDeletionRequirements();
-      if (error) throw error;
-
-      Alert.alert(
-        t('delete.title'),
-        t('delete.confirmMessage', {
-          warning: t('delete.subscriptionWarning', {
-            store: getSubscriptionManagementStoreLabel(),
-            apple: requirements?.hasAppleSignIn ? t('delete.appleWarning') : '',
-          }),
-        }),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('delete.manageSubscription'), onPress: () => void openSubscriptionManagement() },
-          { text: t('common.delete'), style: 'destructive', onPress: deleteProfileAndSignOut },
-        ],
-      );
-    } catch (error: any) {
-      console.error('Failed to load profile deletion requirements:', error);
-      Alert.alert(
-        t('common.error'),
-        error?.message || t('delete.warningFailed'),
-      );
-    }
-  };
-
-  const deleteProfileAndSignOut = async () => {
-    if (!user) {
-      Alert.alert(t('common.notice'), t('delete.signIn'));
-      return;
-    }
-    try {
-      setIsDeletingProfile(true);
-      const { error } = await deleteUserAccount({ avatarUrl });
-      if (error) throw error;
-      setIsDeletingProfile(false);
-      Alert.alert(
-        t('delete.deletedTitle'),
-        t('delete.deletedMessage'),
-        [
-          {
-            text: t('common.ok'),
-            onPress: async () => {
-              await signOut();
-            },
-          },
-        ],
-      );
-    } catch (error: any) {
-      console.error('Error deleting profile:', error);
-      setIsDeletingProfile(false);
-      Alert.alert(t('common.error'), error?.message || t('delete.failed'));
-    }
-  };
+  const confirmDeleteProfileRequest = () => router.push('/account-deletion');
 
   const sendPasswordResetEmail = async () => {
     if (!user?.email) {
@@ -514,6 +453,7 @@ export default function ProfilScreen() {
           <StatusBar hidden />
 
           <Header
+            topSafeAreaHandled
             title={t('screen.title')}
             subtitle={t('screen.subtitle')}
             showBackButton

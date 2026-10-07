@@ -1,3 +1,5 @@
+import { isPaywallExcludedPath } from '@/lib/paywallRoutes';
+import { subscribeToFamilyAccess } from '@/lib/familySubscriptionAccess';
 import { useFonts } from 'expo-font';
 import {
   DarkTheme,
@@ -17,16 +19,18 @@ import FloatingVoiceButton from '@/components/FloatingVoiceButton';
 import 'react-native-reanimated';
 import * as Notifications from '@/lib/notifications';
 
+import { StartupRecovery } from '@/components/StartupRecovery';
 import { StartupMessageModal } from '@/components/StartupMessageModal';
 import { LottiMomentToast } from '@/components/LottiMomentToast';
 import { TermsConsentGate } from '@/components/moderation/TermsConsentGate';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { DataConsentProvider } from '@/contexts/DataConsentContext';
+import { DataConsentBoundary } from '@/components/privacy/DataConsentBoundary';
 import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
 import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
-import { ConvexProvider, useConvex } from '@/contexts/ConvexContext';
 import { BackendProvider, useBackend } from '@/contexts/BackendContext';
 import { BackgroundProvider } from '@/contexts/BackgroundContext';
 import { LocaleProvider, useLocale } from '@/contexts/LocaleContext';
@@ -54,7 +58,7 @@ import {
 } from '@/lib/appCache';
 import { maybeCleanupCache } from '@/lib/imageCache';
 import { invalidateSubscriptionTierCache } from '@/lib/entitlements';
-import { shouldShowPaywall } from '@/lib/paywall';
+import { RootPaywallGate } from '@/components/paywall/root-paywall-gate';
 import { subscribeToRevenueCatCustomerInfoUpdates } from '@/lib/revenuecat';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 import { normalizeBedtimeAnchor } from '@/lib/bedtime';
@@ -88,22 +92,11 @@ import * as Sentry from '@sentry/react-native';
 Sentry.init({
   dsn: 'https://a379435f1d8ad0e5df795df00050dd95@o4506394338263040.ingest.us.sentry.io/4509762120056832',
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  // Baby- und Familienkontext ist besonders sensibel: keine Standard-PII an
-  // Sentry senden und Replays explizit vollständig maskieren.
+  // Fehlerdiagnose bleibt aktiv; keine Standard-PII und keine Sitzungsaufzeichnung.
   sendDefaultPii: false,
-
-  // Configure Session Replay
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 0,
   integrations: [
-    Sentry.mobileReplayIntegration({
-      maskAllText: true,
-      maskAllImages: true,
-      maskAllVectors: true,
-      screenshotStrategy: 'canvas',
-    }),
     Sentry.feedbackIntegration(),
   ],
 
@@ -118,7 +111,6 @@ defineMilestoneCheckerTask();
 // Konfiguriere das Verhalten von Benachrichtigungen für die gesamte App
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,
@@ -129,16 +121,7 @@ Notifications.setNotificationHandler({
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-const PAYWALL_EXCLUDED_PATHS = new Set([
-  '/',
-  '/paywall',
-  '/datenschutz',
-  '/impressum',
-  '/nutzungsbedingungen',
-  '/dsgvo',
-  '/caregiver',
-  '/caregiver-join',
-]);
+
 
 type TermsConsentCheck = {
   userId: string | null;
@@ -151,7 +134,7 @@ function RootLayoutNav() {
   const pathname = usePathname();
   const segments = useSegments();
   const colorScheme = useColorScheme();
-  const { loading, user, signOut } = useAuth();
+  const { loading, user, signOut, refreshSession } = useAuth();
   const { isLocaleReady, locale } = useLocale();
   const layoutCopy = locale === 'en'
     ? { error: 'Error', startupFailed: 'The message could not be confirmed. Please try again.', loading: 'Loading …' }
@@ -161,12 +144,11 @@ function RootLayoutNav() {
   const userId = user?.id ?? null;
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
   const [hasCompletedBootstrap, setHasCompletedBootstrap] = useState(false);
-  const { isResolved: isBabyStatusResolved } = useBabyStatus();
-  const { isResolved: isOnboardingStatusResolved } = useOnboardingStatus();
+  const { isResolved: isBabyStatusResolved, refreshBabyDetails } = useBabyStatus();
+  const { isResolved: isOnboardingStatusResolved, refresh: refreshOnboarding } = useOnboardingStatus();
   const { requestPermissions, expoPushToken } = useNotifications();
-  const { activeBabyId, isReady: isActiveBabyReady } = useActiveBaby();
+  const { activeBabyId, isReady: isActiveBabyReady, refreshBabies } = useActiveBaby();
   const { activeBackend } = useBackend();
-  const { convexClient } = useConvex();
   const [sleepPrediction, setSleepPrediction] = useState<SleepWindowPrediction | null>(null);
   const [hasActiveSleepEntry, setHasActiveSleepEntry] = useState(false);
   const [feedingPrediction, setFeedingPrediction] = useState<FeedingPrediction | null>(null);
@@ -175,27 +157,16 @@ function RootLayoutNav() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const [appStateRevision, setAppStateRevision] = useState(0);
-  const paywallCheckInFlight = useRef(false);
-  const [verifiedPaywallCheck, setVerifiedPaywallCheck] = useState<{
-    userId: string;
-    pathname: string;
-    revision: number;
-  } | null>(null);
   const startupMessageCheckInFlight = useRef(false);
   const primarySegment = typeof segments[0] === 'string' ? segments[0] : null;
-  const isLegalConsentRoute = pathname === '/nutzungsbedingungen' || pathname === '/datenschutz';
+  const isLegalConsentRoute = pathname === '/nutzungsbedingungen' || pathname === '/datenschutz' || pathname === '/data-consents';
   const shouldSkipGlobalPaywallCheck = useMemo(() => {
-    if (!pathname || PAYWALL_EXCLUDED_PATHS.has(pathname)) {
+    if (!pathname || isPaywallExcludedPath(pathname)) {
       return true;
     }
 
     return primarySegment === '(auth)' || primarySegment === 'auth';
   }, [pathname, primarySegment]);
-  const isPaywallCheckBlocking = Boolean(userId) && !shouldSkipGlobalPaywallCheck && (
-    verifiedPaywallCheck?.userId !== userId ||
-    verifiedPaywallCheck?.pathname !== pathname ||
-    verifiedPaywallCheck?.revision !== appStateRevision
-  );
   const shouldSkipStartupMessageCheck = useMemo(() => {
     if (!pathname) {
       return true;
@@ -205,12 +176,12 @@ function RootLayoutNav() {
       return true;
     }
 
-    return pathname === '/paywall' || pathname === '/caregiver' || pathname === '/caregiver-join';
+    return pathname === '/data-consents' || pathname === '/paywall' || pathname === '/caregiver' || pathname === '/caregiver-join';
   }, [pathname, primarySegment]);
   const sleepEntriesService = useMemo(() => {
     if (!userId) return null;
-    return new SleepEntriesService(activeBackend, convexClient, userId);
-  }, [activeBackend, convexClient, userId]);
+    return new SleepEntriesService(userId);
+  }, [activeBackend, userId]);
   const [startupMessage, setStartupMessage] = useState<StartupMessage | null>(null);
   const [isAcknowledgingStartupMessage, setIsAcknowledgingStartupMessage] = useState(false);
   // `status` unterscheidet bewusst zwischen "noch nicht geprueft" (idle/loading),
@@ -228,6 +199,10 @@ function RootLayoutNav() {
     invalidateSubscriptionTierCache();
     setAppStateRevision((prev) => prev + 1);
   }, []);
+
+  useEffect(() => subscribeToFamilyAccess(changedUserId => {
+    if (changedUserId === userId) setAppStateRevision(prev => prev + 1);
+  }), [userId]);
 
   const handleRevenueCatCustomerInfoUpdate = useCallback(async () => {
     invalidateSubscriptionTierCache();
@@ -327,48 +302,9 @@ function RootLayoutNav() {
     };
   }, [locale, userId]);
 
-  useEffect(() => {
-    if (loading || !userId || !isBabyStatusResolved || shouldSkipGlobalPaywallCheck) {
-      return;
-    }
-
-    if (paywallCheckInFlight.current) return;
-
-    let cancelled = false;
-    paywallCheckInFlight.current = true;
-
-    const checkGlobalPaywallGate = async () => {
-      let requiresSubscription = true;
-      try {
-        const { shouldShow } = await shouldShowPaywall();
-        requiresSubscription = shouldShow;
-      } catch (error) {
-        console.error('Global paywall check failed:', error);
-      } finally {
-        paywallCheckInFlight.current = false;
-      }
-      if (!requiresSubscription && !cancelled && pathname) {
-        setVerifiedPaywallCheck({ userId, pathname, revision: appStateRevision });
-      }
-      if (requiresSubscription && !cancelled && pathname) {
-        router.replace({
-          pathname: '/paywall',
-          params: {
-            next: pathname,
-            origin: pathname,
-            trialExpired: '1',
-          },
-        });
-      }
-    };
-
-    void checkGlobalPaywallGate();
-
-    return () => {
-      cancelled = true;
-      paywallCheckInFlight.current = false;
-    };
-  }, [appStateRevision, isBabyStatusResolved, loading, pathname, router, shouldSkipGlobalPaywallCheck, userId]);
+  const handlePaywallDenied = useCallback((next: string) => {
+    router.replace({ pathname: '/paywall', params: { next, origin: next, trialExpired: '1' } });
+  }, [router]);
 
   useEffect(() => {
     if (loading || !userId || !isBabyStatusResolved || shouldSkipStartupMessageCheck) {
@@ -845,17 +781,16 @@ function RootLayoutNav() {
     SplashScreen.hideAsync().catch(() => {});
   }, [hasCompletedBootstrap, isBootstrapReady]);
 
-  // Zeige einen Ladeindikator, während der Authentifizierungsstatus geprüft wird
+  const retryBootstrap = useCallback(async () => {
+    // Retry only the unresolved stage. Dependent providers react to its result.
+    if (loading) { await refreshSession(); return; }
+    if (!isActiveBabyReady) { await refreshBabies(); return; }
+    if (!isBabyStatusResolved) { await refreshBabyDetails(); return; }
+    if (!isOnboardingStatusResolved) await refreshOnboarding();
+  }, [loading, refreshSession, isActiveBabyReady, refreshBabies, isBabyStatusResolved, refreshBabyDetails, isOnboardingStatusResolved, refreshOnboarding]);
+
   if (!hasCompletedBootstrap && !isBootstrapReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-        <ActivityIndicator size="large" color="#E9C9B6" />
-        <View style={{ marginTop: 20 }}>
-          <Text style={{ marginTop: 10, color: '#7D5A50' }}>{layoutCopy.loading}</Text>
-          <StatusBar hidden={true} />
-        </View>
-      </View>
-    );
+    return <StartupRecovery locale={locale} onRetry={retryBootstrap} />;
   }
 
   // Wenn der Benutzer angemeldet ist, zur Hauptapp navigieren, sonst zum Login-Screen
@@ -879,14 +814,10 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider value={colorScheme === 'dark' ? customDarkTheme : customLightTheme}>
-        {/* Der Navigator bleibt montiert, die App ist bis zur Zugangsprüfung
-            aber auch bei Neustarts und Deep Links nicht bedienbar. */}
-        <View
-          style={{ flex: 1, opacity: isPaywallCheckBlocking ? 0 : 1 }}
-          pointerEvents={isPaywallCheckBlocking ? 'none' : 'auto'}
-          accessibilityElementsHidden={isPaywallCheckBlocking}
-          importantForAccessibility={isPaywallCheckBlocking ? 'no-hide-descendants' : 'auto'}
-        >
+        <RootPaywallGate userId={userId} pathname={pathname} revision={appStateRevision}
+          ready={!loading && isBabyStatusResolved} excluded={shouldSkipGlobalPaywallCheck}
+          onDenied={handlePaywallDenied} locale={locale} onSignOut={() => { void signOut(); }}>
+          {(isPaywallCheckBlocking) => <>
         <Stack
           initialRouteName={initialRoute ?? undefined}
           screenOptions={{
@@ -900,6 +831,8 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="paywall" />
         <Stack.Screen name="dsgvo" />
+        <Stack.Screen name="account-deletion" />
+        <Stack.Screen name="data-consents" />
         <Stack.Screen name="subscription" />
         <Stack.Screen name="lottis-fuersorge" />
         <Stack.Screen name="frag-lotti" />
@@ -921,6 +854,7 @@ function RootLayoutNav() {
         <Stack.Screen name="caregiver-join" />
         <Stack.Screen name="+not-found" />
         <Stack.Screen name="auth/callback" />
+        <Stack.Screen name="auth/google-callback" />
         <Stack.Screen name="auth/reset-password" />
       </Stack>
       <StartupMessageModal
@@ -950,13 +884,8 @@ function RootLayoutNav() {
       {!isPaywallCheckBlocking && <FloatingVoiceButton />}
       <ImageCacheMaintenance />
       <StatusBar hidden={true} />
-        </View>
-        {isPaywallCheckBlocking && (
-          <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
-            <ActivityIndicator size="large" color="#E9C9B6" />
-            <Text style={{ marginTop: 10, color: '#7D5A50' }}>{layoutCopy.loading}</Text>
-          </View>
-        )}
+          </>}
+        </RootPaywallGate>
     </ThemeProvider>
     </GestureHandlerRootView>
   );
@@ -1076,16 +1005,16 @@ export default Sentry.wrap(function RootLayout() {
   }
 
   // Umschließen der App mit dem AuthProvider und BabyStatusProvider
-  // ConvexProvider und BackendProvider für Dual-Backend-Architektur hinzugefügt
   return (
     <AuthProvider>
-      <AppDataPreloader />
+      <DataConsentProvider>
       <SubscriptionAccessProvider>
         <LocaleProvider>
-          <ConvexProvider>
             <BackendProvider>
               <BackgroundProvider>
                 <AppThemeProvider>
+                  <DataConsentBoundary>
+                  <AppDataPreloader />
                   <NavigationProvider>
                     <ActiveBabyProvider>
                       <BabyStatusProvider>
@@ -1095,12 +1024,13 @@ export default Sentry.wrap(function RootLayout() {
                       </BabyStatusProvider>
                     </ActiveBabyProvider>
                   </NavigationProvider>
+                  </DataConsentBoundary>
                 </AppThemeProvider>
               </BackgroundProvider>
             </BackendProvider>
-          </ConvexProvider>
         </LocaleProvider>
       </SubscriptionAccessProvider>
+      </DataConsentProvider>
     </AuthProvider>
   );
 });

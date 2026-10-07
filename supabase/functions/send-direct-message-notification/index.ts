@@ -1,3 +1,4 @@
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -43,8 +44,9 @@ serve(async (req: Request) => {
   try {
     const expectedSecret = Deno.env.get('DIRECT_MESSAGE_WEBHOOK_SECRET');
     const authorization = req.headers.get('Authorization');
+    const isolatedNotificationSecret = Deno.env.get('ACCOUNT_DELETION_NOTIFICATION_SECRET');
 
-    if (!expectedSecret || authorization !== `Bearer ${expectedSecret}`) {
+    if ((!expectedSecret || authorization !== `Bearer ${expectedSecret}`) && (!isolatedNotificationSecret || authorization !== `Bearer ${isolatedNotificationSecret}`)) {
       return new Response(JSON.stringify({ message: 'Unauthorized' }), {
         headers: { 'Content-Type': 'application/json' },
         status: 401,
@@ -65,6 +67,9 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { sender_id, receiver_id, content, id, message_type } = payload.record;
+
+    await assertAccountActive(supabase, sender_id);
+    await assertAccountActive(supabase, receiver_id);
 
     if (sender_id === receiver_id) {
       return new Response(

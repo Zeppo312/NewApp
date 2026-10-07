@@ -1,4 +1,5 @@
 import {
+  shouldRedirectToPaywallForState,
   shouldShowPaywallForState,
 } from '../paywallDecision';
 import type { PaywallState } from '../paywall';
@@ -22,13 +23,25 @@ describe('paywall state decision', () => {
     expect(shouldShowPaywallForState(expiredState, intervalMs)).toBe(true);
   });
 
-  it('keeps the gate closed when no access can be verified', () => {
+  it('keeps the initial gate closed when no access can be verified', () => {
     expect(
       shouldShowPaywallForState({
         ...expiredState,
         subscriptionStatus: 'unavailable',
       }, intervalMs),
     ).toBe(true);
+  });
+
+  it('redirects an open screen only for a confirmed missing subscription', () => {
+    expect(shouldRedirectToPaywallForState(expiredState)).toBe(true);
+    expect(shouldRedirectToPaywallForState({
+      ...expiredState,
+      subscriptionStatus: 'unavailable',
+    })).toBe(false);
+    expect(shouldRedirectToPaywallForState({
+      ...expiredState,
+      accessReason: 'admin',
+    })).toBe(false);
   });
 
   it('never shows for confirmed active access', () => {

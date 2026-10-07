@@ -11,10 +11,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
 
 import { Colors } from '@/constants/Colors';
-import { RADIUS } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLocale } from '@/contexts/LocaleContext';
 import {
@@ -51,12 +51,12 @@ export default function CustomActivityDefinitionModal({
   onArchive,
 }: Props) {
   const { locale } = useLocale();
+  const insets = useSafeAreaInsets();
   const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
   const adaptiveColors = useAdaptiveColors();
   const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
   const textPrimary = isDark ? Colors.dark.textPrimary : '#342824';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const panelBackground = isDark ? 'rgba(35,31,32,0.97)' : 'rgba(248,245,241,0.98)';
   const fieldBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)';
   const borderColor = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(125,90,80,0.14)';
 
@@ -142,16 +142,12 @@ export default function CustomActivityDefinitionModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        style={[styles.overlay, { backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
+        style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10), backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <BlurView
-          intensity={isDark ? 40 : 70}
-          tint={isDark ? 'dark' : 'light'}
-          style={[styles.panel, { backgroundColor: panelBackground, borderColor }]}
-        >
+        <GlassSheetSurface isDark={isDark} style={styles.panel}>
           <View style={[styles.handle, { backgroundColor: borderColor }]} />
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -301,52 +297,49 @@ export default function CustomActivityDefinitionModal({
               <Text style={styles.saveText}>{t('custom.save')}</Text>
             </TouchableOpacity>
           </View>
-        </BlurView>
+        </GlassSheetSurface>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
+  overlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
   panel: {
-    maxHeight: '92%',
-    borderTopLeftRadius: RADIUS,
-    borderTopRightRadius: RADIUS,
-    borderWidth: 1,
-    overflow: 'hidden',
+    maxHeight: '100%',
+    flexShrink: 1,
   },
   handle: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 9 },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20, gap: 10 },
+  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20, gap: 14 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8 },
   previewEmoji: { fontSize: 38 },
   titleCopy: { flex: 1 },
-  title: { fontSize: 20, fontWeight: '800' },
+  title: { fontSize: 20, fontWeight: '600' },
   subtitle: { fontSize: 13, lineHeight: 18, marginTop: 3 },
-  label: { fontSize: 14, fontWeight: '800', marginTop: 7 },
-  input: { minHeight: 48, borderRadius: 15, borderWidth: 1, paddingHorizontal: 14, fontSize: 16 },
+  label: { fontSize: 14, fontWeight: '600', marginTop: 7 },
+  input: { minHeight: 48, borderRadius: 22, borderWidth: 1, paddingHorizontal: 14, fontSize: 16 },
   emojiInput: { fontSize: 24 },
   fieldHint: { fontSize: 12, lineHeight: 17 },
   emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   emojiChip: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   emojiChipText: { fontSize: 22 },
   segmentRow: { flexDirection: 'row', gap: 8 },
-  segment: { flex: 1, minHeight: 72, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 8 },
+  segment: { flex: 1, minHeight: 72, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 8 },
   segmentEmoji: { fontSize: 20 },
-  segmentLabel: { fontSize: 12, fontWeight: '800', marginTop: 5, textAlign: 'center' },
+  segmentLabel: { fontSize: 12, fontWeight: '600', marginTop: 5, textAlign: 'center' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
   chipText: { fontSize: 13, fontWeight: '700' },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingVertical: 4 },
   colorDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   colorDotSelected: { borderWidth: 3, borderColor: '#FFFFFF' },
-  colorCheck: { color: '#FFFFFF', fontWeight: '900', fontSize: 17 },
-  bottomBar: { flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === 'ios' ? 28 : 18 },
-  cancelButton: { flex: 1, minHeight: 50, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontSize: 15, fontWeight: '800' },
-  archiveButton: { flex: 1, minHeight: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,85,85,0.12)' },
-  archiveText: { color: '#E25555', fontSize: 15, fontWeight: '800' },
-  saveButton: { flex: 1.3, minHeight: 50, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '900' },
+  colorCheck: { color: '#FFFFFF', fontWeight: '700', fontSize: 17 },
+  bottomBar: { flexShrink: 0, flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18 },
+  cancelButton: { flex: 1, minHeight: 50, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { fontSize: 15, fontWeight: '600' },
+  archiveButton: { flex: 1, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,85,85,0.12)' },
+  archiveText: { color: '#E25555', fontSize: 15, fontWeight: '600' },
+  saveButton: { flex: 1.3, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   disabled: { opacity: 0.55 },
 });

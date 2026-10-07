@@ -13,7 +13,6 @@ type AdvisorCandidate = {
   body: string;
   coreContent: string;
   reasons: string[];
-  [key: string]: unknown;
 };
 
 type LocalizedText = { title: string; headline: string; body: string; coreContent: string };

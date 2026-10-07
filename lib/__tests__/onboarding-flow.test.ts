@@ -14,8 +14,8 @@ describe('onboarding flow', () => {
   });
 
   it('uses the linked baby instead of asking an invited parent to enter baby details again', () => {
-    expect(getOnboardingSteps(true, true)).toEqual(['welcome', 'firstName', 'role', 'invitation', 'mood', 'energy', 'needs', 'personalValue', 'challenge', 'relief', 'support', 'sharedValue', 'productMoment', 'feedback', 'habit', 'plan']);
-    expect(getOnboardingSteps(false, true)).toEqual(['welcome', 'firstName', 'role', 'mood', 'energy', 'needs', 'personalValue', 'challenge', 'relief', 'support', 'sharedValue', 'productMoment', 'feedback', 'habit', 'plan']);
+    expect(getOnboardingSteps(true, true)).toEqual(['welcome', 'firstName', 'role', 'invitation']);
+    expect(getOnboardingSteps(false, true)).toEqual(['welcome', 'firstName', 'role', 'invitation']);
   });
 
   it('skips demo feedback in both directions when no action was completed', () => {

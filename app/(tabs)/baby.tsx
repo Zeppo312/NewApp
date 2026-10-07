@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedBackground } from '@/components/ThemedBackground';
+import { HomeBackground, HomeGlassSurface } from '@/components/ui/home-glass';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -17,7 +17,7 @@ import { saveBabyInfo, BabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { loadBabyInfoWithCache, invalidateBabyCache } from '@/lib/babyCache';
 import { supabase } from '@/lib/supabase';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
 import { useLocalSearchParams, useRouter, Stack , useFocusEffect, useNavigation as useRouteNavigation } from 'expo-router';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
@@ -149,6 +149,40 @@ const pastelPaletteDark = {
   blush: 'rgba(255, 160, 188, 0.24)',
 };
 
+function BabyGlassCard(props: Pick<React.ComponentProps<typeof LiquidGlassCard>,
+  'children' | 'style' | 'intensity' | 'overlayColor' | 'borderColor'>) {
+  const adaptiveColors = useAdaptiveColors();
+  if (Platform.OS !== 'android') return <LiquidGlassCard {...props} />;
+
+  const radius = StyleSheet.flatten(props.style)?.borderRadius ?? 22;
+  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+
+  return (
+    <View style={[
+      styles.androidGlassCard,
+      props.style,
+      {
+        borderRadius: radius,
+        borderColor: props.borderColor ?? (useDarkMode ? GLASS_BORDER_DARK : 'rgba(255,255,255,0.3)'),
+      },
+    ]}>
+      {/* Blur only the wallpaper, with content outside the native blur layer. */}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <HomeGlassSurface
+          intensity={props.intensity ?? 24}
+          tint={useDarkMode ? 'dark' : 'light'}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}
+        />
+        <View style={[
+          StyleSheet.absoluteFill,
+          { borderRadius: radius, backgroundColor: props.overlayColor ?? GLASS_OVERLAY },
+        ]} />
+      </View>
+      {props.children}
+    </View>
+  );
+}
+
 const GlassLayer = ({
   tint = 'rgba(255,255,255,0.22)',
   sheenOpacity = 0.35,
@@ -160,20 +194,32 @@ const GlassLayer = ({
 }) => (
   <>
     <LinearGradient
+      pointerEvents="none"
       colors={[tint, isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.06)']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.statsGlassLayerGradient}
     />
-    <View
-      style={[
-        styles.statsGlassSheen,
-        {
-          opacity: sheenOpacity,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
-        },
-      ]}
-    />
+    {Platform.OS === 'android' ? (
+      <LinearGradient
+        pointerEvents="none"
+        colors={isDark
+          ? ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0)']
+          : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0)']}
+        style={[styles.statsGlassSheen, { opacity: sheenOpacity, backgroundColor: 'transparent' }]}
+      />
+    ) : (
+      <View
+        pointerEvents="none"
+        style={[
+          styles.statsGlassSheen,
+          {
+            opacity: sheenOpacity,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
+          },
+        ]}
+      />
+    )}
   </>
 );
 
@@ -193,6 +239,9 @@ export default function BabyScreen() {
     borderColor: glassBorderColor,
     backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.15)',
     shadowOpacity: isDark ? 0.18 : 0.06,
+    ...(Platform.OS === 'android' ? {
+      boxShadow: `0 4px 8px rgba(0, 0, 0, ${isDark ? 0.18 : 0.06})`,
+    } : {}),
   } as const;
   const iconBubbleBackground = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.82)';
   const pastelPalette = isDark ? pastelPaletteDark : pastelPaletteLight;
@@ -859,7 +908,7 @@ export default function BabyScreen() {
     ];
 
     return (
-      <LiquidGlassCard
+      <BabyGlassCard
         style={styles.statsGlassCard}
         intensity={26}
         overlayColor={glassOverlay}
@@ -881,7 +930,7 @@ export default function BabyScreen() {
             ))}
           </View>
         </View>
-      </LiquidGlassCard>
+      </BabyGlassCard>
     );
   };
 
@@ -997,12 +1046,13 @@ export default function BabyScreen() {
   ];
 
   return (
-    <ThemedBackground style={styles.container}>
+    <HomeBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header
+          topSafeAreaHandled
           title={t('screen.title')}
           subtitle={t('screen.subtitle')}
           showBackButton
@@ -1018,7 +1068,7 @@ export default function BabyScreen() {
           contentInsetAdjustmentBehavior="automatic"
           showsVerticalScrollIndicator={false}
         >
-          <LiquidGlassCard style={styles.glassCard} intensity={24} overlayColor={glassOverlay}>
+          <BabyGlassCard style={styles.glassCard} intensity={24} overlayColor={glassOverlay}>
             <View style={styles.glassInner}>
             <View style={[styles.profileHero, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,244,238,0.58)' }]}>
             <View style={styles.photoContainer}>
@@ -1440,11 +1490,11 @@ export default function BabyScreen() {
               )}
             </View>
             </View>
-          </LiquidGlassCard>
+          </BabyGlassCard>
 
           {babyInfo.birth_date ? (
             <>
-              <LiquidGlassCard
+              <BabyGlassCard
                 style={[styles.statsGlassCard, styles.statsFirstGlassCard]}
                 intensity={26}
                 overlayColor={glassOverlay}
@@ -1491,9 +1541,9 @@ export default function BabyScreen() {
                     ))}
                   </View>
                 </View>
-              </LiquidGlassCard>
+              </BabyGlassCard>
 
-              <LiquidGlassCard
+              <BabyGlassCard
                 style={styles.statsGlassCard}
                 intensity={26}
                 overlayColor={glassOverlay}
@@ -1516,11 +1566,11 @@ export default function BabyScreen() {
                     ))}
                   </View>
                 </View>
-              </LiquidGlassCard>
+              </BabyGlassCard>
 
               {renderInterestingFacts()}
 
-              <LiquidGlassCard
+              <BabyGlassCard
                 style={styles.statsGlassCard}
                 intensity={26}
                 overlayColor={glassOverlay}
@@ -1536,10 +1586,10 @@ export default function BabyScreen() {
                     ))}
                   </View>
                 </View>
-              </LiquidGlassCard>
+              </BabyGlassCard>
             </>
           ) : (
-            <LiquidGlassCard
+            <BabyGlassCard
               style={styles.statsGlassCard}
               intensity={26}
               overlayColor={glassOverlay}
@@ -1550,11 +1600,11 @@ export default function BabyScreen() {
                   {t('section.noBirthDate')}
                 </ThemedText>
               </View>
-            </LiquidGlassCard>
+            </BabyGlassCard>
           )}
         </ScrollView>
       </SafeAreaView>
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 
@@ -1576,7 +1626,6 @@ export default function BabyScreen() {
       // Set notification handler
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
-          shouldShowAlert: true,
           shouldPlaySound: true,
           shouldSetBadge: true,
           shouldShowBanner: true,
@@ -1620,6 +1669,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   // Liquid Glass wrappers (Sleep-Tracker look)
+  androidGlassCard: {
+    width: '100%',
+    alignSelf: 'stretch',
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
   glassCard: {
     marginBottom: 20,
     borderRadius: 26,
@@ -1918,7 +1973,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   statsGlassLayerGradient: {
     ...StyleSheet.absoluteFill,

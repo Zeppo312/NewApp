@@ -11,7 +11,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { BlurView } from 'expo-blur';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { Colors } from '@/constants/Colors';

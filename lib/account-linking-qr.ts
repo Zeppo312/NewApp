@@ -1,4 +1,5 @@
-const CODE_PATTERN = /^[A-Z0-9]{8}$/i;
+// Legacy invitations use eight characters; server-issued invitations use UUID hex.
+const CODE_PATTERN = /^(?:[A-Z0-9]{8}|[A-F0-9]{32})$/i;
 
 /** Read invitation data without opening arbitrary scanned URLs. */
 export function parseAccountLinkingQr(data: string, currentInvitationLink: string): string | null {

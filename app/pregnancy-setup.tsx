@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';

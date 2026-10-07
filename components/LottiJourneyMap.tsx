@@ -347,7 +347,7 @@ export function LottiJourneyMap({
 
       <BlurView
         {...(Platform.OS === 'android'
-          ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+          ? { blurMethod: 'none' as const }
           : {})}
         intensity={22}
         tint={isDark ? 'dark' : 'light'}
@@ -886,7 +886,7 @@ function JourneyCompassCard({
   return (
     <BlurView
       {...(Platform.OS === 'android'
-        ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+        ? { blurMethod: 'none' as const }
         : {})}
       intensity={28}
       tint={isDark ? 'dark' : 'light'}
@@ -1197,7 +1197,7 @@ function LevelDetailSheet({
         <Pressable onPress={(event) => event.stopPropagation()} style={styles.sheetWrapper}>
           <BlurView
             {...(Platform.OS === 'android'
-              ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+              ? { blurMethod: 'none' as const }
               : {})}
             intensity={30}
             tint={isDark ? 'dark' : 'light'}

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Animated,
+  AppState,
   Easing,
   LayoutAnimation,
   Platform,
@@ -25,7 +26,7 @@ import Header from '@/components/Header';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { GlassCard } from '@/components/ui/GlassCard';
+import { CareGlassCard } from '@/components/advisor/CareGlassCard';
 import { CareAnalyticsSection } from '@/components/CareAnalyticsSection';
 import { CareDayTimeline } from '@/components/advisor/CareDayTimeline';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
@@ -44,18 +45,12 @@ import {
   saveAdvisorSettings,
   saveTodayInsight,
   setActed,
-  updateAdvisorContext,
   type AdvisorCategory,
-  type AdvisorFrequency,
   type AdvisorHistoryItem,
   type AdvisorSettings,
   type AdvisorTodayState,
 } from '@/lib/advisor/advisorStorage';
 import { buildDailySignals } from '@/lib/advisor/buildDailySignals';
-import {
-  registerForPushNotificationsAsync,
-  savePushToken,
-} from '@/lib/notificationService';
 import { generateAdvisorInsight } from '@/lib/advisor/generateInsight';
 import { generatePregnancyInsight } from '@/lib/advisor/generatePregnancyInsight';
 import { buildPregnancyAnalysis } from '@/lib/advisor/pregnancyInsights';
@@ -197,6 +192,7 @@ function Skeleton({
 }) {
   const v = React.useState(() => new Animated.Value(0.45))[0];
   useEffect(() => {
+    if (Platform.OS === 'android') return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(v, { toValue: 1, duration: 720, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -231,6 +227,12 @@ function AnimatedBar({
 }) {
   const w = React.useState(() => new Animated.Value(0))[0];
   useEffect(() => {
+    // Width animations trigger layout on every JS frame. Android shows the
+    // final value directly, including when details are expanded again.
+    if (Platform.OS === 'android') {
+      w.setValue(Math.max(0, Math.min(1, progress)));
+      return;
+    }
     if (!play) return;
     const anim = Animated.timing(w, {
       toValue: Math.max(0, Math.min(1, progress)),
@@ -318,7 +320,7 @@ export default function LottisFuersorgeScreen() {
       controlBorder: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(94,61,179,0.20)',
       switchTrack: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(74,58,51,0.18)',
     }),
-    [adaptiveColors, isDark],
+    [adaptiveColors.textPrimary, adaptiveColors.textSecondary, adaptiveColors.textTertiary, isDark],
   );
   const styles = useMemo(() => createStyles(theme), [theme]);
   const tileProps = useMemo(
@@ -374,10 +376,23 @@ export default function LottisFuersorgeScreen() {
   const runIdRef = useRef(0);
   const ready = !!analysis;
 
-  useEffect(() => {
-    const timer = setInterval(() => setClockNow(new Date()), 60_000);
-    return () => clearInterval(timer);
-  }, []);
+  useFocusEffect(useCallback(() => {
+    // Stack screens remain mounted; only update predictions while visible.
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const syncClock = () => {
+      if (timer) clearInterval(timer);
+      timer = undefined;
+      if (AppState.currentState !== 'active') return;
+      setClockNow(new Date());
+      timer = setInterval(() => setClockNow(new Date()), 60_000);
+    };
+    syncClock();
+    const subscription = AppState.addEventListener('change', syncClock);
+    return () => {
+      if (timer) clearInterval(timer);
+      subscription.remove();
+    };
+  }, []));
 
   // Weiche Einblendung für das stets sichtbare Copilot-Briefing.
   const heroIn = React.useState(() => new Animated.Value(0))[0];
@@ -419,6 +434,7 @@ export default function LottisFuersorgeScreen() {
       } catch {
         // Name optional
       }
+      if (!alive()) return;
       const signals = await buildPregnancySignals({ userId: user?.id, motherName });
       if (!alive()) return;
       setPregnancySignals(signals);
@@ -461,10 +477,8 @@ export default function LottisFuersorgeScreen() {
   //     Fallback auf die lokale Mock-Analyse. ---
   const loadAnalysis = useCallback(async () => {
     const myRun = ++runIdRef.current;
-    const alive = () => runIdRef.current === myRun;
-
-    // Kontext (Zeitzone/Standort) für den täglichen Push-Job mitpflegen.
-    updateAdvisorContext();
+    const alive = () => runIdRef.current === myRun && AppState.currentState === 'active';
+    if (!alive()) return;
 
     if (isPregnancy) {
       await loadPregnancyAnalysis(alive);
@@ -475,8 +489,10 @@ export default function LottisFuersorgeScreen() {
     try {
       signals = await buildDailySignals(activeBaby);
     } catch {
+      if (!alive()) return;
       signals = await buildDailySignals(null);
     }
+    if (!alive()) return;
     setDailySignals(signals);
     let result: AdvisorAnalysis = buildMockAnalysis(signals);
     if (!alive()) return;
@@ -539,9 +555,14 @@ export default function LottisFuersorgeScreen() {
       // Erst laden, wenn der Zugriff bestätigt ist (kein Persistieren
       // von Hinweisen für Nutzer ohne Freischaltung).
       if (access !== true) return;
-      loadAnalysis();
+      void loadAnalysis();
+      const subscription = AppState.addEventListener('change', (state) => {
+        runIdRef.current += 1;
+        if (state === 'active') void loadAnalysis();
+      });
       return () => {
         runIdRef.current += 1;
+        subscription.remove();
       };
     }, [access, loadAnalysis]),
   );
@@ -572,35 +593,6 @@ export default function LottisFuersorgeScreen() {
     saveAdvisorSettings(next);
   };
 
-  /**
-   * Push-Opt-in: Beim Einschalten System-Berechtigung anfordern und den
-   * Expo-Token registrieren; erst wenn beides klappt, wird das Opt-in
-   * gespeichert. Ausschalten wirkt sofort (advisor-daily prüft das Flag).
-   */
-  const [pushBusy, setPushBusy] = useState(false);
-  const togglePush = async () => {
-    if (!settings || pushBusy) return;
-    if (settings.pushEnabled) {
-      updateSettings({ ...settings, pushEnabled: false });
-      return;
-    }
-    setPushBusy(true);
-    try {
-      const token = await registerForPushNotificationsAsync();
-      if (!token) {
-        Alert.alert(
-          t('notificationTitle'),
-          t('notificationMessage'),
-        );
-        return;
-      }
-      await savePushToken(token);
-      updateSettings({ ...settings, pushEnabled: true });
-    } finally {
-      setPushBusy(false);
-    }
-  };
-
   const toggleTheme = (theme: AdvisorCategory) => {
     if (!settings) return;
     const active = settings.themes.includes(theme);
@@ -616,7 +608,9 @@ export default function LottisFuersorgeScreen() {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
-    LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+    if (Platform.OS !== 'android') {
+      LayoutAnimation.configureNext(LayoutAnimation.create(220, 'easeInEaseOut', 'opacity'));
+    }
     setDetailsOpen((v) => !v);
   };
 
@@ -684,7 +678,7 @@ export default function LottisFuersorgeScreen() {
 
   /* ---- Tagesbriefing-Karte: Struktur steht sofort, Text per Skeleton ---- */
   const renderBriefing = () => (
-    <GlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.briefingContent}>
+    <CareGlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.briefingContent}>
       {/* Kopfzeile: Titel */}
       <View style={styles.briefingHeader}>
         <View style={styles.briefingTitleRow}>
@@ -802,11 +796,11 @@ export default function LottisFuersorgeScreen() {
         </View>
       ) : null}
 
-    </GlassCard>
+    </CareGlassCard>
   );
 
   const renderCareHorizon = () => (
-    <GlassCard {...tileProps} radius={28} style={styles.horizonShadow} contentStyle={styles.horizonContent}>
+    <CareGlassCard {...tileProps} radius={28} style={styles.horizonShadow} contentStyle={styles.horizonContent}>
       {!careHorizon ? (
         <View style={styles.horizonSkeleton}>
           <Skeleton width={128} height={25} radius={999} color={theme.skeleton} />
@@ -888,7 +882,7 @@ export default function LottisFuersorgeScreen() {
           </TouchableOpacity>
         </>
       )}
-    </GlassCard>
+    </CareGlassCard>
   );
 
   // Schwangerschaft: „Heute: SSW X+Y" mit Entwicklungs-Fakt und den nächsten
@@ -914,7 +908,7 @@ export default function LottisFuersorgeScreen() {
     preparation: '🧳',
   };
   const renderPregnancyWeekCard = () => (
-    <GlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.weekContent}>
+    <CareGlassCard {...tileProps} radius={28} style={styles.briefingShadow} contentStyle={styles.weekContent}>
       {pregnancyBriefing ? (
         <>
           <ThemedText adaptive={false} style={styles.weekTitle}>
@@ -961,7 +955,7 @@ export default function LottisFuersorgeScreen() {
           <Skeleton width="100%" height={60} radius={14} color={theme.skeleton} style={{ marginTop: 8 }} />
         </View>
       )}
-    </GlassCard>
+    </CareGlassCard>
   );
 
   const renderCopilotBriefing = () => (
@@ -985,7 +979,7 @@ export default function LottisFuersorgeScreen() {
   );
 
   const renderDayTimeline = () => (
-    <GlassCard {...tileProps} radius={28} contentStyle={styles.timelineContent}>
+    <CareGlassCard {...tileProps} radius={28} contentStyle={styles.timelineContent}>
       <CareDayTimeline
         items={dayTimeline}
         loading={!dailySignals || todayPlanner.loading}
@@ -1005,7 +999,7 @@ export default function LottisFuersorgeScreen() {
         }}
         onOpenPlanner={() => router.push('/planner')}
       />
-    </GlassCard>
+    </CareGlassCard>
   );
 
   const renderCards = () => (
@@ -1014,19 +1008,19 @@ export default function LottisFuersorgeScreen() {
         if (typeof card === 'number') {
           return (
             <View key={card} style={styles.miniCardWrap}>
-              <GlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
+              <CareGlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
                 <Skeleton width={38} height={38} radius={13} color={theme.skeleton} />
                 <Skeleton width="70%" height={22} radius={8} color={theme.skeleton} style={{ marginTop: 12 }} />
                 <Skeleton width="55%" height={14} radius={7} color={theme.skeleton} style={{ marginTop: 6 }} />
                 <Skeleton width="100%" height={6} radius={999} color={theme.skeleton} style={{ marginTop: 12 }} />
-              </GlassCard>
+              </CareGlassCard>
             </View>
           );
         }
         const accent = cardAccent(card.key, isDark);
         return (
           <FadeInUp key={card.key} delay={120 + index * 70} style={styles.miniCardWrap}>
-            <GlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
+            <CareGlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
               <View style={styles.miniHeader}>
                 <View style={[styles.miniIconChip, { backgroundColor: accent.soft }]}>
                   <Text style={styles.miniEmoji}>{card.emoji}</Text>
@@ -1060,7 +1054,7 @@ export default function LottisFuersorgeScreen() {
               <ThemedText adaptive={false} numberOfLines={1} style={styles.miniCaption}>
                 {card.caption}
               </ThemedText>
-            </GlassCard>
+            </CareGlassCard>
           </FadeInUp>
         );
       })}
@@ -1076,7 +1070,7 @@ export default function LottisFuersorgeScreen() {
         const acted = !!item.actedAt;
         return (
           <FadeInUp key={item.id} delay={260 + index * 70}>
-            <GlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
+            <CareGlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
               <View style={[styles.historyEmojiBubble, { backgroundColor: accent.soft }]}>
                 <Text style={styles.historyEmoji}>{item.emoji}</Text>
               </View>
@@ -1103,7 +1097,7 @@ export default function LottisFuersorgeScreen() {
                   color={acted ? '#FFFFFF' : theme.accent}
                 />
               </TouchableOpacity>
-            </GlassCard>
+            </CareGlassCard>
           </FadeInUp>
         );
       })}
@@ -1117,7 +1111,7 @@ export default function LottisFuersorgeScreen() {
         const accent = toneAccent(item.tone, isDark);
         return (
           <FadeInUp key={item.id} delay={260 + index * 70}>
-            <GlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
+            <CareGlassCard {...tileProps} radius={20} contentStyle={styles.historyContent}>
               <View style={[styles.historyEmojiBubble, { backgroundColor: accent.soft }]}>
                 <Text style={styles.historyEmoji}>{item.emoji}</Text>
               </View>
@@ -1129,7 +1123,7 @@ export default function LottisFuersorgeScreen() {
                   {item.body}
                 </ThemedText>
               </View>
-            </GlassCard>
+            </CareGlassCard>
           </FadeInUp>
         );
       })}
@@ -1142,7 +1136,7 @@ export default function LottisFuersorgeScreen() {
     return (
       <View style={styles.settingsSection}>
         <ThemedText style={styles.historyHeading}>{t('settings')}</ThemedText>
-        <GlassCard {...tileProps} radius={22} contentStyle={styles.settingsContent}>
+        <CareGlassCard {...tileProps} radius={22} contentStyle={styles.settingsContent}>
           <ThemedText adaptive={false} style={styles.settingsGroupLabel}>
             {t('topics')}
           </ThemedText>
@@ -1169,63 +1163,9 @@ export default function LottisFuersorgeScreen() {
             </View>
           ))}
 
-          <ThemedText
-            adaptive={false}
-            style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
-          >
-            {t('notifications')}
+          <ThemedText adaptive={false} style={styles.settingsHint}>
+            {t('foregroundHint')}
           </ThemedText>
-          <View style={styles.settingsRow}>
-            <Text style={styles.settingsEmoji}>🔔</Text>
-            <View style={styles.settingsLabelColumn}>
-              <ThemedText adaptive={false} style={styles.settingsLabel}>
-                {t('push')}
-              </ThemedText>
-              <ThemedText adaptive={false} style={styles.settingsHint}>
-                {t('pushHint', { start: settings.quietHoursStart, end: settings.quietHoursEnd })}
-              </ThemedText>
-            </View>
-            <Switch
-              value={settings.pushEnabled}
-              disabled={pushBusy}
-              onValueChange={togglePush}
-              trackColor={{ false: theme.switchTrack, true: theme.accentStrong }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <ThemedText
-            adaptive={false}
-            style={[styles.settingsGroupLabel, styles.settingsGroupSpacing]}
-          >
-            {t('frequency')}
-          </ThemedText>
-          <View style={styles.frequencyRow}>
-            {([
-              { key: 'daily', label: t('daily') },
-              { key: 'critical_only', label: t('importantOnly') },
-              { key: 'off', label: t('off') },
-            ] as { key: AdvisorFrequency; label: string }[]).map((option) => {
-              const active = settings.frequency === option.key;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  activeOpacity={0.8}
-                  onPress={() => updateSettings({ ...settings, frequency: option.key })}
-                  style={[styles.frequencyChip, active && styles.frequencyChipActive]}
-                >
-                  <Text
-                    style={[
-                      styles.frequencyChipText,
-                      active && styles.frequencyChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
 
           {/* Datenschutz-Hinweis: was Lottis Fürsorge wohin überträgt. */}
           <View style={styles.privacyBlock}>
@@ -1246,7 +1186,7 @@ export default function LottisFuersorgeScreen() {
               <IconSymbol name="chevron.right" size={12} color={theme.accent} />
             </TouchableOpacity>
           </View>
-        </GlassCard>
+        </CareGlassCard>
       </View>
     );
   };
@@ -1259,6 +1199,7 @@ export default function LottisFuersorgeScreen() {
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
           <Header
+            topSafeAreaHandled
             title={t('title')}
             subtitle={t('subtitle')}
             showBackButton
@@ -1266,7 +1207,7 @@ export default function LottisFuersorgeScreen() {
           />
           {access === false ? (
             <View style={styles.gateWrap}>
-              <GlassCard {...tileProps} radius={22} contentStyle={styles.gateContent}>
+              <CareGlassCard {...tileProps} radius={22} contentStyle={styles.gateContent}>
                 <Text style={styles.gateEmoji}>🔒</Text>
                 <ThemedText adaptive={false} style={styles.gateTitle}>
                   {t('locked')}
@@ -1274,7 +1215,7 @@ export default function LottisFuersorgeScreen() {
                 <ThemedText adaptive={false} style={styles.gateText}>
                   {t('lockedText')}
                 </ThemedText>
-              </GlassCard>
+              </CareGlassCard>
             </View>
           ) : null}
         </SafeAreaView>
@@ -1287,6 +1228,7 @@ export default function LottisFuersorgeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
+          topSafeAreaHandled
           title={t('title')}
           subtitle={t('subtitle')}
           showBackButton
@@ -1460,6 +1402,11 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 14,
     elevation: 6,
+    ...(Platform.OS === 'android' ? {
+      elevation: 0,
+      shadowOpacity: 0,
+      boxShadow: '0 3px 8px rgba(94,61,179,0.16)',
+    } : {}),
   },
   ctaButtonDisabled: { opacity: 0.55 },
   ctaText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },

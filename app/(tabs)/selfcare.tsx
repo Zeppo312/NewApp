@@ -1028,7 +1028,7 @@ export default function SelfcareScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <StatusBar hidden={true} />
         
-        <Header title={t('screen.title')} subtitle={t('screen.subtitle')} showBackButton />
+        <Header topSafeAreaHandled title={t('screen.title')} subtitle={t('screen.subtitle')} showBackButton />
         
         <ScrollView
           style={styles.scrollView}
@@ -2228,7 +2228,8 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
       position: 'absolute',
       left: 0,
       right: 0,
-      bottom: 100,
+      // Android's tab bar already reserves space below the screen.
+      bottom: process.env.EXPO_OS === 'android' ? 16 : 100,
       paddingHorizontal: LAYOUT_PAD,
       alignItems: 'center',
     },

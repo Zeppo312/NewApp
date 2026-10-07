@@ -4,6 +4,7 @@ const mockGetUser = jest.fn();
 const mockFetch = jest.fn();
 const mockInsert = jest.fn();
 const mockGte = jest.fn();
+const mockRpc = jest.fn();
 
 jest.mock('https://deno.land/std@0.168.0/http/server.ts', () => ({
   serve: (handler: typeof mockHandler) => { mockHandler = handler; },
@@ -11,6 +12,7 @@ jest.mock('https://deno.land/std@0.168.0/http/server.ts', () => ({
 jest.mock('https://esm.sh/@supabase/supabase-js@2', () => ({
   createClient: () => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
+    rpc: (...args: unknown[]) => mockRpc(...args),
     from: () => ({
       select: () => ({ eq: () => ({ gte: (...args: unknown[]) => mockGte(...args) }) }),
       insert: (...args: unknown[]) => mockInsert(...args),
@@ -30,6 +32,7 @@ beforeEach(() => {
   Object.assign(global, { Deno: { env: { get: () => 'test-key' } }, fetch: mockFetch });
   mockGetUser.mockResolvedValue({ data: { user: { id: 'user-id' } } });
   mockFeatureAccess.mockResolvedValue({ allowed: true });
+  mockRpc.mockResolvedValue({ data: true, error: null });
   mockGte.mockResolvedValue({ data: [], error: null });
   mockInsert.mockResolvedValue({ error: null });
 });

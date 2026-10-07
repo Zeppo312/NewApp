@@ -103,6 +103,7 @@ export default function SupportScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
           <StatusBar hidden />
           <Header
+            topSafeAreaHandled
             title={t('screen.title')}
             subtitle={t('screen.subtitle')}
             showBackButton

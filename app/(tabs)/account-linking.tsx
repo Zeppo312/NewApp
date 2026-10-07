@@ -1,3 +1,4 @@
+import { invalidateFamilyAccess, refreshFamilyAccess } from '@/lib/familySubscriptionAccess';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { caretakerCopy } from '@/lib/caretaker-copy';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -21,7 +22,6 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useConvex } from '@/contexts/ConvexContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { buildInvitationLink, createInvitationLink, getUserInvitations, getLinkedUsers, deactivateAccountLink } from '@/lib/supabase';
@@ -32,8 +32,6 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
 import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
-import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
-import { useFeatureAccess } from '@/lib/entitlements';
 import {
   DEFAULT_ACCOUNT_LINKING_LOCALE,
   getAccountLinkingLocaleTag,
@@ -91,17 +89,11 @@ const lightenHex = (hex: string, amount = 0.35) => {
   return `#${toHex(lightenChannel(r))}${toHex(lightenChannel(g))}${toHex(lightenChannel(b))}`;
 };
 
-// Abo-Gate: in Lotti Lite ist dieses Feature gesperrt (lib/entitlements.ts).
+// Joining a paying partner must be possible before this account has a plan.
+// Subscription and shared-feature authorization remain server-side.
 export default function AccountLinkingScreen() {
   ACTIVE_ACCOUNT_LINKING_LOCALE = useLocale().locale;
   ACCOUNT_LINKING_LOCALE_TAG = getAccountLinkingLocaleTag(ACTIVE_ACCOUNT_LINKING_LOCALE);
-  const access = useFeatureAccess('partnerLink');
-
-  if (access.hasAccess === null) return null;
-  if (!access.hasAccess) {
-    return <LockedFeatureScreen feature="partnerLink" />;
-  }
-
   return <AccountLinkingScreenContent />;
 }
 
@@ -130,7 +122,6 @@ function AccountLinkingScreenContent() {
   const { user } = useAuth();
   const { refreshBabies } = useActiveBaby();
   const { refreshBabyDetails } = useBabyStatus();
-  const { syncUser } = useConvex();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
@@ -188,13 +179,17 @@ function AccountLinkingScreenContent() {
   }, [prefilledInvitationCode]);
 
   const refreshLinkedBabyState = useCallback(async () => {
+    if (user?.id) {
+      invalidateFamilyAccess(user.id);
+      void refreshFamilyAccess(user.id, { force: true });
+    }
     await Promise.allSettled([
       loadData(),
       refreshBabies(),
       refreshBabyDetails(),
     ]);
-    void syncUser();
-  }, [loadData, refreshBabies, refreshBabyDetails, syncUser]);
+
+  }, [loadData, refreshBabies, refreshBabyDetails, user]);
 
   const handleCreateInvitation = async (showQr = false) => {
     if (!user?.id) {
@@ -218,7 +213,7 @@ function AccountLinkingScreenContent() {
           });
         }
         await loadData();
-        void syncUser();
+
       } else {
         Alert.alert(t('common.error'), t('create.failed'));
       }
@@ -309,9 +304,13 @@ function AccountLinkingScreenContent() {
     try {
       const result = await deactivateAccountLink(link.linkId);
       if (result.success) {
+        if (user?.id) {
+          invalidateFamilyAccess(user.id);
+          void refreshFamilyAccess(user.id, { force: true });
+        }
         Alert.alert(t('linked.unlinkedTitle'), t('linked.unlinkedMessage'));
         void loadData();
-        void syncUser();
+
       } else {
         const errorMessage = result.error?.message || t('linked.unlinkFailed');
         Alert.alert(t('common.error'), errorMessage);
@@ -370,11 +369,12 @@ function AccountLinkingScreenContent() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <Header
+          topSafeAreaHandled
           title={t(qrMode ? (qrMode.code === null ? 'qr.scan' : 'qr.show') : 'screen.title')}
           subtitle={t('screen.subtitle')}
           showBackButton
           showBabySwitcher={false}
-          onBackPress={() => qrMode ? setQrMode(null) : router.back()}
+          onBackPress={qrMode ? () => setQrMode(null) : undefined}
         />
 
         {qrMode ? (
@@ -541,11 +541,11 @@ function AccountLinkingScreenContent() {
                       autoCapitalize="characters"
                       autoCorrect={false}
                       spellCheck={false}
-                      maxLength={8}
+                      maxLength={32}
                       returnKeyType="done"
                       accessibilityLabel={t('redeem.accessibility')}
                     />
-                    {invitationCode.length === 8 && (
+                    {(invitationCode.length === 8 || invitationCode.length === 32) && (
                       <IconSymbol name="checkmark.circle.fill" size={22} color={accentMint} />
                     )}
                   </View>
@@ -595,6 +595,9 @@ function AccountLinkingScreenContent() {
                       </ThemedText>
                       <ThemedText style={[styles.listSubtitle, { color: textSecondary }]}>
                         {t('linked.subtitle')}
+                      </ThemedText>
+                      <ThemedText style={[styles.listSubtitle, { color: textSecondary }]}>
+                        {t('linked.familyReinvite')}
                       </ThemedText>
                     </View>
 

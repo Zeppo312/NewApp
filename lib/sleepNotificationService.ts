@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPersistedAppLocale } from './localization';
 import { translateNotificationsText } from './notificationsTranslations';
+import { runtimeConsentAllowed, subscribeDataConsents } from './dataConsentRuntime';
 
 // Kanal-ID für die Benachrichtigung
 const SLEEP_NOTIFICATION_CHANNEL = 'sleep-tracking-channel';
@@ -14,7 +15,6 @@ const SLEEP_TIMER_INTERVAL = 5000; // Aktualisierung alle 5 Sekunden
 // Richte die Standard-Benachrichtigungseinstellungen ein
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: false,
     shouldSetBadge: false,
     shouldShowBanner: true,
@@ -28,6 +28,7 @@ class SleepNotificationService {
   private isInitialized = false;
 
   constructor() {
+    subscribeDataConsents(() => { if (!runtimeConsentAllowed('health')) void this.stopSleepTracking().catch(() => {}); });
     this.init();
   }
 
@@ -35,6 +36,7 @@ class SleepNotificationService {
    * Initialisiert den Notification-Service
    */
   async init() {
+    if (!runtimeConsentAllowed('health')) return;
     if (this.isInitialized) return;
     
     try {
@@ -127,6 +129,7 @@ class SleepNotificationService {
    * @param startTime Startzeitpunkt der Schlafaufzeichnung
    */
   async startSleepTracking(startTime: Date) {
+    if (!runtimeConsentAllowed('health')) return;
     await this.init();
     
     this.startTime = startTime;

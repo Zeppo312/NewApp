@@ -199,6 +199,7 @@ export function LockedFeatureScreen({
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
+          topSafeAreaHandled
           title={headerTitle ?? copy.title}
           subtitle={headerSubtitle}
           showBackButton

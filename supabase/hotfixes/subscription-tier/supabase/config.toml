@@ -1,0 +1,16 @@
+project_id = "lotti-subscription-tier-hotfix"
+
+[functions.subscription-tier-repair]
+verify_jwt = false
+
+[functions.advisor-generate]
+verify_jwt = false
+
+[functions.voice-log-parse]
+verify_jwt = false
+
+[functions.ask-lotti]
+verify_jwt = true
+
+[functions.revenuecat-webhook]
+verify_jwt = false

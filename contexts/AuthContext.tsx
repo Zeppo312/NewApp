@@ -1,3 +1,4 @@
+import { clearPersonalDeviceData, waitForPersonalDeviceCleanup } from '@/lib/accountDeletionCleanup';
 import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import {
@@ -5,15 +6,23 @@ import {
   signInWithEmail,
   signUpWithEmail,
   signInWithApple,
+  signInWithGoogle,
   resendOTPToken,
   verifyOTPToken,
   checkEmailVerification,
   signOut,
-  checkSupabaseConnection,
   isSupabaseReady,
   invalidateUserCache
 } from '@/lib/supabase';
 import { invalidateAllCaches } from '@/lib/appCache';
+import { setRevenueCatSessionUser } from '@/lib/revenuecat';
+import {
+  clearGoogleSignIn,
+  completeGoogleSignIn as exchangeGoogleSignIn,
+  type GoogleAuthOptions,
+  type GoogleAuthResult,
+  type GoogleStartResult,
+} from '@/lib/google-auth';
 
 // Typdefinitionen für den Kontext
 type AuthContextType = {
@@ -30,6 +39,8 @@ type AuthContextType = {
   ) => Promise<{ data?: any, error: any }>;
   // Apple Sign-In
   signInWithApple: () => Promise<{ data?: any, error: any }>;
+  signInWithGoogle: (options: GoogleAuthOptions) => Promise<GoogleStartResult>;
+  completeGoogleSignIn: (url: string) => Promise<GoogleAuthResult>;
   // OTP-Verifikation
   resendOTPToken: (email: string) => Promise<{ data?: any, error: any }>;
   verifyOTPToken: (email: string, token: string) => Promise<{ data?: any, error: any }>;
@@ -46,9 +57,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const signOutPromiseRef = useRef<Promise<{ error: any }> | null>(null);
+  const sessionRevisionRef = useRef(0);
+  const refreshPromiseRef = useRef<Promise<Session | null> | null>(null);
+  const mountedRef = useRef(true);
   const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
 
   const applySession = useCallback((nextSession: Session | null) => {
+    sessionRevisionRef.current++;
     const nextUserId = nextSession?.user?.id ?? null;
     const previousUserId = lastSessionUserIdRef.current;
 
@@ -60,43 +76,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Error invalidating caches after auth user change:', cacheError);
       });
     }
+    if (previousUserId && nextUserId === null) {
+      // Also handles a remote revocation/expired session. Never await Supabase
+      // auth methods inside its auth-state callback (the auth lock is held).
+      invalidateUserCache();
+      void clearGoogleSignIn().catch(() => { console.warn('Google login cleanup failed'); });
+      void clearPersonalDeviceData().then((failures) => {
+        if (failures.length) console.warn('Local cleanup incomplete:', failures);
+      });
+    }
     lastSessionUserIdRef.current = nextUserId;
+    setRevenueCatSessionUser(nextUserId);
 
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
   }, []);
 
-  const refreshSession = useCallback(async () => {
-    if (!isSupabaseReady()) {
-      applySession(null);
-      return null;
-    }
-
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      // Bewusst kein applySession(null): ein Fehler heisst hier meistens nur,
-      // dass der faellige Token-Refresh gerade nicht durchging (Funkloch,
-      // Timeout beim Kaltstart). Die persistierte Sitzung liegt dann noch im
-      // Storage und traegt beim naechsten Versuch wieder. Wuerden wir sie
-      // lokal verwerfen, schickte der Guard den Nutzer trotzdem auf den
-      // Login-Screen. Einen echten Abbruch meldet auth-js ohnehin selbst:
-      // `_removeSession()` feuert immer `SIGNED_OUT` an den Listener unten.
-      console.error('Error refreshing session:', error);
-      return null;
-    }
-
-    const nextSession = data.session ?? null;
-    applySession(nextSession);
-    return nextSession;
+  const refreshSession = useCallback((): Promise<Session | null> => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+    if (signOutPromiseRef.current) return Promise.resolve(null);
+    const revision = sessionRevisionRef.current;
+    const operation = (async () => {
+      try {
+        const result = isSupabaseReady()
+          ? await supabase.auth.getSession()
+          : { data: { session: null }, error: null };
+        if (!mountedRef.current || revision !== sessionRevisionRef.current) return null;
+        if (result.error) {
+          // A failed cold-start refresh is unresolved, not a signed-out session.
+          // Keep the recovery screen until a retry or authoritative auth event.
+          console.error('Error refreshing session:', result.error);
+          return null;
+        }
+        const nextSession = result.data.session ?? null;
+        applySession(nextSession);
+        setLoading(false);
+        return nextSession;
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        return null;
+      }
+    })();
+    refreshPromiseRef.current = operation;
+    void operation.finally(() => {
+      if (refreshPromiseRef.current === operation) refreshPromiseRef.current = null;
+    });
+    return operation;
   }, [applySession]);
 
   // Initialisierung und Überwachung des Authentifizierungsstatus
   useEffect(() => {
     let isMounted = true;
+    mountedRef.current = true;
 
     const applySessionSafe = (nextSession: Session | null) => {
       if (!isMounted) return;
       applySession(nextSession);
+      setLoading(false);
     };
 
     // Prüfen, ob wir im Browser sind und Supabase bereit ist
@@ -109,7 +145,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Überwachung von Authentifizierungsänderungen früh registrieren
     let subscription: { unsubscribe: () => void } | null = null;
     try {
-      const authListener = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const authListener = supabase.auth.onAuthStateChange((event, nextSession) => {
+        // INITIAL_SESSION can be null after a transient SDK recovery failure.
+        // Only getSession without an error establishes anonymous startup.
+        if (event === 'INITIAL_SESSION' && !nextSession) return;
         applySessionSafe(nextSession);
       });
 
@@ -118,40 +157,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error setting up auth state change:', error);
     }
 
-    const initAuth = async () => {
-      try {
-        // Optionales Connectivity-Logging (darf Auth nicht blockieren)
-        checkSupabaseConnection()
-          .then((result) => {
-            if (!result.success) {
-              console.warn('Supabase connection check warning:', result.error);
-            }
-          })
-          .catch((connectionError) => {
-            console.warn('Supabase connection check exception:', connectionError);
-          });
-
-        // Abrufen der aktuellen Session beim Start
-        await refreshSession();
-      } catch (error) {
-        // Auch hier gilt: eine geworfene Ausnahme ist kein Beleg dafuer, dass
-        // die Sitzung ungueltig ist. Der Zustand bleibt, wie er ist - ein
-        // echter Logout kommt ueber den SIGNED_OUT-Listener.
-        console.error('Error initializing auth:', error);
-      } finally {
-        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
-        if (isMounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    // Initialisierung starten
-    initAuth();
+    void refreshSession();
 
     // Cleanup-Funktion
     return () => {
       isMounted = false;
+      mountedRef.current = false;
       if (subscription) {
         subscription.unsubscribe();
       }
@@ -160,6 +171,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // E-Mail-Authentifizierung
   const handleSignInWithEmail = async (email: string, password: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
     const { data, error } = await signInWithEmail(email, password);
     if (!error && data?.session) {
       applySession(data.session);
@@ -172,6 +185,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password: string,
     termsConsent: { version: string; acceptedAt: string },
   ) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
     const { data, error } = await signUpWithEmail(email, password, termsConsent);
     if (!error && data?.session) {
       applySession(data.session);
@@ -180,6 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const handleSignInWithApple = async () => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
     const { data, error } = await signInWithApple();
     if (!error && data?.session) {
       applySession(data.session);
@@ -187,7 +204,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { data, error };
   };
 
+  const handleSignInWithGoogle = async (options: GoogleAuthOptions) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    return signInWithGoogle(options);
+  };
+
+  const handleCompleteGoogleSignIn = async (url: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    const result = await exchangeGoogleSignIn(supabase, url);
+    applySession(result.session);
+    return result;
+  };
+
   const handleVerifyOTPToken = async (email: string, token: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
     const { data, error } = await verifyOTPToken(email, token);
     if (!error && data?.session) {
       applySession(data.session);
@@ -196,28 +229,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Abmeldung
-  const handleSignOut = async () => {
-    // Lokalen Auth-State sofort leeren, damit geschützte Screens direkt unmounten.
-    applySession(null);
-
-    // Cleanup darf Logout nicht abbrechen.
+  const handleSignOut = (): Promise<{ error: any }> => {
+    if (signOutPromiseRef.current) return signOutPromiseRef.current;
+    sessionRevisionRef.current++;
+    // Hide private screens immediately, while preserving the persisted token
+    // until Supabase has attempted remote session revocation.
+    setSession(null);
+    setUser(null);
+    setRevenueCatSessionUser(null);
     invalidateUserCache();
-    try {
-      await invalidateAllCaches();
-    } catch (cacheError) {
-      console.error('Error invalidating caches during sign out:', cacheError);
-    }
-
-    try {
-      const { error } = await signOut();
-      if (error) {
-        console.error('Error signing out from Supabase:', error);
+    const operation = (async () => {
+      let error: unknown = null;
+      try {
+        await clearGoogleSignIn().catch(() => { console.warn('Google login cleanup failed'); });
+        ({ error } = await signOut());
+      }
+      catch (failure) { error = failure; }
+      finally {
+        applySession(null);
+        const failures = await clearPersonalDeviceData();
+        if (failures.length) console.warn('Local cleanup incomplete:', failures);
       }
       return { error };
-    } catch (error) {
-      console.error('Unexpected sign out error:', error);
-      return { error };
-    }
+    })();
+    signOutPromiseRef.current = operation;
+    void operation.finally(() => { signOutPromiseRef.current = null; });
+    return operation;
   };
 
   // Bereitstellung des Kontexts
@@ -231,6 +268,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
         signInWithApple: handleSignInWithApple,
+        signInWithGoogle: handleSignInWithGoogle,
+        completeGoogleSignIn: handleCompleteGoogleSignIn,
         resendOTPToken,
         verifyOTPToken: handleVerifyOTPToken,
         checkEmailVerification,

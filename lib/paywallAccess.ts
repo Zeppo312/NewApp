@@ -6,6 +6,7 @@ export type PaywallAccessRole =
   | 'premium_tester'
   | 'lite_tester';
 export type PaywallAccessReason =
+  | 'family_subscription'
   | 'subscription'
   | 'admin'
   | PaywallAccessRole
@@ -74,6 +75,8 @@ export const getPaywallAccessReasonLabel = (
   reason: PaywallAccessReason,
 ): string => {
   switch (reason) {
+    case 'family_subscription':
+      return 'Familienabo';
     case 'subscription':
       return 'Abo';
     case 'admin':

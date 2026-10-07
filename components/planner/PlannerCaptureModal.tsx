@@ -15,7 +15,7 @@ import {
   TextStyle,
   Alert,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker from "@/components/ui/DateTimePicker";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -181,7 +181,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       textSecondary: isDark ? Colors.dark.textSecondary : THEME.textSecondary,
       overlay: isDark ? "rgba(0,0,0,0.58)" : "rgba(0,0,0,0.35)",
       pickerOverlay: isDark ? "rgba(0,0,0,0.62)" : "rgba(0,0,0,0.4)",
-      sheetBackground: isDark ? "rgba(8,8,12,0.82)" : "rgba(255,255,255,0.12)",
+      sheetBackground: isDark ? "rgba(8,8,12,0.96)" : "rgba(255,255,255,0.96)",
       sheetBorder: isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.45)",
       field: isDark ? "rgba(255,255,255,0.08)" : THEME.field,
       block: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.85)",
@@ -1004,6 +1004,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
       visible={visible}
       animationType="slide"
       transparent
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
       <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
@@ -1705,6 +1707,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             visible={showAssigneePicker}
             animationType="fade"
             transparent
+            statusBarTranslucent
+            navigationBarTranslucent
             onRequestClose={() => setShowAssigneePicker(false)}
           >
             <View
@@ -1790,6 +1794,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             visible={showTimeRangeModal}
             animationType="slide"
             transparent
+            statusBarTranslucent
+            navigationBarTranslucent
             onRequestClose={() => {
               setShowTimeRangeModal(false);
               setShowStartPicker(false);
@@ -1817,6 +1823,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
                 style={[
                   styles.timeRangeModalSheet,
                   {
+                    paddingBottom: Math.max(insets.bottom, 12),
                     backgroundColor: theme.sheetBackground,
                     borderColor: theme.sheetBorder,
                     borderWidth: 1,
@@ -2030,6 +2037,8 @@ export const PlannerCaptureModal: React.FC<Props> = ({
             visible={showReminderPicker}
             animationType="fade"
             transparent
+            statusBarTranslucent
+            navigationBarTranslucent
             onRequestClose={() => setShowReminderPicker(false)}
           >
             <View

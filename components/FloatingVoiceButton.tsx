@@ -26,7 +26,7 @@ import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { fetchVoiceLogAccess } from '@/lib/voiceLog/access';
+import { useVoiceLogAccess } from '@/lib/voiceLog/access';
 import {
   FLOATING_VOICE_BUTTON_COLORS,
   emitVoiceLogSaved,
@@ -60,7 +60,7 @@ const FloatingVoiceButton: React.FC = () => {
   const colorOption = FLOATING_VOICE_BUTTON_COLORS.find((option) => option.id === selectedColor)
     ?? FLOATING_VOICE_BUTTON_COLORS[0];
 
-  const [hasAccess, setHasAccess] = useState(false);
+  const hasAccess = useVoiceLogAccess() === true;
   const [modalVisible, setModalVisible] = useState(false);
   const [positionReady, setPositionReady] = useState(false);
 
@@ -81,21 +81,6 @@ const FloatingVoiceButton: React.FC = () => {
   useEffect(() => {
     boundsRef.current = bounds;
   }, [bounds]);
-
-  // Zugriff prüfen — gecacht, daher günstig; bei Nutzerwechsel neu.
-  useEffect(() => {
-    let active = true;
-    if (!userId) {
-      setHasAccess(false);
-      return;
-    }
-    fetchVoiceLogAccess().then((allowed) => {
-      if (active) setHasAccess(allowed);
-    });
-    return () => {
-      active = false;
-    };
-  }, [userId, enabled]);
 
   // Gespeicherte Position laden und in den Grenzen halten.
   useEffect(() => {
@@ -196,10 +181,11 @@ const FloatingVoiceButton: React.FC = () => {
               accessibilityLabel="Per Sprache eintragen"
               accessibilityHint="Antippen zum Aufnehmen, ziehen zum Verschieben"
             >
+              {/* This global overlay has no BlurTargetView; use the Android tint fallback. */}
               <BlurView
                 tint={isDark ? 'systemThinMaterialDark' : 'systemThinMaterialLight'}
                 intensity={78}
-                blurMethod={process.env.EXPO_OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
+                blurMethod="none"
                 style={styles.buttonSurface}
               >
                 <View

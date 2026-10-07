@@ -1,11 +1,26 @@
-// This file is a fallback for using MaterialIcons on Android and web.
+// This file maps SF Symbols to vector icons on Android and web.
 
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolWeight } from 'expo-symbols';
 import React from 'react';
 import { OpaqueColorValue, StyleProp, TextStyle } from 'react-native';
 
 type MaterialIconName = React.ComponentProps<typeof MaterialIcons>['name'];
+type MaterialCommunityIconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+// MaterialCommunityIcons includes distinct symbols for every Babywetter condition.
+const WEATHER_MAPPING: Record<string, MaterialCommunityIconName> = {
+  'cloud.sun.fill': 'weather-partly-cloudy',
+  'cloud.moon.fill': 'weather-night-partly-cloudy',
+  'cloud.fill': 'weather-cloudy',
+  'smoke.fill': 'weather-cloudy',
+  'cloud.drizzle.fill': 'weather-rainy',
+  'cloud.rain.fill': 'weather-pouring',
+  'cloud.bolt.rain.fill': 'weather-lightning-rainy',
+  'cloud.snow.fill': 'weather-snowy',
+  'cloud.fog.fill': 'weather-fog',
+};
 
 // Add your SFSymbol to MaterialIcons mappings here.
 const MAPPING: Record<string, MaterialIconName> = {
@@ -124,7 +139,6 @@ const MAPPING: Record<string, MaterialIconName> = {
   'bubble.left.and.bubble.right.fill': 'forum',
   'text.bubble': 'chat',
   'chart.line.uptrend.xyaxis': 'show-chart',
-  'cloud.sun.fill': 'wb-sunny',
   'sun.max.fill': 'wb-sunny',
   'sun.max': 'wb-sunny',
   'close': 'close',
@@ -136,7 +150,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'link': 'link',
   'moon.fill': 'dark-mode',
   'mouth.fill': 'sentiment-satisfied',
-  'number': 'looks-one',
+  'number': 'tag',
   'pause.fill': 'pause',
   'pencil': 'edit',
   'pencil.circle.fill': 'edit',
@@ -166,9 +180,9 @@ export type IconSymbolName = string;
 const FALLBACK_ICON: MaterialIconName = 'help-outline';
 
 /**
- * An icon component that uses native SFSymbols on iOS, and MaterialIcons on Android and web. This ensures a consistent look across platforms, and optimal resource usage.
+ * An icon component that uses native SFSymbols on iOS, and Material vector icons on Android and web.
  *
- * Icon `name`s are based on SFSymbols and require manual mapping to MaterialIcons.
+ * Icon `name`s are based on SFSymbols and require manual mapping to vector icons.
  */
 export function IconSymbol({
   name,
@@ -182,5 +196,10 @@ export function IconSymbol({
   style?: StyleProp<TextStyle>;
   weight?: SymbolWeight;
 }) {
+  const weatherIcon = WEATHER_MAPPING[name];
+  if (weatherIcon) {
+    return <MaterialCommunityIcons color={color} size={size} name={weatherIcon} style={style} />;
+  }
+
   return <MaterialIcons color={color} size={size} name={MAPPING[name] ?? FALLBACK_ICON} style={style} />;
 }

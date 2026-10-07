@@ -1,5 +1,6 @@
 import { supabase, getCachedUser } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { isTransientBabyListError, type BabyListLoadResult } from './babyListLoading';
 
 // Cache-Konfiguration für Baby-Liste
 const BABY_LIST_CACHE_KEY = 'baby_list_cache_v1';
@@ -363,9 +364,11 @@ export const applyLinkedBabySelection = async ({
 };
 
 // Baby-Informationen mit Cache
-export const listBabies = async (forceRefresh = false) => {
+export const listBabies = async (forceRefresh = false, signal?: AbortSignal): Promise<BabyListLoadResult> => {
   try {
-    const { data: userData } = await getCachedUser();
+    const { data: userData, error: userError } = await getCachedUser();
+    if (signal?.aborted) return { data: null, error: new Error('Baby list request cancelled'), retryable: false };
+    if (userError) return { data: null, error: userError, retryable: isTransientBabyListError(userError) };
     if (!userData.user) {
       return { data: null, error: new Error('Nicht angemeldet') };
     }
@@ -382,7 +385,8 @@ export const listBabies = async (forceRefresh = false) => {
           const age = Date.now() - timestamp;
 
           // Cache ist noch gültig
-          if (age < BABY_LIST_CACHE_DURATION_MS) {
+          if (Array.isArray(data) && age >= 0 && age < BABY_LIST_CACHE_DURATION_MS) {
+            if (signal?.aborted) return { data: null, error: new Error('Baby list request cancelled'), retryable: false };
             return { data, error: null, fromCache: true };
           }
         }
@@ -391,7 +395,7 @@ export const listBabies = async (forceRefresh = false) => {
       }
     }
 
-    const { data, error } = await supabase
+    const memberQuery = supabase
       .from('baby_info')
       .select(`
         *,
@@ -402,31 +406,36 @@ export const listBabies = async (forceRefresh = false) => {
       .eq('baby_members.user_id', userId)
       .order('created_at', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching member baby list:', error);
-    }
-
-    const { data: ownedData, error: ownedError } = await supabase
+    const ownedQuery = supabase
       .from('baby_info')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
 
-    if (ownedError) {
-      console.error('Error fetching owned baby list:', ownedError);
+    const [members, owned] = await Promise.all([
+      signal ? memberQuery.abortSignal(signal) : memberQuery,
+      signal ? ownedQuery.abortSignal(signal) : ownedQuery,
+    ]);
+    if (signal?.aborted) return { data: null, error: new Error('Baby list request cancelled'), retryable: false };
+
+    const failures = [members, owned].filter((result) => result.error);
+    if (failures.length > 0) {
+      const permanentFailure = failures.find((result) => !isTransientBabyListError(result.error, result.status));
+      // A successful subset never establishes that the full child list is known.
+      return {
+        data: null,
+        error: (permanentFailure ?? failures[0]).error,
+        retryable: !permanentFailure,
+      };
     }
 
-    const combined = [...(data ?? []), ...(ownedData ?? [])];
+    const combined = [...(members.data ?? []), ...(owned.data ?? [])];
     const seen = new Set<string>();
     const deduped = combined.filter((baby) => {
       if (!baby?.id || seen.has(baby.id)) return false;
       seen.add(baby.id);
       return true;
     });
-
-    if (deduped.length === 0 && (error || ownedError)) {
-      return { data: null, error: error ?? ownedError };
-    }
 
     // 2. Speichere im Cache
     try {
@@ -444,7 +453,7 @@ export const listBabies = async (forceRefresh = false) => {
     return { data: deduped, error: null, fromCache: false };
   } catch (err) {
     console.error('Failed to list babies:', err);
-    return { data: null, error: err };
+    return { data: null, error: err, retryable: isTransientBabyListError(err) };
   }
 };
 

@@ -5,8 +5,10 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { onboardingColors as brand } from './theme';
 
 export function OnboardingSurface({ children, style, tone }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: string }) {
-  return <GlassCard intensity={24} radius={22} frostColor="rgba(255,255,255,0.35)" toneColor={tone}
-    highlightStrength="subtle" grainOpacity={0} shadeOpacity={0.2} glossOpacity={0.25}
+  return <GlassCard intensity={65} tint="systemUltraThinMaterialLight" radius={24} skipAndroidBlur
+    frostColor="rgba(255,255,255,0.24)" toneColor={tone}
+    borderColor="rgba(255,255,255,0.82)" innerBorderColor="rgba(255,255,255,0.40)"
+    highlightStrength="subtle" grainOpacity={0} shadeOpacity={0.14} glossOpacity={0.45}
     contentStyle={style}>{children}</GlassCard>;
 }
 
@@ -18,9 +20,11 @@ export function OnboardingChoice({ children, selected = false, tone, contentStyl
   return <Pressable {...props} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}
     accessibilityRole={props.accessibilityRole ?? 'button'} accessibilityState={{ ...props.accessibilityState, selected }}>
     <Animated.View style={{ transform: [{ scale: pressed && !reduced ? 0.97 : 1 }], transitionProperty: 'transform', transitionDuration: reduced ? 0 : 120, transitionTimingFunction: cubicBezier(0.23, 1, 0.32, 1) }}>
-      <GlassCard intensity={24} radius={22} borderColor={selected ? brand.accentText : 'rgba(255,255,255,0.7)'}
-        frostColor="rgba(255,255,255,0.25)" toneColor={selected ? brand.selectedGlass : tone}
-        highlightStrength="subtle" grainOpacity={0} shadeOpacity={0.2} glossOpacity={0.25} contentStyle={contentStyle}>
+      <GlassCard intensity={65} tint="systemUltraThinMaterialLight" radius={24} skipAndroidBlur
+        borderColor={selected ? 'rgba(142,78,198,0.62)' : 'rgba(255,255,255,0.82)'}
+        innerBorderColor="rgba(255,255,255,0.40)" frostColor="rgba(255,255,255,0.20)"
+        toneColor={selected ? brand.selectedGlass : tone}
+        highlightStrength="subtle" grainOpacity={0} shadeOpacity={0.14} glossOpacity={0.45} contentStyle={contentStyle}>
         {children}
       </GlassCard>
     </Animated.View>

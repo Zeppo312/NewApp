@@ -1,3 +1,5 @@
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
+import { assertDataProcessingAllowed, dataProcessingAllowed } from '../_shared/dataConsent.ts';
 import { answerRetryInstruction, checkupPreparationAnswer } from "./answerRecovery.ts";
 // Frag Lotti — a read-only, family-scoped Premium assistant.
 //
@@ -278,7 +280,9 @@ const callStructuredOpenAi = async (
   name: string,
   schema: Record<string, unknown>,
   maxOutputTokens: number,
+  beforeSend: () => Promise<void>,
 ) => {
+  await beforeSend();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   const response = await fetch(OPENAI_RESPONSES_URL, {
@@ -347,6 +351,7 @@ const planRequest = async <P extends AnyPlan>(
   history: AskLottiHistoryItem[],
   appLocale: AskLottiLocale,
   spec: PlannerSpec<P>,
+  beforeSend: () => Promise<void>,
 ): Promise<{
   plan: P;
   usage: ModelUsage;
@@ -362,6 +367,7 @@ const planRequest = async <P extends AnyPlan>(
       "ask_lotti_plan",
       spec.schema,
       PLANNER_MAX_OUTPUT_TOKENS,
+      beforeSend,
     );
     const plan = spec.validate(result.parsed);
     if (!plan) throw new Error("invalid_planner_output");
@@ -403,6 +409,7 @@ const generateAnswer = async (
     age: { months: number; weeks: number } | null;
     today: string;
     reference: ReferenceRange[];
+    beforeSend: () => Promise<void>;
     /** Pregnancy mode: replaces the baby-age framing in the system prompt. */
     pregnancy?: {
       context: ReturnType<typeof pregnancyContextFromDueDate>;
@@ -489,6 +496,7 @@ const generateAnswer = async (
       "ask_lotti_answer",
       ASK_LOTTI_ANSWER_SCHEMA,
       ANSWER_MAX_OUTPUT_TOKENS,
+      context.beforeSend,
     );
     const answer = result.parsed?.answer;
     const ids = Array.isArray(result.parsed?.source_ids)
@@ -569,6 +577,7 @@ const answerPregnancy = async (input: {
   startedAt: number;
   mark: (values: Record<string, unknown>) => Promise<void>;
   commonResponse: Record<string, unknown>;
+  beforeSend: () => Promise<void>;
 }) => {
   const {
     openAiKey,
@@ -583,6 +592,7 @@ const answerPregnancy = async (input: {
     startedAt,
     mark,
     commonResponse,
+    beforeSend,
   } = input;
   const planned = await planRequest(
     openAiKey,
@@ -590,6 +600,7 @@ const answerPregnancy = async (input: {
     history,
     appLocale,
     PREGNANCY_PLANNER,
+    beforeSend,
   );
   const resolved = resolvePregnancyClarifyPlan(planned.plan);
   const plan = resolved.plan;
@@ -804,6 +815,7 @@ const answerPregnancy = async (input: {
       today: now.toISOString().slice(0, 10),
       reference,
       pregnancy: { context, subject: pregnancyAnswerContext(context) },
+      beforeSend,
     });
     answer = generated.answer;
     answerUsage = generated.usage;
@@ -860,6 +872,7 @@ serve(async (req: Request) => {
   let admin: any = null;
   let userId: string | null = null;
   let requestId: string | null = null;
+  let accountActive = false;
   try {
     const declaredLength = Number(req.headers.get("content-length") ?? 0);
     if (declaredLength > MAX_BODY_BYTES)
@@ -918,6 +931,11 @@ serve(async (req: Request) => {
     admin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    await assertAccountActive(admin, currentUserId);
+    accountActive = true;
+    if (!await dataProcessingAllowed(admin, currentUserId, 'ai')) return json({ error: 'ai_consent_required' }, 403);
+    const beforeSend = () => assertDataProcessingAllowed(admin, currentUserId, 'ai');
 
     const featureAccess = await verifySubscriptionFeatureAccess(
       admin,
@@ -1027,6 +1045,7 @@ serve(async (req: Request) => {
     }
 
     const mark = async (values: Record<string, unknown>) => {
+      await beforeSend();
       await admin
         .from("lotti_ai_requests")
         .update(values)
@@ -1090,6 +1109,7 @@ serve(async (req: Request) => {
         startedAt,
         mark,
         commonResponse,
+        beforeSend,
       });
     }
 
@@ -1099,6 +1119,7 @@ serve(async (req: Request) => {
       history,
       appLocale,
       BABY_PLANNER,
+      beforeSend,
     );
     const resolved = resolveClarifyPlan(planned.plan);
     const plan = resolved.plan;
@@ -1376,6 +1397,7 @@ serve(async (req: Request) => {
           age,
           today: now.toISOString().slice(0, 10),
           reference,
+          beforeSend,
         },
       );
       answer = generated.answer;
@@ -1422,7 +1444,12 @@ serve(async (req: Request) => {
       intent: legacyIntent(plan),
     });
   } catch (error) {
-    if (admin && userId && requestId) {
+    if (error instanceof Error && error.message === 'consent_check_unavailable') return json({ error: 'consent_check_unavailable' }, 503);
+    if (error instanceof Error && /^(health|ai)_consent_required$/.test(error.message)) return json({ error: error.message }, 403);
+    // Failed or withdrawn consent must not become an error-path private write.
+    let mayRecordFailure = false;
+    try { mayRecordFailure = !!admin && !!userId && await dataProcessingAllowed(admin,userId,'ai'); } catch { /* fail closed */ }
+    if (mayRecordFailure && requestId) {
       await admin
         .from("lotti_ai_requests")
         .update({

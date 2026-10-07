@@ -266,7 +266,7 @@ function CollectionDetailSheet({
         >
           <BlurView
             {...(Platform.OS === 'android'
-              ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
+              ? { blurMethod: 'none' as const }
               : {})}
             intensity={30}
             tint={isDark ? 'dark' : 'light'}

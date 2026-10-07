@@ -1,10 +1,10 @@
 import React from 'react';
 import { Platform, TouchableOpacity, type PlatformOSType } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { TimePickerField } from '@/components/SleepQuickAddModal';
 
-jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
+jest.mock('@/components/ui/DateTimePicker', () => 'DateTimePicker');
 jest.mock('@/hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light' }) }));
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
 jest.mock('@/constants/DesignGuide', () => ({ RADIUS: 22 }));

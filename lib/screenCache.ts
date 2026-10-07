@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { runtimeConsentAllowed } from './dataConsentRuntime';
 
 /**
  * Intelligentes Screen Cache System
@@ -40,6 +41,7 @@ export async function cacheData<T>(
   data: T,
   strategy: CacheStrategy = CacheStrategy.MEDIUM
 ): Promise<void> {
+  if (!runtimeConsentAllowed('health')) return;
   // NEVER Strategy: Nicht cachen
   if (strategy === CacheStrategy.NEVER) {
     return;
@@ -62,6 +64,7 @@ export async function cacheData<T>(
  * Lade Daten aus dem Cache (berücksichtigt Strategy)
  */
 export async function loadCachedData<T>(key: string): Promise<T | null> {
+  if (!runtimeConsentAllowed('health')) return null;
   try {
     const cached = await AsyncStorage.getItem(key);
     if (!cached) return null;

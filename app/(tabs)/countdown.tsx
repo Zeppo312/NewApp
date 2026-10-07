@@ -14,7 +14,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 
@@ -32,6 +32,8 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getSafePickerDate, parseSafeDate } from '@/lib/safeDate';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { pregnancyWeekInfo } from '@/constants/PregnancyWeekInfo';
+import { getPregnancyAge, parsePregnancyDate } from '@/lib/pregnancy-age';
+import { usePregnancyAge } from '@/hooks/use-pregnancy-age';
 import { pregnancyMotherInfo } from '@/constants/PregnancyMotherInfo';
 import { pregnancyPartnerInfo } from '@/constants/PregnancyPartnerInfo';
 import { pregnancySymptoms } from '@/constants/PregnancySymptoms';
@@ -243,6 +245,12 @@ export default function CountdownScreen() {
   const [selectedBabySizeWeek, setSelectedBabySizeWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   const [daysOverdue, setDaysOverdue] = useState<number>(0);
+  const pregnancyAge = usePregnancyAge(dueDate);
+  useEffect(() => {
+    setCurrentWeek(pregnancyAge?.runningWeek ?? null);
+    setCurrentDay(pregnancyAge?.day ?? null);
+    setDaysOverdue(Math.max(0, -(pregnancyAge?.daysToDueDate ?? 0)));
+  }, [pregnancyAge?.runningWeek, pregnancyAge?.day, pregnancyAge?.daysToDueDate]);
   const [birthPreparationSectionY, setBirthPreparationSectionY] = useState<number | null>(null);
   const headerSubtitle = isReadOnlyPreviewMode
     ? t('screen.previewSubtitle')
@@ -330,7 +338,7 @@ export default function CountdownScreen() {
       if (result.success) {
         logWithTimestamp('Loaded due date with linked users');
         if (result.dueDate) {
-          const resultDueDate = parseSafeDate(result.dueDate);
+          const resultDueDate = parsePregnancyDate(result.dueDate);
           if (!resultDueDate) {
             logWithTimestamp('Ungültiger Entbindungstermin aus RPC verworfen');
             setDueDate(null);
@@ -342,28 +350,10 @@ export default function CountdownScreen() {
           setTempDate(resultDueDate);
           logWithTimestamp(`Entbindungstermin geladen: ${resultDueDate.toLocaleDateString()}`);
 
-          const now = new Date();
-          now.setHours(0, 0, 0, 0);
-          const dueDateCopy = new Date(resultDueDate);
-          dueDateCopy.setHours(0, 0, 0, 0);
-
-          const difference = dueDateCopy.getTime() - now.getTime();
-          const daysLeft = Math.round(difference / (1000 * 60 * 60 * 24));
-
-          const totalDaysInPregnancy = 280;
-          const daysRemaining = Math.max(0, daysLeft);
-          const daysPregnant = Math.min(
-            totalDaysInPregnancy,
-            Math.max(0, totalDaysInPregnancy - daysRemaining)
-          );
-
-          const weeksPregnant = Math.floor(daysPregnant / 7);
-          const daysInCurrentWeek = daysPregnant % 7;
-
-          setCurrentWeek(Math.max(1, weeksPregnant + 1));
-          setCurrentDay(daysInCurrentWeek);
-
-          setDaysOverdue(daysLeft < 0 ? Math.abs(daysLeft) : 0);
+          const age = getPregnancyAge(resultDueDate);
+          setCurrentWeek(age?.runningWeek ?? null);
+          setCurrentDay(age?.day ?? null);
+          setDaysOverdue(Math.max(0, -(age?.daysToDueDate ?? 0)));
 
           if (result.linkedUsers && result.linkedUsers.length > 0) {
             setLinkedUsers(result.linkedUsers);
@@ -391,7 +381,7 @@ export default function CountdownScreen() {
         if (error && error.code !== 'PGRST116') {
           console.error('Error loading due date:', error);
         } else if (data && data.due_date) {
-          const loadedDate = parseSafeDate(data.due_date);
+          const loadedDate = parsePregnancyDate(data.due_date);
           if (loadedDate) {
             logWithTimestamp(`Loaded local due date: ${loadedDate.toLocaleDateString()}`);
             setDueDate(loadedDate);
@@ -550,7 +540,7 @@ export default function CountdownScreen() {
     );
   }
 
-  const isOverdue = !!dueDate && new Date() > dueDate;
+  const isOverdue = !!pregnancyAge && pregnancyAge.daysToDueDate < 0;
   const displayedWeek = currentWeek && currentWeek < 43 ? currentWeek : 42;
   const germanDayInfo = (overdueInfo[Math.min(daysOverdue, 14)] || overdueInfo.default);
   const localizedOverdueInfo = getLocalizedOverdueInfo(ACTIVE_COUNTDOWN_LOCALE, daysOverdue) ?? germanDayInfo;
@@ -560,6 +550,7 @@ export default function CountdownScreen() {
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <Header
+          topSafeAreaHandled
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton

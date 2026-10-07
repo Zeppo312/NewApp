@@ -57,20 +57,33 @@ const scaleRgbaAlpha = (rgba: string, multiplier: number) => {
 };
 
 const GlassLayer = ({
+  radius,
   tint = 'rgba(255,255,255,0.22)',
   sheenOpacity = 0.35,
 }: {
+  radius: number;
   tint?: string;
   sheenOpacity?: number;
 }) => (
   <>
     <LinearGradient
+      pointerEvents="none"
       colors={[tint, 'rgba(255,255,255,0.06)']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.glassLayerGradient}
+      style={[styles.glassLayerGradient, { borderRadius: radius }]}
     />
-    <View style={[styles.glassSheen, { opacity: sheenOpacity }]} />
+    {process.env.EXPO_OS === 'android' ? (
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 0.55 }}
+        style={[styles.glassLayerGradient, { borderRadius: radius, opacity: sheenOpacity }]}
+      />
+    ) : (
+      <View pointerEvents="none" style={[styles.glassSheen, { opacity: sheenOpacity }]} />
+    )}
   </>
 );
 
@@ -175,7 +188,7 @@ export default function BabySizeDetail({ week, onWeekChange, cardStyle }: BabySi
       >
         <View style={styles.glassInner}>
           <View style={[styles.heroHighlight, styles.glassSurface, glassSurfaceStyle]}>
-            <GlassLayer tint={pastelPaletteResolved.honey} sheenOpacity={heroSheen} />
+            <GlassLayer radius={styles.heroHighlight.borderRadius} tint={pastelPaletteResolved.honey} sheenOpacity={heroSheen} />
             <ThemedText
               style={[styles.heroWeek, { color: textSecondary }]}
               numberOfLines={1}
@@ -212,7 +225,7 @@ export default function BabySizeDetail({ week, onWeekChange, cardStyle }: BabySi
           <View style={styles.quickStatRow}>
             {quickStats.map((stat) => (
               <View key={stat.key} style={[styles.quickStat, styles.glassSurface, glassSurfaceStyle]}>
-                <GlassLayer tint={stat.accent} sheenOpacity={statSheen} />
+                <GlassLayer radius={styles.quickStat.borderRadius} tint={stat.accent} sheenOpacity={statSheen} />
                 <View style={[styles.quickStatIcon, { backgroundColor: quickStatIconBackground }]}>
                   <IconSymbol name={stat.icon} size={18} color={stat.iconColor} />
                 </View>
@@ -223,7 +236,7 @@ export default function BabySizeDetail({ week, onWeekChange, cardStyle }: BabySi
           </View>
 
           <View style={[styles.descriptionBlock, styles.glassSurface, glassSurfaceStyle]}>
-            <GlassLayer tint={pastelPaletteResolved.peach} sheenOpacity={descriptionSheen} />
+            <GlassLayer radius={styles.descriptionBlock.borderRadius} tint={pastelPaletteResolved.peach} sheenOpacity={descriptionSheen} />
             <ThemedText style={[styles.descriptionTitle, { color: textPrimary }]}>{t('development.title')}</ThemedText>
             <ThemedText style={[styles.descriptionText, { color: textSecondary }]}>{babyData.description}</ThemedText>
           </View>
@@ -254,6 +267,7 @@ export default function BabySizeDetail({ week, onWeekChange, cardStyle }: BabySi
                   accessibilityLabel={t('week.accessibility', { week: data.week })}
                 >
                   <GlassLayer
+                    radius={styles.weekChip.borderRadius}
                     tint={isSelected ? pastelPaletteResolved.lavender : neutralChipTint}
                     sheenOpacity={isSelected ? chipSheenSelected : chipSheen}
                   />
@@ -291,11 +305,16 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    // Native Android elevation leaves rectangular cutouts on translucent cards.
+    // A box shadow follows the rounded surface without elevating its glass layers.
+    ...(process.env.EXPO_OS === 'android'
+      ? { boxShadow: '0 4px 8px rgba(0, 0, 0, 0.06)' }
+      : {
+          shadowColor: '#000',
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 4 },
+        }),
   },
   glassLayerGradient: {
     ...StyleSheet.absoluteFill,

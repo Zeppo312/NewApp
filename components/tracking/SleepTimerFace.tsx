@@ -23,7 +23,7 @@ export function SleepTimerFace({ size, active, progress, timeLabel, textColor, c
       </BlurView>
     </View>
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.progressAbsolute, { width: size, height: size }]}>
-      <ProgressCircle progress={progress} size={size} strokeWidth={8} progressColor={active ? '#87CEEB' : 'rgba(135,206,235,0.4)'} backgroundColor="rgba(135,206,235,0.2)" textColor="transparent" />
+      <ProgressCircle progress={progress} size={size} strokeWidth={8} progressColor={active ? '#87CEEB' : 'rgba(135,206,235,0.4)'} backgroundColor="rgba(135,206,235,0.2)" showPercentage={false} />
     </View>
     <View pointerEvents="none" style={styles.centerOverlay}><Text style={[styles.centralTime, { color: textColor, fontWeight: '800' }]}>{timeLabel}</Text></View>
     <View pointerEvents="none" style={styles.upperContent}>

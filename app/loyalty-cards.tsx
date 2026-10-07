@@ -286,6 +286,7 @@ function LoyaltyCardsContent() {
       <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
         <Stack.Screen options={{ headerShown: false }} />
         <Header
+          topSafeAreaHandled
           title={t('title')}
           subtitle={t('subtitle')}
           showBackButton

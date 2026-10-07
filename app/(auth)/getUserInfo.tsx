@@ -2,7 +2,7 @@ import { onboardingColors as brand } from '@/components/onboarding/theme';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, Image, ImageBackground, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, ActivityIndicator, KeyboardAvoidingView, ScrollView, Keyboard, InputAccessoryView } from 'react-native';
+import { StyleSheet, Image, ImageBackground, View, TouchableOpacity, TextInput, Alert, StatusBar, Platform, ActivityIndicator, KeyboardAvoidingView, ScrollView, Keyboard, InputAccessoryView, BackHandler } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { OnboardingChoice, OnboardingSurface, OnboardingTransition } from '@/components/onboarding/surfaces';
 import { Colors } from '@/constants/Colors';
@@ -10,15 +10,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useOnboardingStatus } from '@/contexts/OnboardingStatusContext';
-import { useConvex } from '@/contexts/ConvexContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { invalidateUserProfileCache, invalidateUserSettingsCache } from '@/lib/appCache';
-import { supabase } from '@/lib/supabase';
-import { saveBabyInfo } from '@/lib/baby';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { shouldShowPaywall } from '@/lib/paywall';
+import { invalidatePremiumStatusCache, invalidateUserProfileCache, invalidateUserSettingsCache } from '@/lib/appCache';
+import { buildInvitationLink, supabase } from '@/lib/supabase';
+import { getLinkedBabySelectionOptions, saveBabyInfo } from '@/lib/baby';
+import { invalidateFamilyAccess, refreshFamilyAccess } from '@/lib/familySubscriptionAccess';
+import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
+import { translateAccountLinkingText } from '@/lib/accountLinkingTranslations';
+import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import DateTimePicker from '@/components/ui/DateTimePicker';
+import { shouldRedirectToPaywallForState, shouldShowPaywall } from '@/lib/paywall';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import { SurveyStep, ProductTryout } from '@/components/onboarding/personalized-steps';
 import { getPersonalizedStart, getOnboardingNeeds, type OnboardingNeed, type OnboardingChallenge, type OnboardingSupport, type OnboardingHabit } from '@/lib/onboarding-personalization';
@@ -54,7 +56,6 @@ export default function GetUserInfoScreen() {
   const { refreshBabyDetails } = useBabyStatus();
   const { refreshBabies, activeBaby } = useActiveBaby();
   const { refresh: refreshOnboardingStatus } = useOnboardingStatus();
-  const { syncUser } = useConvex();
   const params = useLocalSearchParams<{ invitationCode?: string }>();
   const prefilledInvitationCode = typeof params.invitationCode === 'string'
     ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
@@ -129,7 +130,11 @@ export default function GetUserInfoScreen() {
 
   // Einladungscode
   const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
-  const [showInvitation, setShowInvitation] = useState(false);
+  const [showInvitation, setShowInvitation] = useState(hasPrefilledInvitationCode);
+  const [showScanner, setShowScanner] = useState(false);
+  const finishInvitationRequested = useRef(false);
+  const redemptionInFlight = useRef(false);
+  const saveInFlight = useRef(false);
   const [need, setNeed] = useState<OnboardingNeed | null>(null);
   const [challenge, setChallenge] = useState<OnboardingChallenge | null>(null);
   const [demoCompleted, setDemoCompleted] = useState(false);
@@ -192,10 +197,10 @@ export default function GetUserInfoScreen() {
 
   const redeemInvitation = useCallback(async (
     rawCode: string,
-    options?: { showSuccessAlert?: boolean; showErrorAlert?: boolean }
+    options?: { showErrorAlert?: boolean }
   ) => {
+    if (redemptionInFlight.current) return false;
     const normalizedCode = rawCode.replace(/\s+/g, '').toUpperCase();
-    const shouldShowSuccessAlert = options?.showSuccessAlert ?? true;
     const shouldShowErrorAlert = options?.showErrorAlert ?? true;
 
     if (!user?.id) {
@@ -210,6 +215,7 @@ export default function GetUserInfoScreen() {
       return false;
     }
 
+    redemptionInFlight.current = true;
     setInvitationCode(normalizedCode);
     setInvitationError(null);
     setIsRedeemingInvitation(true);
@@ -241,17 +247,18 @@ export default function GetUserInfoScreen() {
         });
 
         if (result.linkedUserId) {
-          setPendingBabySelection({
-            linkedUserId: result.linkedUserId,
-            linkedUserName: partnerName || null,
-          });
+          const selection = await getLinkedBabySelectionOptions(user.id, result.linkedUserId);
+          // Only skip a choice when there is nothing to choose or one baby
+          // already shared by the invitation RPC. Never silently change sharing.
+          const babies = selection.data ?? [];
+          if (selection.error || babies.length > 1 || (babies.length === 1 && !babies[0].is_shared_between_accounts)) {
+            setPendingBabySelection({
+              linkedUserId: result.linkedUserId,
+              linkedUserName: partnerName || null,
+            });
+          }
         }
-
-        if (shouldShowSuccessAlert && !result.linkedUserId) {
-          Alert.alert(t('invitation.linkedTitle'), partnerName
-            ? t('invitation.linkedWith', { name: partnerName })
-            : t('invitation.accepted'));
-        }
+        finishInvitationRequested.current = true;
         return true;
       } else {
         const errorMessage = t('invitation.redeemFailed');
@@ -275,21 +282,24 @@ export default function GetUserInfoScreen() {
       }
       return false;
     } finally {
+      redemptionInFlight.current = false;
       setIsRedeemingInvitation(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    if (!hasPrefilledInvitationCode || autoRedeemAttemptedRef.current || !user?.id) {
+    if (!hasPrefilledInvitationCode || autoRedeemAttemptedRef.current || !user?.id
+      || currentStepKey !== 'invitation' || !firstName.trim() || !userRole) {
       return;
     }
 
     autoRedeemAttemptedRef.current = true;
-    void redeemInvitation(prefilledInvitationCode, { showSuccessAlert: false, showErrorAlert: false });
-  }, [hasPrefilledInvitationCode, user?.id, prefilledInvitationCode, redeemInvitation]);
+    void redeemInvitation(prefilledInvitationCode, { showErrorAlert: false });
+  }, [hasPrefilledInvitationCode, user?.id, prefilledInvitationCode, redeemInvitation, currentStepKey, firstName, userRole]);
 
   const handleRedeemInvitation = async () => {
-    await redeemInvitation(invitationCode, { showSuccessAlert: true, showErrorAlert: true });
+    Keyboard.dismiss();
+    await redeemInvitation(invitationCode);
   };
 
   // Handler für Änderungen am Geburtstermin
@@ -332,19 +342,21 @@ export default function GetUserInfoScreen() {
 
   // Speichern der Benutzerdaten in verschiedenen Tabellen
   const saveUserData = async () => {
+    if (saveInFlight.current) return;
     try {
       if (!user) {
         Alert.alert(t('common.notice'), t('save.signIn'));
         return;
       }
 
-      if (!firstName.trim() || !userRole || !need || !challenge || !support) {
+      const partnerFlow = invitationStatus === 'accepted';
+      if (!firstName.trim() || !userRole || (!partnerFlow && (!need || !challenge || !support))) {
         Alert.alert(t('common.notice'), t('survey.choose'));
         setCurrentStep(onboardingSteps.indexOf(!firstName.trim() ? 'firstName' : !userRole ? 'role' : !need ? 'needs' : !challenge ? 'challenge' : 'support'));
         return;
       }
+      saveInFlight.current = true;
       setIsSaving(true);
-      const partnerFlow = invitationStatus === 'accepted';
       const babyBorn = momentBabyBorn;
       const safeDueDateIso = toSafeIsoString(dueDate);
       const safeBirthDateIso = toSafeIsoString(birthDate);
@@ -386,17 +398,23 @@ export default function GetUserInfoScreen() {
       let settingsResult;
 
       if (existingSettings && existingSettings.id) {
-        // Wenn ein Eintrag existiert, aktualisieren wir diesen
-        settingsResult = await supabase
-          .from('user_settings')
-          .update({
-            due_date: calculatedDueDate,
-            is_baby_born: babyBorn,
-            theme: 'light', // Standard-Theme
-            notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingSettings.id);
+        // The invitation already synchronized these settings. Preserve them,
+        // including notification/theme preferences, in the shortened flow.
+        if (partnerFlow) {
+          settingsResult = { error: null };
+        } else {
+          // Wenn ein Eintrag existiert, aktualisieren wir diesen
+          settingsResult = await supabase
+            .from('user_settings')
+            .update({
+              due_date: calculatedDueDate,
+              is_baby_born: babyBorn,
+              theme: 'light', // Standard-Theme
+              notifications_enabled: true, // Benachrichtigungen standardmäßig aktiviert
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingSettings.id);
+        }
       } else {
         // Wenn kein Eintrag existiert, erstellen wir einen neuen
         settingsResult = await supabase
@@ -417,10 +435,12 @@ export default function GetUserInfoScreen() {
         throw new Error(t('save.settingsFailed'));
       }
 
-      const { error: answersError } = await supabase.auth.updateUser({
-        data: { onboarding_preferences: { version: 1, need, challenge, support, habit, wellbeing } },
-      });
-      if (answersError) throw new Error(t('save.profileFailed'));
+      if (!partnerFlow) {
+        const { error: answersError } = await supabase.auth.updateUser({
+          data: { onboarding_preferences: { version: 1, need, challenge, support, habit, wellbeing } },
+        });
+        if (answersError) throw new Error(t('save.profileFailed'));
+      }
 
       await Promise.all([
         invalidateUserProfileCache(),
@@ -447,20 +467,27 @@ export default function GetUserInfoScreen() {
       }
 
       await refreshBabies();
-      await refreshOnboardingStatus();
-      void syncUser();
+      if (partnerFlow) {
+        await refreshBabyDetails();
+        invalidateFamilyAccess(user.id);
+        await Promise.all([refreshFamilyAccess(user.id, { force: true }), invalidatePremiumStatusCache()]);
+      }
+      if (!await refreshOnboardingStatus()) throw new Error(t('save.allFailed'));
+
 
       // Nach dem Speichern zur entsprechenden Seite navigieren oder Paywall zeigen
-      const nextRoute = getOnboardingDestination(babyBorn, selectedStart);
+      const nextRoute = getOnboardingDestination(babyBorn, partnerFlow ? undefined : selectedStart);
 
-      let requiresSubscription = true;
+      let requiresSubscription = false;
       try {
-        const { shouldShow } = await shouldShowPaywall();
-        requiresSubscription = shouldShow;
+        const { state } = await shouldShowPaywall(undefined, user.id);
+        requiresSubscription = shouldRedirectToPaywallForState(state);
       } catch (paywallError) {
         console.error('Paywall check after onboarding failed:', paywallError);
       }
 
+      // Unknown access is handled by the root recovery gate at nextRoute.
+      // A connection error must never send an existing subscriber to checkout.
       if (requiresSubscription) {
         router.replace({
           pathname: '/paywall',
@@ -474,9 +501,20 @@ export default function GetUserInfoScreen() {
       console.error('Failed to save user data:', err);
       Alert.alert(t('common.error'), err instanceof Error ? err.message : t('save.allFailed'));
     } finally {
+      saveInFlight.current = false;
       setIsSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!finishInvitationRequested.current || invitationStatus !== 'accepted'
+      || isRedeemingInvitation || pendingBabySelection) return;
+    finishInvitationRequested.current = false;
+    void saveUserData();
+    // A failed save remains on the accepted invitation and can be retried
+    // with the footer, without redeeming the single-use code again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invitationStatus, isRedeemingInvitation, pendingBabySelection]);
 
   // Zum nächsten Schritt gehen
   const goToNextStep = () => {
@@ -539,7 +577,8 @@ export default function GetUserInfoScreen() {
   };
 
   // Zum vorherigen Schritt gehen
-  const goToPreviousStep = () => {
+  const goToPreviousStep = useCallback(() => {
+    if (showScanner) { setShowScanner(false); return; }
     // Wenn wir beim ersten Schritt sind, können wir nicht zurück
     if (boundedCurrentStep === 0) {
       return;
@@ -547,7 +586,18 @@ export default function GetUserInfoScreen() {
 
     // Zum vorherigen Schritt
     setCurrentStep(getPreviousOnboardingIndex(onboardingSteps, boundedCurrentStep, demoCompleted));
-  };
+  }, [boundedCurrentStep, onboardingSteps, demoCompleted, showScanner]);
+
+  useFocusEffect(useCallback(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isSaving || isRedeemingInvitation || pendingBabySelection) return true;
+      if (boundedCurrentStep === 0) return false;
+      goToPreviousStep();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [boundedCurrentStep, goToPreviousStep, isSaving, isRedeemingInvitation, pendingBabySelection]));
 
   // Render-Funktion für den aktuellen Schritt
   const renderCurrentStep = () => {
@@ -582,7 +632,12 @@ export default function GetUserInfoScreen() {
               <View style={{ flex: 1 }} /><IconSymbol name={userRole === role ? 'checkmark.circle.fill' : 'circle'} size={24} color={brand.accentText} />
             </OnboardingChoice>)}
             {!hasPrefilledInvitationCode && invitationStatus !== 'accepted' && <TouchableOpacity accessibilityRole="button" style={styles.textLink}
-              onPress={() => { Keyboard.dismiss(); setShowInvitation(true); setCurrentStep(getOnboardingSteps(true, false).indexOf('invitation')); }}>
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowInvitation(true);
+                if (!userRole) { Alert.alert(t('common.notice'), t('validation.role')); return; }
+                setCurrentStep(getOnboardingSteps(true, false).indexOf('invitation'));
+              }}>
               <ThemedText style={styles.linkText}>{t('flow.inviteLink')}</ThemedText><IconSymbol name="arrow.right" size={16} color={brand.accentText} />
             </TouchableOpacity>}
           </View>
@@ -594,7 +649,7 @@ export default function GetUserInfoScreen() {
             {invitationStatus === 'accepted' ? (
               <>
                 <ThemedText style={styles.stepTitle}>{t('invitation.successTitle')}</ThemedText>
-                <View style={styles.infoCard}>
+                <View style={styles.infoCardContainer}><OnboardingSurface style={styles.infoCard}>
                   <View style={styles.infoRow}>
                     <View style={[styles.infoRowIcon, { backgroundColor: brand.softAccent }]}>
                       <IconSymbol name="checkmark.circle.fill" size={18} color={brand.accentText} />
@@ -632,7 +687,7 @@ export default function GetUserInfoScreen() {
                       <ThemedText style={styles.infoRowValue}>{t('invitation.sharedSelection')}</ThemedText>
                     </View>
                   </View>
-                </View>
+                </OnboardingSurface></View>
                 <ThemedText style={styles.invitationSkipNote}>
                   {t('invitation.continuePreview')}
                 </ThemedText>
@@ -644,9 +699,18 @@ export default function GetUserInfoScreen() {
                   {t('flow.inviteBody')}
                 </ThemedText>
 
+                <TouchableOpacity accessibilityRole="button" style={styles.textLink}
+                  disabled={isRedeemingInvitation || isSaving}
+                  onPress={() => { Keyboard.dismiss(); setShowScanner(true); }}>
+                  <IconSymbol name="qrcode.viewfinder" size={24} color={brand.accentText} />
+                  <ThemedText style={styles.linkText}>{translateAccountLinkingText(ACTIVE_ONBOARDING_LOCALE, 'qr.scan')}</ThemedText>
+                </TouchableOpacity>
+
                 <TextInput
                   style={[styles.input, { color: theme.text }]}
                   value={invitationCode}
+                  editable={!isRedeemingInvitation && !isSaving}
+                  accessibilityLabel={t('invitation.title')}
                   onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
                   placeholder={t('invitation.placeholder')}
                   placeholderTextColor={theme.tabIconDefault}
@@ -854,7 +918,8 @@ export default function GetUserInfoScreen() {
     : currentStepKey === 'challenge' ? !challenge
     : currentStepKey === 'support' ? !support
     : false;
-  const continueDisabled = answerMissing || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection);
+  const continueDisabled = answerMissing || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection)
+    || (currentStepKey === 'invitation' && invitationStatus !== 'accepted');
 
   return (
     <ImageBackground source={require('@/assets/images/heller-background.png')} resizeMode="cover" style={styles.backgroundImage}>
@@ -872,7 +937,12 @@ export default function GetUserInfoScreen() {
             </View>
           </View>
 
-          {isLoading ? (
+          {showScanner ? (
+            <AccountLinkingQrModal code={null} invitationLink={buildInvitationLink('')}
+              locale={ACTIVE_ONBOARDING_LOCALE} isDark={false}
+              onClose={() => setShowScanner(false)}
+              onScanned={code => { setShowScanner(false); void redeemInvitation(code); }} />
+          ) : isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={theme.accent} />
               <ThemedText style={styles.loadingText}>{t('screen.loading')}</ThemedText>
@@ -910,7 +980,7 @@ export default function GetUserInfoScreen() {
                   >
                     <ThemedText style={styles.nextButtonText}>
                       {boundedCurrentStep === totalSteps - 1
-                        ? (isSaving ? t('common.saving') : t(selectedStart === 'memories' ? 'flow.startMemories' : momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
+                        ? (isSaving ? t('common.saving') : isPartnerFlow ? t('invitation.openApp') : t(selectedStart === 'memories' ? 'flow.startMemories' : momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
                         : (currentStepKey === 'mood' || currentStepKey === 'energy') && wellbeing[currentStepKey] === null ? wellbeingCopy(ACTIVE_ONBOARDING_LOCALE).skip : currentStepKey === 'welcome' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).welcomeCta : t(currentStepKey === 'productMoment' && !demoCompleted ? 'survey.skipDemo' : 'common.next')}
                     </ThemedText>
                     {boundedCurrentStep < totalSteps - 1 && (
@@ -939,11 +1009,11 @@ export default function GetUserInfoScreen() {
             linkedUserName={pendingBabySelection?.linkedUserName}
             locale={ACTIVE_ONBOARDING_LOCALE}
             onApplied={async () => {
-              setPendingBabySelection(null);
               await Promise.allSettled([
                 refreshBabies(),
                 refreshBabyDetails(),
               ]);
+              setPendingBabySelection(null);
             }}
           />
         </SafeAreaView>
@@ -969,7 +1039,7 @@ const styles = StyleSheet.create({
   description: { color: brand.secondary, fontSize: 17, lineHeight: 25, marginBottom: 24 },
   fieldLabel: { color: brand.secondary, fontSize: 15, fontWeight: '600', marginTop: 8, marginBottom: 10 },
   stepSubtitle: { color: brand.secondary, fontSize: 16, lineHeight: 24 },
-  input: { minHeight: 56, borderWidth: 1, borderColor: brand.border, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 14, fontSize: 18, color: brand.text, backgroundColor: 'rgba(255,255,255,0.55)' },
+  input: { minHeight: 56, borderWidth: 1, borderColor: 'rgba(255,255,255,0.82)', borderRadius: 16, borderCurve: 'continuous', paddingHorizontal: 18, paddingVertical: 14, fontSize: 18, color: brand.text, backgroundColor: 'rgba(255,255,255,0.24)' },
   optionalHint: { color: brand.muted, fontSize: 13, lineHeight: 20, marginTop: 9 },
   roleButtonsContainer: { flexDirection: 'row', gap: 12 },
   roleButton: { flex: 1, minHeight: 56, borderWidth: 1.5, borderColor: brand.border, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.55)', padding: 12 },
@@ -985,7 +1055,7 @@ const styles = StyleSheet.create({
   stageTitle: { color: brand.text, fontSize: 20, lineHeight: 26, fontWeight: '600' },
   stageDetail: { color: brand.secondary, fontSize: 15, lineHeight: 23 },
   stageCheck: { position: 'absolute', right: 20, top: 24 },
-  dateButton: { minHeight: 58, borderWidth: 1, borderColor: brand.border, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, gap: 12, backgroundColor: 'rgba(255,255,255,0.55)' },
+  dateButton: { minHeight: 58, borderWidth: 1, borderColor: 'rgba(255,255,255,0.82)', borderRadius: 16, borderCurve: 'continuous', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, gap: 12, backgroundColor: 'rgba(255,255,255,0.24)' },
   dateButtonText: { flex: 1, color: brand.secondary, fontSize: 17, lineHeight: 24 },
   keyboardAvoidingView: { flex: 1 }, scrollView: { flex: 1 }, scrollContent: { flexGrow: 1, paddingBottom: 16 },
   footerContainer: { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 8, backgroundColor: 'transparent', width: '100%', maxWidth: 540, alignSelf: 'center' },
@@ -995,9 +1065,10 @@ const styles = StyleSheet.create({
   nextButtonText: { flexShrink: 1, textAlign: 'center', color: brand.white, fontSize: 17, lineHeight: 23, fontWeight: '600' },
   buttonDisabled: { opacity: 0.45 },
   booleanButtonsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  booleanButton: { flex: 1, minWidth: 120, minHeight: 52, padding: 12, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderWidth: 1, borderColor: brand.border, backgroundColor: brand.soft },
+  booleanButton: { flex: 1, minWidth: 120, minHeight: 52, padding: 12, justifyContent: 'center', alignItems: 'center', borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: 'rgba(255,255,255,0.82)', backgroundColor: 'rgba(255,255,255,0.24)' },
   booleanButtonText: { color: brand.secondary, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  infoCard: { backgroundColor: brand.soft, borderRadius: 20, overflow: 'hidden', marginTop: 12 },
+  infoCardContainer: { marginTop: 12 },
+  infoCard: { padding: 0 },
   infoRow: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   infoRowIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   infoRowContent: { flex: 1 },

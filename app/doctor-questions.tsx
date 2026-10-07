@@ -16,7 +16,7 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { DoctorQuestion } from '@/lib/supabase';
@@ -40,6 +40,7 @@ import {
 } from '@/lib/doctorQuestionsTranslations';
 
 export default function DoctorQuestionsScreen() {
+  const { draft } = useLocalSearchParams<{ draft?: string }>();
   const { locale } = useLocale();
   const t = (key: DoctorQuestionsTranslationKey) => translateDoctorQuestionsText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
@@ -55,6 +56,13 @@ export default function DoctorQuestionsScreen() {
 
   const [questions, setQuestions] = useState<DoctorQuestion[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
+  const consumedDraft = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof draft !== 'string' || !draft.trim() || consumedDraft.current === draft) return;
+    consumedDraft.current = draft;
+    // This is a draft only. Existing Save, permissions and error recovery apply.
+    setNewQuestion(current => current || draft.trim().slice(0, 1000));
+  }, [draft]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isTogglingQuestionId, setIsTogglingQuestionId] = useState<string | null>(null);

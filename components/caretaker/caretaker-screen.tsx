@@ -57,7 +57,7 @@ export default function CaretakerScreen() {
   return <ThemedBackground style={{ flex: 1 }}>
     <Stack.Screen options={{ headerShown: false }} />
     <SafeAreaView style={{ flex: 1 }}>
-      <Header title={qrGrant ? s.t.showCode : s.t.title} subtitle={qrGrant ? qrGrant.label : s.t.subtitle}
+      <Header topSafeAreaHandled title={qrGrant ? s.t.showCode : s.t.title} subtitle={qrGrant ? qrGrant.label : s.t.subtitle}
         showBackButton showBabySwitcher={false}
         onBackPress={() => { if (qrGrant) setQrGrant(null); else if (router.canGoBack()) router.back(); else router.replace('/'); }}
         rightContent={!qrGrant ? <BabySwitcherButton navigateOnSelect={false} showSwitchHint /> : undefined} />

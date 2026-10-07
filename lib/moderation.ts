@@ -16,6 +16,7 @@ export type ReportTargetType =
   | 'group_nested_comment'
   | 'group_message'
   | 'direct_message'
+  | 'ai_answer'
   | 'profile';
 
 export type ReportReason =

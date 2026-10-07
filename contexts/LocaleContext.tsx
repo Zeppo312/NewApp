@@ -24,6 +24,7 @@ import {
   type LanguagePreference,
 } from '@/lib/localization';
 import { getAppSettings, saveAppSettings } from '@/lib/supabase';
+import { DATA_CONSENTS_ENABLED, runtimeConsentAllowed } from '@/lib/dataConsentRuntime';
 
 type LocaleContextValue = {
   locale: AppLocale;
@@ -140,6 +141,7 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let cancelled = false;
     setIsAccountPreferenceLoaded(false);
 
+    if (DATA_CONSENTS_ENABLED && !runtimeConsentAllowed('health')) { setIsAccountPreferenceLoaded(true); return; }
     getAppSettings()
       .then(({ data }) => {
         const accountPreference = data?.language_preference;

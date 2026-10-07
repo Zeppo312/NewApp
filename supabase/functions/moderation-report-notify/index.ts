@@ -1,3 +1,4 @@
+import { workerRpc } from '../_shared/accountDeletion/contracts.ts';
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -36,6 +37,7 @@ interface ModerationReportWebhookPayload {
 }
 
 const TARGET_LABELS: Record<string, { de: string; en: string; es: string }> = {
+  ai_answer: { de: 'KI-Antwort', en: 'AI answer', es: 'Respuesta de IA' },
   post: { de: 'Beitrag', en: 'Post', es: 'Publicación' },
   comment: { de: 'Kommentar', en: 'Comment', es: 'Comentario' },
   nested_comment: { de: 'Antwort', en: 'Reply', es: 'Respuesta' },
@@ -113,7 +115,10 @@ serve(async (req: Request) => {
       throw adminError;
     }
 
-    const adminIds = (admins || []).map((admin: { id: string }) => admin.id);
+    const adminIds: string[] = [];
+    for (const admin of (admins || []) as { id: string }[]) {
+      if (!(await workerRpc(supabase, 'blocked', { userId: admin.id }))) adminIds.push(admin.id);
+    }
 
     const { count: openCount } = await supabase
       .from('content_reports')

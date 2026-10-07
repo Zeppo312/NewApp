@@ -37,7 +37,7 @@ import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, TIMELINE
 import { BlurView } from 'expo-blur';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ProgressCircle } from '@/components/ProgressCircle';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 
 type Contraction = {
   id: string;
@@ -1210,7 +1210,7 @@ export default function HomeScreen() {
                             strokeWidth={8}
                             progressColor={timerRunning ? '#87CEEB' : 'rgba(135,206,235,0.4)'}
                             backgroundColor="rgba(135,206,235,0.2)"
-                            textColor="transparent"
+                            showPercentage={false}
                           />
                         </View>
 
@@ -1332,13 +1332,17 @@ export default function HomeScreen() {
             <View style={styles.manualModalOverlay}>
               <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeManualModal} />
               <BlurView intensity={80} tint="extraLight" style={styles.manualModalCard}>
+                <View
+                  pointerEvents="none"
+                  style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(248,245,241,0.94)' }]}
+                />
                 <View style={styles.manualHeader}>
                   <TouchableOpacity style={styles.manualHeaderButton} onPress={closeManualModal}>
                     <Text style={styles.manualHeaderButtonText}>✕</Text>
                   </TouchableOpacity>
                   <View style={styles.manualHeaderCenter}>
-                    <Text style={[styles.manualTitle, { color: textSecondary }]}>{t('manual.title')}</Text>
-                    <Text style={[styles.manualSubtitle, { color: textSecondary }]}>{t('manual.subtitle')}</Text>
+                    <Text style={styles.manualTitle}>{t('manual.title')}</Text>
+                    <Text style={styles.manualSubtitle}>{t('manual.subtitle')}</Text>
                   </View>
                   <TouchableOpacity style={[styles.manualHeaderButton, styles.manualSaveButton]} onPress={handleManualSave}>
                     <Text style={styles.manualSaveButtonText}>✓</Text>
@@ -1348,7 +1352,7 @@ export default function HomeScreen() {
                 <ScrollView style={styles.manualScroll} showsVerticalScrollIndicator={false}>
                   <View style={styles.manualContent}>
                     <View style={styles.manualSection}>
-                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>{t('manual.period')}</Text>
+                      <Text style={styles.manualSectionTitle}>{t('manual.period')}</Text>
                       <View style={styles.manualTimeRow}>
                         <TouchableOpacity
                           style={styles.manualTimeButton}
@@ -1387,6 +1391,7 @@ export default function HomeScreen() {
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
+                              if (Platform.OS === 'android') setShowManualStartPicker(false);
                               if (date) {
                                 setManualStartTime(date);
                                 if (safeManualEndTime <= date) {
@@ -1412,6 +1417,7 @@ export default function HomeScreen() {
                             mode="datetime"
                             display={Platform.OS === 'ios' ? 'compact' : 'default'}
                             onChange={(_, date) => {
+                              if (Platform.OS === 'android') setShowManualEndPicker(false);
                               if (date) {
                                 if (date <= safeManualStartTime) {
                                   Alert.alert(t('common.notice'), t('alert.endAfterStart'));
@@ -1433,7 +1439,7 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={styles.manualSection}>
-                      <Text style={[styles.manualSectionTitle, { color: textSecondary }]}>{t('manual.intensity')}</Text>
+                      <Text style={styles.manualSectionTitle}>{t('manual.intensity')}</Text>
                       <View style={styles.manualIntensityRow}>
                         {(['schwach', 'mittel', 'stark'] as const).map(level => (
                           <TouchableOpacity
@@ -2040,6 +2046,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
   manualModalCard: {
+    backgroundColor: 'rgba(248,245,241,0.94)',
     width: '100%',
     borderRadius: 28,
     overflow: 'hidden',

@@ -398,7 +398,7 @@ export default function ModerationAdminScreen() {
 
                 <View style={styles.reportedUserRow}>
                   <ThemedText style={[styles.reportedUser, { color: textPrimary }]} numberOfLines={1}>
-                    {report.reported_user_name}
+                    {report.target_type === 'ai_answer' ? 'Lotti' : report.reported_user_name}
                   </ThemedText>
                   {report.reported_user_suspended ? (
                     <View style={[styles.badge, { backgroundColor: dangerColor }]}>
@@ -532,7 +532,17 @@ export default function ModerationAdminScreen() {
                       </TouchableOpacity>
                     ) : null}
 
-                    {report.target_type !== 'profile' && report.status === 'open' ? (
+                    {report.target_type === 'ai_answer' && report.status === 'open' ? (
+                      <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: theme.accent }]}
+                        onPress={() => void runAction(report.id, () => moderationResolveReport(report.id, 'resolved'))}
+                        activeOpacity={0.85}
+                      >
+                        <ThemedText style={styles.actionButtonText}>{t('admin.resolveAiAnswer')}</ThemedText>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    {report.target_type !== 'profile' && report.target_type !== 'ai_answer' && report.status === 'open' ? (
                       <TouchableOpacity
                         style={[styles.actionButton, { backgroundColor: dangerColor }]}
                         onPress={() => handleDeleteContent(report)}

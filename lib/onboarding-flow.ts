@@ -6,10 +6,11 @@ export type OnboardingStep =
   | 'sharedValue' | 'productMoment' | 'feedback' | 'habit' | 'plan';
 
 export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean): OnboardingStep[] {
+  if (isLinked) return ['welcome', 'firstName', 'role', 'invitation'];
   return [
     'welcome', 'firstName', 'role',
     ...(showInvitation ? ['invitation' as const] : []),
-    ...(isLinked ? [] : ['babyStatus', 'dates'] as const),
+    'babyStatus', 'dates',
     'mood', 'energy', 'needs', 'personalValue', 'challenge', 'relief', 'support',
     'sharedValue', 'productMoment', 'feedback', 'habit', 'plan',
   ];

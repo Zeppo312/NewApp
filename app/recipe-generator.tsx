@@ -16,11 +16,13 @@ import {
   TouchableOpacity,
   useWindowDimensions,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { BlurView } from "expo-blur";
+import { BlurView, type BlurViewProps } from "expo-blur";
 import { Stack, useRouter } from "expo-router";
 
 import { ThemedBackground } from "@/components/ThemedBackground";
@@ -29,13 +31,13 @@ import { RecipeVideoCourse } from "@/components/RecipeVideoCourse";
 import { LockedFeatureScreen } from "@/components/LockedFeatureScreen";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { GlassSheetSurface } from "@/components/ui/glass-sheet-surface";
 import { Colors } from "@/constants/Colors";
 import {
   GLASS_BORDER,
   GLASS_BORDER_DARK,
   GLASS_OVERLAY,
   GLASS_OVERLAY_DARK,
-  LiquidGlassCard,
   PRIMARY,
   GRID_GAP,
 } from "@/constants/DesignGuide";
@@ -91,7 +93,56 @@ const SCREEN_PADDING = 16;
 const MAX_CONTENT_WIDTH = 720;
 const CARD_INTERNAL_PADDING = 18;
 const CARD_SPACING = 14;
+const CARD_RADIUS = 26;
 const ALLERGEN_COLUMNS = 2; // Immer 2 Buttons pro Reihe
+
+function RecipeCatalogCard({
+  children,
+  style,
+  intensity,
+  tint,
+  overlayColor,
+  borderColor,
+  onPress,
+  activeOpacity = 0.9,
+}: {
+  children: React.ReactNode;
+  style: StyleProp<ViewStyle>;
+  intensity: number;
+  tint: BlurViewProps["tint"];
+  overlayColor: string;
+  borderColor: string;
+  onPress?: () => void;
+  activeOpacity?: number;
+}) {
+  const CardComponent = onPress ? TouchableOpacity : View;
+
+  return (
+    <CardComponent style={style} onPress={onPress} activeOpacity={activeOpacity}>
+      {/* Clip every surface together; keep padding inside and the shadow outside. */}
+      <View style={{ borderRadius: CARD_RADIUS, overflow: "hidden" }}>
+        <BlurView
+          pointerEvents="none"
+          intensity={intensity}
+          tint={tint}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { backgroundColor: overlayColor }]}
+        />
+        <View style={{ padding: CARD_INTERNAL_PADDING }}>{children}</View>
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            { borderRadius: CARD_RADIUS, borderWidth: 1, borderColor },
+          ]}
+        />
+      </View>
+    </CardComponent>
+  );
+}
 
 const chunkItems = <T,>(items: T[], columns: number): (T | null)[][] => {
   const rows: (T | null)[][] = [];
@@ -194,6 +245,7 @@ const RecipeGeneratorContent = () => {
     [ACTIVE_RECIPE_LOCALE],
   );
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const contentWidth = Math.min(
     Math.max(0, screenWidth - SCREEN_PADDING * 2),
@@ -637,10 +689,11 @@ const RecipeGeneratorContent = () => {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <ThemedBackground style={styles.background}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
           <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
           <View style={styles.overlayContainer}>
             <Header
+              topSafeAreaHandled
               title={t("screen.title")}
               subtitle={t("screen.subtitle")}
               showBackButton
@@ -659,8 +712,11 @@ const RecipeGeneratorContent = () => {
           </View>
 
           <ScrollView
-            contentInsetAdjustmentBehavior="automatic"
-            contentContainerStyle={styles.scrollContent}
+            contentInsetAdjustmentBehavior="never"
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingBottom: 100 + insets.bottom },
+            ]}
             showsVerticalScrollIndicator={false}
           >
             <View style={[styles.contentContainer, { width: contentWidth }]}>
@@ -860,7 +916,8 @@ const RecipeGeneratorContent = () => {
                   </View>
 
                   {recipes.length === 0 ? (
-                    <LiquidGlassCard
+                    <RecipeCatalogCard
+                      tint={blurTint}
                       style={styles.card}
                       intensity={24}
                       overlayColor={
@@ -907,9 +964,10 @@ const RecipeGeneratorContent = () => {
                           )}
                         </TouchableOpacity>
                       </View>
-                    </LiquidGlassCard>
+                    </RecipeCatalogCard>
                   ) : sortedRecipes.length === 0 && (hasActiveSearch || favoritesOnly) ? (
-                    <LiquidGlassCard
+                    <RecipeCatalogCard
+                      tint={blurTint}
                       style={styles.card}
                       intensity={24}
                       overlayColor={
@@ -941,7 +999,7 @@ const RecipeGeneratorContent = () => {
                           </ThemedText>
                         </TouchableOpacity>
                       </View>
-                    </LiquidGlassCard>
+                    </RecipeCatalogCard>
                   ) : (
                     sortedRecipes.map((recipe) => {
                       const isFilteredOut = selectedAllergies.some((allergen) =>
@@ -953,11 +1011,11 @@ const RecipeGeneratorContent = () => {
 
                       if (!meetsAge || isFilteredOut) {
                         return (
-                          <LiquidGlassCard
+                          <RecipeCatalogCard
+                            tint={blurTint}
                             key={recipe.id}
                             style={[
                               styles.card,
-                              styles.recipeCard,
                               styles.disabledRecipeCard,
                             ]}
                             intensity={20}
@@ -998,14 +1056,15 @@ const RecipeGeneratorContent = () => {
                             <ThemedText style={styles.disabledNotice}>
                               {t("catalog.filteredNotice")}
                             </ThemedText>
-                          </LiquidGlassCard>
+                          </RecipeCatalogCard>
                         );
                       }
 
                       return (
-                        <LiquidGlassCard
+                        <RecipeCatalogCard
+                          tint={blurTint}
                           key={recipe.id}
-                          style={[styles.card, styles.recipeCard]}
+                          style={styles.card}
                           intensity={24}
                           overlayColor={glassOverlay}
                           borderColor={glassBorder}
@@ -1104,7 +1163,7 @@ const RecipeGeneratorContent = () => {
                               </View>
                             </View>
                           </View>
-                        </LiquidGlassCard>
+                        </RecipeCatalogCard>
                       );
                     })
                   )}
@@ -1113,7 +1172,8 @@ const RecipeGeneratorContent = () => {
 
               {/* Allergie Notice */}
               {blockedRecipeCount > 0 && (
-                <LiquidGlassCard
+                <RecipeCatalogCard
+                  tint={blurTint}
                   style={styles.card}
                   intensity={22}
                   overlayColor={
@@ -1131,7 +1191,7 @@ const RecipeGeneratorContent = () => {
                       blockedRecipeCount,
                     )}
                   </ThemedText>
-                </LiquidGlassCard>
+                </RecipeCatalogCard>
               )}
             </View>
           </ScrollView>
@@ -1143,19 +1203,38 @@ const RecipeGeneratorContent = () => {
         <Modal
           visible={!!selectedRecipe}
           transparent
+          statusBarTranslucent
+          navigationBarTranslucent
           animationType="slide"
           onRequestClose={() => setSelectedRecipe(null)}
         >
-          <View style={styles.recipeModalOverlay}>
+          <View
+            style={[
+              styles.recipeModalOverlay,
+              {
+                paddingTop: insets.top,
+                paddingLeft: insets.left,
+                paddingRight: insets.right,
+              },
+            ]}
+          >
             <TouchableOpacity
               style={StyleSheet.absoluteFill}
               onPress={() => setSelectedRecipe(null)}
               activeOpacity={1}
             />
-            <BlurView
-              style={styles.recipeModalCard}
-              intensity={90}
-              tint={blurTint}
+            <GlassSheetSurface
+              style={[
+                styles.recipeModalCard,
+                {
+                  maxWidth: "100%",
+                  borderBottomLeftRadius: 0,
+                  borderBottomRightRadius: 0,
+                  borderBottomWidth: 0,
+                  paddingBottom: 0,
+                },
+              ]}
+              isDark={isDark}
             >
               <View style={styles.recipeModalHandle} />
               <View style={styles.recipeModalHeaderRow}>
@@ -1181,8 +1260,8 @@ const RecipeGeneratorContent = () => {
                 {favoriteButton(selectedRecipe)}
               </View>
               <ScrollView
-                contentInsetAdjustmentBehavior="automatic"
-                contentContainerStyle={styles.recipeModalScroll}
+                contentInsetAdjustmentBehavior="never"
+                contentContainerStyle={{ paddingBottom: 80 + insets.bottom }}
                 showsVerticalScrollIndicator={false}
               >
                 <View style={styles.recipeHeroCard}>
@@ -1401,7 +1480,7 @@ const RecipeGeneratorContent = () => {
                   {t("recipe.disclaimer")}
                 </ThemedText>
               </ScrollView>
-            </BlurView>
+            </GlassSheetSurface>
           </View>
         </Modal>
       )}
@@ -1947,7 +2026,6 @@ const createStyles = ({
       borderColor: glassBorder,
     },
     scrollContent: {
-      paddingBottom: 100,
       paddingHorizontal: SCREEN_PADDING,
       alignItems: "center",
     },
@@ -1957,23 +2035,15 @@ const createStyles = ({
     },
     card: {
       marginBottom: CARD_SPACING,
-      padding: CARD_INTERNAL_PADDING,
-      borderRadius: 26,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: isDark ? 0.16 : 0.07,
-      shadowRadius: 18,
-      elevation: 3,
-    },
-    recipeCard: {
-      paddingHorizontal: CARD_INTERNAL_PADDING,
-      paddingVertical: CARD_INTERNAL_PADDING,
+      width: "100%",
+      borderRadius: CARD_RADIUS,
+      boxShadow: isDark
+        ? "0 2px 8px rgba(0, 0, 0, 0.12)"
+        : "0 2px 8px rgba(92, 64, 51, 0.06)",
     },
     imageHeader: {
       marginTop: -CARD_INTERNAL_PADDING,
       marginHorizontal: -CARD_INTERNAL_PADDING,
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
       overflow: "hidden",
       position: "relative",
     },
@@ -1993,7 +2063,7 @@ const createStyles = ({
       right: 0,
       top: 0,
       bottom: 0,
-      backgroundColor: isDark ? "rgba(0,0,0,0.34)" : "rgba(0,0,0,0.18)",
+      backgroundColor: isDark ? "rgba(0,0,0,0.18)" : "rgba(0,0,0,0.06)",
     },
     imageHeaderBadges: {
       position: "absolute",
@@ -2535,9 +2605,6 @@ const createStyles = ({
       fontSize: 13,
       color: textTertiary,
       marginTop: 4,
-    },
-    recipeModalScroll: {
-      paddingBottom: 80,
     },
     recipeHeroCard: {
       borderRadius: 28,

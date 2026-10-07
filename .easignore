@@ -17,7 +17,9 @@ web-build/
 ios/Pods/
 ios/build/
 ios/.xcode.env.local
-android/app/build/
+# Also exclude a local build-directory symlink (e.g. external QA storage).
+android/app/build
+android/app/.cxx/
 android/.gradle/
 android/build/
 
@@ -31,4 +33,24 @@ venv/
 docs/
 backup/
 output/
+tmp/
+# Store screenshots/videos and marketing projects are not application inputs.
+store/
+marketing/
+artifacts/
+credentials.json
+*.jks
+*.keystore
+!android/app/debug.keystore
+*.p8
+*.p12
+*.key
+*.pem
+android/app/eas-build.gradle
+android/app 2/
+android/gradle 2/
 ownership-map-out/
+.family-qa/
+# Local connector settings and database CLI state are not build inputs.
+.mcp.json
+supabase/.temp/

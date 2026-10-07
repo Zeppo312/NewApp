@@ -1,11 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { runtimeConsentAllowed } from '../dataConsentRuntime';
 
 import type { AskLottiEvidence, AskLottiFollowUp } from "./types";
 
 // Conversations stay on the device on purpose: the Frag Lotti backend never
 // stores questions or answers (OpenAI runs with store:false, lotti_ai_requests
-// keeps metadata only), so persisting them locally keeps that property intact.
+// keeps metadata only). Explicitly reported answers are the exception: the
+// selected answer is sent to the moderation queue after the user submits it.
 const STORAGE_KEY = "ask_lotti_conversations_v1";
+let storageEpoch = 0;
+let storageWrites: Promise<void> = Promise.resolve();
+export const getConversationStorageEpoch = () => storageEpoch;
 
 export const MAX_CONVERSATIONS = 30;
 export const MAX_MESSAGES_PER_CONVERSATION = 60;
@@ -166,9 +171,11 @@ export const removeConversation = (
   conversations.filter((conversation) => conversation.id !== id);
 
 export const loadConversations = async (): Promise<AskLottiConversation[]> => {
+  const epoch = storageEpoch;
   try {
+    await storageWrites;
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw || epoch !== storageEpoch) return [];
     return normalizeConversations(JSON.parse(raw));
   } catch (error) {
     console.error("Failed to load Frag Lotti conversations:", error);
@@ -178,21 +185,28 @@ export const loadConversations = async (): Promise<AskLottiConversation[]> => {
 
 export const saveConversations = async (
   conversations: AskLottiConversation[],
+  epoch = storageEpoch,
 ): Promise<void> => {
-  try {
+  const write = storageWrites.then(async () => {
+    if (!runtimeConsentAllowed('ai')) return;
+    if (epoch !== storageEpoch) return;
     await AsyncStorage.setItem(
       STORAGE_KEY,
       JSON.stringify(normalizeConversations(conversations)),
     );
-  } catch (error) {
+  });
+  storageWrites = write.catch((error) => {
     console.error("Failed to save Frag Lotti conversations:", error);
-  }
+  });
+  await storageWrites;
 };
 
 export const clearConversations = async (): Promise<void> => {
-  try {
+  storageEpoch += 1;
+  const clear = storageWrites.then(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
-  } catch (error) {
-    console.error("Failed to clear Frag Lotti conversations:", error);
-  }
+  });
+  storageWrites = clear.catch(() => undefined);
+  // Propagate cleanup failures to the deletion UI instead of claiming success.
+  await clear;
 };

@@ -10,6 +10,7 @@
  * - EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
  */
 module.exports = function withRevenueCat(config, props = {}) {
+  require('../scripts/check-android-build-env').validateAndroidBuildEnv();
   const iosKey =
     props.iosApiKey ||
     process.env.EXPO_PUBLIC_RC_IOS_KEY ||

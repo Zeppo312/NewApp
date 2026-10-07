@@ -1,6 +1,6 @@
 import { supabase, getDueDateWithLinkedUsers } from './supabase';
 import { getRecommendations, LottiRecommendation } from './supabase/recommendations';
-import { parseSafeDate } from './safeDate';
+import { getPregnancyAge, parsePregnancyDate } from './pregnancy-age';
 import {
   CacheStrategy,
   loadWithRevalidate,
@@ -78,7 +78,8 @@ export async function loadDueDateWithCache(
     async () => {
       const result = await getDueDateWithLinkedUsers(userId);
 
-      if (!result.success || !result.dueDate) {
+      if (!result.success) throw new Error('pregnancy_due_date_unavailable');
+      if (!result.dueDate) {
         return {
           date: null,
           currentWeek: null,
@@ -86,42 +87,14 @@ export async function loadDueDateWithCache(
         };
       }
 
-      const due = parseSafeDate(result.dueDate);
-      if (!due) {
-        return {
-          date: null,
-          currentWeek: null,
-          currentDay: null,
-        };
-      }
+      const due = parsePregnancyDate(result.dueDate);
+      if (!due) throw new Error('pregnancy_due_date_invalid');
 
-      // Berechne die aktuelle SSW
-      const now = new Date();
-      now.setHours(0, 0, 0, 0);
-
-      const dueDateCopy = new Date(due);
-      dueDateCopy.setHours(0, 0, 0, 0);
-
-      // Berechne die Differenz in Tagen
-      const difference = dueDateCopy.getTime() - now.getTime();
-      const daysLeft = Math.round(difference / (1000 * 60 * 60 * 24));
-
-      // Schwangerschaft dauert ca. 40 Wochen = 280 Tage
-      const totalDaysInPregnancy = 280;
-      const daysRemaining = Math.max(0, daysLeft);
-      const daysPregnant = totalDaysInPregnancy - daysRemaining;
-
-      // Berechne SSW und Tag
-      const weeksPregnant = Math.floor(daysPregnant / 7);
-      const daysInCurrentWeek = daysPregnant % 7;
-
-      // currentWeek ist die aktuelle Schwangerschaftswoche (1-basiert)
-      const currentWeek = weeksPregnant + 1;
-
+      const age = getPregnancyAge(due);
       return {
         date: due,
-        currentWeek,
-        currentDay: daysInCurrentWeek,
+        currentWeek: age?.runningWeek ?? null,
+        currentDay: age?.day ?? null,
       };
     },
     CacheStrategy.LONG // 10 Minuten - Due Date ändert sich nicht oft
@@ -185,7 +158,13 @@ export async function loadPregnancyHomeDataWithCache(
 
   return {
     profile: profileResult.data || { firstName: '', avatarUrl: null },
-    dueDate: dueDateResult.data || { date: null, currentWeek: null, currentDay: null },
+    // Cached Date objects are JSON strings; age must be recalculated today,
+    // rather than carrying yesterday's week through a ten-minute cache.
+    dueDate: (() => {
+      const date = parsePregnancyDate(dueDateResult.data?.date);
+      const age = getPregnancyAge(date);
+      return { date, currentWeek: age?.runningWeek ?? null, currentDay: age?.day ?? null };
+    })(),
     recommendations: recommendationsResult.data || [],
     isStale,
   };

@@ -8,7 +8,7 @@
  * und die Seite nutzt wie bisher buildMockAnalysis als Fallback.
  */
 
-import { supabase } from '@/lib/supabase';
+import { invokeForegroundAdvisor } from './foregroundRequest';
 import type { AppLocale } from '@/lib/localization';
 
 import { localDateString } from './advisorStorage';
@@ -29,55 +29,53 @@ export const generateAdvisorInsight = async (
   locale: AppLocale = 'de',
 ): Promise<RemoteInsight | null> => {
   try {
-    const { data, error } = await supabase.functions.invoke('advisor-generate', {
-      body: {
-        babyId,
-        locale,
-        localDate: localDateString(),
-        signals: {
-          babyName: signals.babyName,
-          ageMonths: signals.ageMonths,
-          ageText: signals.ageText,
-          // Volles Feeding-Profil, damit die Regel-Engine den Fütter-Modus
-          // kennt (Stillen/Flasche/Beikost) und eigene Baselines nutzen kann.
-          feeding: {
-            totalCount: signals.feeding.totalCount,
-            isReal: signals.feeding.isReal,
-            bottleCount: signals.feeding.bottleCount,
-            breastCount: signals.feeding.breastCount,
-            solidsCount: signals.feeding.solidsCount,
-            waterCount: signals.feeding.waterCount,
-            totalBottleMl: signals.feeding.totalBottleMl,
-            lastFeedingAt: signals.feeding.lastFeedingAt,
-            hoursSinceLastFeeding: signals.feeding.hoursSinceLastFeeding,
-            lastBreastAt: signals.feeding.lastBreastAt,
-            daysSinceLastBreast: signals.feeding.daysSinceLastBreast,
-            breastCountLast21Days: signals.feeding.breastCountLast21Days,
-            bottleCountLast21Days: signals.feeding.bottleCountLast21Days,
-            solidsCountLast21Days: signals.feeding.solidsCountLast21Days,
-            likelyFeedingMode: signals.feeding.likelyFeedingMode,
-            typicalPerDay: signals.feeding.typicalPerDay,
-            typicalByNow: signals.feeding.typicalByNow,
-            baselineSampleDays: signals.feeding.baselineSampleDays,
-          },
-          diaper: {
-            count: signals.diaper.count,
-            isReal: signals.diaper.isReal,
-            wetCountToday: signals.diaper.wetCountToday,
-            lastWetAt: signals.diaper.lastWetAt,
-          },
-          sleep: {
-            minutes: signals.sleep.minutes,
-            isReal: signals.sleep.isReal,
-            typicalMinutesByNow: signals.sleep.typicalMinutesByNow,
-            baselineSampleDays: signals.sleep.baselineSampleDays,
-          },
-          context: signals.context,
-          weather: signals.weather,
+    const data = await invokeForegroundAdvisor({
+      babyId,
+      locale,
+      localDate: localDateString(),
+      signals: {
+        babyName: signals.babyName,
+        ageMonths: signals.ageMonths,
+        ageText: signals.ageText,
+        // Volles Feeding-Profil, damit die Regel-Engine den Fütter-Modus
+        // kennt (Stillen/Flasche/Beikost) und eigene Baselines nutzen kann.
+        feeding: {
+          totalCount: signals.feeding.totalCount,
+          isReal: signals.feeding.isReal,
+          bottleCount: signals.feeding.bottleCount,
+          breastCount: signals.feeding.breastCount,
+          solidsCount: signals.feeding.solidsCount,
+          waterCount: signals.feeding.waterCount,
+          totalBottleMl: signals.feeding.totalBottleMl,
+          lastFeedingAt: signals.feeding.lastFeedingAt,
+          hoursSinceLastFeeding: signals.feeding.hoursSinceLastFeeding,
+          lastBreastAt: signals.feeding.lastBreastAt,
+          daysSinceLastBreast: signals.feeding.daysSinceLastBreast,
+          breastCountLast21Days: signals.feeding.breastCountLast21Days,
+          bottleCountLast21Days: signals.feeding.bottleCountLast21Days,
+          solidsCountLast21Days: signals.feeding.solidsCountLast21Days,
+          likelyFeedingMode: signals.feeding.likelyFeedingMode,
+          typicalPerDay: signals.feeding.typicalPerDay,
+          typicalByNow: signals.feeding.typicalByNow,
+          baselineSampleDays: signals.feeding.baselineSampleDays,
         },
+        diaper: {
+          count: signals.diaper.count,
+          isReal: signals.diaper.isReal,
+          wetCountToday: signals.diaper.wetCountToday,
+          lastWetAt: signals.diaper.lastWetAt,
+        },
+        sleep: {
+          minutes: signals.sleep.minutes,
+          isReal: signals.sleep.isReal,
+          typicalMinutesByNow: signals.sleep.typicalMinutesByNow,
+          baselineSampleDays: signals.sleep.baselineSampleDays,
+        },
+        context: signals.context,
+        weather: signals.weather,
       },
     });
-    if (error || !data?.main?.id || !data?.main?.body) return null;
+    if (!data?.main?.id || !data?.main?.body) return null;
     return {
       main: {
         id: data.main.id,

@@ -1,3 +1,5 @@
+import { workerRpc } from '../_shared/accountDeletion/contracts.ts';
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
 /* eslint-disable import/no-unresolved */
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -43,8 +45,9 @@ serve(async (req: Request) => {
   try {
     const expectedSecret = Deno.env.get('DIRECT_MESSAGE_WEBHOOK_SECRET');
     const authorization = req.headers.get('Authorization');
+    const isolatedNotificationSecret = Deno.env.get('ACCOUNT_DELETION_NOTIFICATION_SECRET');
 
-    if (!expectedSecret || authorization !== `Bearer ${expectedSecret}`) {
+    if ((!expectedSecret || authorization !== `Bearer ${expectedSecret}`) && (!isolatedNotificationSecret || authorization !== `Bearer ${isolatedNotificationSecret}`)) {
       return new Response(JSON.stringify({ message: 'Unauthorized' }), {
         headers: { 'Content-Type': 'application/json' },
         status: 401,
@@ -65,6 +68,8 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { sender_id, group_id, content, id, message_type, event_id } = payload.record;
+
+    await assertAccountActive(supabase, sender_id);
 
     // 1. Get group name
     const { data: groupData, error: groupError } = await supabase
@@ -137,7 +142,10 @@ serve(async (req: Request) => {
         .map((s) => s.user_id)
     );
 
-    const eligibleRecipients = recipientIds.filter((id) => !disabledUsers.has(id));
+    const eligibleRecipients: string[] = [];
+    for (const id of recipientIds) {
+      if (!disabledUsers.has(id) && !(await workerRpc(supabase, 'blocked', { userId: id }))) eligibleRecipients.push(id);
+    }
     const localeByUser = new Map<string, SupportedLocale>(
       (settingsData || []).map((settings) => [settings.user_id, getSettingsLocale(settings)])
     );

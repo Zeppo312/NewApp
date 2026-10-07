@@ -1,18 +1,18 @@
+import { assertAccountActive } from './accountDeletion/access.ts';
 // Server-side subscription feature verification. A client-provided tier or
 // locally cached feature matrix is never trusted here: RevenueCat determines
 // the tier and Postgres determines whether that tier may use the feature.
 
-type SupabaseAdmin = { from: (table: string) => any };
+type SupabaseAdmin = { from: (table: string) => any; rpc: (name: string, args?: any) => any };
 
-export type ServerSubscriptionTier = 'lite' | 'standard' | 'premium';
-export type RevenueCatEntitlementConfig = {
-  premium: string | undefined;
-  standard?: string | undefined;
-  lite?: string | undefined;
-};
+import { CACHE_MAX_AGE_MS, cachedSubscriptionTier, fetchRevenueCatTier } from './revenuecatState.ts';
+import { familySharingEnvironment } from './familySandboxEnvironment.ts';
+import type { RevenueCatEntitlementConfig, ServerSubscriptionTier } from './revenuecatState.ts';
+export { parseRevenueCatTier } from './revenuecatState.ts';
+export type { RevenueCatEntitlementConfig, ServerSubscriptionTier } from './revenuecatState.ts';
 export type FeatureAccessResult = {
   allowed: boolean;
-  reason: 'admin' | 'special_access' | 'revenuecat' | 'feature_disabled' | 'not_entitled' | 'unavailable';
+  reason: 'admin' | 'special_access' | 'revenuecat' | 'family_subscription' | 'feature_disabled' | 'not_entitled' | 'unavailable';
   tier: ServerSubscriptionTier | null;
 };
 export type PremiumAccessResult = {
@@ -20,58 +20,9 @@ export type PremiumAccessResult = {
   reason: 'admin' | 'premium_tester' | 'revenuecat' | 'not_premium' | 'unavailable';
 };
 
-type RevenueCatActiveEntitlement = { entitlement_id?: unknown; expires_at?: unknown };
-type VerifiedTierState = {
-  tier: ServerSubscriptionTier | null;
-  productId: string | null;
-  expiresAt: string | null;
-};
-
-const CACHE_MAX_AGE_MS = 15 * 60_000;
 const STALE_POSITIVE_GRACE_MS = 24 * 60 * 60_000;
 const isFutureOrLifetime = (value: unknown): boolean =>
   value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) > Date.now());
-const tierRank = (tier: ServerSubscriptionTier) => tier === 'premium' ? 3 : tier === 'standard' ? 2 : 1;
-
-const entitlementTier = (
-  entitlementId: unknown,
-  config: RevenueCatEntitlementConfig,
-): ServerSubscriptionTier | null => {
-  if (typeof entitlementId !== 'string') return null;
-  if (config.premium && entitlementId === config.premium) return 'premium';
-  if (config.standard && entitlementId === config.standard) return 'standard';
-  if (config.lite && entitlementId === config.lite) return 'lite';
-  return null;
-};
-
-export const parseRevenueCatTier = (
-  payload: unknown,
-  config: RevenueCatEntitlementConfig,
-): VerifiedTierState => {
-  const items = (payload as { items?: unknown } | null)?.items;
-  if (!Array.isArray(items)) return { tier: null, productId: null, expiresAt: null };
-
-  let best: VerifiedTierState = { tier: null, productId: null, expiresAt: null };
-  for (const entitlement of items as RevenueCatActiveEntitlement[]) {
-    const tier = entitlementTier(entitlement?.entitlement_id, config);
-    if (!tier) continue;
-    const expiryMs =
-      typeof entitlement.expires_at === 'number' && Number.isFinite(entitlement.expires_at)
-        ? entitlement.expires_at
-        : typeof entitlement.expires_at === 'string' && Number.isFinite(Number(entitlement.expires_at))
-          ? Number(entitlement.expires_at)
-          : null;
-    if (expiryMs !== null && expiryMs <= Date.now()) continue;
-    if (!best.tier || tierRank(tier) > tierRank(best.tier)) {
-      best = {
-        tier,
-        productId: String(entitlement.entitlement_id),
-        expiresAt: expiryMs === null ? null : new Date(expiryMs).toISOString(),
-      };
-    }
-  }
-  return best;
-};
 
 export const syncRevenueCatTier = async (
   admin: SupabaseAdmin,
@@ -81,32 +32,33 @@ export const syncRevenueCatTier = async (
   entitlementConfig: RevenueCatEntitlementConfig,
   source: 'revenuecat_api' | 'revenuecat_webhook',
 ) => {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8_000);
-  const response = await fetch(
-    `https://api.revenuecat.com/v2/projects/${encodeURIComponent(revenueCatProjectId)}/customers/${encodeURIComponent(userId)}/active_entitlements?limit=100`,
-    {
-      headers: { Authorization: `Bearer ${revenueCatSecretKey}`, Accept: 'application/json' },
-      signal: controller.signal,
-    },
-  ).finally(() => clearTimeout(timeout));
-
-  if (!response.ok && response.status !== 404) throw new Error(`revenuecat_${response.status}`);
-  const state = response.status === 404
-    ? { tier: null, productId: null, expiresAt: null }
-    : parseRevenueCatTier(await response.json(), entitlementConfig);
-  const { error } = await admin.from('lotti_subscription_entitlements').upsert({
-    user_id: userId,
-    tier: state.tier,
-    is_premium: state.tier === 'premium',
-    product_id: state.productId,
-    expires_at: state.expiresAt,
-    source,
-    checked_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  });
-  if (error) throw new Error('subscription_cache_write_failed');
-  return state;
+  await assertAccountActive(admin, userId);
+  // Optimistic concurrency across Edge isolates AND app/webhook requests. Read the
+  // version BEFORE RevenueCat. After a conflict discard the snapshot and fetch again.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: previous, error: readError } = await admin.from('lotti_subscription_entitlements')
+      .select('checked_at').eq('user_id', userId).maybeSingle();
+    if (readError) throw new Error('subscription_cache_read_failed');
+    const state = await fetchRevenueCatTier(userId, revenueCatSecretKey, revenueCatProjectId, entitlementConfig,
+      familySharingEnvironment(userId));
+    const checkedAt = new Date(Math.max(Date.now(), previous ? Date.parse(previous.checked_at) + 1 : 0)).toISOString();
+    const row = {
+      user_id: userId, tier: state.tier, is_premium: state.tier === 'premium',
+      product_id: state.productId, expires_at: state.expiresAt, source,
+      checked_at: checkedAt, updated_at: checkedAt,
+      paid_tier: state.paid?.tier ?? null,
+      paid_expires_at: state.paid?.expiresAt ?? null,
+      paid_subscription_id: state.paid?.subscriptionId ?? null,
+      paid_verified_at: checkedAt,
+    };
+    const query = previous
+      ? admin.from('lotti_subscription_entitlements').update(row).eq('user_id', userId).eq('checked_at', previous.checked_at)
+      : admin.from('lotti_subscription_entitlements').upsert(row, { onConflict: 'user_id', ignoreDuplicates: true });
+    const { data, error } = await query.select('user_id');
+    if (error) throw new Error('subscription_cache_write_failed');
+    if (data?.length === 1) return state;
+  }
+  throw new Error('subscription_cache_conflict');
 };
 
 const featureEnabledForTier = async (
@@ -142,7 +94,7 @@ const resultForTier = async (
   return { allowed: enabled, reason: enabled ? source : 'feature_disabled', tier };
 };
 
-export const verifySubscriptionFeatureAccess = async (
+const verifyOwnSubscriptionFeatureAccess = async (
   admin: SupabaseAdmin,
   userId: string,
   feature: string,
@@ -150,6 +102,7 @@ export const verifySubscriptionFeatureAccess = async (
   revenueCatProjectId: string | undefined,
   entitlementConfig: RevenueCatEntitlementConfig,
 ): Promise<FeatureAccessResult> => {
+  await assertAccountActive(admin, userId);
   const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('is_admin, paywall_access_role')
@@ -164,25 +117,23 @@ export const verifySubscriptionFeatureAccess = async (
 
   const { data: cached, error: cacheError } = await admin
     .from('lotti_subscription_entitlements')
-    .select('tier, is_premium, expires_at, checked_at')
+    .select('tier, is_premium, product_id, expires_at, checked_at')
     .eq('user_id', userId)
     .maybeSingle();
   if (cacheError) return { allowed: false, reason: 'unavailable', tier: null };
 
-  const cachedTier: ServerSubscriptionTier | null =
-    cached?.tier === 'lite' || cached?.tier === 'standard' || cached?.tier === 'premium'
-      ? cached.tier
-      : cached?.is_premium === true ? 'premium' : null;
-  const cacheFresh = cached?.checked_at && Date.now() - Date.parse(cached.checked_at) < CACHE_MAX_AGE_MS;
-  const cacheWithinGrace = cached?.checked_at && Date.now() - Date.parse(cached.checked_at) < STALE_POSITIVE_GRACE_MS;
-  const cacheActive = cachedTier !== null && isFutureOrLifetime(cached?.expires_at ?? null);
+  const cachedTier = cachedSubscriptionTier(cached);
+  const age = typeof cached?.checked_at === 'string' ? Date.now() - Date.parse(cached.checked_at) : NaN;
+  const cacheFresh = age >= 0 && age < CACHE_MAX_AGE_MS;
+  const cacheWithinGrace = age >= 0 && age < STALE_POSITIVE_GRACE_MS;
+  const cacheActive = cachedTier !== null && isFutureOrLifetime(cached?.expires_at);
 
-  if (cacheFresh) {
-    if (!cacheActive) return { allowed: false, reason: 'not_entitled', tier: null };
+  // Refresh expired paid and negative rows: renewal/restore may precede its webhook.
+  if (cacheFresh && cacheActive) {
     return resultForTier(admin, feature, cachedTier, 'revenuecat');
   }
 
-  if (!revenueCatSecretKey || !revenueCatProjectId || !entitlementConfig.premium) {
+  if (!revenueCatSecretKey || !revenueCatProjectId) {
     if (cacheActive && cacheWithinGrace) return resultForTier(admin, feature, cachedTier, 'revenuecat');
     return { allowed: false, reason: 'unavailable', tier: cachedTier };
   }
@@ -199,8 +150,71 @@ export const verifySubscriptionFeatureAccess = async (
     if (!state.tier) return { allowed: false, reason: 'not_entitled', tier: null };
     return resultForTier(admin, feature, state.tier, 'revenuecat');
   } catch {
-    if (cacheActive && cacheWithinGrace) return resultForTier(admin, feature, cachedTier, 'revenuecat');
-    return { allowed: false, reason: 'unavailable', tier: cachedTier };
+    // A webhook may have revoked access while this API request was failing.
+    // Never fall back to the positive row read before that revocation.
+    const { data: latest, error } = await admin.from('lotti_subscription_entitlements')
+      .select('tier, is_premium, product_id, expires_at, checked_at').eq('user_id', userId).maybeSingle();
+    if (!error && latest?.checked_at === cached?.checked_at && cacheActive && cacheWithinGrace &&
+      cachedSubscriptionTier(latest) === cachedTier && isFutureOrLifetime(latest?.expires_at)) return resultForTier(admin, feature, cachedTier, 'revenuecat');
+    return { allowed: false, reason: 'unavailable', tier: null };
+  }
+};
+
+/** The service-only SQL resolver returns one verified partner, never a chain. */
+export async function resolveFamilySubscriptionAccess(
+  admin: SupabaseAdmin, userId: string, secret: string | undefined,
+  projectId: string | undefined, config: RevenueCatEntitlementConfig,
+): Promise<Record<string, any>> {
+  await assertAccountActive(admin, userId);
+  let refreshed = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await admin.rpc('family_subscription_state', { p_user_id: userId });
+    if (error || !data || data.userId !== userId || data.schemaVersion !== 1) {
+      throw new Error('family_state_unavailable');
+    }
+    if (data.status === 'none') return data;
+    if (data.status === 'active') {
+      // Refresh before the client lease ends. On failure re-read membership and
+      // the cache; never return a grant captured before an unlink/revocation.
+      if (!refreshed && secret && projectId && typeof data.sponsorId === 'string' &&
+          Date.parse(data.validUntil) <= Date.now() + 30_000) {
+        refreshed = true;
+        try { await syncRevenueCatTier(admin, data.sponsorId, secret, projectId, config, 'revenuecat_api'); }
+        catch { /* A still-valid lease can survive only after the SQL re-read. */ }
+        continue;
+      }
+      return data;
+    }
+    if (data.status !== 'stale' || typeof data.sponsorId !== 'string' || !secret || !projectId) {
+      throw new Error('family_verification_unavailable');
+    }
+    await syncRevenueCatTier(admin, data.sponsorId, secret, projectId, config, 'revenuecat_api');
+    refreshed = true;
+    // Re-read the relationship after HTTP: it may have been severed or changed.
+  }
+  throw new Error('family_state_conflict');
+}
+
+export const verifySubscriptionFeatureAccess = async (
+  admin: SupabaseAdmin, userId: string, feature: string,
+  secret: string | undefined, projectId: string | undefined, config: RevenueCatEntitlementConfig,
+): Promise<FeatureAccessResult> => {
+  const own = await verifyOwnSubscriptionFeatureAccess(admin, userId, feature, secret, projectId, config);
+  // Special access is personal and keeps its existing precedence.
+  if (own.reason === 'admin' || own.reason === 'special_access') return own;
+  const { data: profile, error } = await admin.from('profiles').select('is_admin, paywall_access_role')
+    .eq('id', userId).maybeSingle();
+  if (error) return { allowed: false, reason: 'unavailable', tier: null };
+  if (specialTier(profile) || own.tier === 'premium') return own;
+  try {
+    const family = await resolveFamilySubscriptionAccess(admin, userId, secret, projectId, config);
+    const rank = (tier: any) => tier === 'premium' ? 3 : tier === 'standard' ? 2 : tier === 'lite' ? 1 : 0;
+    if (family.status === 'active' && rank(family.tier) > rank(own.tier)) {
+      return resultForTier(admin, feature, family.tier, 'family_subscription');
+    }
+    return own;
+  } catch {
+    return own.allowed ? own : { allowed: false, reason: 'unavailable', tier: null };
   }
 };
 
@@ -237,7 +251,7 @@ export const verifyPremiumAccess = async (
       ? 'admin'
       : result.reason === 'special_access'
         ? 'premium_tester'
-        : result.reason === 'revenuecat'
+        : result.reason === 'revenuecat' || result.reason === 'family_subscription'
           ? 'revenuecat'
           : result.reason === 'unavailable'
             ? 'unavailable'

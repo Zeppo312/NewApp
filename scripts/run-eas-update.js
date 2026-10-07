@@ -27,8 +27,13 @@ function validateUpdateArgs(args) {
     );
   }
 
-  if (channel !== environment) {
-    throw new Error(`Channel "${channel}" must use the matching EAS environment "${channel}"; received "${environment}".`);
+  const expectedEnvironment = channel === 'store-internal' ? 'preview' : channel;
+  if (expectedEnvironment !== environment) {
+    throw new Error(`Channel "${channel}" must use EAS environment "${expectedEnvironment}"; received "${environment}".`);
+  }
+
+  if (channel === 'store-internal' && readOption(args, '--platform', '-p') !== 'android') {
+    throw new Error('The store-internal channel is reserved for Android. Use --platform android.');
   }
 
   if (!message?.trim()) {

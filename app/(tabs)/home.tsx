@@ -1,13 +1,15 @@
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter , useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedBackground } from '@/components/ThemedBackground';
+import { HomeBackground, HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
+import { HomeCarouselDots, HomeOverviewHeading } from '@/components/ui/home-overview';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +26,6 @@ import VoiceLogModal from '@/components/VoiceLogModal';
 import PremiumHighlights, {
   type PremiumHighlightItem,
 } from '@/components/PremiumHighlights';
-import { BlurView } from 'expo-blur';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import NightWakePrompt from '@/components/NightWakePrompt';
 import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
@@ -911,6 +912,9 @@ export default function HomeScreen() {
   const isStackedLayout = layoutFontScale >= 1.3;
   const twoLineLimit = useLineLimit(2);
   const tileMetrics = useTileGridMetrics();
+  const { width: windowWidth } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
+  const isCompactAndroid = Platform.OS === 'android' && windowWidth < 400;
   const scaledCardSizing = useMemo(
     () => ({
       minHeight: tileMetrics.itemHeight,
@@ -942,10 +946,6 @@ export default function HomeScreen() {
   const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const overviewRotationPauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isAutoScrollingRef = useRef(false);
-  const androidBlurProps =
-    Platform.OS === 'android'
-      ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
-      : {};
   const quickAccessOrderStorageKey = useMemo(
     () => buildHomeQuickAccessOrderStorageKey(user?.id, activeBabyId),
     [activeBabyId, user?.id],
@@ -1664,14 +1664,13 @@ export default function HomeScreen() {
 
     return (
       <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
-        <BlurView
-          {...androidBlurProps}
+        <HomeGlassSurface
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, styles.greetingGlassBackground, { backgroundColor: glassBlurBg }]}
         >
           <ThemedView
-            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, { backgroundColor: glassCardBg }]}
+            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, isCompactAndroid && styles.greetingContainerCompact, { backgroundColor: glassCardBg }]}
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
@@ -1686,10 +1685,10 @@ export default function HomeScreen() {
 
             <View style={styles.greetingHeader}>
               <View style={styles.greetingTextBlock}>
-                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
+                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, isCompactAndroid && styles.greetingCompact, { color: textPrimary }]}>
                   {t('greeting.hello', { name: displayName })}
                 </ThemedText>
-                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
+                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, isCompactAndroid && styles.dateTextCompact, { color: textPrimary }]}>
                   {formatDate()}
                 </ThemedText>
               </View>
@@ -1735,7 +1734,7 @@ export default function HomeScreen() {
               <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
             )}
           </ThemedView>
-        </BlurView>
+        </HomeGlassSurface>
         <GlassBorderGlint radius={30} />
       </View>
     );
@@ -1815,24 +1814,19 @@ export default function HomeScreen() {
           }
         }}
       >
-        <BlurView
+        <HomeGlassSurface
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
         >
           <ThemedView
-            style={[styles.summaryContainer, styles.liquidGlassContainer, { backgroundColor: glassCardBg }]}
+            style={[styles.summaryContainer, styles.liquidGlassContainer, isCompactAndroid && styles.summaryContainerCompact, { backgroundColor: glassCardBg }]}
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            <View style={styles.sectionTitleContainer}>
-              <ThemedText adaptive={false} style={[styles.sectionTitle, { color: textSecondary, fontSize: 22 }]}>
-                {t('summary.title')}
-              </ThemedText>
-              <View style={styles.liquidGlassChevron}>
-                <IconSymbol name="chevron.right" size={20} color={textSecondary} />
-              </View>
-            </View>
+            <HomeOverviewHeading color={textSecondary}>
+              {t('summary.title')}
+            </HomeOverviewHeading>
 
             <View style={[styles.statsContainer, isStackedLayout ? styles.statsContainerStacked : null]}>
               <TouchableOpacity
@@ -1933,7 +1927,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           </ThemedView>
-        </BlurView>
+        </HomeGlassSurface>
       </TouchableOpacity>
     );
   };
@@ -1947,8 +1941,7 @@ export default function HomeScreen() {
 
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
-        <BlurView
-          {...androidBlurProps}
+        <HomeGlassSurface
           intensity={22}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={[styles.liquidGlassBackground, cardHeightStyle, { backgroundColor: glassBlurBg }]}
@@ -2032,7 +2025,7 @@ export default function HomeScreen() {
               </View>
             )}
           </ThemedView>
-        </BlurView>
+        </HomeGlassSurface>
       </View>
     );
   };
@@ -2086,18 +2079,7 @@ export default function HomeScreen() {
           )
         )}
       </ScrollView>
-      <View style={styles.carouselDots}>
-        {[0, 1].map((index) => (
-          <View
-            key={`overview-dot-${index}`}
-            style={[
-              styles.carouselDot,
-              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(107, 76, 59, 0.25)' },
-              overviewIndex === index && { backgroundColor: isDark ? Colors.dark.text : '#6B4C3B' },
-            ]}
-          />
-        ))}
-      </View>
+      <HomeCarouselDots count={2} index={overviewIndex} dark={isDark} />
     </View>
   );
 
@@ -2156,8 +2138,7 @@ export default function HomeScreen() {
           options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
         ]}
       >
-        <BlurView
-          {...androidBlurProps}
+        <HomeGlassSurface
           intensity={item.blurIntensity ?? 24}
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           style={styles.liquidGlassCardBackground}
@@ -2205,6 +2186,7 @@ export default function HomeScreen() {
                   shadowOpacity: 0.3,
                   shadowRadius: 4,
                   elevation: 4,
+                  ...androidHomeShadow,
                 },
               ]}
             >
@@ -2217,7 +2199,7 @@ export default function HomeScreen() {
               {item.description}
             </ThemedText>
           </View>
-        </BlurView>
+        </HomeGlassSurface>
       </View>
     );
   };
@@ -2267,8 +2249,7 @@ export default function HomeScreen() {
               activeOpacity={0.86}
               onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
-              <BlurView
-                {...androidBlurProps}
+              <HomeGlassSurface
                 intensity={card.blurIntensity ?? 24}
                 tint={colorScheme === 'dark' ? 'dark' : 'light'}
                 style={styles.liquidGlassCardBackground}
@@ -2302,6 +2283,7 @@ export default function HomeScreen() {
                         shadowOpacity: 0.3,
                         shadowRadius: 4,
                         elevation: 4,
+                        ...androidHomeShadow,
                       },
                     ]}
                   >
@@ -2314,7 +2296,7 @@ export default function HomeScreen() {
                     {t('quick.restore')}
                   </ThemedText>
                 </View>
-              </BlurView>
+              </HomeGlassSurface>
             </TouchableOpacity>
           ))}
         </View>
@@ -2390,8 +2372,8 @@ export default function HomeScreen() {
   // isBabyBorn=false while navigating to the baby-edit screen).
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
+    <HomeBackground style={styles.backgroundImage}>
+      <SafeAreaView style={[styles.container, Platform.OS === 'android' && { paddingTop: safeAreaInsets.top }]}>
       <StatusBar hidden={true} />
         {isLoading ? (
           <View style={styles.loadingContainer}>
@@ -2402,7 +2384,7 @@ export default function HomeScreen() {
           <ScrollView 
           ref={mainScrollRef}
           style={styles.scrollView} 
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[styles.contentContainer, isCompactAndroid && styles.contentContainerCompact]}
           scrollEnabled={!isQuickAccessDragging}
           onLayout={(event) => {
             quickAccessScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
@@ -2469,7 +2451,7 @@ export default function HomeScreen() {
           onDismiss={dismissNightWakePrompt}
         />
       </SafeAreaView>
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 
@@ -2488,6 +2470,27 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
+  },
+  contentContainerCompact: {
+    paddingHorizontal: 16,
+  },
+  greetingContainerCompact: {
+    paddingHorizontal: 16,
+    paddingTop: 22,
+    paddingBottom: 18,
+  },
+  greetingCompact: {
+    fontSize: 26,
+    lineHeight: 32,
+    includeFontPadding: false,
+  },
+  dateTextCompact: {
+    fontSize: 16,
+    lineHeight: 22,
+    includeFontPadding: false,
+  },
+  summaryContainerCompact: {
+    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -2531,6 +2534,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 14,
     elevation: 8,
+    ...androidHomeShadow,
   },
 
   // Begrüßungsbereich - Liquid Glass Design
@@ -2591,6 +2595,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 16,
     elevation: 5,
+    ...androidHomeShadow,
   },
   activeTimerGradient: {
     // Kein absoluteFillObject — in RN 0.86 entfernt (zur Laufzeit undefined).
@@ -2717,6 +2722,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 5,
+    ...androidHomeShadow,
   },
   sleepCardBody: {
     flexDirection: 'row',
@@ -2827,22 +2833,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     width: '100%',
   },
-  carouselDots: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 10,
-  },
-  carouselDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(107, 76, 59, 0.25)',
-    marginHorizontal: 4,
-  },
-  carouselDotActive: {
-    backgroundColor: '#6B4C3B',
-  },
-
   // Recommendation Card
   recommendationContainer: {
     flex: 1,
@@ -2973,6 +2963,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.3,
@@ -3039,6 +3032,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 5,
+    ...androidHomeShadow,
     minHeight: 66,
     justifyContent: 'center',
     alignItems: 'center',
@@ -3046,7 +3040,8 @@ const styles = StyleSheet.create({
   liquidGlassStatIcon: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 32,
-    padding: 14,
+    // Android emoji glyphs need more room than their nominal font size.
+    padding: Platform.OS === 'android' ? 6 : 14,
     marginBottom: 6,
     alignSelf: 'center',
     shadowColor: '#000',
@@ -3054,6 +3049,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 6,
+    ...androidHomeShadow,
     width: 64,
     height: 64,
     justifyContent: 'center',
@@ -3063,8 +3059,16 @@ const styles = StyleSheet.create({
   },
   statEmoji: {
     fontSize: 32,
-    lineHeight: 34,
     textAlign: 'center',
+    ...Platform.select({
+      android: {
+        width: '100%',
+        includeFontPadding: true,
+      },
+      default: {
+        lineHeight: 34,
+      },
+    }),
   },
   liquidGlassStatValue: {
     color: 'rgba(255, 255, 255, 0.95)',
@@ -3134,6 +3138,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
 
   // Quick Access Cards Section
@@ -3193,6 +3198,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 5,
+    ...androidHomeShadow,
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
@@ -3334,6 +3340,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
   cardTitle: {
     fontSize: 16,

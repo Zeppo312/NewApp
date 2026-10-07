@@ -1,4 +1,5 @@
 import { canImportLottiMessage, isUnavailableLottiAnswer, retryQuestionForMessage } from "@/lib/askLotti/messageActions";
+import { AiConsentGate } from '@/components/privacy/DataConsentBoundary';
 import React, {
   useCallback,
   useEffect,
@@ -29,6 +30,7 @@ import {
 } from "react-native-safe-area-context";
 
 import VoiceLogModal from "@/components/VoiceLogModal";
+import { ReportAnswerButton } from "@/components/askLotti/ReportAnswerButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { parseLottiEntries } from "@/lib/voiceLog/api";
 import type { VoiceLogParseResult } from "@/lib/voiceLog/types";
@@ -53,6 +55,7 @@ import {
   createConversationId,
   createMessageId,
   deriveConversationTitle,
+  getConversationStorageEpoch,
   loadConversations,
   removeConversation,
   saveConversations,
@@ -72,6 +75,9 @@ import type {
 type ChatMessage = StoredChatMessage;
 
 export default function AskLottiScreen() {
+  return <AiConsentGate><ConsentedAskLottiScreen /></AiConsentGate>;
+}
+function ConsentedAskLottiScreen() {
   const { locale } = useLocale();
   const { activeBabyId, activeBaby } = useActiveBaby();
   const { user } = useAuth();
@@ -149,6 +155,7 @@ export default function AskLottiScreen() {
   const [isChatListVisible, setChatListVisible] = useState(false);
   const conversationsRef = useRef<AskLottiConversation[]>([]);
   const isHydratedRef = useRef(false);
+  const conversationStorageEpoch = useRef(getConversationStorageEpoch()).current;
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +198,7 @@ export default function AskLottiScreen() {
     });
     conversationsRef.current = next;
     setConversations(next);
-    void saveConversations(next);
+    void saveConversations(next, conversationStorageEpoch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, activeConversationId]);
 
@@ -236,7 +243,7 @@ export default function AskLottiScreen() {
         );
         conversationsRef.current = next;
         setConversations(next);
-        void saveConversations(next);
+        void saveConversations(next, conversationStorageEpoch);
         if (conversation.id === activeConversationId) {
           setActiveConversationId(createConversationId());
           setMessages([introMessage]);
@@ -410,6 +417,7 @@ export default function AskLottiScreen() {
       <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
         <Header
+          topSafeAreaHandled
           title={t("title")}
           subtitle={t(isPregnancy ? "subtitlePregnancy" : "subtitle")}
           showBackButton
@@ -439,8 +447,10 @@ export default function AskLottiScreen() {
         />
         <KeyboardAvoidingView
           style={styles.flex}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={8}
+          // Android edge-to-edge layouts can remain full-height above the IME.
+          // Apply only the actual overlap, including when adjustResize is active.
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
           <ScrollView
             ref={scrollRef}
@@ -629,6 +639,7 @@ export default function AskLottiScreen() {
                       {message.disclaimer}
                     </Text>
                   ) : null}
+                  <ReportAnswerButton message={message} conversationId={activeConversationId} isDark={isDark} />
                 </View>
               </View>
             ))}

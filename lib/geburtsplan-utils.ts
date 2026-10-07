@@ -550,6 +550,15 @@ export const generateAndDownloadPDF = async (babyIconBase64: string | null, setI
       <div class="footer">${babyIconBase64 ? `<div class="baby-icon"><img src="data:image/png;base64,${babyIconBase64}" alt="Baby Icon" /></div>` : ''}<p>${escapeHtml(t('export.footer'))}</p></div></div></body></html>`;
     }
 
+    // Androids Druckdialog bietet „Als PDF speichern“ direkt an. HTML wird
+    // an den PrintManager übergeben, ohne eine Cache-Datei an expo-sharing
+    // weiterzureichen: dessen Leseprüfung kann auch App-Cache-Pfade ablehnen.
+    if (Platform.OS === 'android') {
+      await Print.printAsync({ html: htmlContent });
+      // Android bestätigt nur das Öffnen des Dialogs, nicht das Speichern.
+      return;
+    }
+
     // Generiere das PDF mit expo-print
     const printOptions: Parameters<typeof Print.printToFileAsync>[0] = {
       html: htmlContent,
@@ -566,11 +575,14 @@ export const generateAndDownloadPDF = async (babyIconBase64: string | null, setI
         : {}),
     };
 
-    const { uri } = await Print.printToFileAsync(printOptions);
+    const pdf = await Print.printToFileAsync(printOptions);
+
+    // Im Browser öffnet expo-print bereits den Druck-/PDF-Speicherdialog.
+    if (Platform.OS === 'web') return;
 
     // Teile die PDF-Datei
     if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, {
+      await Sharing.shareAsync(pdf.uri, {
         mimeType: 'application/pdf',
         dialogTitle: t('export.dialogTitle'),
         UTI: 'com.adobe.pdf'

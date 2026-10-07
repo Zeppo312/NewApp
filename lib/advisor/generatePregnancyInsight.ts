@@ -8,7 +8,7 @@
  * lokalen Analyse (buildPregnancyAnalysis).
  */
 
-import { supabase } from '@/lib/supabase';
+import { invokeForegroundAdvisor } from './foregroundRequest';
 import type { AppLocale } from '@/lib/localization';
 
 import { localDateString } from './advisorStorage';
@@ -21,15 +21,13 @@ export const generatePregnancyInsight = async (
   locale: AppLocale = 'de',
 ): Promise<RemoteInsight | null> => {
   try {
-    const { data, error } = await supabase.functions.invoke('advisor-generate', {
-      body: {
-        mode: 'pregnancy',
-        locale,
-        localDate: localDateString(),
-        signals: toPregnancyRuleSignals(signals),
-      },
+    const data = await invokeForegroundAdvisor({
+      mode: 'pregnancy',
+      locale,
+      localDate: localDateString(),
+      signals: toPregnancyRuleSignals(signals),
     });
-    if (error || !data?.main?.id || !data?.main?.body) return null;
+    if (!data?.main?.id || !data?.main?.body) return null;
     return {
       main: {
         id: data.main.id,

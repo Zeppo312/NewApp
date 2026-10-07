@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { useConvex } from '@/contexts/ConvexContext';
 import { useBackend } from '@/contexts/BackendContext';
 import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
 
@@ -11,7 +10,6 @@ import { SleepEntriesService } from '@/lib/services/SleepEntriesService';
  * const result = await service.getEntries();
  */
 export const useSleepEntriesService = (userId?: string | null) => {
-  const { convexClient } = useConvex();
   const { activeBackend } = useBackend();
 
   const service = useMemo(() => {
@@ -19,8 +17,8 @@ export const useSleepEntriesService = (userId?: string | null) => {
       return null;
     }
 
-    return new SleepEntriesService(activeBackend, convexClient, userId);
-  }, [activeBackend, convexClient, userId]);
+    return new SleepEntriesService(userId);
+  }, [activeBackend, userId]);
 
   return service;
 };

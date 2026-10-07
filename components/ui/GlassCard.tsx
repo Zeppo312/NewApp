@@ -141,6 +141,8 @@ export function GlassCard({
   glossOpacity = 0.45,
   grainOpacity = 0.06,
   shadeOpacity = 1,
+  skipAndroidBlur = false,
+  fill = false,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -159,6 +161,9 @@ export function GlassCard({
   glossOpacity?: number;
   grainOpacity?: number;
   shadeOpacity?: number;
+  skipAndroidBlur?: boolean;
+  /** Fill a shared row height so the backdrop and content grow together. */
+  fill?: boolean;
 }) {
   const wrapStyle: ViewStyle = {
     borderRadius: radius,
@@ -170,23 +175,18 @@ export function GlassCard({
     Object.assign(wrapStyle, TOKENS.shadow);
   }
 
-  const androidBlurProps: Partial<BlurViewProps> =
-    Platform.OS === 'android'
-      ? { blurMethod: 'dimezisBlurView', blurReductionFactor: 1 }
-      : {};
-
   // Der Inhalt liegt bewusst NICHT in der BlurView: expo-blur rendert auf iOS
   // (neue Architektur) verschachtelte Kinder nicht zuverlässig. Blur + Deko
   // liegen als absolute Schichten hinter dem normal layoutenden Inhalt.
+  // Androids blurMethod="none" paints a native tint. Screens that need a
+  // translucent fallback can skip it and use the frost and tone layers below.
   return (
     <View style={[wrapStyle, style]}>
-      <View style={[styles.clip, { borderRadius: radius }]}>
-        <BlurView
-          {...androidBlurProps}
-          intensity={intensity}
-          tint={tint}
-          style={styles.absoluteFill}
-        />
+      <View style={[styles.clip, fill && { flex: 1 }, { borderRadius: radius }]}>
+        {!(Platform.OS === 'android' && skipAndroidBlur) && (
+          <BlurView blurMethod={Platform.OS === 'android' ? 'none' : undefined}
+            intensity={intensity} tint={tint} style={styles.absoluteFill} />
+        )}
         <View style={[styles.absoluteFill, { backgroundColor: frostColor }]} />
         {toneColor ? (
           <View style={[styles.absoluteFill, { backgroundColor: toneColor }]} />
@@ -227,7 +227,7 @@ export function GlassCard({
           />
         ) : null}
 
-        <View style={[styles.content, contentStyle]}>{children}</View>
+        <View style={[styles.content, fill && { flex: 1 }, contentStyle]}>{children}</View>
       </View>
     </View>
   );

@@ -12,7 +12,7 @@ import { useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
-import { GlassCard } from '@/components/ui/GlassCard';
+import { CareGlassCard } from '@/components/advisor/CareGlassCard';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import {
@@ -227,7 +227,7 @@ function RelationshipPlot({ report, width, feedingLabel, diaperLabel, sleepLabel
   );
 }
 
-export function CareAnalyticsSection({ babyId }: { babyId?: string | null }) {
+export const CareAnalyticsSection = React.memo(function CareAnalyticsSection({ babyId }: { babyId?: string | null }) {
   const { locale, localeTag } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const isDark =
@@ -248,7 +248,7 @@ export function CareAnalyticsSection({ babyId }: { babyId?: string | null }) {
       previousLine: isDark ? 'rgba(255,255,255,0.32)' : 'rgba(74,58,51,0.30)',
       pointFill: isDark ? '#18131F' : '#FFFFFF',
     }),
-    [adaptiveColors, isDark],
+    [adaptiveColors.textPrimary, adaptiveColors.textSecondary, adaptiveColors.textTertiary, isDark],
   );
   const styles = useMemo(() => createStyles(theme), [theme]);
   const tileProps = useMemo(
@@ -366,7 +366,7 @@ export function CareAnalyticsSection({ babyId }: { babyId?: string | null }) {
         })}
       </View>
 
-      <GlassCard {...tileProps} radius={26} contentStyle={styles.reportContent}>
+      <CareGlassCard {...tileProps} radius={26} contentStyle={styles.reportContent}>
         <View style={styles.reportHeader}>
           <View style={styles.reportHeaderText}>
             <ThemedText adaptive={false} style={styles.reportEyebrow}>{report.title}</ThemedText>
@@ -481,10 +481,10 @@ export function CareAnalyticsSection({ babyId }: { babyId?: string | null }) {
             </View>
           </>
         )}
-      </GlassCard>
+      </CareGlassCard>
     </View>
   );
-}
+});
 
 const createStyles = (theme: AnalyticsTheme) => StyleSheet.create({
   section: { gap: 14 },

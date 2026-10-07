@@ -23,7 +23,7 @@ import {
   type GestureResponderEvent,
   type ViewStyle,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -96,7 +96,12 @@ export function LottiWeekCard({ style }: Props) {
   const oneLineLimit = useLineLimit(1);
   // Enge Zeilen-Layouts (Emoji + Text + Button nebeneinander) lassen bei großer
   // Schrift keine sinnvolle Textbreite mehr übrig — dann untereinander stapeln.
-  const isStacked = useFontScale() >= 1.3;
+  const fontScale = useFontScale();
+  const isStacked = fontScale >= 1.3;
+  const [cardWidth, setCardWidth] = useState(0);
+  const isCompactAndroid = Platform.OS === 'android' && cardWidth > 0 && cardWidth < 310;
+  // Reserve a complete row for collecting hearts when seven days leave no room.
+  const isFooterStacked = isStacked || (Platform.OS === 'android' && cardWidth > 0 && cardWidth < 330 * fontScale);
   const twoLineLimit = useLineLimit(2);
   const reviewCtaHeight = useScaledSize(32);
   const reviewEmojiBubbleSize = useScaledSize(38);
@@ -298,13 +303,11 @@ export function LottiWeekCard({ style }: Props) {
         activeOpacity={0.9}
         onPress={handlePress}
         style={[styles.wrapper, style]}
+        onLayout={(event) => setCardWidth(event.nativeEvent.layout.width)}
         accessibilityRole="button"
         accessibilityLabel={`${copy.title}. ${subtitle}`}
       >
-        <BlurView
-          {...(Platform.OS === 'android'
-            ? { blurMethod: 'dimezisBlurView' as const, blurReductionFactor: 1 }
-            : {})}
+        <HomeGlassSurface
           intensity={22}
           tint={isDark ? 'dark' : 'light'}
           style={[styles.blur, { backgroundColor: glassBlurBg }]}
@@ -312,13 +315,15 @@ export function LottiWeekCard({ style }: Props) {
           <View
             style={[
               styles.container,
+              isCompactAndroid && styles.containerCompact,
               { backgroundColor: glassContainerBg, borderColor: glassBorder },
             ]}
           >
-            <View style={[styles.row, isStacked ? styles.rowStacked : null]}>
+            <View style={[styles.row, isCompactAndroid && styles.rowCompact, isStacked ? styles.rowStacked : null]}>
               <Animated.View
                 style={[
                   styles.avatarBlock,
+                  isCompactAndroid && styles.avatarCompact,
                   { transform: [{ scale: avatarScale }] },
                 ]}
                 // data-avatar-state damit später Illustration leicht zu finden
@@ -327,6 +332,7 @@ export function LottiWeekCard({ style }: Props) {
                 <View
                   style={[
                     styles.placeholder,
+                    isCompactAndroid && styles.avatarCompact,
                     { borderColor: avatarBorder },
                   ]}
                 >
@@ -369,7 +375,7 @@ export function LottiWeekCard({ style }: Props) {
               <View style={[styles.textBlock, isStacked ? styles.textBlockStacked : null]}>
                 <ThemedText
                   adaptive={false}
-                  style={[styles.title, { color: textPrimary }]}
+                  style={[styles.title, isCompactAndroid && styles.titleCompact, { color: textPrimary }]}
                   numberOfLines={twoLineLimit}
                 >
                   {copy.title}
@@ -425,6 +431,7 @@ export function LottiWeekCard({ style }: Props) {
               onPress={handleStoryPress}
               style={({ pressed }) => [
                 styles.reviewRow,
+                isCompactAndroid && styles.reviewRowCompact,
                 isStacked ? styles.reviewRowStacked : null,
                 {
                   backgroundColor: isDark
@@ -441,8 +448,8 @@ export function LottiWeekCard({ style }: Props) {
                 style={[
                   styles.reviewEmojiBubble,
                   {
-                    width: reviewEmojiBubbleSize,
-                    height: reviewEmojiBubbleSize,
+                    width: isCompactAndroid && !isStacked ? 32 : reviewEmojiBubbleSize,
+                    height: isCompactAndroid && !isStacked ? 32 : reviewEmojiBubbleSize,
                     borderRadius: reviewEmojiBubbleSize / 2,
                   },
                 ]}
@@ -467,7 +474,7 @@ export function LottiWeekCard({ style }: Props) {
                   {reviewSubtitle}
                 </ThemedText>
               </View>
-              <View style={[styles.reviewCta, { height: reviewCtaHeight, borderRadius: reviewCtaHeight / 2 }]}>
+              <View style={[styles.reviewCta, isCompactAndroid && styles.reviewCtaCompact, { height: reviewCtaHeight, borderRadius: reviewCtaHeight / 2 }]}>
                 <ThemedText adaptive={false} style={styles.reviewCtaText}>
                   {c.story}
                 </ThemedText>
@@ -477,8 +484,8 @@ export function LottiWeekCard({ style }: Props) {
 
             <View style={[styles.divider, { backgroundColor: dividerColor }]} />
 
-            <View style={[styles.bottomRow, isStacked ? styles.bottomRowStacked : null]}>
-              <View style={[styles.daysRow, isStacked ? styles.daysRowStacked : null]}>
+            <View style={[styles.bottomRow, isFooterStacked ? styles.bottomRowStacked : null]}>
+              <View style={[styles.daysRow, isFooterStacked ? styles.daysRowStacked : null]}>
                 {c.dayLabels.map((label, idx) => {
                   const isToday = idx === todayIndex;
                   const isOn = days[idx];
@@ -487,7 +494,7 @@ export function LottiWeekCard({ style }: Props) {
                       key={label}
                       style={[
                         styles.dayChip,
-                        isStacked ? styles.dayChipStacked : { width: dayChipWidth },
+                        isFooterStacked ? styles.dayChipStacked : { width: dayChipWidth },
                       ]}
                     >
                       <ThemedText
@@ -516,11 +523,11 @@ export function LottiWeekCard({ style }: Props) {
                 })}
               </View>
 
-              <View style={styles.ctaInner}>
+              <View style={[styles.ctaInner, isFooterStacked && styles.ctaInnerStacked]}>
                 <ThemedText
                   adaptive={false}
                   style={[styles.cta, { color: ACCENT_PURPLE }]}
-                  numberOfLines={oneLineLimit}
+                  numberOfLines={isFooterStacked ? undefined : oneLineLimit}
                 >
                   {ctaLabel}
                 </ThemedText>
@@ -528,7 +535,7 @@ export function LottiWeekCard({ style }: Props) {
               </View>
             </View>
           </View>
-        </BlurView>
+        </HomeGlassSurface>
       </TouchableOpacity>
 
       <WochenkarteStory
@@ -561,6 +568,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 4,
+    ...androidHomeShadow,
   },
   blur: {
     borderRadius: 22,
@@ -572,6 +580,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 12,
+  },
+  containerCompact: {
+    paddingHorizontal: 12,
+  },
+  rowCompact: {
+    gap: 10,
+  },
+  avatarCompact: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+  },
+  titleCompact: {
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  reviewRowCompact: {
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  reviewCtaCompact: {
+    minWidth: 60,
+    paddingHorizontal: 8,
+  },
+  ctaInnerStacked: {
+    alignSelf: 'flex-end',
+    maxWidth: '100%',
+    minHeight: 32,
   },
   row: {
     flexDirection: 'row',
@@ -621,6 +657,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 4,
+    ...androidHomeShadow,
   },
   levelBadgeText: {
     fontSize: 11,
@@ -672,6 +709,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   progressHint: {
+    ...(Platform.OS === 'android' ? { lineHeight: 16, includeFontPadding: false } : {}),
     marginTop: 4,
     fontSize: 10.5,
     fontWeight: '500',
@@ -782,6 +820,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   dayLabel: {
+    ...(Platform.OS === 'android' ? { lineHeight: 16, includeFontPadding: false } : {}),
     fontSize: 10,
     letterSpacing: 0,
   },
@@ -805,6 +844,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   cta: {
+    flexShrink: 1,
+    ...(Platform.OS === 'android' ? { lineHeight: 18, includeFontPadding: false } : {}),
     fontSize: 12.5,
     fontWeight: '700',
     letterSpacing: 0,

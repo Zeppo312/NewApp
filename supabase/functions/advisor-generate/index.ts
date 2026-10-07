@@ -1,3 +1,4 @@
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
 // Lottis Fürsorge — On-Demand-Analyse beim Öffnen der Seite.
 //
 // Die App sammelt die Tagessignale lokal (buildDailySignals) und schickt sie
@@ -19,6 +20,7 @@ import {
   type RuleSignals,
 } from './advisorRules.ts';
 import { generateAiText, generatePregnancyAiText } from './advisorAi.ts';
+import { dataProcessingAllowed } from '../_shared/dataConsent.ts';
 import {
   evaluatePregnancyRules,
   selectPregnancyCandidate,
@@ -29,9 +31,6 @@ import { normalizeLocale } from '../_shared/localization.ts';
 import { verifySubscriptionFeatureAccess } from '../_shared/premiumAccess.ts';
 
 declare const Deno: { env: { get: (key: string) => string | undefined } };
-
-/** Max. KI-Formulierungen pro Nutzer/Baby/Tag (Admins ausgenommen). */
-const MAX_AI_RUNS_PER_DAY = 3;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -87,6 +86,10 @@ serve(async (req: Request) => {
     }
 
     const admin = createClient(supabaseUrl, serviceKey);
+    await assertAccountActive(admin, user.id);
+    if (!await dataProcessingAllowed(admin, user.id, 'health')) return json({ error: 'health_consent_required' }, 403);
+    const aiConsent = await dataProcessingAllowed(admin, user.id, 'ai');
+
     const locale = normalizeLocale(body.locale);
 
     const featureAccess = await verifySubscriptionFeatureAccess(
@@ -177,7 +180,7 @@ serve(async (req: Request) => {
       !isAdmin &&
       todayRow &&
       todayRow.rule_id === candidate.ruleId &&
-      todayRow.source === 'ai' &&
+      todayRow.source === 'ai' && aiConsent &&
       (todayRow.facts as { locale?: string } | null)?.locale === locale
     ) {
       return json({
@@ -197,14 +200,19 @@ serve(async (req: Request) => {
     }
 
     // KI-Formulierung (optional) mit Template-Fallback.
-    // Max. MAX_AI_RUNS_PER_DAY Formulierungen pro Tag (Admins ausgenommen).
-    const aiRunsToday = Number((todayRow?.facts as any)?.ai_runs ?? 0) || 0;
-    const underCap = isAdmin || aiRunsToday < MAX_AI_RUNS_PER_DAY;
-    let aiRuns = aiRunsToday;
+    // Reserve before the provider call. Client-writable facts, baby IDs and
+    // localDate cannot reset the server's UTC daily budget.
+    let quota: { allowed?: boolean; used?: number } | null = null;
+    if (settings?.ai_enabled !== false && aiConsent) {
+      const reserved = await admin.rpc('consume_advisor_ai_quota', { p_user_id: user.id });
+      if (reserved.error) return json({ error: 'quota_unavailable' }, 503);
+      quota = reserved.data;
+    }
+    const aiRuns = quota?.used ?? 0;
     let headline = candidate.headline;
     let text = candidate.body;
     let source = 'rules';
-    if (settings?.ai_enabled !== false && underCap) {
+    if (quota?.allowed === true && await dataProcessingAllowed(admin, user.id, 'ai')) {
       const ai = isPregnancy
         ? await generatePregnancyAiText(
             candidate as any,
@@ -216,7 +224,6 @@ serve(async (req: Request) => {
         headline = ai.headline;
         text = ai.body;
         source = 'ai';
-        aiRuns += 1;
       }
     }
 
@@ -243,6 +250,7 @@ serve(async (req: Request) => {
     };
     let saved: { id: string } | null = null;
     let saveError: unknown = null;
+    if (!await dataProcessingAllowed(admin, user.id, source === 'ai' ? 'ai' : 'health')) return json({ error: 'consent_withdrawn' }, 403);
     if (babyId) {
       const result = await admin
         .from('advisor_messages')
@@ -287,6 +295,7 @@ serve(async (req: Request) => {
       messageId: saved?.id ?? null,
     });
   } catch (err) {
+    if (err instanceof Error && err.message === 'consent_check_unavailable') return json({ error: 'consent_check_unavailable' }, 503);
     console.error('advisor-generate error:', err);
     return json({ error: 'Internal error' }, 500);
   }

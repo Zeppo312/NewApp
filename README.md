@@ -97,6 +97,10 @@ EXPO_PUBLIC_RC_ANDROID_KEY=goog_DEIN_PUBLIC_SDK_KEY
 
 Die App akzeptiert außerdem die älteren Variablennamen `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` und `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`. Serverseitige Schlüssel gehören in die Konfiguration der jeweiligen Edge Function. `EXPO_PUBLIC_*`-Werte werden in das App-Bundle übernommen und dürfen keine privaten Schlüssel enthalten.
 
+Für Android wird ein eigener öffentlicher Google-Play-SDK-Key aus RevenueCat benötigt; ein iOS-Key ersetzt ihn nicht. `build.development.env` wird von Metro nicht automatisch geladen und enthält für Android nur einen Platzhalter. Nach Änderungen an `.env.local` Metro neu starten und die App vollständig neu laden. Für EAS-Builds und Updates den Key außerdem in der jeweils verwendeten EAS-Umgebung setzen. Ohne Key bleibt der Abo-Status „nicht verfügbar“; im Entwicklungsbetrieb wird der Konfigurationshinweis nur einmal im Terminal protokolliert.
+
+**Android-Benachrichtigungen:** Wenn Expo Go beim Anlegen eines Kanals mit `null cannot be cast ... NotificationsChannelsProvider` scheitert, fehlt der native Kanal-Provider im Expo-Go-Host. Die App fängt ausschließlich diesen Fehler in Android Expo Go ab und setzt die Berechtigungsprüfung fort. Kanalverhalten und Zustellung müssen mit einem funktionierenden Expo-Go-Host oder einem eigenen Development Build geprüft werden. In eigenen App-Builds wird derselbe Fehler weiterhin gemeldet; dort ist ein zur installierten Expo-Version passender nativer Neubau erforderlich.
+
 ### Startbefehle
 
 ```sh

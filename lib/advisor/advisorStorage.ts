@@ -487,47 +487,6 @@ export const fetchAdvisorSettings = async (): Promise<AdvisorSettings> => {
   }
 };
 
-/**
- * Kontext für den täglichen Server-Job (advisor-daily) aktualisieren:
- * Zeitzone immer, Koordinaten nur wenn die Standortfreigabe bereits
- * erteilt ist (kein Prompt). Fire-and-forget beim Öffnen der Seite.
- */
-export const updateAdvisorContext = async (): Promise<void> => {
-  const userId = await getUserId();
-  if (!userId) return;
-
-  const payload: Record<string, unknown> = { user_id: userId };
-  try {
-    payload.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch {
-    // Zeitzone nicht ermittelbar – Server-Default bleibt.
-  }
-
-  try {
-    const Location = await import('expo-location');
-    const { status } = await Location.getForegroundPermissionsAsync();
-    if (status === 'granted') {
-      const pos = await Location.getLastKnownPositionAsync();
-      if (pos?.coords) {
-        // Auf ~1 km runden – für das Tageswetter reicht das (Datensparsamkeit).
-        payload.latitude = Math.round(pos.coords.latitude * 100) / 100;
-        payload.longitude = Math.round(pos.coords.longitude * 100) / 100;
-        payload.location_updated_at = new Date().toISOString();
-      }
-    }
-  } catch {
-    // Standort optional – ohne Koordinaten gibt es serverseitig kein Wetter.
-  }
-
-  try {
-    await supabase
-      .from('advisor_settings')
-      .upsert(payload, { onConflict: 'user_id' });
-  } catch {
-    // best effort
-  }
-};
-
 /** Einstellungen speichern (Upsert auf user_id). */
 export const saveAdvisorSettings = async (
   settings: AdvisorSettings,
@@ -543,7 +502,7 @@ export const saveAdvisorSettings = async (
         themes: settings.themes,
         quiet_hours_start: settings.quietHoursStart,
         quiet_hours_end: settings.quietHoursEnd,
-        push_enabled: settings.pushEnabled,
+        push_enabled: false,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },

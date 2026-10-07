@@ -19,7 +19,6 @@
     "constants/**/*.tsx",
     "contexts/**/*.ts",
     "contexts/**/*.tsx",
-    "convex/**/*.ts",
     "hooks/**/*.ts",
     "hooks/**/*.tsx",
     "lib/**/*.ts",
@@ -44,6 +43,7 @@
     "scripts",
     "supabase/functions",
     "**/* 2.ts",
-    "**/* 2.tsx"
+    "**/* 2.tsx",
+    "convex"
   ]
 }

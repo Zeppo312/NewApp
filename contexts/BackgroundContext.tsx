@@ -19,7 +19,7 @@ const resolveBackgroundUri = () => `${FileSystem.documentDirectory}${BACKGROUND_
 const defaultBackground = require('@/assets/images/heller-background.png');
 const presetBackgrounds = {
   default: defaultBackground,
-  verspielt: require('@/assets/images/Background_Hell.png'),
+  verspielt: require('@/assets/images/Background_Hell.jpg'),
   dunkler: require('@/assets/images/dunkler-background.png'),
   nightmode: require('@/assets/images/nightmode.png'),
   shadow: require('@/assets/images/Shadow.png'),

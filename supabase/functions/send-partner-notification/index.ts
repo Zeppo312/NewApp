@@ -1,3 +1,6 @@
+import { secureEqual } from '../_shared/accountDeletion/contracts.ts';
+import { assertAccountActive } from '../_shared/accountDeletion/access.ts';
+import { assertDataProcessingAllowed } from '../_shared/dataConsent.ts';
 // Supabase Edge Function to send push notifications when partner activities are created
 // This function is triggered by a database webhook when a new partner_activity_notification is inserted
 
@@ -137,6 +140,10 @@ const getNotificationContent = (
 };
 
 serve(async (req: Request) => {
+  const serviceKey = Deno.env.get('ACCOUNT_DELETION_NOTIFICATION_SECRET');
+  if (!serviceKey || !secureEqual(req.headers.get('authorization') ?? '', 'Bearer ' + serviceKey)) {
+    return new Response(JSON.stringify({ message: 'Unauthorized' }), {status:401,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+  }
   try {
     // Get the webhook payload
     const payload: NotificationPayload = await req.json();
@@ -165,6 +172,10 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { user_id, partner_id, activity_type, activity_subtype, entry_id } = payload.record;
+    await assertAccountActive(supabase, user_id);
+    await assertDataProcessingAllowed(supabase, user_id);
+    if (partner_id) await assertDataProcessingAllowed(supabase, partner_id);
+    if (partner_id) await assertAccountActive(supabase, partner_id);
 
     const { data: recipientSettings, error: recipientSettingsError } = await supabase
       .from('user_settings')
@@ -294,6 +305,7 @@ serve(async (req: Request) => {
     console.log(`📬 Sending notification: ${emoji} ${title} - ${body}`);
 
     // Send push notification to each token
+    await assertDataProcessingAllowed(supabase,user_id); if(partner_id) await assertDataProcessingAllowed(supabase,partner_id);
     const pushPromises = tokens.map((tokenRecord: { token: string }) =>
       fetch(EXPO_PUSH_URL, {
         method: 'POST',

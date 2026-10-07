@@ -1,6 +1,9 @@
+import { activeDataConsentCopy, dataConsentCopy } from '@/lib/dataConsentCopy';
+import { useDataConsents } from '@/contexts/DataConsentContext';
+import { ConsentPage, consentStyles as consentPageStyles } from '@/components/privacy/DataConsentPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -10,18 +13,12 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Redirect, useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { useConvex } from '@/contexts/ConvexContext';
 import { useBackground } from '@/contexts/BackgroundContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { getAppSettings, saveAppSettings, AppSettings } from '@/lib/supabase';
 import { getCachedUserProfile } from '@/lib/appCache';
 import { exportUserData } from '@/lib/dataExport';
-import {
-  deleteUserAccount,
-  deleteUserData,
-  getAccountDeletionRequirements,
-} from '@/lib/profile';
 import { sleepActivityService } from '@/lib/sleepActivityService';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
@@ -35,10 +32,6 @@ import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGu
 import { useNotificationPreferences } from '@/hooks/useNotificationPreferences';
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatVitaminDReminderTime } from '@/lib/vitaminDReminder';
-import {
-  getSubscriptionManagementStoreLabel,
-  openSubscriptionManagement,
-} from '@/lib/subscriptionManagement';
 import { buildSleepDebugSnapshot, serializeSleepDebugSnapshot } from '@/lib/sleepDebug';
 import { hasFeatureAccess } from '@/lib/entitlements';
 import { fetchVoiceLogAccess } from '@/lib/voiceLog/access';
@@ -92,6 +85,19 @@ const FLOATING_VOICE_COLOR_LABEL_KEYS: Record<
 };
 
 export default function AppSettingsScreen() {
+  const consent = useDataConsents();
+  return consent.mode !== 'preview' && !consent.healthAllowed ? <BasicConsentSettings /> : <FullAppSettingsScreen />;
+}
+function BasicConsentSettings() {
+  const { locale } = useLocale(); const { signOut } = useAuth(); const router = useRouter(); const copy = activeDataConsentCopy[locale];
+  const s = consentPageStyles;
+  const links = [[copy.manage,'/data-consents'],[copy.privacy,'/datenschutz'],[copy.terms,'/nutzungsbedingungen'],[locale==='de'?'Abo verwalten':locale==='es'?'Gestionar suscripción':'Manage subscription','/subscription'],[copy.account,'/account-deletion'],[copy.support,'/support']] as const;
+  return <ConsentPage><Stack.Screen options={{ headerShown:false }} /><ThemedText style={s.title}>{copy.settingsTitle}</ThemedText><ThemedText style={s.body}>{copy.healthConsequence}</ThemedText>
+    {links.map(([label,href])=><TouchableOpacity key={href} accessibilityRole="button" style={s.secondary} onPress={()=>router.push(href)}><ThemedText style={s.linkText}>{label}</ThemedText></TouchableOpacity>)}
+    <TouchableOpacity accessibilityRole="button" style={s.link} onPress={()=>void signOut()}><ThemedText style={s.linkText}>{copy.signOut}</ThemedText></TouchableOpacity>
+  </ConsentPage>;
+}
+function FullAppSettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const router = useRouter();
@@ -111,8 +117,9 @@ export default function AppSettingsScreen() {
       }, () => {});
     });
   };
-  const { user, session, signOut } = useAuth();
+  const { user, session } = useAuth();
   const { locale, localeTag, preference, setPreference } = useLocale();
+  const consentCopy = (useDataConsents().mode === 'preview' ? dataConsentCopy : activeDataConsentCopy)[locale];
   const t = (
     key: AppSettingsTranslationKey,
     params?: Record<string, string | number>,
@@ -192,15 +199,13 @@ export default function AppSettingsScreen() {
   const [isNotificationsExpanded, setIsNotificationsExpanded] = useState(true);
   const [showVitaminDTimePicker, setShowVitaminDTimePicker] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isDeletingData, setIsDeletingData] = useState(false);
+  const isDeletingData = false;
   const [isChangingBackground, setIsChangingBackground] = useState(false);
   const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
   const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState(t('live.statusLoading'));
   const [isAdmin, setIsAdmin] = useState(false);
   const [isExportingSleepDebug, setIsExportingSleepDebug] = useState(false);
 
-  // Convex context
-  const { convexClient, lastSyncError } = useConvex();
 
   // Background context
   const {
@@ -302,6 +307,12 @@ export default function AppSettingsScreen() {
   };
 
   const refreshLiveActivitiesStatus = async (): Promise<string> => {
+    if (Platform.OS === 'android') {
+      const status = t('live.androidUnavailable');
+      setLiveActivitiesStatusText(status);
+      return status;
+    }
+
     if (!sleepActivityService.isLiveActivitySupported()) {
       const status = t('live.unavailable');
       setLiveActivitiesStatusText(status);
@@ -754,6 +765,18 @@ export default function AppSettingsScreen() {
   };
 
   const handleOpenLiveActivitiesPopup = async () => {
+    if (Platform.OS === 'android') {
+      Alert.alert(
+        t('live.androidTitle'),
+        t('live.androidUnsupportedMessage'),
+        [{ text: t('common.close'), style: 'cancel' }],
+        { cancelable: true }
+      );
+      return;
+    }
+
+    if (Platform.OS !== 'ios') return;
+
     const status = await refreshLiveActivitiesStatus();
     const message = [
       t('live.popupStatus', { status }),
@@ -840,99 +863,12 @@ export default function AppSettingsScreen() {
     }
   };
 
-  const runDeleteDataFlow = async (deleteAccount: boolean) => {
-    if (!user) {
-      Alert.alert(t('common.error'), t('auth.signInAgain'));
-      return;
-    }
-
-    try {
-      setIsDeletingData(true);
-      const { error } = deleteAccount ? await deleteUserAccount() : await deleteUserData();
-      if (error) throw error;
-
-      if (deleteAccount) {
-        Alert.alert(
-          t('data.accountDeletedTitle'),
-          t('data.accountDeletedMessage'),
-          [
-            {
-              text: t('common.ok'),
-              onPress: async () => {
-                await signOut();
-              },
-            },
-          ],
-        );
-        return;
-      }
-
-      await loadSettings();
-      Alert.alert(t('data.deletedTitle'), t('data.deletedMessage'));
-    } catch (err: any) {
-      console.error('Failed to delete user data:', err);
-      Alert.alert(t('common.error'), err?.message || t('data.deleteFailed'));
-    } finally {
-      setIsDeletingData(false);
-    }
-  };
-
-  const confirmAccountDeletion = async (onConfirm: () => void) => {
-    try {
-      const { data: requirements, error } = await getAccountDeletionRequirements();
-      if (error) throw error;
-
-      Alert.alert(
-        t('data.warningTitle'),
-        t('data.warningMessage', {
-          store: getSubscriptionManagementStoreLabel(),
-          apple: requirements?.hasAppleSignIn ? t('data.warningApple') : '',
-        }),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('data.manageSubscription'), onPress: () => void openSubscriptionManagement() },
-          { text: t('data.deleteAnyway'), style: 'destructive', onPress: onConfirm },
-        ],
-      );
-    } catch (error: any) {
-      console.error('Failed to load account deletion requirements:', error);
-      Alert.alert(
-        t('common.error'),
-        error?.message || t('data.warningLoadFailed'),
-      );
-    }
-  };
-
   const handleDeleteDataRequest = () => {
-    if (isDeletingData) return;
-    Alert.alert(
-      t('data.deleteTitle'),
-      t('data.deleteQuestion'),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('data.continue'),
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              t('data.deleteAccountTitle'),
-              t('data.deleteAccountQuestion'),
-              [
-                { text: t('common.cancel'), style: 'cancel' },
-                { text: t('data.deleteOnly'), style: 'destructive', onPress: () => runDeleteDataFlow(false) },
-                {
-                  text: t('data.deleteWithAccount'),
-                  style: 'destructive',
-                  onPress: () => {
-                    void confirmAccountDeletion(() => runDeleteDataFlow(true));
-                  },
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    Alert.alert(t('data.deleteTitle'), t('data.deleteAccountQuestion'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('data.deleteOnly'), onPress: () => router.push('/account-deletion?scope=data') },
+      { text: t('data.deleteWithAccount'), style: 'destructive', onPress: () => router.push('/account-deletion') },
+    ]);
   };
 
   const handleLanguageChange = async (nextPreference: LanguagePreference) => {
@@ -959,7 +895,7 @@ export default function AppSettingsScreen() {
     }
 
     void refreshLiveActivitiesStatus();
-  }, [user?.id]);
+  }, [user?.id, localeTag]);
 
   if (!session) {
     return <Redirect href="/(auth)/login" />;
@@ -973,6 +909,7 @@ export default function AppSettingsScreen() {
           <StatusBar hidden={true} />
           <View style={styles.container}>
             <Header
+              topSafeAreaHandled
               title={t('screen.title')}
               subtitle={t('screen.subtitle')}
               showBackButton
@@ -1603,28 +1540,30 @@ export default function AppSettingsScreen() {
                     )}
                   </LiquidGlassCard>
 
-                  <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
-                    <TouchableOpacity
-                      style={[styles.rowItem, styles.firstRow, isSyncingLiveActivities && styles.disabledRow]}
-                      onPress={handleOpenLiveActivitiesPopup}
-                      disabled={isSyncingLiveActivities}
-                    >
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={styles.rowTitle}>{t('live.title')}</ThemedText>
-                        <ThemedText style={styles.rowDescription}>{liveActivitiesStatusText}</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        {isSyncingLiveActivities ? (
-                          <ActivityIndicator size="small" color={theme.accent} />
-                        ) : (
-                          <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
-                        )}
+                  {(Platform.OS === 'ios' || Platform.OS === 'android') && (
+                    <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                      <TouchableOpacity
+                        style={[styles.rowItem, styles.firstRow, isSyncingLiveActivities && styles.disabledRow]}
+                        onPress={handleOpenLiveActivitiesPopup}
+                        disabled={isSyncingLiveActivities}
+                      >
+                        <View style={styles.rowIcon}>
+                          <IconSymbol name="moon.zzz" size={22} color={primaryIconColor} />
+                        </View>
+                        <View style={styles.rowContent}>
+                          <ThemedText style={styles.rowTitle}>{t(Platform.OS === 'android' ? 'live.androidTitle' : 'live.title')}</ThemedText>
+                          <ThemedText style={styles.rowDescription}>{liveActivitiesStatusText}</ThemedText>
+                        </View>
+                        <View style={styles.trailing}>
+                          {isSyncingLiveActivities ? (
+                            <ActivityIndicator size="small" color={theme.accent} />
+                          ) : (
+                            <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                          )}
                       </View>
                     </TouchableOpacity>
                   </LiquidGlassCard>
+                  )}
 
                   {/* Hintergrundbild */}
                   <View ref={backgroundSectionRef} onLayout={focusBackgroundSection} collapsable={false}>
@@ -1764,6 +1703,12 @@ export default function AppSettingsScreen() {
                       <IconSymbol name="lock.shield" size={16} color={primaryIconColor} />
                       <ThemedText style={styles.sectionTitle}>{t('data.section')}</ThemedText>
                     </View>
+
+                    <TouchableOpacity accessibilityRole="button" style={styles.rowItem} onPress={() => router.push('/data-consents')}>
+                      <View style={styles.rowIcon}><IconSymbol name="lock.shield" size={24} color={primaryIconColor} /></View>
+                      <View style={styles.rowContent}><ThemedText style={styles.rowTitle}>{consentCopy.settingsTitle}</ThemedText><ThemedText style={styles.rowDescription}>{consentCopy.settingsIntro}</ThemedText></View>
+                      <IconSymbol name="chevron.right" size={20} color={trailingIconColor} />
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       style={[styles.rowItem, isExporting && styles.disabledRow]}
@@ -1953,19 +1898,6 @@ export default function AppSettingsScreen() {
                         </View>
                       </TouchableOpacity>
 
-                      {/* Convex Status Info */}
-                      <View style={[styles.rowItem, styles.infoRow]}>
-                        <View style={styles.rowIcon}>
-                          <ThemedText style={{ fontSize: 24 }}>ℹ️</ThemedText>
-                        </View>
-                        <View style={styles.rowContent}>
-                          <ThemedText style={styles.rowTitle}>{t('admin.convexTitle')}</ThemedText>
-                          <ThemedText style={[styles.rowDescription, { fontSize: 11 }]}>
-                            {t('admin.client')}: {convexClient ? t('admin.clientReady') : t('admin.clientUnavailable')}
-                            {lastSyncError && `\n${t('admin.error', { message: lastSyncError.message.substring(0, 50) })}`}
-                          </ThemedText>
-                        </View>
-                      </View>
                     </LiquidGlassCard>
                   )}
                 </>

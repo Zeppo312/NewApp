@@ -13,11 +13,9 @@
  * (lib/entitlements.ts). isPro reicht NICHT — das gilt für alle Abos.
  */
 
-import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-
 import { getCachedUserProfile } from '@/lib/appCache';
 import { hasFeatureAccess } from '@/lib/entitlements';
+import { usePremiumFeatureAccess } from '@/lib/premiumFeatureAccess';
 
 export const fetchAdvisorAccess = async (): Promise<boolean> => {
   try {
@@ -44,19 +42,5 @@ export const fetchAdvisorAccess = async (): Promise<boolean> => {
  * Wird bei jedem Fokus neu geladen (Rolle kann sich serverseitig ändern).
  */
 export const useAdvisorAccess = (): boolean | null => {
-  const [access, setAccess] = useState<boolean | null>(null);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      fetchAdvisorAccess().then((allowed) => {
-        if (active) setAccess(allowed);
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
-
-  return access;
+  return usePremiumFeatureAccess('fuersorge');
 };

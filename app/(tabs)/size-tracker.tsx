@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, SafeAreaView, StatusBar, Text, TouchableWithoutFeedback, Platform, TextInputProps , Dimensions } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '@/components/ui/DateTimePicker';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/ThemedText';
@@ -455,10 +455,9 @@ export default function SizeTrackerScreen() {
   const renderWeightChart = () => {
     const subjectCopyLabel = trackerLabel;
     const unitLabel = getWeightUnit(selectedSubject);
-    const isNeonMomChart = false;
-    const chartFillFromOpacity = isNeonMomChart ? 0.3 : 0.15;
-    const chartFillToOpacity = isNeonMomChart ? 0.08 : 0.02;
-    const chartDotStrokeWidth = isNeonMomChart ? '3' : '2';
+    const chartFillFromOpacity = 0.08;
+    const chartFillToOpacity = 0;
+    const chartDotStrokeWidth = '2';
     const hasSeries =
       !!chartData &&
       !!chartData.datasets &&
@@ -944,7 +943,11 @@ export default function SizeTrackerScreen() {
             )}
             </ScrollView>
           </View>
-          <FloatingAddButton onPress={openWeightModal} bottomInset={Math.max(88, insets.bottom + 54)} rightInset={18} />
+          <FloatingAddButton
+            onPress={openWeightModal}
+            bottomInset={Math.max(88, insets.bottom + 54) - (process.env.EXPO_OS === 'android' ? 20 : 0)}
+            rightInset={18}
+          />
         </SafeAreaView>
       </ThemedBackground>
     </>
@@ -1022,11 +1025,6 @@ const styles = StyleSheet.create({
     width: '100%', // Volle Breite nutzen
     borderRadius: 22,
     padding: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
   chartWrapper: {
     flexDirection: 'row',

@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useFamilySubscriptionAccess } from '@/hooks/useFamilySubscriptionAccess';
+import { hasCheckedFamilyAccess, refreshFamilyAccess } from '@/lib/familySubscriptionAccess';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Linking, Platform } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -14,20 +16,14 @@ import { markPaywallShown, shouldShowPaywall } from '@/lib/paywall';
 import {
   DEFAULT_PAYWALL_CONTENT,
   fetchPaywallContent,
-  formatEuroAmount,
   type PaywallPlansContent,
 } from '@/lib/paywallContent';
 import {
-  DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
-  DEFAULT_DISPLAY_LITE_YEARLY_PRICE,
-  DEFAULT_DISPLAY_MONTHLY_PRICE,
-  DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
-  DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
-  DEFAULT_DISPLAY_YEARLY_PRICE,
-} from '@/lib/paywallDefaults';
-import {
   getRevenueCatConfigurationIssue,
   getRevenueCatPlanPricing,
+  isRevenueCatPurchaseCancelled,
+  RevenueCatPurchaseBlockedError,
+  type RevenueCatPlanKey,
   hasRevenueCatEntitlement,
   purchaseSubscriptionPlan,
   restoreRevenueCatPurchases,
@@ -40,43 +36,17 @@ import { localizePaywallPlansContent, translatePaywall } from '@/lib/paywallTran
 const APPLE_EULA_URL =
   'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 
-const buildPlanPrices = (
-  storePricing: RevenueCatPlanPricing,
-  localeTag: string,
-): PaywallPlanPrices => {
-  const resolve = (
-    fromStore: { price: number; priceString: string } | undefined,
-    fallbackAmount: number,
-  ) =>
-    fromStore
-      ? { amount: fromStore.price, label: fromStore.priceString }
-      : { amount: fallbackAmount, label: formatEuroAmount(fallbackAmount, localeTag) };
-
+const buildPlanPrices = (storePricing: RevenueCatPlanPricing, unavailable: string): PaywallPlanPrices => {
+  const resolve = (key: RevenueCatPlanKey) => {
+    const price = storePricing[key];
+    return price
+      ? { amount: price.price, label: price.priceString, currencyCode: price.currencyCode, verified: true }
+      : { amount: 0, label: unavailable, verified: false };
+  };
   return {
-    premiumMonthly: resolve(
-      storePricing.premiumMonthly,
-      DEFAULT_DISPLAY_MONTHLY_PRICE,
-    ),
-    premiumYearly: resolve(
-      storePricing.premiumYearly,
-      DEFAULT_DISPLAY_YEARLY_PRICE,
-    ),
-    standardMonthly: resolve(
-      storePricing.standardMonthly,
-      DEFAULT_DISPLAY_STANDARD_MONTHLY_PRICE,
-    ),
-    standardYearly: resolve(
-      storePricing.standardYearly,
-      DEFAULT_DISPLAY_STANDARD_YEARLY_PRICE,
-    ),
-    liteMonthly: resolve(
-      storePricing.liteMonthly,
-      DEFAULT_DISPLAY_LITE_MONTHLY_PRICE,
-    ),
-    liteYearly: resolve(
-      storePricing.liteYearly,
-      DEFAULT_DISPLAY_LITE_YEARLY_PRICE,
-    ),
+    premiumMonthly: resolve('premiumMonthly'), premiumYearly: resolve('premiumYearly'),
+    standardMonthly: resolve('standardMonthly'), standardYearly: resolve('standardYearly'),
+    liteMonthly: resolve('liteMonthly'), liteYearly: resolve('liteYearly'),
   };
 };
 
@@ -89,7 +59,8 @@ export default function PaywallScreen() {
   }>();
   const router = useRouter();
   const { user } = useAuth();
-  const { locale, localeTag } = useLocale();
+  const family = useFamilySubscriptionAccess();
+  const { locale } = useLocale();
   const t = (key: Parameters<typeof translatePaywall>[1]) => translatePaywall(locale, key);
 
   const nextRoute =
@@ -104,7 +75,12 @@ export default function PaywallScreen() {
   const [plansContent, setPlansContent] = useState<PaywallPlansContent>(() =>
     localizePaywallPlansContent(locale, DEFAULT_PAYWALL_CONTENT.plans),
   );
-  const [storePricing, setStorePricing] = useState<RevenueCatPlanPricing>({});
+  const [pricingState, setPricingState] = useState<{ userId: string; pricing: RevenueCatPlanPricing } | null>(null);
+  const storePricing = pricingState?.userId === user?.id ? pricingState?.pricing ?? {} : {};
+  const actionInFlight = useRef(false);
+  const currentUserId = useRef(user?.id);
+  useEffect(() => { currentUserId.current = user?.id; }, [user?.id]);
+  const [showManagement, setShowManagement] = useState(false);
   const [pendingAction, setPendingAction] = useState<
     'purchase' | 'restore' | null
   >(null);
@@ -118,7 +94,7 @@ export default function PaywallScreen() {
 
   const isRevenueCatConfigured = revenueCatConfigurationIssue === null;
   const isPurchaseActionDisabled =
-    isPurchasesSupported && (!isRevenueCatConfigured || !user || !!pendingAction);
+    !isPurchasesSupported || !isRevenueCatConfigured || !user || !!pendingAction || isAdminPreview || family?.status === 'active' || family?.status === 'unavailable';
   const billingLabel =
     Platform.OS === 'ios'
       ? t('billingApple')
@@ -131,12 +107,17 @@ export default function PaywallScreen() {
       : Platform.OS === 'android'
         ? 'Google Play'
         : t('store');
-  const visiblePurchaseError = purchaseError ?? (revenueCatConfigurationIssue ? t('unavailable') : null);
+  const visiblePurchaseError = purchaseError ?? (family?.status === 'unavailable' && user && hasCheckedFamilyAccess(user.id) ? t('refreshFailed') : null) ?? (revenueCatConfigurationIssue ? t('unavailable') : null);
 
   const planPrices = useMemo(
-    () => buildPlanPrices(storePricing, localeTag),
-    [localeTag, storePricing],
+    () => buildPlanPrices(storePricing, t('priceUnavailable')),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locale, storePricing],
   );
+
+  useEffect(() => {
+    if (!isAdminPreview && family?.status === 'active') router.replace(nextRoute as any);
+  }, [family?.status, isAdminPreview, nextRoute, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +141,11 @@ export default function PaywallScreen() {
   }, [locale]);
 
   useEffect(() => {
+    // Clear account-specific purchase state when the external auth identity changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPricingState(null);
+    setPurchaseError(null);
+    setShowManagement(false);
     if (!isPurchasesSupported || !isRevenueCatConfigured || !user) return;
 
     let cancelled = false;
@@ -167,7 +153,7 @@ export default function PaywallScreen() {
     const loadStorePricing = async () => {
       const pricing = await getRevenueCatPlanPricing(user.id);
       if (!cancelled) {
-        setStorePricing(pricing);
+        setPricingState({ userId: user.id, pricing });
       }
     };
 
@@ -231,11 +217,18 @@ export default function PaywallScreen() {
       return;
     }
 
+    const key = `${tier}${interval === 'yearly' ? 'Yearly' : 'Monthly'}` as RevenueCatPlanKey;
+    const price = storePricing[key];
+    if (!price || isAdminPreview) { setPurchaseError(t('unavailable')); return; }
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    const actionUserId = user.id;
     setPurchaseError(null);
     setPendingAction('purchase');
 
     try {
-      const hasAccess = await purchaseSubscriptionPlan(user.id, tier, interval);
+      const hasAccess = await purchaseSubscriptionPlan(user.id, tier, interval, price);
+      if (currentUserId.current !== actionUserId) return;
 
       if (!hasAccess) {
         setPurchaseError(
@@ -246,19 +239,24 @@ export default function PaywallScreen() {
 
       invalidateSubscriptionTierCache();
       await invalidatePremiumStatusCache();
-      router.replace(nextRoute as any);
+      if (currentUserId.current === actionUserId) router.replace(nextRoute as any);
     } catch (err: any) {
-      if (err?.userCancelled === true) return;
-      if (
-        typeof err?.message === 'string' &&
-        err.message.toLowerCase().includes('cancel')
-      ) {
-        return;
+      if (currentUserId.current !== actionUserId || isRevenueCatPurchaseCancelled(err)) return;
+      // Installed SDK: PAYMENT_PENDING_ERROR = '20'; no access until confirmed.
+      if (String(err?.code) === '20') {
+        setPurchaseError(t('paymentPending'));
+      } else if (err instanceof RevenueCatPurchaseBlockedError) {
+        setPurchaseError(t(err.reason));
+        setShowManagement(err.reason === 'activeSubscription' || err.reason === 'familySubscription');
+        if (err.reason === 'priceChanged') {
+          const pricing = await getRevenueCatPlanPricing(actionUserId);
+          if (currentUserId.current === actionUserId) setPricingState({ userId: actionUserId, pricing });
+        }
+      } else {
+        setPurchaseError(t('purchaseFailed'));
       }
-      setPurchaseError(
-        err?.message ?? t('purchaseFailed'),
-      );
     } finally {
+      actionInFlight.current = false;
       setPendingAction(null);
     }
   };
@@ -281,33 +279,44 @@ export default function PaywallScreen() {
       return;
     }
 
+    if (actionInFlight.current || isAdminPreview) return;
+    actionInFlight.current = true;
+    const actionUserId = user.id;
     setPurchaseError(null);
     setPendingAction('restore');
 
     try {
+      const familyAccess = await refreshFamilyAccess(actionUserId, { force: true });
+      if (currentUserId.current !== actionUserId) return;
+      if (familyAccess.status === 'active') {
+        invalidateSubscriptionTierCache();
+        router.replace(nextRoute as any);
+        return;
+      }
+      if (familyAccess.status === 'unavailable') { setPurchaseError(t('refreshFailed')); return; }
       const restored = await restoreRevenueCatPurchases(user.id);
+      if (currentUserId.current !== actionUserId) return;
       if (restored) {
         invalidateSubscriptionTierCache();
         await invalidatePremiumStatusCache();
-        router.replace(nextRoute as any);
+        if (currentUserId.current === actionUserId) router.replace(nextRoute as any);
         return;
       }
 
       const current = await hasRevenueCatEntitlement(user.id);
+      if (currentUserId.current !== actionUserId) return;
       if (current) {
         invalidateSubscriptionTierCache();
         await invalidatePremiumStatusCache();
-        router.replace(nextRoute as any);
+        if (currentUserId.current === actionUserId) router.replace(nextRoute as any);
         return;
       }
 
       setPurchaseError(t('noneFound'));
-    } catch (err: any) {
-      setPurchaseError(
-        err?.message ??
-          t('refreshFailed'),
-      );
+    } catch {
+      if (currentUserId.current === actionUserId) setPurchaseError(t('refreshFailed'));
     } finally {
+      actionInFlight.current = false;
       setPendingAction(null);
     }
   };
@@ -320,6 +329,8 @@ export default function PaywallScreen() {
       <PaywallPlansExperience
         content={plansContent}
         prices={planPrices}
+        previewOnly={isAdminPreview}
+        onManageSubscription={showManagement ? () => router.push('/subscription') : undefined}
         billingLabel={billingLabel}
         storeProvider={storeProvider}
         isTrialExpired={isTrialExpired}
@@ -334,6 +345,8 @@ export default function PaywallScreen() {
         onRestorePress={() => {
           void restoreAndRefresh();
         }}
+        onRedeemFamilyCode={user && !isAdminPreview && !pendingAction
+          ? () => router.push('/(tabs)/account-linking') : undefined}
         onClose={() => { if (!isTrialExpired) router.back(); }}
         onOpenPrivacy={() => router.push('/datenschutz' as any)}
         onOpenTerms={() => router.push('/nutzungsbedingungen' as any)}
