@@ -1,3 +1,4 @@
+import { clearLocalHealthData } from '@/lib/localHealthStorage';
 import React, {
   createContext,
   useCallback,
@@ -8,7 +9,7 @@ import React, {
   useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BabyInfo, createBaby, listBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
+import { BabyInfo, createBaby, listBabies, readSavedBabies, syncBabiesForLinkedUsers } from '@/lib/baby';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/lib/supabase';
 import { refreshBabyListWithRetry, type BabyListLoadResult } from '@/lib/babyListLoading';
@@ -24,6 +25,7 @@ type ActiveBabyContextType = {
   isLoading: boolean;
   isReady: boolean;
   loadError: string | null;
+  savedListAt?: string;
   setActiveBabyId: (babyId: string) => Promise<void>;
   refreshBabies: () => Promise<void>;
 };
@@ -44,6 +46,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [resolvedScope, setResolvedScope] = useState<string | null>(null);
+  const [savedListAt, setSavedListAt] = useState<string | undefined>();
   const [loadError, setLoadError] = useState<string | null>(null);
   const currentScope = getActiveBabyResolutionScope(user?.id);
   const isDataForCurrentUser = isResolutionCurrent(resolvedScope, currentScope);
@@ -202,6 +205,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
       const canKeepExisting = result.retryable === true &&
         latestState.current.resolvedScope === scope && latestState.current.babies.length > 0;
       if (!canKeepExisting) {
+        if ((result.error as any)?.code === '42501') void clearLocalHealthData(userId);
         setBabies([]);
         setActiveBabyIdState(null);
       }
@@ -217,16 +221,31 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
     request.promise = (async () => {
       setIsLoading(true);
       setLoadError(null);
+      if (latestState.current.resolvedScope !== scope) setSavedListAt(undefined);
       // Refreshing the selector must not invalidate a usable active child.
       if (latestState.current.resolvedScope !== scope || latestState.current.babies.length === 0) {
         setIsReady(false);
       }
 
-      const result = forceRefresh ? await readFresh() : await listBabies(false, request.controller.signal);
+      const saved = await readSavedBabies(userId);
+      if (!isCurrent()) return;
+      if (saved && saved.data.length > 0) {
+        const storedId = await AsyncStorage.getItem(getActiveBabyStorageKey(userId));
+        if (!isCurrent()) return;
+        if (storedId && saved.data.some(baby => baby.id === storedId)) {
+          setSavedListAt(saved.verifiedAt); setBabies(saved.data); setActiveBabyIdState(storedId); setIsReady(true); setResolvedScope(scope);
+          latestState.current = { babies: saved.data, activeBabyId: storedId, resolvedScope: scope };
+        }
+      }
+      let result = forceRefresh ? await readFresh() : await listBabies(false, request.controller.signal);
+      if (result.fromCache && !result.error) result = await readFresh();
       if (!isCurrent()) return;
       if (result.error) { handleError(result); return; }
 
       let nextBabies = result.data ?? [];
+      const removedIds = latestState.current.babies.filter(baby => !nextBabies.some(next => next.id === baby.id)).map(baby => baby.id);
+      for (const removedId of removedIds) await clearLocalHealthData(userId, removedId);
+      if (!isCurrent()) return;
       setLoadError(null);
 
       // Try to pull shared babies from linked accounts before creating a placeholder
@@ -323,7 +342,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
       if (!isCurrent()) return;
       // Commit list and selection together, keeping the old active child usable
       // while persisted selection is being resolved.
-      setBabies(nextBabies);
+      setSavedListAt(undefined); setBabies(nextBabies);
       setActiveBabyIdState(resolvedId);
 
       if (!resolvedId) {
@@ -339,7 +358,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
       if (pendingLoad.current === request) pendingLoad.current = null;
     });
     return request.promise;
-  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, userId]);
+  }, [formatLoadError, resolveActiveBabyId, shouldSkipPlaceholderBabyCreation, userId, getActiveBabyStorageKey]);
 
   /**
    * Initial load + reload on login change
@@ -388,6 +407,7 @@ export const ActiveBabyProvider: React.FC<{ children: React.ReactNode }> = ({
         isLoading: isLoading || !isDataForCurrentUser,
         isReady: isReadyForCurrentUser,
         loadError,
+        savedListAt: isDataForCurrentUser ? savedListAt : undefined,
         setActiveBabyId,
         refreshBabies: refreshBabiesForced,
       }}

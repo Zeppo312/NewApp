@@ -1,3 +1,4 @@
+import { notifyServerContact } from './serverContact';
 import { DATA_CONSENT_VERSION, hasDataConsent, type DataConsentSnapshot, type DataConsentScope } from './dataConsentTypes';
 
 // New app versions include the effective flow by default. Only an explicit
@@ -70,10 +71,10 @@ export function dataConsentRequestScope(url: string): DataConsentScope | null {
 
 /** Off means the existing fetch path, with no added RPC or access decision. */
 export async function consentAwareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  if (!DATA_CONSENTS_ENABLED) return fetch(input, init);
+  if (!DATA_CONSENTS_ENABLED) { const result = await fetch(input, init); if (result.ok) notifyServerContact(); return result; }
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   const scope = dataConsentRequestScope(url);
-  if (!scope) return fetch(input, init);
+  if (!scope) { const result = await fetch(input, init); if (result.ok) notifyServerContact(); return result; }
   if (!runtimeConsentAllowed(scope)) throw new DataConsentRequiredError(scope);
   const controller = new AbortController();
   const release = trackConsentRequest(controller, scope);
@@ -84,6 +85,7 @@ export async function consentAwareFetch(input: RequestInfo | URL, init?: Request
   try {
     const result = await fetch(input, { ...init, signal: controller.signal });
     if (!runtimeConsentAllowed(scope) || controller.signal.aborted) throw new DataConsentRequiredError(scope);
+    if (result.ok) notifyServerContact();
     return result;
   } finally { originalSignal?.removeEventListener('abort', abort); release(); }
 }

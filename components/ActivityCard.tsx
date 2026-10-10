@@ -10,6 +10,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { LinearGradient } from 'expo-linear-gradient';
 import { HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import { useLocale } from '@/contexts/LocaleContext';
+import { offlineText } from '@/lib/offlineTranslations';
 import { getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 interface ActivityCardProps {
@@ -390,8 +391,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     />
                   </Animated.View>}
                 </View>
-                {(auxiliaryBadgeLabel || customQuantityLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
+                {(entry.local_pending || auxiliaryBadgeLabel || customQuantityLabel || recipeNote || weightDateLabel || showNotesBadge || showFeverBadge || showSuppositoryBadge || showFeedingSideBadge) ? (
                   <View style={styles.badgesWrap}>
+                    {entry.local_pending && <View style={styles.badgePill}><ThemedText style={[styles.badgeText,{color:badgeTextColor}]}>{offlineText(locale,'queuedEntry')}</ThemedText></View>}
                     {auxiliaryBadgeLabel ? (
                       <View style={styles.badgePill}>
                         <ThemedText style={[styles.badgeText, { color: badgeTextColor }]}>{auxiliaryBadgeLabel}</ThemedText>

@@ -27,6 +27,7 @@ type Props = {
   inputMode?: TextInputProps["inputMode"];
   onClose: () => void;
   onSubmit: (next: string) => void;
+  onChangeText?: (next: string) => void;
 };
 
 const DEFAULT_ACCENT = "#5E3DB3";
@@ -57,6 +58,7 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
   inputMode,
   onClose,
   onSubmit,
+  onChangeText,
   palette,
   blurTint,
   resolvedAccentColor,
@@ -99,7 +101,7 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
               },
             ]}
             value={text}
-            onChangeText={setText}
+            onChangeText={next => { setText(next); onChangeText?.(next); }}
             placeholder={placeholder}
             placeholderTextColor={palette.placeholder}
             autoFocus

@@ -1,3 +1,7 @@
+import { backendHost, localDateKey, localScopeKey, readSnapshot, writeSnapshot, validRows, invalidateReadSnapshots, readSnapshotRevision } from './localReadSnapshots';
+import { boundedRead } from './boundedRead';
+import { localHealthGeneration } from './localHealthStorage';
+import { getRuntimeDataConsents } from './dataConsentRuntime';
 import { supabase } from './supabase';
 import {
   CacheStrategy,
@@ -25,6 +29,9 @@ import {
 export const mapCareToDaily = (rows: any[]): any[] =>
   rows.map((r) => ({
     id: r.id,
+    user_id: r.user_id,
+    updated_at: r.updated_at,
+    local_pending: r.local_pending,
     baby_id: r.baby_id ?? undefined,
     entry_date: r.start_time,
     entry_type: r.entry_type,
@@ -71,13 +78,29 @@ export const mapCareToDaily = (rows: any[]): any[] =>
  */
 export async function loadDayEntriesWithCache(
   date: Date,
-  babyId: string
+  babyId: string,
+  userId?: string
 ): Promise<{
   data: any[] | null;
+  verifiedAt?: string;
   isStale: boolean;
   refresh: () => Promise<any[]>;
 }> {
-  const dateKey = date.toISOString().split('T')[0];
+  if (userId) {
+    const scope = { backendHost: backendHost(), userId, babyId, localDateKey: localDateKey(date) };
+    const generation = localHealthGeneration(); const readRevision = readSnapshotRevision();
+    const saved = await readSnapshot(scope, 'daily-care', validRows);
+    const refresh = () => boundedRead(localScopeKey(scope) + ':daily-care', async signal => {
+      const { data, error } = await getBabyCareEntriesForDate(date, babyId, signal);
+      if (error) throw error;
+      if (readRevision !== readSnapshotRevision()) throw new Error('Read invalidated by mutation');
+      const rows = mapCareToDaily(data ?? []);
+      await writeSnapshot(scope, 'daily-care', rows, new Date().toISOString(), generation, readRevision).catch(() => {});
+      return rows;
+    });
+    return { data: saved?.data ?? null, verifiedAt: saved?.verifiedAt, isStale: !saved || Date.now()-Date.parse(saved.verifiedAt)>=120000, refresh };
+  }
+  const dateKey = localDateKey(date);
   const cacheKey = `screen_cache_daily_day_${babyId}_${dateKey}`;
 
   return await loadWithRevalidate(
@@ -154,6 +177,8 @@ export async function loadMonthEntriesWithCache(
  * Called after: Add, Update, Delete Entries
  */
 export async function invalidateDailyCache(babyId: string): Promise<void> {
+  const userId = getRuntimeDataConsents().userId;
+  if (userId) await invalidateReadSnapshots(userId, babyId, ['daily-care', 'home-care', 'home-sleep','home-sleep-rows']);
   await invalidateCacheAfterAction(`daily_day_${babyId}`);
   await invalidateCacheAfterAction(`daily_week_${babyId}`);
   await invalidateCacheAfterAction(`daily_month_${babyId}`);

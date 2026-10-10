@@ -1,3 +1,11 @@
+import { useAuth } from '@/contexts/AuthContext';
+import { useActivityDraft } from '@/hooks/useActivityDraft';
+import { backendHost } from '@/lib/localReadSnapshots';
+import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
+import { getBabyCareEntriesForDate } from '@/lib/supabase';
+import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
+import { offlineText } from '@/lib/offlineTranslations';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
@@ -26,7 +34,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { useFeatureAccess } from '@/lib/entitlements';
+import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
 import { DailyTranslationKey, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 import {
   computeTotalQuantity,
@@ -58,10 +66,11 @@ interface ActivityInputModalProps {
   hiddenSubTypes?: string[];
   restricted?: boolean;
   saving?: boolean;
+  draftEnabled?: boolean;
   date?: Date;
   forceDarkMode?: boolean;
   onClose: () => void;
-  onSave: (data: any, options?: { startTimer?: boolean }) => void | Promise<void>; // data ist DB-ready für baby_care_entries
+  onSave: (data: any, options?: { startTimer?: boolean; draftManaged?: boolean }) => void | ActivitySaveOutcome | Promise<void | ActivitySaveOutcome>; // data ist DB-ready für baby_care_entries
   onDelete?: (id: string) => void; // Optional: Nur wenn ein Eintrag bearbeitet wird
   initialData?: Partial<{
     id: string;
@@ -120,6 +129,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   hiddenSubTypes = [],
   restricted = false,
   saving = false,
+  draftEnabled = false,
   date,
   forceDarkMode,
   onClose,
@@ -132,6 +142,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const { width, fontScale } = useWindowDimensions();
   const useWideOptions = width < 360 || fontScale > 1.2;
   const { locale } = useLocale();
+  const { user } = useAuth();
+  const ot = (key: Parameters<typeof offlineText>[1], values?: Record<string, string | number>) => offlineText(locale, key, values);
   const recipesAccess = useFeatureAccess('recipes').hasAccess;
   const t = useCallback((key: DailyTranslationKey) => translateDailyText(locale, key), [locale]);
   const localeTag = getDailyLocaleTag(locale);
@@ -166,6 +178,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   };
 
   // States
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const saveInFlightRef = useRef(false);
   const [startTime, setStartTime] = useState(new Date());
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [isEndTimeVisible, setEndTimeVisible] = useState(false);
@@ -193,9 +207,11 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   // Diaper States
   const [diaperType, setDiaperType] = useState<DiaperType>('wet');
-  const { activeBabyId } = useActiveBaby();
+  const { activeBabyId, activeBaby } = useActiveBaby();
   const [diaperInventoryItems, setDiaperInventoryItems] = useState<InventoryItem[]>([]);
   const [selectedDiaperItemId, setSelectedDiaperItemId] = useState<string | null>(null);
+  const [inventoryAttempt, setInventoryAttempt] = useState(0);
+  const [inventoryFailed, setInventoryFailed] = useState(false);
   const [formulaInventoryItems, setFormulaInventoryItems] = useState<InventoryItem[]>([]);
   const [selectedFormulaItemId, setSelectedFormulaItemId] = useState<string | null | 'none'>(null);
   const [diaperFeverMeasured, setDiaperFeverMeasured] = useState(false);
@@ -330,7 +346,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       return;
     }
 
-    const initKey = `${activityType}:${initialData?.id ?? 'new'}:${initialSubType ?? ''}`;
+    const initKey = `${user?.id}:${activeBabyId}:${activityType}:${initialData?.id ?? 'new'}:${initialSubType ?? ''}`;
     if (initKeyRef.current === initKey) return;
     initKeyRef.current = initKey;
 
@@ -420,7 +436,42 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
 
     // Hier könnten initialSubType ausgewertet werden
-  }, [visible, initialSubType, date, initialData, activityType, sanitizeManualDate, feedingOptions, diaperOptions]);
+  }, [visible, user?.id, activeBabyId, initialSubType, date, initialData, activityType, sanitizeManualDate, feedingOptions, diaperOptions]);
+
+  const draftKind = activityType === 'diaper' ? 'diaper' : 'bottle';
+  const canDraft = draftEnabled && visible && !restricted && !initialData?.id && !!user?.id && !!activeBabyId && !startTimer
+    && (activityType === 'diaper' || activityType === 'feeding' && feedingType === 'bottle');
+  const [reviewEntries, setReviewEntries] = useState<any[] | null>(null);
+  const historyCutoff = useHistoryCutoff();
+  const historyCutoffRef = useRef(historyCutoff); historyCutoffRef.current = historyCutoff;
+  const draftScope = { backendHost: backendHost(), userId: user?.id ?? '', babyId: activeBabyId };
+  const draftSessionKey = `${draftScope.userId}:${activeBabyId}:${draftKind}`;
+  const draftSessionRef = useRef(draftSessionKey); draftSessionRef.current = draftSessionKey;
+  const draftValues = {
+    startTime: startTime.toISOString(), endTime: endTime?.toISOString() ?? null, isEndTimeVisible,
+    notes: focusConfig?.field === 'notes' ? focusValue : notes, volumeMl, diaperType,
+    selectedDiaperItemId, selectedFormulaItemId, diaperFeverMeasured,
+    diaperTemperatureC: focusConfig?.field === 'diaper_temperature_c' ? focusValue : diaperTemperatureC,
+    diaperSuppositoryGiven, diaperSuppositoryDoseMg: focusConfig?.field === 'diaper_suppository_dose_mg' ? focusValue : diaperSuppositoryDoseMg,
+  };
+  const draft = useActivityDraft({ enabled: canDraft, scope: draftScope, kind: draftKind, values: draftValues, restore: v => {
+    setStartTime(new Date(v.startTime)); setEndTime(v.endTime ? new Date(v.endTime) : null); setEndTimeVisible(v.isEndTimeVisible);
+    setNotes(v.notes); setVolumeMl(v.volumeMl); setDiaperType(v.diaperType);
+    setSelectedDiaperItemId(v.selectedDiaperItemId); setSelectedFormulaItemId(v.selectedFormulaItemId);
+    setDiaperFeverMeasured(v.diaperFeverMeasured); setDiaperTemperatureC(v.diaperTemperatureC);
+    setDiaperSuppositoryGiven(v.diaperSuppositoryGiven); setDiaperSuppositoryDoseMg(v.diaperSuppositoryDoseMg);
+  } });
+  const closeModal = async () => { try { if (canDraft) await draft.flush(); } catch {} onClose(); };
+  const inspectHistory = async () => {
+    const key = draftSessionKey; const generation = localHealthGeneration();
+    const original = draft.draft?.values.startTime ?? startTime.toISOString();
+    if (isBeforeHistoryCutoff(new Date(original),historyCutoffRef.current)) { setReviewEntries(null); Alert.alert(ot('checkHistory'),ot('blocked')); return; }
+    const result = await getBabyCareEntriesForDate(new Date(original), activeBabyId ?? undefined);
+    if (draftSessionRef.current !== key || !localHealthAllowed(draftScope.userId, generation) || isBeforeHistoryCutoff(new Date(original),historyCutoffRef.current)) return;
+    if (result.error) { setReviewEntries(null); Alert.alert(ot('checkHistory'), ot('blocked')); return; }
+    setReviewEntries(result.data ?? []);
+  };
+  useEffect(() => { setReviewEntries(null); }, [visible, draftSessionKey, historyCutoff?.getTime()]);
 
   // Windel-Vorräte laden, damit bei mehreren Posten optional gewählt werden
   // kann, welche Windel abgebucht wird (nur bei neuen Einträgen).
@@ -431,16 +482,15 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       return;
     }
     let cancelled = false;
-    setSelectedDiaperItemId(null);
-    fetchDiaperInventoryItems().then(({ data }) => {
+    setInventoryFailed(false);
+    fetchDiaperInventoryItems().then(({ data, error }) => {
       if (!cancelled) {
+        if (error) { setInventoryFailed(true); return; }
         setDiaperInventoryItems(data);
       }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [restricted, visible, activityType, initialData?.id, activeBabyId]);
+    }).catch(() => { if (!cancelled) setInventoryFailed(true); });
+    return () => { cancelled = true; };
+  }, [restricted, visible, activityType, initialData?.id, activeBabyId, user?.id, inventoryAttempt]);
 
   // Milchpulver-Vorräte (mit hinterlegter Dosierung) für Fläschchen-Einträge.
   useEffect(() => {
@@ -450,20 +500,19 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       return;
     }
     let cancelled = false;
-    setSelectedFormulaItemId(null);
-    fetchFormulaInventoryItems().then(({ data }) => {
+    setInventoryFailed(false);
+    fetchFormulaInventoryItems().then(({ data, error }) => {
       if (!cancelled) {
+        if (error) { setInventoryFailed(true); return; }
         setFormulaInventoryItems(
           data.filter(
             (item) => item.dosage_grams_per_100ml !== null && item.dosage_grams_per_100ml > 0
           )
         );
       }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [restricted, visible, activityType, initialData?.id, activeBabyId]);
+    }).catch(() => { if (!cancelled) setInventoryFailed(true); });
+    return () => { cancelled = true; };
+  }, [restricted, visible, activityType, initialData?.id, activeBabyId, user?.id, inventoryAttempt]);
 
   // Rezepte laden (Supabase), fallback auf Samples
   useEffect(() => {
@@ -500,7 +549,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   }, [feedingType]);
 
   // Speichern: Payload für baby_care_entries
-  const handleSave = () => {
+  const handleSave = async (unsafe = false) => {
+    if (saving || saveInFlightRef.current) return;
+    if (canDraft && (!draft.ready || draft.unknown)) return;
     if (activityType === 'feeding' && !isStandaloneSpecialFlow && feedingOptions.length === 0) {
       Alert.alert(t('input.noFeedingTitle'), t('input.noFeedingBody'));
       return;
@@ -522,7 +573,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const base = {
       entry_type: activityType,           // 'feeding' | 'diaper'
       start_time: entryDateISO,
-      end_time: isDiaperEntry ? null : (safeEndTime ? safeEndTime.toISOString() : null as string | null),
+      end_time: !startTimer ? (safeEndTime?.toISOString() ?? entryDateISO) : null,
       notes: combinedNotes || null,
     };
 
@@ -581,13 +632,24 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     }
     // other: nur base + notes
 
-    if (restricted) {
-      if (!saving) void Promise.resolve(onSave(payload, { startTimer: false })).then(onClose).catch(() => {});
-      return;
+    // The server validates the saved inventory ID at sync time. A failed
+    // inventory read must not block a durable offline care entry.
+    saveInFlightRef.current = true;
+    setIsSubmitting(true);
+    try {
+      if (canDraft) {
+        const result = await draft.save(() => Promise.resolve(onSave(payload, { startTimer: false, draftManaged: true })), unsafe);
+        if (result?.status === 'confirmed' || result?.status === 'queued') onClose();
+      } else {
+        const result = await onSave(payload, { startTimer: !restricted && activityType === 'feeding' ? startTimer : false });
+        if (!result || result.status === 'confirmed' || result.status === 'queued') onClose();
+      }
+    } catch (error) {
+      Alert.alert(t('common.error'), saveErrorMessage(error, locale, t('daily.saveFailed')));
+    } finally {
+      saveInFlightRef.current = false;
+      setIsSubmitting(false);
     }
-    console.log('ActivityInputModal - Sending payload:', JSON.stringify(payload, null, 2));
-    onSave(payload, { startTimer: activityType === 'feeding' ? startTimer : false });
-    onClose();
   };
 
   // Löschen: Nur bei Bearbeitung verfügbar
@@ -1029,7 +1091,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={onClose}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={() => void closeModal()}>
         <Text style={styles.closeHeaderButtonText}>✕</Text>
       </TouchableOpacity>
       <View style={styles.headerCenter}>
@@ -1040,9 +1102,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         style={[styles.headerButton, { backgroundColor: theme.accent }]} 
         accessibilityRole="button"
         accessibilityLabel={t('custom.saveEntry')}
-        disabled={saving}
-        accessibilityState={{ disabled: saving, busy: saving }}
-        onPress={handleSave}
+        disabled={saving || isSubmitting || canDraft && (!draft.ready || draft.unknown)}
+        accessibilityState={{ disabled: saving || isSubmitting || canDraft && (!draft.ready || draft.unknown), busy: saving || isSubmitting }}
+        onPress={() => void handleSave()}
       >
         <Text style={styles.saveHeaderButtonText}>✓</Text>
       </TouchableOpacity>
@@ -1074,7 +1136,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const renderVolumeControl = () => {
     const quickVolumes = [60, 90, 120, 150, 180, 210];
     return (
-      <View style={{width: '100%', alignItems: 'center'}}>
+      <View pointerEvents={canDraft && (!draft.ready || draft.unknown) ? 'none' : 'auto'} style={{width: '100%', alignItems: 'center'}}>
         <Text style={[styles.sectionTitle, { color: theme.text }]}>
           <FixedEmojiText style={styles.sectionTitleEmoji}>🥛</FixedEmojiText>{' '}
           {feedingType === 'pump' ? t('input.pumpedAmount') : feedingType === 'water' ? t('input.drunkAmount') : t('input.amountMl')}
@@ -1276,7 +1338,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
           </View>
         ) : null}
         {feedingOptions.length > 0 && (feedingType === 'breast' || feedingType === 'pump') && (
-          <View style={{width: '100%', alignItems: 'center'}}>
+          <View pointerEvents={canDraft && (!draft.ready || draft.unknown) ? 'none' : 'auto'} style={{width: '100%', alignItems: 'center'}}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>
               <FixedEmojiText style={styles.sectionTitleEmoji}>{feedingType === 'pump' ? '🥛' : '🤱'}</FixedEmojiText>{' '}
               {t('input.side')}
@@ -1686,7 +1748,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   );
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => void closeModal()}>
       <View
         style={[
           styles.modalOverlay,
@@ -1695,7 +1757,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         ]}
       >
         {/* This empty view allows closing the modal by tapping the background */}
-        <TouchableWithoutFeedback onPress={onClose}>
+        <TouchableWithoutFeedback onPress={() => void closeModal()}>
             <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
 
@@ -1709,9 +1771,37 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
+                {canDraft && (draft.choice || draft.corrupt || draft.error || draft.unknown || inventoryFailed && (!!selectedDiaperItemId || !!selectedFormulaItemId && selectedFormulaItemId !== 'none')) && (
+                  <View style={[styles.draftFeedback, { backgroundColor: theme.lightGray, borderColor: theme.mediumGray }]} accessibilityLiveRegion="polite">
+                    {draft.choice && <>
+                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('restore')} · {activeBaby?.name ?? activeBabyId} · {new Date(draft.choice.values.startTime).toLocaleString(locale)}</Text>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={draft.resume}><Text style={{ color: theme.text }}>{ot('resume')}</Text></TouchableOpacity>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard()}><Text style={{ color: theme.text }}>{ot('discard')}</Text></TouchableOpacity>
+                    </>}
+                    {draft.corrupt && <>
+                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('corrupt')}</Text>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard()}><Text style={{ color: theme.text }}>{ot('discard')}</Text></TouchableOpacity>
+                    </>}
+                    {inventoryFailed && (!!selectedDiaperItemId || !!selectedFormulaItemId && selectedFormulaItemId !== 'none') && <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => setInventoryAttempt(v => v + 1)}><Text style={{ color: theme.text }}>{ot('inventoryCheck')} · {ot('retry')}</Text></TouchableOpacity>}
+                    {draft.error && <>
+                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('storageError')}</Text>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.flush().catch(() => {})}><Text style={{ color: theme.text }}>{ot('retry')}</Text></TouchableOpacity>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => Alert.alert(ot('onlineAnyway'), ot('unsafe'), [{ text: ot('back') }, { text: ot('onlineAnyway'), onPress: () => void handleSave(true) }])}><Text style={{ color: theme.text }}>{ot('onlineAnyway')}</Text></TouchableOpacity>
+                    </>}
+                    {draft.unknown && <>
+                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('unknown')}</Text>
+                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void inspectHistory()}><Text style={{ color: theme.text }}>{ot('checkHistory')}</Text></TouchableOpacity>
+                      {reviewEntries !== null && <>
+                        {reviewEntries.map(entry => <Text key={entry.id} style={[styles.draftFeedbackText, { color: theme.text }]}>{new Date(entry.start_time).toLocaleString(locale)} · {entry.feeding_volume_ml ?? entry.diaper_type ?? ''} · {entry.notes ?? ''}</Text>)}
+                        <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard().then(onClose)}><Text style={{ color: theme.text }}>{ot('alreadyInHistory')}</Text></TouchableOpacity>
+                        <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.allowRetryAfterReview().then(() => setReviewEntries(null))}><Text style={{ color: theme.text }}>{ot('notInHistory')}</Text></TouchableOpacity>
+                      </>}
+                    </>}
+                  </View>
+                )}
                 {/* This wrapper ensures keyboard dismiss works inside the scroll view */}
                 <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <View style={{width: '100%', alignItems: 'center'}}>
+                    <View pointerEvents={canDraft && (!draft.ready || draft.unknown) ? 'none' : 'auto'} style={{width: '100%', alignItems: 'center'}}>
                         {activityType === 'feeding' && renderFeedingSection()}
                         {activityType === 'diaper' && renderDiaperSection()}
                         {renderTimeSection()}
@@ -1743,6 +1833,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         inputMode={focusConfig?.inputMode}
         onClose={closeFocusEditor}
         onSubmit={(next) => saveFocusEditor(next)}
+        onChangeText={setFocusValue}
       />
     </Modal>
   );
@@ -1751,6 +1842,9 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
 // --- STYLES ---
 
 const styles = StyleSheet.create({
+  draftFeedback: { width: '100%', marginBottom: 20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, borderWidth: 1, borderRadius: 20 },
+  draftFeedbackText: { fontSize: 14, lineHeight: 21 },
+  draftFeedbackAction: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

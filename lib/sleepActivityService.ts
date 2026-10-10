@@ -53,6 +53,7 @@ const liveActivityModule =
   NativeModules.LiveActivityModule as LiveActivityNativeModule | undefined;
 
 class SleepActivityService {
+  private sleepGeneration = 0;
   private currentSleepActivityId: string | null = null;
   private currentFeedingActivityId: string | null = null;
 
@@ -154,28 +155,34 @@ class SleepActivityService {
   }
 
   public async restoreCurrentActivity(): Promise<NativeLiveActivitySnapshot | null> {
+    const generation = this.sleepGeneration;
+    const previousId = this.currentSleepActivityId;
     if (!(await this.ensureSupported()) || !liveActivityModule) {
       return null;
     }
 
     try {
       const activity = await liveActivityModule.getCurrentSleepActivity();
+      if (generation !== this.sleepGeneration || this.currentSleepActivityId !== previousId) return null;
       this.currentSleepActivityId = activity?.id ?? null;
       return activity;
     } catch (error) {
       console.error('Failed to restore current sleep live activity:', error);
-      this.currentSleepActivityId = null;
+      if (generation === this.sleepGeneration && this.currentSleepActivityId === previousId) this.currentSleepActivityId = null;
       return null;
     }
   }
 
   public async startSleepActivity(startTime: Date, babyName?: string): Promise<string | null> {
+    const generation = ++this.sleepGeneration;
     if (!(await this.ensureSupported()) || !liveActivityModule) {
       return null;
     }
 
     try {
+      if (generation !== this.sleepGeneration) return null;
       const activityId = await this.startSleepActivityCompat(startTime.toISOString(), babyName);
+      if (generation !== this.sleepGeneration) { if (activityId) await liveActivityModule.endSleepActivity(activityId,'00:00:00',null); return null; }
       this.currentSleepActivityId = activityId ?? null;
       if (activityId) {
         console.log('Sleep Live Activity started:', activityId);
@@ -259,7 +266,7 @@ class SleepActivityService {
         elapsedTimeText,
         quality ?? null
       );
-      if (!updated) {
+      if (!updated && this.currentSleepActivityId === activityId) {
         this.currentSleepActivityId = null;
       }
       return updated;
@@ -326,7 +333,7 @@ class SleepActivityService {
     try {
       const ended = await liveActivityModule.endSleepActivity(activityId, totalDuration, quality);
       if (ended) {
-        this.currentSleepActivityId = null;
+        if (this.currentSleepActivityId === activityId) this.currentSleepActivityId = null;
         console.log('Sleep Live Activity ended');
       }
       return ended;
@@ -334,6 +341,16 @@ class SleepActivityService {
       console.error('Failed to end sleep live activity:', error);
       return false;
     }
+  }
+
+  /** End the activity bound to a confirmed server entry, even if a newer one starts meanwhile. */
+  public async endSleepActivityById(activityId: string, quality: string | null, duration: string): Promise<boolean> {
+    if (!(await this.ensureSupported()) || !liveActivityModule) return false;
+    try {
+      const ended = await liveActivityModule.endSleepActivity(activityId,duration,quality);
+      if (ended && this.currentSleepActivityId === activityId) this.currentSleepActivityId = null;
+      return ended;
+    } catch { return false; }
   }
 
   public async endFeedingActivity(totalDuration: string, feedingType: string = 'BREAST'): Promise<boolean> {
@@ -383,13 +400,15 @@ class SleepActivityService {
   }
 
   public async endAllSleepActivities(): Promise<boolean> {
+    const generation = ++this.sleepGeneration;
     if (!(await this.ensureSupported()) || !liveActivityModule) {
       return false;
     }
 
     try {
+      if (generation !== this.sleepGeneration) return false;
       const result = await liveActivityModule.endAllSleepActivities();
-      this.currentSleepActivityId = null;
+      if (generation === this.sleepGeneration) this.currentSleepActivityId = null;
       return result;
     } catch (error) {
       console.error('Failed to end all sleep live activities:', error);

@@ -3,7 +3,8 @@ import { listBabies } from '../baby';
 import { refreshBabyListWithRetry, isTransientBabyListError } from '../babyListLoading';
 import { getCachedUser, supabase } from '../supabase';
 
-jest.mock('../supabase', () => ({ supabase: { from: jest.fn() }, getCachedUser: jest.fn() }));
+jest.mock('../dataConsentRuntime', () => ({ getRuntimeDataConsents: () => ({ userId:'user', generation:0 }), runtimeConsentAllowed: () => true }));
+jest.mock('../supabase', () => ({ supabaseUrl:'https://fixture.supabase.co', supabase: { from: jest.fn() }, getCachedUser: jest.fn() }));
 
 const levi = { id: 'levi', name: 'Levi', birth_date: '2024-01-01' };
 const pregnancy = { id: 'pregnancy', name: 'Schwangerschaft', birth_date: null };

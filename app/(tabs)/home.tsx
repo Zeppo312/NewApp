@@ -1,3 +1,13 @@
+import { useSleepOffline } from '@/contexts/SleepOfflineContext';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
+import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
+import { homeSleepMinutes, validHomeSleepRows } from '@/lib/homeSleepTotals';
+import { SLEEP_OFFLINE_ENABLED, readSleepSyncSnapshot } from '@/lib/sleepSyncContract';
+import { AppState } from 'react-native';
+import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
+import { backendHost, localDateKey, localScopeKey, readSnapshot, writeSnapshot, validRows, readSnapshotRevision, invalidateReadSnapshots } from '@/lib/localReadSnapshots';
+import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
+import { boundedRead } from '@/lib/boundedRead';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -33,7 +43,6 @@ import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddM
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { LottiWeekCard } from '@/components/LottiWeekCard';
 import { LottiWeekRing } from '@/components/LottiWeekRing';
-import { loadCachedHomeData, cacheHomeData, isCacheFresh, type HomeCacheScope } from '@/lib/homeCache';
 import { getLocalProfileName } from '@/lib/localProfile';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
 import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
@@ -68,6 +77,7 @@ const t = (key: HomeTranslationKey, params?: Record<string, string | number>) =>
   translateHomeText(ACTIVE_HOME_LOCALE, key, params);
 
 type HomeActiveTimer = {
+  entryId?: string | null;
   source: 'sleep' | 'daily';
   start: number;
   route: '/(tabs)/sleep-tracker' | '/(tabs)/daily_old';
@@ -366,6 +376,7 @@ function buildSleepHomeTimer(entries: SleepEntry[] | undefined): HomeActiveTimer
 
   return {
     source: 'sleep',
+    entryId: activeSleepEntry.id,
     start,
     route: '/(tabs)/sleep-tracker',
     label: t('timer.sleep.label'),
@@ -411,6 +422,7 @@ function buildDailyHomeTimer(entry: {
 
   return {
     source: 'daily',
+    entryId: entry.id,
     start,
     route: '/(tabs)/daily_old',
     label: t('timer.daily.label'),
@@ -869,6 +881,8 @@ export default function HomeScreen() {
   const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
   const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const sleepOffline = useSleepOffline();
+  const homePendingRef = useRef(sleepOffline.actions); homePendingRef.current = sleepOffline.actions;
   const { user } = useAuth();
   const userId = user?.id;
   const { activeBabyId, activeBaby, isReady: isActiveBabyReady } = useActiveBaby();
@@ -892,7 +906,8 @@ export default function HomeScreen() {
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
-  const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [confirmedTodaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [homeSleepRows, setHomeSleepRows] = useState<{scope:string;entries:SleepEntry[]} | null>(null);
   const [activeHomeTimer, setActiveHomeTimer] = useState<HomeActiveTimer | null>(null);
   const [activeHomeTimerNow, setActiveHomeTimerNow] = useState(() => Date.now());
   const [showSleepModal, setShowSleepModal] = useState(false);
@@ -1248,73 +1263,84 @@ export default function HomeScreen() {
     }
   };
 
-  async function loadData(options?: { isRefreshing?: boolean }) {
-    const isRefreshing = options?.isRefreshing ?? false;
-    try {
-      if (!user?.id) {
-        setDailyEntries([]);
-        setTodaySleepMinutes(0);
-        setActiveHomeTimer(null);
-        return;
-      }
+  const homeDateKey = localDateKey(new Date(activeHomeTimerNow));
+  const homeScopeKey = `${user?.id}:${activeBabyId}:${homeDateKey}`;
+  const todaySleepMinutes = homeSleepRows?.scope === homeScopeKey
+    ? homeSleepMinutes(pendingSleepOverlay(homeSleepRows.entries, sleepOffline.actions),new Date(activeHomeTimerNow),new Date(activeHomeTimerNow)) : confirmedTodaySleepMinutes;
+  const homeScopeRef = useRef(homeScopeKey);
+  homeScopeRef.current = homeScopeKey;
+  const homeFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const [readStates, setReadStates] = useState<Record<string, { verifiedAt?: string; failed?: boolean; loading?: boolean }>>({});
+  const timerParts = useRef<{ sleep: HomeActiveTimer | null; care: HomeActiveTimer | null }>({ sleep: null, care: null });
+  useEffect(() => {
+    setDailyEntries([]); setTodaySleepMinutes(0); setActiveHomeTimer(null); setReadStates({});
+    setHomeSleepRows(null);
+    timerParts.current = { sleep: null, care: null };
+  }, [homeScopeKey]);
 
-      const today = new Date();
-      const homeCacheScope: HomeCacheScope = {
-        userId: user.id,
-        babyId: activeBabyId ?? null,
-        dateKey: today.toISOString().split('T')[0],
-      };
-
-      // 🆕 Cache-First Strategy: Lade gecachte Daten zuerst
-      const cachedData = await loadCachedHomeData(homeCacheScope);
-      if (cachedData) {
-        console.log('Loading cached home data (age:', new Date().toISOString(), '-', cachedData.lastUpdate, ')');
-        // Zeige sofort gecachte Daten für instant load
-        if (cachedData.dailyEntries) setDailyEntries(cachedData.dailyEntries);
-        if (cachedData.todaySleepMinutes !== undefined) setTodaySleepMinutes(cachedData.todaySleepMinutes);
-
-        // Wenn Cache frisch ist (< 5 Min), beende Loading sofort
-        if (isCacheFresh(cachedData.lastUpdate) && !isRefreshing) {
-          setIsLoading(false);
-        }
-      }
-
-      // Lade trotzdem immer frische Daten von Supabase (parallel)
-      if (!isRefreshing && !cachedData) {
-        setIsLoading(true);
-      }
-
-      // Alltags-Einträge für heute laden
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const { data: dailyData, error: dailyError } = await getBabyCareEntriesForDate(
-        today,
-        activeBabyId ?? undefined
-      );
-
-      let freshDailyEntries: any[] = [];
-      if (!dailyError && dailyData) {
-        freshDailyEntries = dailyData;
-        setDailyEntries(dailyData);
-      }
-
-      const { totalMinutes: freshSleepMinutes, activeSleepTimer } = await fetchTodaySleepMinutes(startOfDay, endOfDay);
-      const activeDailyTimer = await loadActiveDailyTimer();
-      setActiveHomeTimer(pickLatestHomeTimer(activeSleepTimer, activeDailyTimer));
-
-      // 🆕 Speichere frische Daten im Cache für nächstes Mal
-      await cacheHomeData({
-        dailyEntries: freshDailyEntries,
-        todaySleepMinutes: freshSleepMinutes,
-      }, homeCacheScope);
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-    } finally {
+  function loadData(_options?: { isRefreshing?: boolean }): Promise<void> {
+    const key = homeScopeKey;
+    if (homeFlight.current?.key === key) return homeFlight.current.promise;
+    const generation = localHealthGeneration(); const readRevision = readSnapshotRevision();
+    const scope = { backendHost: backendHost(), userId: user?.id ?? '', babyId: activeBabyId, localDateKey: homeDateKey };
+    const current = () => homeScopeRef.current === key && readRevision === readSnapshotRevision() && localHealthAllowed(scope.userId, generation);
+    const task = (async () => {
+      if (!current()) return;
+      const today = new Date(); const start = new Date(today); start.setHours(0, 0, 0, 0);
+      const end = new Date(today); end.setHours(23, 59, 59, 999);
+      const [care, sleep, sleepRows] = await Promise.all([
+        readSnapshot(scope, 'home-care', validRows),
+        readSnapshot(scope, 'home-sleep', (v): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0),
+        readSnapshot(scope, 'home-sleep-rows', validHomeSleepRows),
+      ]);
+      if (!current()) return;
+      if (care) setDailyEntries(care.data);
+      if (sleep) setTodaySleepMinutes(sleep.data);
+      if (sleepRows && (!sleep || sleepRows.verifiedAt===sleep.verifiedAt)) setHomeSleepRows({scope:key,entries:sleepRows.data});
+      else if (sleep) setHomeSleepRows(null);
+      setReadStates(previous => ({ ...previous,
+        care: { verifiedAt: care?.verifiedAt ?? previous.care?.verifiedAt, loading: true },
+        sleep: { verifiedAt: sleep?.verifiedAt ?? previous.sleep?.verifiedAt, loading: true },
+        timer: { ...previous.timer, loading: true },
+      }));
       setIsLoading(false);
-    }
+      const mark = (dataset: string, verifiedAt?: string) => {
+        if (current()) setReadStates(previous => ({ ...previous, [dataset]: { verifiedAt: verifiedAt ?? previous[dataset]?.verifiedAt, failed: !verifiedAt } }));
+      };
+      await Promise.allSettled([
+        (async () => {
+          try {
+            const data = await boundedRead(localScopeKey(scope) + ':home-care', async signal => {
+              const result = await getBabyCareEntriesForDate(today, activeBabyId ?? undefined, signal);
+              if (result.error) throw result.error; return result.data ?? [];
+            });
+            if (!current()) return;
+            const at = new Date().toISOString(); setDailyEntries(data); mark('care', at);
+            await writeSnapshot(scope, 'home-care', data.map(({id,entry_type,start_time,end_time,feeding_type,feeding_volume_ml,feeding_side,diaper_type}) => ({id,entry_type,start_time,end_time,feeding_type,feeding_volume_ml,feeding_side,diaper_type})), at, generation, readRevision).catch(() => {});
+          } catch { mark('care'); }
+        })(),
+        (async () => {
+          try {
+            const result = await boundedRead(localScopeKey(scope) + ':home-sleep', signal => fetchTodaySleepMinutes(start, end, signal));
+            if (!current()) return;
+            const at = new Date().toISOString(); setTodaySleepMinutes(result.totalMinutes); timerParts.current.sleep = result.activeSleepTimer; mark('sleep', at);
+            if (result.serverEntries) setHomeSleepRows({scope:key,entries:result.serverEntries});
+            await writeSnapshot(scope, 'home-sleep', result.totalMinutes, at, generation, readRevision).catch(() => {});
+            if (result.serverEntries) await writeSnapshot(scope,'home-sleep-rows',result.serverEntries.map(({id,baby_id,start_time,end_time,duration_minutes})=>({id,baby_id,start_time,end_time,duration_minutes})),at,generation,readRevision).catch(()=>{});
+            return true;
+          } catch { mark('sleep'); return false; }
+        })().then(async sleepConfirmed => {
+          try {
+            const timer = await boundedRead(localScopeKey(scope) + ':home-timer', signal => loadActiveDailyTimer(signal));
+            if (!current()) return;
+            timerParts.current.care = timer;
+            if (sleepConfirmed) { setActiveHomeTimer(pickLatestHomeTimer(timerParts.current.sleep, timer)); mark('timer', new Date().toISOString()); }
+            else mark('timer');
+          } catch { mark('timer'); }
+        }),
+      ]);
+    })().finally(() => { if (homeFlight.current?.promise === task) homeFlight.current = null; if (current()) setIsLoading(false); else if (homeScopeRef.current === key && localHealthAllowed(scope.userId, generation) && readRevision !== readSnapshotRevision()) void loadData(); });
+    homeFlight.current = { key, promise: task }; return task;
   }
 
   useFocusEffect(
@@ -1324,8 +1350,13 @@ export default function HomeScreen() {
       }
 
       void loadData();
-    }, [user, activeBabyId, isActiveBabyReady])
+    }, [user, activeBabyId, isActiveBabyReady, homeDateKey])
   );
+
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void loadData(); });
+    return () => listener.remove();
+  }, [homeScopeKey]);
 
   // Formatiere das aktuelle Datum
   const formatDate = () => {
@@ -1366,55 +1397,21 @@ export default function HomeScreen() {
   };
 
   // Load only daily entries (for quick refresh after adding entries)
-  const loadDailyEntriesOnly = async () => {
-    try {
-      if (!user?.id) {
-        setDailyEntries([]);
-        setTodaySleepMinutes(0);
-        setActiveHomeTimer(null);
-        return;
-      }
+  useEffect(() => {
+    const ids = new Set(sleepOffline.actions.filter(action => !['confirmed','discarded'].includes(action.state)).map(action => action.originalEntryId));
+    setActiveHomeTimer(current => current?.entryId && ids.has(current.entryId) ? null : current);
+    if (sleepOffline.actions.some(action => ['confirmed','discarded'].includes(action.state))) void loadData();
+  }, [sleepOffline.actions]);
 
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
+  const loadDailyEntriesOnly = () => loadData({ isRefreshing: true });
 
-      console.log('Loading daily entries for date:', today.toISOString());
-
-      const { data: dailyData, error } = await getBabyCareEntriesForDate(
-        today,
-        activeBabyId ?? undefined
-      );
-
-      if (error) {
-        console.error('Error loading daily entries:', error);
-        return;
-      }
-
-      if (dailyData) {
-        console.log('Loaded daily entries:', dailyData.length, 'entries');
-        setDailyEntries(dailyData);
-      }
-
-      const [{ activeSleepTimer }, activeDailyTimer] = await Promise.all([
-        fetchTodaySleepMinutes(startOfDay, endOfDay),
-        loadActiveDailyTimer(),
-      ]);
-      setActiveHomeTimer(pickLatestHomeTimer(activeSleepTimer, activeDailyTimer));
-    } catch (err) {
-      console.error('Failed to load daily entries:', err);
-    }
-  };
-
-  const loadActiveDailyTimer = async (): Promise<HomeActiveTimer | null> => {
+  const loadActiveDailyTimer = async (signal?: AbortSignal): Promise<HomeActiveTimer | null> => {
     if (!activeBabyId) {
       return null;
     }
 
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from('baby_care_entries')
         .select('id,feeding_type,start_time')
         .eq('baby_id', activeBabyId)
@@ -1422,10 +1419,11 @@ export default function HomeScreen() {
         .is('end_time', null)
         .order('start_time', { ascending: false })
         .limit(10);
+      const { data, error } = await (signal ? query.abortSignal(signal) : query);
 
       if (error) {
         console.error('Error loading active daily timer for home:', error);
-        return null;
+        throw error;
       }
 
       const openEntries = Array.isArray(data) ? data : [];
@@ -1435,29 +1433,32 @@ export default function HomeScreen() {
       return buildDailyHomeTimer(activeDailyEntry);
     } catch (error) {
       console.error('Failed to resolve active daily timer for home:', error);
-      return null;
+      throw error;
     }
   };
 
   const fetchTodaySleepMinutes = async (
     startOfDay: Date,
-    endOfDay: Date
-  ): Promise<{ totalMinutes: number; activeSleepTimer: HomeActiveTimer | null }> => {
+    endOfDay: Date,
+    signal?: AbortSignal
+  ): Promise<{ totalMinutes: number; activeSleepTimer: HomeActiveTimer | null; serverEntries?: SleepEntry[] }> => {
     try {
       if (!user?.id) {
-        setTodaySleepMinutes(0);
         return { totalMinutes: 0, activeSleepTimer: null };
       }
 
-      const { success, entries, error } = await loadAllVisibleSleepEntries(activeBabyId ?? undefined);
-      if (!success || !entries) {
+      const result = SLEEP_OFFLINE_ENABLED && activeBabyId ? await readSleepSyncSnapshot(user.id,activeBabyId,null,signal) : null;
+      const { success, entries:rawEntries, error } = result ? {success:result.status==='available',entries:result.status==='available'?result.entries:null,error:result.status}
+        : await loadAllVisibleSleepEntries(activeBabyId ?? undefined, signal);
+      if (!success || !rawEntries) {
         console.error('Error loading visible sleep entries for today:', error);
-        setTodaySleepMinutes(0);
-        return { totalMinutes: 0, activeSleepTimer: null };
+        throw new Error(error ?? 'Sleep read failed');
       }
+      const entries:SleepEntry[] = rawEntries.map(entry=>({...entry,duration_minutes:entry.duration_minutes??undefined,notes:entry.notes??undefined,quality:entry.quality??undefined}));
 
       const now = new Date();
-      const activeSleepTimer = buildSleepHomeTimer(entries);
+      const visibleEntries = pendingSleepOverlay(entries, homePendingRef.current);
+      const activeSleepTimer = buildSleepHomeTimer(visibleEntries);
       const intervals = entries
         .map((entry) => {
           const entryStart = new Date(entry.start_time);
@@ -1494,12 +1495,10 @@ export default function HomeScreen() {
         return diff > 0 ? sum + Math.round(diff / 60000) : sum;
       }, 0);
 
-      setTodaySleepMinutes(totalMinutes);
-      return { totalMinutes, activeSleepTimer };
+      return { totalMinutes, activeSleepTimer, serverEntries:entries.filter(entry=>new Date(entry.start_time)<=endOfDay&&(!entry.end_time||new Date(entry.end_time)>=startOfDay)) };
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
-      setTodaySleepMinutes(0);
-      return { totalMinutes: 0, activeSleepTimer: null };
+      throw error;
     }
   };
 
@@ -1519,8 +1518,8 @@ export default function HomeScreen() {
     onAfterSplit: () => loadDailyEntriesOnly(),
   });
 
-  const handleSaveEntry = async (payload: any) => {
-    console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
+  const handleSaveEntry = async (payload: any, options?: { draftManaged?: boolean }): Promise<ActivitySaveOutcome> => {
+    console.log('Home care save requested');
     const entryType =
       payload?.entry_type === 'feeding' || payload?.entry_type === 'diaper'
         ? payload.entry_type
@@ -1528,10 +1527,10 @@ export default function HomeScreen() {
 
     if (entryType !== 'feeding' && entryType !== 'diaper') {
       Alert.alert(t('common.error'), t('alert.unknownEntry'));
-      return;
+      return { status: 'rejected' };
     }
 
-    const { error } = await addBabyCareEntry({
+    const { data, error, saveStatus } = await addBabyCareEntry({
       entry_type: entryType,
       start_time: payload.start_time,
       end_time: payload.end_time ?? null,
@@ -1545,14 +1544,15 @@ export default function HomeScreen() {
       diaper_suppository_given: payload.diaper_suppository_given ?? null,
       diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
     }, activeBabyId ?? undefined, {
+      expectedUserId: user?.id, expectedLocalGeneration: localHealthGeneration(),
       diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
       bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
     });
 
-    if (error) {
+    if (error || !data?.id) {
       console.error('Error saving baby care entry:', error);
-      Alert.alert(t('common.error'), t('alert.entrySaveFailed'));
-      return;
+      Alert.alert(t('common.error'), saveErrorMessage(error, ACTIVE_HOME_LOCALE, t('alert.entrySaveFailed')));
+      return { status: saveStatus === 'rejected' ? 'rejected' : 'confirmation_unknown', error };
     }
 
     if (
@@ -1576,10 +1576,10 @@ export default function HomeScreen() {
       }
     }
 
-    setShowInputModal(false);
-    setSelectedActivityType('feeding');
-    setSelectedSubType(null);
+    if (!options?.draftManaged) { setShowInputModal(false); setSelectedActivityType('feeding'); setSelectedSubType(null); }
 
+    const outcome: ActivitySaveOutcome = data?.id ? { status: 'confirmed', entryId: data.id } : { status: 'confirmation_unknown' };
+    if (user?.id) await invalidateReadSnapshots(user.id, activeBabyId ?? undefined, ['home-care','daily-care']).catch(() => {});
     // Quick reload of daily entries to show the new entry immediately
     await loadDailyEntriesOnly();
 
@@ -1590,7 +1590,7 @@ export default function HomeScreen() {
         feedingType: payload.feeding_type ?? null,
       });
     }
-
+    return outcome;
   };
 
   const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
@@ -1612,7 +1612,7 @@ export default function HomeScreen() {
       const { error } = await supabase.from('sleep_entries').insert(payload);
       if (error) {
         console.error('Error saving sleep entry:', error);
-        Alert.alert(t('common.error'), t('alert.sleepSaveFailed'));
+        Alert.alert(t('common.error'), saveErrorMessage(error, ACTIVE_HOME_LOCALE, t('alert.sleepSaveFailed')));
         return;
       }
 
@@ -1624,24 +1624,16 @@ export default function HomeScreen() {
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      await loadData({ isRefreshing: true });
     } catch (err) {
       console.error('Failed to save sleep entry:', err);
-      Alert.alert(t('common.error'), t('alert.sleepEntrySaveFailed'));
+      Alert.alert(t('common.error'), saveErrorMessage(err, ACTIVE_HOME_LOCALE, t('alert.sleepEntrySaveFailed')));
     }
   };
 
   // Nach dem Sprach-Logging alles neu laden, was betroffen sein kann
   // (Alltag-Einträge und die Schlafminuten der Home-Kachel).
-  const handleVoiceLogSaved = async () => {
-    await loadDailyEntriesOnly();
-    const today = new Date();
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
-    await fetchTodaySleepMinutes(startOfDay, endOfDay);
-  };
+  const handleVoiceLogSaved = async () => { await loadDailyEntriesOnly(); };
   // Einträge über den schwebenden Sprach-Button (globales Modal) nachladen.
   useVoiceLogSavedListener(() => {
     void handleVoiceLogSaved();
@@ -1850,8 +1842,8 @@ export default function HomeScreen() {
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
                   }]}>
-                    {feedingStatValue}
-                    <Text style={styles.feedingMlUnit}>{feedingStatUnit === 'ml' ? ' ml' : '×'}</Text>
+                    {readStates.care?.verifiedAt ? feedingStatValue : '—'}
+                    <Text style={styles.feedingMlUnit}>{readStates.care?.verifiedAt ? (feedingStatUnit === 'ml' ? ' ml' : '×') : ''}</Text>
                   </ThemedText>
                 </View>
                 <View style={styles.feedingDetailsWrap}>
@@ -1861,7 +1853,7 @@ export default function HomeScreen() {
                     ellipsizeMode="tail"
                     style={[styles.feedingDetailPrimary, { color: textSecondary }]}
                   >
-                    {todayFeedingsPrimaryDetail}
+                    {readStates.care?.verifiedAt ? todayFeedingsPrimaryDetail : ''}
                   </ThemedText>
                   {todayFeedingsSecondaryDetail ? (
                     <ThemedText
@@ -1896,7 +1888,7 @@ export default function HomeScreen() {
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
-                  }]}>{todayDiaperChanges}</ThemedText>
+                  }]}>{readStates.care?.verifiedAt ? todayDiaperChanges : '—'}</ThemedText>
                 </View>
                 <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.diapers')}</ThemedText>
               </TouchableOpacity>
@@ -1921,7 +1913,7 @@ export default function HomeScreen() {
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
-                  }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
+                  }]}>{readStates.sleep?.verifiedAt ? formatMinutes(todaySleepMinutes) : '—'}</ThemedText>
                 </View>
                 <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.sleep')}</ThemedText>
               </TouchableOpacity>
@@ -2415,6 +2407,7 @@ export default function HomeScreen() {
         )}
 
         <ActivityInputModal
+          draftEnabled
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}

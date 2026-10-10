@@ -7,7 +7,7 @@ import React, {
   useState,
 } from 'react';
 
-import { getOnboardingCompletionState } from '@/lib/onboarding';
+import { getOnboardingCompletionState, readSavedOnboardingCompletionState } from '@/lib/onboarding';
 import {
   getActiveBabyResolutionScope,
   isResolutionCurrent,
@@ -50,7 +50,14 @@ export function OnboardingStatusProvider({ children }: { children: React.ReactNo
       return false;
     }
 
+    let savedComplete = false;
     try {
+      // A saved completed setup can resolve navigation before a stalled auth
+      // refresh/profile request. The normal check continues in the background.
+      savedComplete = await readSavedOnboardingCompletionState(requestedUserId);
+      if (savedComplete && requestId === latestRequestIdRef.current) {
+        setResolved({ scope: requestedScope, isComplete: true });
+      }
       const isComplete = await getOnboardingCompletionState(requestedUserId);
       if (requestId === latestRequestIdRef.current) {
         setResolved({ scope: requestedScope, isComplete });
@@ -59,15 +66,17 @@ export function OnboardingStatusProvider({ children }: { children: React.ReactNo
     } catch (error) {
       console.error('Failed to resolve onboarding status:', error);
       if (requestId === latestRequestIdRef.current) {
-        setResolved({ scope: requestedScope, isComplete: false });
+        setResolved({ scope: requestedScope, isComplete: savedComplete });
       }
-      return false;
+      return savedComplete;
     }
   }, [user?.id]);
 
   useEffect(() => {
     if (authLoading) return;
     void refresh();
+    const invalidatePending = () => { latestRequestIdRef.current++; };
+    return invalidatePending;
   }, [authLoading, refresh]);
 
   return (

@@ -1,3 +1,4 @@
+import { offlineText } from './offlineTranslations';
 import { NativeModules, Platform } from 'react-native';
 
 import { findFreshActiveSleepEntry } from './sleepEntryGuards';
@@ -35,6 +36,8 @@ type SleepWidgetNativeModule = {
 const nativeModule: SleepWidgetNativeModule | null =
   Platform.OS === 'ios' ? (NativeModules.SleepWidgetModule ?? null) : null;
 
+let widgetGeneration = 0;
+let widgetWork: Promise<unknown> = Promise.resolve();
 export const isSleepWidgetSupported = () => nativeModule !== null;
 
 /**
@@ -167,6 +170,8 @@ export type SleepWidgetSegment = {
 };
 
 export type SleepWidgetSnapshot = {
+  localStopPending?: boolean;
+  pendingLabel?: string;
   updatedAt: number;
   babyName: string | null;
   isSleeping: boolean;
@@ -213,6 +218,7 @@ const buildStrings = (locale: SleepTrackerLocale): Record<string, string> => {
 export const buildSleepWidgetSnapshot = (
   entries: SleepEntry[],
   options: {
+    localStopPending?: boolean;
     prediction?: SleepWindowPrediction | null;
     locale?: SleepTrackerLocale;
     babyName?: string | null;
@@ -250,6 +256,8 @@ export const buildSleepWidgetSnapshot = (
     date ? Math.round(date.getTime() / 1000) : null;
 
   return {
+    localStopPending: options.localStopPending ?? false,
+    pendingLabel: options.localStopPending ? offlineText(locale, 'inspect') : undefined,
     updatedAt: Math.round(now.getTime() / 1000),
     babyName: options.babyName ?? null,
     isSleeping: Boolean(activeEntry && activeStart),
@@ -274,6 +282,7 @@ export const buildSleepWidgetSnapshot = (
 export const syncSleepWidget = async (
   entries: SleepEntry[],
   options: {
+    localStopPending?: boolean;
     prediction?: SleepWindowPrediction | null;
     locale?: SleepTrackerLocale;
     babyName?: string | null;
@@ -283,7 +292,9 @@ export const syncSleepWidget = async (
   if (!nativeModule) return;
   try {
     const snapshot = buildSleepWidgetSnapshot(entries, options);
-    await nativeModule.syncSnapshot(JSON.stringify(snapshot));
+    const generation = widgetGeneration;
+    const task = widgetWork.catch(() => {}).then(async () => { if (generation === widgetGeneration) await nativeModule.syncSnapshot(JSON.stringify(snapshot)); });
+    widgetWork = task; await task;
   } catch (error) {
     console.warn('Failed to sync sleep widget:', error);
   }
@@ -291,9 +302,11 @@ export const syncSleepWidget = async (
 
 /** Leert das Widget, z. B. beim Abmelden oder ohne aktives Baby. */
 export const clearSleepWidget = async (): Promise<void> => {
+  widgetGeneration += 1;
   if (!nativeModule) return;
   try {
-    await nativeModule.clearSnapshot();
+    const task = widgetWork.catch(() => {}).then(() => nativeModule.clearSnapshot());
+    widgetWork = task; await task;
   } catch (error) {
     console.warn('Failed to clear sleep widget:', error);
   }

@@ -98,6 +98,8 @@ public struct SleepWidgetStrings: Codable, Equatable {
 }
 
 public struct SleepWidgetSnapshot: Codable, Equatable {
+    public var localStopPending: Bool? = nil
+    public var pendingLabel: String? = nil
     public var updatedAt: TimeInterval
     public var babyName: String?
 

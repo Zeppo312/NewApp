@@ -121,6 +121,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'ruler': 'straighten',
   'ruler.fill': 'straighten',
   'wind': 'air',
+  'wifi.slash': 'wifi-off',
   'humidity': 'water-drop',
   'plus': 'add',
   'plus.circle': 'add-circle',

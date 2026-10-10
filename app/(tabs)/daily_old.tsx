@@ -1,3 +1,11 @@
+import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
+import { localDateKey, readSnapshot, writeSnapshot, validRows } from '@/lib/localReadSnapshots';
+import { useTrackingSync } from '@/contexts/TrackingSyncContext';
+import { TrackingSyncStatus } from '@/components/TrackingSyncStatus';
+import { overlayTrackingRows, overlayVitaminChecks, readTrackingOutbox, trackingScope } from '@/lib/trackingOutbox';
+import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
+import { LocalReadStatus } from '@/components/LocalReadStatus';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -15,6 +23,7 @@ import {
   Alert,
   ScrollView,
   Animated,
+  AppState,
   Dimensions,
 } from 'react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
@@ -66,7 +75,6 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // Removed old managers; using unified baby_care_entries
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
 
 import { BlurView } from 'expo-blur';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY } from '@/constants/DesignGuide';
@@ -841,6 +849,7 @@ export default function DailyScreen() {
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
   const { user } = useAuth();
+  const trackingSync = useTrackingSync();
   const userId = user?.id;
 
   // Dark Mode angepasste Farben
@@ -866,7 +875,7 @@ export default function DailyScreen() {
     dismissNightWakePrompt,
   } = useNightWakePrompt({ userId: user?.id, babyId: activeBabyId });
 
-  const [entries, setEntries] = useState<DailyEntry[]>([]);
+  const [storedEntries, setEntries] = useState<DailyEntry[]>([]);
   const [weekEntries, setWeekEntries] = useState<DailyEntry[]>([]);
   const [monthEntries, setMonthEntries] = useState<DailyEntry[]>([]);
   const [currentDeviceTimeMs, setCurrentDeviceTimeMs] = useState(() => Date.now());
@@ -876,6 +885,9 @@ export default function DailyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const historyCutoff = useHistoryCutoff();
+  const entries = isBeforeHistoryCutoff(selectedDate, historyCutoff) ? [] : storedEntries;
+  const careScopeKey = `${user?.id}:${activeBabyId}`;
+  const careScopeRef = useRef(careScopeKey); careScopeRef.current = careScopeKey;
   const [selectedTab, setSelectedTab] = useState<'day' | 'week' | 'month'>('day');
   const subscriptionTier = useSubscriptionTier();
   const canCreateCustomActivities = subscriptionTier === 'standard' || subscriptionTier === 'premium';
@@ -924,6 +936,7 @@ export default function DailyScreen() {
   const quickActionHandledRef = useRef<string | null>(null);
 
   const [activeTimer, setActiveTimer] = useState<ActiveCareTimer | null>(null);
+  useEffect(() => { setActiveTimer(null); }, [careScopeKey]);
   const [hydratedTimerBabyId, setHydratedTimerBabyId] = useState<string | null>(null);
   const isTimerHydrated = hydratedTimerBabyId === activeBabyId;
   const lastLiveStopEventRef = useRef<{ url: string; at: number } | null>(null);
@@ -988,13 +1001,18 @@ export default function DailyScreen() {
       return;
     }
 
+    const key = careScopeKey;
+    const scope = user?.id ? trackingScope(user.id,activeBabyId) : null;
+    if (scope) { const saved = await readSnapshot(scope,'tracking-custom-types',validRows); if (careScopeRef.current===key && saved) setCustomActivities(saved.data); }
     const { data, error } = await getCustomActivityTypes(activeBabyId, { includeArchived: true });
+    if (careScopeRef.current!==key) return;
     if (error) {
       console.error('Daily: failed to load custom activities', error);
       return;
     }
     setCustomActivities(data ?? []);
-  }, [activeBabyId, isReady]);
+    if (scope) await writeSnapshot(scope,'tracking-custom-types',data ?? []).catch(() => {});
+  }, [activeBabyId, isReady, user?.id, careScopeKey]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => void loadCustomActivities(), 0);
@@ -1025,6 +1043,9 @@ export default function DailyScreen() {
       return;
     }
 
+    const scope = careScopeKey; const generation = localHealthGeneration();
+    const currentScope = () => careScopeRef.current === scope && !!user?.id && localHealthAllowed(user.id,generation);
+    if (!currentScope()) return;
     try {
       const { data, error } = await supabase
         .from('baby_care_entries')
@@ -1035,6 +1056,7 @@ export default function DailyScreen() {
         .order('start_time', { ascending: false })
         .limit(1);
 
+      if (!currentScope()) return;
       if (error) {
         console.error('Error loading latest bottle info:', error);
         return;
@@ -1054,7 +1076,7 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Failed to resolve latest bottle info:', error);
     }
-  }, [activeBabyId]);
+  }, [activeBabyId, careScopeKey, user?.id]);
 
   useEffect(() => {
     let isActive = true;
@@ -1487,6 +1509,7 @@ export default function DailyScreen() {
     return latestVolume ?? 120;
   }, [entries, weekEntries, monthEntries]);
 
+  const activeCareReadSequence = useRef(0);
   const loadActiveTimer = useCallback(async () => {
     if (!activeBabyId) {
       setActiveTimer(null);
@@ -1494,22 +1517,41 @@ export default function DailyScreen() {
       return;
     }
 
+    const scope = careScopeKey; const generation = localHealthGeneration(); const request = ++activeCareReadSequence.current;
+    const currentScope = () => request === activeCareReadSequence.current && careScopeRef.current === scope && !!user?.id && localHealthAllowed(user.id,generation);
+    if (!currentScope()) return;
     try {
+      const localScope = trackingScope(user!.id, activeBabyId);
+      const cached = await readSnapshot(localScope, 'tracking-care-active', validRows);
+      const pending = await readTrackingOutbox(user!.id);
+      if (currentScope()) {
+        const local = overlayTrackingRows('care', cached?.data ?? [], pending, activeBabyId,cached?.verifiedAt ?? '').find(row => !row.end_time && row.start_time);
+        if (local) setActiveTimer(local.entry_type === 'custom'
+          ? { id: local.id, type: 'CUSTOM', start: Date.parse(local.start_time), label: local.custom_name, emoji: local.custom_emoji, color: local.custom_color }
+          : { id: local.id, type: local.entry_type === 'diaper' ? 'DIAPER' : local.feeding_type, start: Date.parse(local.start_time) });
+        setHydratedTimerBabyId(activeBabyId);
+      }
       const { data, error } = await supabase
         .from('baby_care_entries')
-        .select('id,entry_type,feeding_type,start_time,custom_name,custom_emoji,custom_color,custom_tracking_mode')
+        .select('*')
         .eq('baby_id', activeBabyId)
         .in('entry_type', ['feeding', 'diaper', 'custom'])
         .is('end_time', null)
         .order('start_time', { ascending: false })
         .limit(50);
 
+      if (!currentScope()) return;
       if (error) {
         console.error('Error loading active timer:', error);
         return;
       }
 
-      const openTimers = data ?? [];
+      const currentOperations = await readTrackingOutbox(user!.id);
+      if (!currentScope()) return;
+      await writeSnapshot(localScope,'tracking-care-active',data ?? [],new Date().toISOString(),generation).catch(() => {});
+      if (!currentScope()) return;
+      // Do not replace the full care cache with this deliberately limited timer query.
+      const openTimers = overlayTrackingRows('care', data ?? [], currentOperations, activeBabyId).filter(row => !row.end_time);
       const validTypeSet = new Set(['BREAST', 'BOTTLE', 'SOLIDS', 'PUMP', 'WATER']);
       const current = openTimers.find((row) => {
         if (!row?.id || !row?.start_time) return false;
@@ -1519,24 +1561,6 @@ export default function DailyScreen() {
         if (row.entry_type === 'diaper') return true;
         return row.entry_type === 'custom' && row.custom_tracking_mode === 'duration';
       });
-
-      // Data hygiene: only one timer can be active. Close stale open timers automatically.
-      const staleOpenTimers = openTimers.filter((row) => !!row?.id && (!current || row.id !== current.id));
-      if (!isReadOnlyPreviewMode && staleOpenTimers.length > 0) {
-        const nowIso = new Date().toISOString();
-        await Promise.allSettled(
-          staleOpenTimers.map((row) => {
-            const startMs = row.start_time ? new Date(row.start_time).getTime() : NaN;
-            const endIso = Number.isFinite(startMs) ? new Date(startMs).toISOString() : nowIso;
-            return supabase
-              .from('baby_care_entries')
-              .update({ end_time: endIso, updated_at: nowIso })
-              .eq('id', row.id)
-              .eq('baby_id', activeBabyId)
-              .is('end_time', null);
-          }),
-        );
-      }
 
       if (!current?.id || !current.start_time) {
         setActiveTimer(null);
@@ -1576,48 +1600,79 @@ export default function DailyScreen() {
     } catch (error) {
       console.error('Failed to resolve active timer:', error);
     } finally {
-      setHydratedTimerBabyId(activeBabyId ?? null);
+      if (currentScope()) setHydratedTimerBabyId(activeBabyId ?? null);
     }
-  }, [activeBabyId, isReadOnlyPreviewMode]);
+  }, [activeBabyId, careScopeKey, user?.id]);
 
-  const loadEntries = async () => {
-    if (!activeBabyId) return;
-    setIsLoading(true);
-
-    try {
-      // Load with cache - instant if cached
-      const { data, isStale, refresh } = await loadDayEntriesWithCache(
-        selectedDate,
-        activeBabyId
-      );
-
-      // Show cached data immediately
-      if (data) {
-        setEntries(data);
-        setIsLoading(false);
-      }
-
-      // Refresh in background if stale
-      if (isStale) {
-        const freshData = await refresh();
-        setEntries(freshData);
-      }
-
-      // If no cache, data is already fresh
-      if (!data) {
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error('Error loading day entries:', error);
-      setIsLoading(false);
-    } finally {
-      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
-      setRefreshing(false);
+  const dayScope = `${user?.id}:${activeBabyId}:${localDateKey(selectedDate)}:${visibleTab}:${historyCutoff?.getTime()}`;
+  const dayScopeRef = useRef(dayScope); dayScopeRef.current = dayScope;
+  const dayFlight = useRef<{ scope: string; promise: Promise<void> } | null>(null);
+  const [dayReadState, setDayReadState] = useState<{ verifiedAt?: string; failed?: boolean; loading?: boolean }>({});
+  useEffect(() => { setEntries([]); setDayReadState({}); }, [dayScope]);
+  const aggregateScope = `${user?.id}:${activeBabyId}:${visibleTab}:${weekOffset}:${monthOffset}`;
+  const aggregateScopeRef = useRef(aggregateScope); aggregateScopeRef.current = aggregateScope;
+  useEffect(() => { setWeekEntries([]); setMonthEntries([]); }, [aggregateScope]);
+  const projectCareRows = (rows: any[], start: Date, end: Date, verifiedAt?: string) => mapCareToDaily(overlayTrackingRows('care', rows, trackingSync.operations, activeBabyId, verifiedAt))
+    .filter(row => Date.parse(row.start_time) >= start.getTime() && Date.parse(row.start_time) <= end.getTime());
+  const careConfirmationSignature = useRef('');
+  useEffect(() => {
+    if (!activeBabyId || !trackingSync.ready) return;
+    const dayStart = new Date(selectedDate); dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(selectedDate); dayEnd.setHours(23,59,59,999);
+    setEntries(rows => projectCareRows(rows, dayStart, dayEnd));
+    setWeekEntries(rows => projectCareRows(rows, getWeekStart(selectedWeekDate), getWeekEnd(selectedWeekDate)));
+    const monthStart = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth(), 1);
+    const monthEnd = new Date(selectedMonthDate.getFullYear(), selectedMonthDate.getMonth()+1, 0,23,59,59,999);
+    setMonthEntries(rows => projectCareRows(rows, monthStart, monthEnd));
+    setVitaminDChecks(checks => overlayVitaminChecks(checks, trackingSync.operations, activeBabyId));
+    void loadActiveTimer();
+    // A confirmation triggers an authoritative read, retaining local content on failure.
+    const confirmed = trackingSync.operations.filter(op => op.scope.babyId === activeBabyId && op.state === 'confirmed');
+    const signature = `${careScopeKey}|` + confirmed.map(op=>op.operationId).join('|');
+    if (signature !== careConfirmationSignature.current) {
+      careConfirmationSignature.current = signature;
+      if (confirmed.length === 0) return;
+      const scope = careScopeKey; const generation = localHealthGeneration();
+      void (async () => {
+        // A pre-reconnect read must settle before this new authoritative read.
+        if (visibleTab === 'day') await dayFlight.current?.promise;
+        if (careScopeRef.current !== scope || dayScopeRef.current !== dayScope || !user?.id || !localHealthAllowed(user.id,generation)) return;
+        if (visibleTab === 'day') void loadEntries(); else if (visibleTab === 'week') void loadWeekEntries(); else void loadMonthEntries();
+        const checks = await loadVitaminDReminderState(user.id, activeBabyId);
+        if (careScopeRef.current === scope && localHealthAllowed(user.id,generation)) setVitaminDChecks(checks);
+      })().catch(() => {});
     }
+  }, [trackingSync.operations, trackingSync.ready, careScopeKey, dayScope, aggregateScope, activeBabyId, selectedDate, selectedWeekDate, selectedMonthDate]);
+  const loadEntries = (): Promise<void> => {
+    if (!activeBabyId || !user?.id || isBeforeHistoryCutoff(selectedDate, historyCutoff)) return Promise.resolve();
+    const scope = dayScope; const generation = localHealthGeneration();
+    if (dayFlight.current?.scope === scope) return dayFlight.current.promise;
+    const current = () => dayScopeRef.current === scope && localHealthAllowed(user.id, generation) && !isBeforeHistoryCutoff(selectedDate, historyCutoff);
+    const task = (async () => {
+      setDayReadState(previous => ({ ...previous, loading: true }));
+      try {
+        const { data, refresh, verifiedAt } = await loadDayEntriesWithCache(selectedDate, activeBabyId, user.id);
+        if (!current()) return;
+        const from = new Date(selectedDate); from.setHours(0,0,0,0); const to = new Date(selectedDate); to.setHours(23,59,59,999);
+        if (data) { setEntries(projectCareRows(data,from,to,verifiedAt ?? '')); setDayReadState(v => ({ ...v, verifiedAt })); setIsLoading(false); }
+        const fresh = await refresh();
+        if (!current()) return;
+        await writeSnapshot(trackingScope(user.id, activeBabyId), 'tracking-care', fresh).catch(() => {});
+        const operations = await readTrackingOutbox(user.id); if (!current()) return;
+        setEntries(mapCareToDaily(overlayTrackingRows('care',fresh,operations,activeBabyId)).filter(row => Date.parse(row.start_time)>=from.getTime() && Date.parse(row.start_time)<=to.getTime())); setDayReadState({ verifiedAt: new Date().toISOString() });
+      } catch {
+        if (current()) setDayReadState(previous => ({ ...previous, loading: false, failed: true }));
+      } finally {
+        if (current()) { setIsLoading(false); setRefreshing(false); void Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]); }
+      }
+    })().finally(() => { if (dayFlight.current?.promise === task) dayFlight.current = null; });
+    dayFlight.current = { scope, promise: task }; return task;
   };
 
   const loadWeekEntries = async () => {
     if (!activeBabyId) return;
+    const scope = aggregateScope; const generation = localHealthGeneration();
+    const current = () => aggregateScopeRef.current === scope && !!user?.id && localHealthAllowed(user.id, generation);
     setIsLoading(true);
 
     const weekStart = getWeekStart(selectedWeekDate);
@@ -1631,32 +1686,35 @@ export default function DailyScreen() {
         activeBabyId
       );
 
+      if (!current()) return;
       // Show cached data immediately
       if (data) {
-        setWeekEntries(data);
-        setIsLoading(false);
+        setWeekEntries(projectCareRows(data,weekStart,weekEnd,''));
+        if (current()) setIsLoading(false);
       }
 
       // Refresh in background if stale
       if (isStale) {
         const freshData = await refresh();
-        setWeekEntries(freshData);
+        if (current()) setWeekEntries(projectCareRows(freshData,weekStart,weekEnd));
       }
 
       // If no cache, data is already fresh
       if (!data) {
-        setIsLoading(false);
+        if (current()) setIsLoading(false);
       }
     } catch (error) {
       console.error('Error loading week entries:', error);
-      setIsLoading(false);
+      if (current()) setIsLoading(false);
     } finally {
-      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
+      if (current()) await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
     }
   };
 
   const loadMonthEntries = async () => {
     if (!activeBabyId) return;
+    const scope = aggregateScope; const generation = localHealthGeneration();
+    const current = () => aggregateScopeRef.current === scope && !!user?.id && localHealthAllowed(user.id, generation);
     setIsLoading(true);
 
     try {
@@ -1666,27 +1724,28 @@ export default function DailyScreen() {
         activeBabyId
       );
 
+      if (!current()) return;
       // Show cached data immediately
       if (data) {
-        setMonthEntries(data);
-        setIsLoading(false);
+        setMonthEntries(projectCareRows(data,new Date(selectedMonthDate.getFullYear(),selectedMonthDate.getMonth(),1),new Date(selectedMonthDate.getFullYear(),selectedMonthDate.getMonth()+1,0,23,59,59,999),''));
+        if (current()) setIsLoading(false);
       }
 
       // Refresh in background if stale
       if (isStale) {
         const freshData = await refresh();
-        setMonthEntries(freshData);
+        if (current()) setMonthEntries(projectCareRows(freshData,new Date(selectedMonthDate.getFullYear(),selectedMonthDate.getMonth(),1),new Date(selectedMonthDate.getFullYear(),selectedMonthDate.getMonth()+1,0,23,59,59,999)));
       }
 
       // If no cache, data is already fresh
       if (!data) {
-        setIsLoading(false);
+        if (current()) setIsLoading(false);
       }
     } catch (error) {
       console.error('Error loading month entries:', error);
-      setIsLoading(false);
+      if (current()) setIsLoading(false);
     } finally {
-      await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
+      if (current()) await Promise.allSettled([loadActiveTimer(), loadLatestBottleInfo()]);
     }
   };
 
@@ -1704,13 +1763,29 @@ export default function DailyScreen() {
     return () => clearTimeout(timeoutId);
   }, [selectedDate, selectedWeekDate, selectedMonthDate, visibleTab, activeBabyId, isReady]);
 
+  const liveCareRefreshRef = useRef<() => void>(() => {});
+  liveCareRefreshRef.current = () => {
+    if (visibleTab === 'week') void loadWeekEntries(); else if (visibleTab === 'month') void loadMonthEntries(); else void loadEntries();
+    void loadCustomActivities();
+  };
+  useEffect(() => {
+    if (!user?.id || !activeBabyId || !isReady) return;
+    let alive = true; let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => { if (timer) clearTimeout(timer); timer = setTimeout(() => { if (alive) liveCareRefreshRef.current(); },250); };
+    const channel = supabase.channel(`daily-care-sync:${user.id}:${activeBabyId}`);
+    for (const table of ['baby_care_entries','custom_activity_types']) channel.on('postgres_changes', {event:'*',schema:'public',table,filter:`baby_id=eq.${activeBabyId}`},refresh);
+    channel.subscribe(status => { if (status==='SUBSCRIBED') refresh(); });
+    const foreground = AppState.addEventListener('change', state => { if (state==='active') refresh(); });
+    return () => { alive=false; if (timer) clearTimeout(timer); foreground.remove(); void supabase.removeChannel(channel); };
+  }, [user?.id,activeBabyId,isReady]);
+
   const syncDailyEntries = async () => {};
 
   const handleRefresh = async () => {
     setRefreshing(true);
 
     // Start loading entries
-    const loadPromise = Promise.all([loadEntries(), loadCustomActivities()]);
+    const loadPromise = Promise.all([visibleTab === 'week' ? loadWeekEntries() : visibleTab === 'month' ? loadMonthEntries() : loadEntries(), loadCustomActivities()]);
 
     // Set maximum refresh time to 2 seconds
     const timeoutPromise = new Promise<void>((resolve) => {
@@ -1796,7 +1871,7 @@ export default function DailyScreen() {
         t('common.error'),
         errorCode === '23505'
           ? t('custom.duplicate')
-          : String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+          : saveErrorMessage(result.error, locale, t('daily.saveFailed')),
       );
       return false;
     }
@@ -1818,7 +1893,7 @@ export default function DailyScreen() {
     if (result.error || !result.data) {
       Alert.alert(
         t('common.error'),
-        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+        saveErrorMessage(result.error, locale, t('daily.saveFailed')),
       );
       return false;
     }
@@ -1884,7 +1959,7 @@ export default function DailyScreen() {
     if (result.error || !result.data) {
       Alert.alert(
         t('common.error'),
-        String((result.error as any)?.message ?? result.error ?? t('daily.saveFailed')),
+        saveErrorMessage(result.error, locale, t('daily.saveFailed')),
       );
       return false;
     }
@@ -1908,6 +1983,7 @@ export default function DailyScreen() {
       selectedCustomActivity.name,
     );
     setEditingCustomEntry(null);
+    if (result.data.local_pending) return true;
     await invalidateDailyCache(activeBabyId);
     if (visibleTab === 'week') await loadWeekEntries();
     else if (visibleTab === 'month') await loadMonthEntries();
@@ -1950,16 +2026,18 @@ export default function DailyScreen() {
     return () => clearTimeout(timeoutId);
   }, [ensureWritableInCurrentMode, quickAction, router]);
 
-  const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean }) => {
-    if (!ensureWritableInCurrentMode()) return;
+  const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean; draftManaged?: boolean }): Promise<ActivitySaveOutcome> => {
+    let confirmedId: string | undefined;
+    let saveStatus: 'confirmed' | 'queued' | 'rejected' | 'confirmation_unknown' = 'rejected';
+    if (!ensureWritableInCurrentMode()) return { status: 'rejected' };
     if (!activeBabyId) {
       Alert.alert(
         t('alert.noBabyTitle'),
         t('alert.noBaby')
       );
-      return;
+      return { status: 'rejected' };
     }
-    console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
+    console.log('Daily care save requested');
     console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
     console.log('handleSaveEntry - selectedSubType:', selectedSubType);
     const timerRequested = !!options?.startTimer && payload?.feeding_type !== 'PUMP' && payload?.feeding_type !== 'WATER';
@@ -1979,6 +2057,7 @@ export default function DailyScreen() {
           feeding_side: payload.feeding_side ?? null,
         }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
+        if (data?.local_pending) saveStatus = 'queued';
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'feeding',
@@ -1989,13 +2068,15 @@ export default function DailyScreen() {
           feeding_volume_ml: payload.feeding_volume_ml ?? null,
           feeding_side: payload.feeding_side ?? null,
         }, activeBabyId ?? undefined, {
+          expectedUserId: user?.id, expectedLocalGeneration: localHealthGeneration(),
           bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
         });
-        data = res.data; error = res.error;
+        data = res.data; error = res.error; saveStatus = res.saveStatus;
       }
-      if (error) {
-        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFeedingFailed')));
-        return;
+      confirmedId = data?.id;
+      if (error || !data?.id) {
+        Alert.alert(t('common.error'), saveErrorMessage(error, locale, t('daily.saveFeedingFailed')));
+        return { status: saveStatus === 'rejected' ? 'rejected' : 'confirmation_unknown', error };
       }
       if (timerRequested && feedingType) {
         const startMs = new Date(resolvedStartTime).getTime();
@@ -2008,7 +2089,7 @@ export default function DailyScreen() {
 
         try {
           await cancelLocalFeedingReminders();
-          if (user?.id && activeBabyId) {
+          if (saveStatus !== 'queued' && user?.id && activeBabyId) {
             await cancelBabyReminderNotification({
               userId: user.id,
               babyId: activeBabyId,
@@ -2032,7 +2113,7 @@ export default function DailyScreen() {
       ) {
         try {
           await cancelLocalFeedingReminders();
-          if (user?.id && activeBabyId) {
+          if (saveStatus !== 'queued' && user?.id && activeBabyId) {
             await cancelBabyReminderNotification({
               userId: user.id,
               babyId: activeBabyId,
@@ -2073,6 +2154,7 @@ export default function DailyScreen() {
           diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
         }, activeBabyId ?? undefined);
         data = res.data; error = res.error;
+        if (data?.local_pending) saveStatus = 'queued';
       } else {
         const res = await addBabyCareEntry({
           entry_type: 'diaper',
@@ -2085,13 +2167,15 @@ export default function DailyScreen() {
           diaper_suppository_given: payload.diaper_suppository_given ?? null,
           diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
         }, activeBabyId ?? undefined, {
+          expectedUserId: user?.id, expectedLocalGeneration: localHealthGeneration(),
           diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
         });
-        data = res.data; error = res.error;
+        data = res.data; error = res.error; saveStatus = res.saveStatus;
       }
-      if (error) {
-        Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('daily.saveFailed')));
-        return;
+      confirmedId = data?.id;
+      if (error || !data?.id) {
+        Alert.alert(t('common.error'), saveErrorMessage(error, locale, t('daily.saveFailed')));
+        return { status: saveStatus === 'rejected' ? 'rejected' : 'confirmation_unknown', error };
       }
       if (timerRequested) {
         const startMs = new Date(resolvedStartTime).getTime();
@@ -2110,12 +2194,13 @@ export default function DailyScreen() {
     } else {
       Alert.alert(t('common.notice'), t('alert.otherUnavailable'));
     }
-    setShowInputModal(false);
-    setEditingEntry(null);
+    if (!options?.draftManaged) { setShowInputModal(false); setEditingEntry(null); }
 
+    const outcome: ActivitySaveOutcome = confirmedId ? { status: saveStatus === 'queued' ? 'queued' : 'confirmed', entryId: confirmedId } : { status: 'confirmation_unknown' };
+    if (outcome.status === 'queued') return outcome;
     // Invalidate cache after save
     if (activeBabyId) {
-      await invalidateDailyCache(activeBabyId);
+      await invalidateDailyCache(activeBabyId).catch(() => {});
     }
 
     // Reload current view
@@ -2126,6 +2211,7 @@ export default function DailyScreen() {
     } else {
       loadEntries();
     }
+    return outcome;
   };
 
   const showSuccessSplash = (
@@ -2219,14 +2305,15 @@ export default function DailyScreen() {
     if (!activeBabyId) return;
 
     const timerToStop = activeTimer;
-    const { error } = await stopBabyCareEntryTimer(timerToStop.id, activeBabyId);
+    const { data: stopped, error } = await stopBabyCareEntryTimer(timerToStop.id, activeBabyId);
     if (error) {
-      Alert.alert(t('common.error'), String((error as any)?.message ?? error ?? t('common.unknownError')));
+      Alert.alert(t('common.error'), saveErrorMessage(error, locale, t('common.unknownError')));
       return;
     }
 
     await endBreastfeedingLiveActivity(timerToStop);
     setActiveTimer(null);
+    if (stopped?.local_pending) { Alert.alert(t('common.success'),t('daily.timerStopped')); return; }
 
     if (timerToStop.type === 'BREAST' || timerToStop.type === 'BOTTLE' || timerToStop.type === 'SOLIDS') {
       void maybeOfferNightWake({
@@ -3008,7 +3095,8 @@ export default function DailyScreen() {
           onBackPress={() => router.push('/(tabs)/home')}
         />
 
-        <ConnectionStatus showAlways={false} autoCheck={true} onRetry={loadEntries} />
+        <TrackingSyncStatus babyId={activeBabyId} offline={!!dayReadState.failed} />
+        {visibleTab === 'day' && !trackingSync.ready && <LocalReadStatus {...dayReadState} onRetry={() => void loadEntries()} />}
 
         {isReadOnlyPreviewMode && (
           <View style={s.readOnlyPreviewBanner}>
@@ -3473,6 +3561,7 @@ export default function DailyScreen() {
         </Modal>
 
         <ActivityInputModal
+          draftEnabled={!isReadOnlyPreviewMode}
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}

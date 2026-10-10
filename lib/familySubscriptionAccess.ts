@@ -11,7 +11,7 @@ export type FamilyAccess =
   | { status: 'active'; userId: string; tier: AppSubscriptionTier; expiresAt: string; validUntil: number }
   | { status: 'none' | 'unsupported' | 'unavailable'; userId: string };
 
-const entries = new Map<string, { value: FamilyAccess; checkedAt: number }>();
+const entries = new Map<string, { value: FamilyAccess; checkedAt: number; verifiedAt: number }>();
 const requests = new Map<string, Promise<FamilyAccess>>();
 const revisions = new Map<string, number>();
 const supportedUsers = new Set<string>();
@@ -38,6 +38,7 @@ export function parseFamilyAccess(value: unknown, userId: string, now = Date.now
 }
 
 export const hasCheckedFamilyAccess = (userId: string) => entries.has(userId);
+export const getFamilyAccessVerifiedAt = (userId: string) => entries.get(userId)?.verifiedAt ?? 0;
 
 export function getCachedFamilyAccess(userId: string): FamilyAccess {
   const entry = entries.get(userId);
@@ -112,16 +113,18 @@ export async function refreshFamilyAccess(userId: string, options: { force?: boo
     if (result.status === 'active' || result.status === 'none') supportedUsers.add(userId);
     // A network error can retain a previously verified, bounded lease, never
     // renew it. An explicit 'none' immediately revokes it.
+    let verifiedAt = Date.now();
     if (result.status === 'unavailable') {
+      verifiedAt = entries.get(userId)?.verifiedAt ?? 0;
       const previous = getCachedFamilyAccess(userId);
       if (previous.status === 'active') result = previous;
     }
-    entries.set(userId, { value: result, checkedAt: Date.now() });
+    entries.set(userId, { value: result, checkedAt: Date.now(), verifiedAt });
     clearTimeout(expiryTimers.get(userId));
     expiryTimers.delete(userId);
     if (result.status === 'active') {
       expiryTimers.set(userId, setTimeout(() => {
-        entries.set(userId, { value: unavailable(userId), checkedAt: Date.now() });
+        entries.set(userId, { value: unavailable(userId), checkedAt: Date.now(), verifiedAt });
         expiryTimers.delete(userId);
         listeners.forEach(listener => listener(userId));
       }, Math.max(0, result.validUntil - Date.now())));

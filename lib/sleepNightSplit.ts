@@ -1,3 +1,4 @@
+import { SLEEP_OFFLINE_ENABLED, readSleepCapability } from './sleepSyncContract';
 import type {
   SleepEntriesService,
   SleepEntry as ServiceSleepEntry,
@@ -39,6 +40,8 @@ export type SplitNightSegmentResult =
 // Bewusst weiter gefasst als der Service-Typ: der Tracker arbeitet mit
 // lib/sleepData-Entries (Date | string, optionale Felder).
 export type SleepEntryLike = {
+  sync_revision?: string;
+  sync_scope_revision?: string;
   id: string;
   user_id?: string | null;
   baby_id?: string | null;
@@ -137,6 +140,18 @@ export async function splitNightSleepSegment(params: {
       ? null
       : Math.max(1, Math.round((segmentEndMs - segmentStartMs) / MINUTE_MS));
 
+  let firstEntry: ServiceSleepEntry;
+  let secondEntry: ServiceSleepEntry;
+  if (SLEEP_OFFLINE_ENABLED && await readSleepCapability(userId)) {
+    if (!targetEntry.baby_id || !targetEntry.sync_revision || !targetEntry.sync_scope_revision) return { ok: false, reason: 'update-failed', message: 'Bitte den aktuellen Schlafstand laden.' };
+    const changes: any[] = [{ action: 'update', id: targetEntry.id, revision: targetEntry.sync_revision, fields: { end_time: splitTime.toISOString() } }];
+    if (mode === 'split') changes.push({ action: 'create', fields: { start_time: resumedStart.toISOString(), end_time: targetWasActive ? null : segmentEnd.toISOString(), notes: targetEntry.notes ?? null, quality: targetEntry.quality ?? null } });
+    const batch = await service.versionedBatch(targetEntry.baby_id, targetEntry.sync_scope_revision, changes);
+    if (batch.error || !batch.data?.[0] || mode === 'split' && !batch.data?.[1]) return { ok: false, reason: 'update-failed', message: batch.error?.message ?? 'Bitte den aktuellen Schlafstand laden.' };
+    firstEntry = batch.data[0];
+    if (mode === 'truncate') return { ok: true, mode: 'truncated', firstEntry };
+    secondEntry = batch.data[1];
+  } else {
   const updateResult = await service.updateEntry(targetEntry.id, {
     end_time: splitTime.toISOString(),
     duration_minutes: firstDuration,
@@ -199,7 +214,10 @@ export async function splitNightSleepSegment(params: {
     console.warn('[sleepNightSplit] secondary backend write failed:', createResult.secondary.error);
   }
 
-  const secondEntry = createResult.primary.data;
+  firstEntry = updateResult.primary.data;
+  secondEntry = createResult.primary.data;
+  }
+
 
   if (targetWasActive) {
     if (targetPeriodIsNight && secondEntry.id) {
@@ -217,7 +235,7 @@ export async function splitNightSleepSegment(params: {
   return {
     ok: true,
     mode: 'split',
-    firstEntry: updateResult.primary.data,
+    firstEntry,
     secondEntry,
     secondIsActive: targetWasActive,
     resumedStart,

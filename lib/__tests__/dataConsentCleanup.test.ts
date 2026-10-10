@@ -14,12 +14,14 @@ beforeEach(() => {
   mockStorage.set('data_consent_pending_withdrawal_v1:a', '["health"]');
   mockStorage.set('sb-abcdefghijklmnopqrst-auth-token', 'synthetic-token');
   mockStorage.set('home_cache', 'synthetic-health-data');
+  mockStorage.set('startup_access_v1:test.supabase.co:a', 'synthetic-display-access');
 });
 it('keeps the saved consent status through health withdrawal cleanup', async () => {
   await clearHealthConsentDeviceStorage();
   expect(mockStorage.get('data_consent_snapshot_v1:test.supabase.co:a')).toBe('confirmed-revocation');
   expect(mockStorage.get('data_consent_pending_withdrawal_v1:a')).toBe('["health"]');
   expect(mockStorage.has('home_cache')).toBe(false);
+  expect(mockStorage.has('startup_access_v1:test.supabase.co:a')).toBe(true);
 });
 it('removes the cached status on logout while keeping an unconfirmed withdrawal', async () => {
   await clearDeviceStoragePreservingWithdrawals();

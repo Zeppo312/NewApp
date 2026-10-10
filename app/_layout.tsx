@@ -1,3 +1,7 @@
+import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { SleepOfflineProvider, useSleepOffline } from '@/contexts/SleepOfflineContext';
+import { TrackingSyncProvider } from '@/contexts/TrackingSyncContext';
+import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
 import { isPaywallExcludedPath } from '@/lib/paywallRoutes';
 import { subscribeToFamilyAccess } from '@/lib/familySubscriptionAccess';
 import { useFonts } from 'expo-font';
@@ -130,6 +134,8 @@ type TermsConsentCheck = {
 
 // Wrapper-Komponente, die den AuthProvider verwendet
 function RootLayoutNav() {
+  const sleepOffline = useSleepOffline();
+  const sleepOfflineActionsRef = useRef(sleepOffline.actions); sleepOfflineActionsRef.current = sleepOffline.actions;
   const router = useRouter();
   const pathname = usePathname();
   const segments = useSegments();
@@ -490,6 +496,7 @@ function RootLayoutNav() {
       return;
     }
 
+    if (SLEEP_OFFLINE_ENABLED) return; // The dedicated provider uses confirmed snapshots plus the journal for native surfaces.
     const loadSleepPrediction = async () => {
       try {
         // Baby-Info laden
@@ -665,6 +672,7 @@ function RootLayoutNav() {
 
     let cancelled = false;
 
+    if (SLEEP_OFFLINE_ENABLED) return;
     const restoreLiveActivity = async () => {
       try {
         const existing = await sleepActivityService.restoreCurrentActivity();
@@ -674,7 +682,7 @@ function RootLayoutNav() {
         const { success, entries } = await loadAllVisibleSleepEntries();
         if (cancelled || !success || !entries) return;
 
-        const activeEntry = findFreshActiveSleepEntry(entries);
+        const activeEntry = findFreshActiveSleepEntry(pendingSleepOverlay(entries, sleepOfflineActionsRef.current));
 
         // Kein aktiver Schlaf in DB → stale Activity beenden
         if (!activeEntry?.start_time) {
@@ -1019,7 +1027,7 @@ export default Sentry.wrap(function RootLayout() {
                     <ActiveBabyProvider>
                       <BabyStatusProvider>
                         <OnboardingStatusProvider>
-                          <RootLayoutNav />
+                          <TrackingSyncProvider><SleepOfflineProvider><RootLayoutNav /></SleepOfflineProvider></TrackingSyncProvider>
                         </OnboardingStatusProvider>
                       </BabyStatusProvider>
                     </ActiveBabyProvider>

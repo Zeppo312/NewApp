@@ -186,3 +186,12 @@ describe('buildSleepWidgetSnapshot', () => {
     expect(snapshot.segments[0].isNight).toBe(false);
   });
 });
+
+it('native pending projection stops only the original and labels a still-running successor as unresolved locally', () => {
+  const { pendingSleepOverlay } = require('../sleepPendingOverlay');
+  const now = new Date(); const start = new Date(now.getTime()-7200000); const stop = new Date(now.getTime()-3600000);
+  const original={...entry(start,null),id:'original'};const successor={...entry(stop,null),id:'successor'};
+  const visible=pendingSleepOverlay([original,successor],[{scope:{babyId:undefined},originalEntryId:'original',baseEntry:{entry:original},chosenStopAt:stop.toISOString(),state:'needs_decision'}]);
+  const snapshot=buildSleepWidgetSnapshot(visible,{now,locale:'de',localStopPending:true});
+  expect(snapshot.isSleeping).toBe(true);expect(snapshot.sleepStartedAt).toBe(Math.round(stop.getTime()/1000));expect(snapshot.localStopPending).toBe(true);expect(snapshot.pendingLabel).toBe('Ausstehenden Stopp prüfen');
+});

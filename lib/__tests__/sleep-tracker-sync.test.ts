@@ -1,3 +1,5 @@
+import { pendingSleepOverlay } from '../sleepPendingOverlay';
+import { saveErrorMessage } from '../saveErrorMessage';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -21,10 +23,12 @@ const handlerNames = [
   'invalidateSleepDataRequests',
   'beginSleepMutation',
   'handleStartSleep',
+  'handleSaveEntry',
   'handleStopSleep',
   'handlePauseNightSleep',
   'handleSplitNightSegment',
   'handleResumeNightSleep',
+  'promptSleepQualityForStop',
 ] as const;
 const handlerNodes: Partial<Record<typeof handlerNames[number], ts.VariableDeclaration>> = {};
 const visit = (node: ts.Node): void => {
@@ -50,9 +54,11 @@ const handlerSource = handlerNames.map(name => {
 const handlersJs = ts.transpileModule(`${handlerSource}\n({
   begin: beginSleepMutation,
   start: handleStartSleep,
+  save: handleSaveEntry,
   stop: handleStopSleep,
   pause: handlePauseNightSleep,
   split: handleSplitNightSegment,
+  prompt: promptSleepQualityForStop,
 });`, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None },
 }).outputText;
@@ -149,6 +155,16 @@ function harness(
   );
   const storedPeriod = jest.fn(async (_entry: Entry): Promise<'day' | 'night' | undefined> => undefined);
   const context = {
+    pendingSleepOverlay,
+    overlayTrackingRows: (_kind: string, rows: Entry[]) => rows,
+    readTrackingOutbox: jest.fn(async () => []),
+    userId: 'me',
+    setSleepReadFailed: jest.fn(),
+    trackingSync: { ready: false },
+    localHealthAllowed: jest.fn(() => false),
+    sleepOffline: { enabled: false, actions: [] },
+    requestedStop: {current:null},
+    setSleepLiveConfirmed: jest.fn(),
     Date: FixedDate,
     console: { log: jest.fn(), warn: jest.fn(), error: jest.fn() },
     activeBabyId: started.baby_id,
@@ -157,6 +173,8 @@ function harness(
     loadSleepDataRequestIdRef: requestId,
     sleepDataScopeKey: SCOPE,
     sleepDataScopeRef: scopeRef,
+    verifiedSleepScopeRef: {current:''},
+    sleepEntriesDisplayRef: {current:initialHistory},
     sleepMutationRef: mutationRef,
     hasAutoSelectedDateRef: { current: true },
     selectedDate: new FixedDate(),
@@ -441,9 +459,11 @@ describe('sleep screen server snapshot synchronization', () => {
 
 type Mutation = { isCurrentScope: () => boolean; finish: () => boolean };
 type Handlers = {
+  prompt: () => void;
   begin: () => Mutation;
   start: (period: 'day' | 'night') => Promise<boolean>;
-  stop: (quality: 'good' | 'medium' | 'bad', notes?: string) => Promise<void>;
+  save: (payload: { start_time: string; end_time: string | null; notes?: string }) => Promise<void>;
+  stop: (quality: 'good' | 'medium' | 'bad', notes?: string, request?: { id: string; at: string }) => Promise<void>;
   pause: () => Promise<void>;
   split: (params: { targetEntry: Entry; splitTime: Date; wakeMinutes: number }) => Promise<{
     firstEntry: Entry; secondEntry: Entry;
@@ -496,6 +516,10 @@ function handlerHarness(initialActive: Entry | null) {
   };
   const context = {
     ...h.context,
+    SLEEP_OFFLINE_ENABLED: false,
+    saveErrorMessage,
+    offlineText: (_locale:string,key:string) => key,
+    ACTIVE_SLEEP_TRACKER_LOCALE: 'de',
     useCallback: <T,>(callback: T) => callback,
     ensureWritableInCurrentMode: jest.fn(() => true),
     user: { id: 'me' },
@@ -507,6 +531,10 @@ function handlerHarness(initialActive: Entry | null) {
     sleepEntries: clone(state.entries),
     babyName: 'Test baby',
     sleepService: service,
+    editingEntry: null as Entry | null,
+    isValidManualDate: (date: Date) => Number.isFinite(date.getTime()),
+    findOverlappingEntries: jest.fn(() => []),
+    closeManualSleepModal: jest.fn(),
     Alert: { alert: jest.fn() },
     MIN_PERSISTED_SLEEP_DURATION_MS: 60_000,
     setIsStartingSleep: (value: boolean) => { state.starting = value; },
@@ -558,6 +586,78 @@ function handlerHarness(initialActive: Entry | null) {
 }
 
 describe('sleep screen confirmed mutation synchronization', () => {
+  it('starts a durably queued sleep immediately without waiting for partner lookup or history reload',async()=>{
+    const h=handlerHarness(null);h.context.localHealthAllowed.mockReturnValue(true);
+    Object.assign(h.context,{partnerId:'partner'});h.context.getEffectivePartnerId.mockImplementation(()=>new Promise(()=>{}));
+    h.service.createEntry.mockResolvedValueOnce(writeOk({...started,id:'local-start',local_pending:true} as any));
+    expect(await h.handlers.start('day')).toBe(true);expect(h.state.active?.id).toBe('local-start');
+    expect(h.context.getEffectivePartnerId).not.toHaveBeenCalled();expect(h.reload).not.toHaveBeenCalled();expect(h.successSplash).toHaveBeenCalled();
+  });
+  it('closes a durably queued manual sleep form without waiting for partner lookup or server reminders',async()=>{
+    const h=handlerHarness(null);h.context.localHealthAllowed.mockReturnValue(true);
+    Object.assign(h.context,{partnerId:'partner'});h.context.getEffectivePartnerId.mockImplementation(()=>new Promise(()=>{}));
+    h.service.createEntry.mockResolvedValueOnce(writeOk({...stopped,id:'local-history',local_pending:true} as any));
+    await h.handlers.save({start_time:stopped.start_time,end_time:stopped.end_time});
+    expect(h.context.getEffectivePartnerId).not.toHaveBeenCalled();expect(h.context.closeManualSleepModal).toHaveBeenCalled();
+    expect(h.reload).not.toHaveBeenCalled();expect(h.context.cancelBabyReminderNotification).not.toHaveBeenCalled();
+    expect(h.state.entries.some(row=>row.id==='local-history')).toBe(true);
+  });
+  it('releases a queued night pause immediately, allowing offline resume without a history read',async()=>{
+    const h=handlerHarness(activeAgo(3,'night'));
+    h.service.updateEntry.mockResolvedValueOnce(writeOk({...stopped,local_pending:true} as any));
+    h.reload.mockImplementation(()=>new Promise(()=>{}));await h.handlers.pause();
+    expect(h.state.active).toBeNull();expect(h.state.stopping).toBe(false);expect(h.state.paused?.lastPausedEntryId).toBe(started.id);
+    expect(h.reload).not.toHaveBeenCalled();expect(h.successSplash).toHaveBeenCalled();
+  });
+  it.each([false, true])('leaves the sleep form open after an offline save (editing: %s)', async editing => {
+    const h = handlerHarness(editing ? activeAgo(20) : null);
+    h.context.editingEntry = editing ? activeAgo(20) : null;
+    const error = new Error('fetch failed: UnexpectedException: keine Verbindung zum Internet (ExpoModulesCore/Promise.swift:56)');
+    const failed = { primary: { data: null, error }, secondary: { data: null, error: null } };
+    h.service.createEntry.mockResolvedValueOnce(failed); h.service.updateEntry.mockResolvedValueOnce(failed);
+    await h.handlers.save({ start_time: new Date(NOW - 10 * 60_000).toISOString(), end_time: new Date(NOW).toISOString(), notes: 'Keep this input' });
+    expect(h.context.closeManualSleepModal).not.toHaveBeenCalled();
+    expect(h.successSplash).not.toHaveBeenCalled();
+    expect(h.context.Alert.alert).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('nicht bestätigt'));
+    expect(h.context.Alert.alert.mock.calls.flat().join(' ')).not.toMatch(/fetch failed|UnexpectedException|Promise.swift/);
+  });
+  it('keeps the timer stopped and shows a safe message when an offline start cannot be confirmed', async () => {
+    const h = handlerHarness(null);
+    const error = new Error('Error: fetch failed: UnexpectedException: Es besteht anscheinend keine Verbindung zum Internet. (at ExpoModulesCore/Promise.swift:56)');
+    h.service.createEntry.mockResolvedValueOnce({ primary: { data: null, error }, secondary: { data: null, error: null } });
+    await h.handlers.start('day');
+    expect(h.state.active).toBeNull();
+    expect(h.state.starting).toBe(false);
+    expect(h.successSplash).not.toHaveBeenCalled();
+    expect(h.state.entries).toEqual(previousHistory);
+    expect(h.context.Alert.alert).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('Speicherung konnte nicht bestätigt werden'));
+    expect(h.context.Alert.alert.mock.calls.flat().join(' ')).not.toMatch(/fetch failed|UnexpectedException|Promise.swift/);
+  });
+  it('Android dialog dismissal cancels its captured stop time without clearing a later request', () => {
+    const h = handlerHarness(activeAgo(3));
+    h.handlers.prompt();
+    expect(h.context.requestedStop.current).not.toBeNull();
+    const dismiss = h.context.Alert.alert.mock.calls[0][3].onDismiss;
+    dismiss(); expect(h.context.requestedStop.current).toBeNull();
+    const newer = { id: 'new-original', at: new Date(NOW + 60_000).toISOString() };
+    Object.assign(h.context.requestedStop, { current: newer });
+    dismiss(); expect(h.context.requestedStop.current).toBe(newer);
+  });
+  it('failed local sleep storage preserves the captured end time for an explicit retry',async()=>{
+    const active=activeAgo(3);const h=handlerHarness(active);const at=new Date(NOW-1000).toISOString();
+    Object.assign(h.context.requestedStop,{current:{id:active.id,at}});
+    const stop=jest.fn().mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce({chosenStopAt:at});Object.assign(h.context.sleepOffline,{enabled:true,stop});
+    await h.handlers.stop('good');expect(h.state.active?.id).toBe(active.id);expect(h.context.requestedStop.current).toEqual({id:active.id,at});
+    await h.handlers.stop('good');expect(stop.mock.calls.map(c=>c[1])).toEqual([at,at]);expect(h.state.entries[0].end_time).toBe(at);expect(h.service.updateEntry).not.toHaveBeenCalled();
+  });
+  it('a rating dialog for the old sleep cannot stop a new active sleep', async () => {
+    const h = handlerHarness({ ...activeAgo(3), id: 'new-active' });
+    await h.handlers.stop('good', undefined, { id: 'old-original', at: new Date(NOW).toISOString() });
+    expect(h.service.updateEntry).not.toHaveBeenCalled();
+    expect(h.service.deleteEntry).not.toHaveBeenCalled();
+    expect(h.state.active?.id).toBe('new-active');
+    expect(h.native.endAllSleepActivities).not.toHaveBeenCalled();
+  });
   it('invalidates reads at mutation start and finish, with idempotent finish', () => {
     const h = handlerHarness(started);
     h.state.loading = true;
@@ -688,7 +788,7 @@ describe('sleep screen confirmed mutation synchronization', () => {
     const stop = h.handlers.stop('medium');
     await nativeRequested.promise;
 
-    expect(h.service.deleteEntry).toHaveBeenCalledWith(entry.id);
+    expect(h.service.deleteEntry).toHaveBeenCalledWith(entry.id, entry);
     expect(h.service.updateEntry).not.toHaveBeenCalled();
     expect(h.state.active).toBeNull();
     expect(h.activeRef.current).toBeNull();

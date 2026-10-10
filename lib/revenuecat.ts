@@ -288,6 +288,18 @@ const getActiveEntitlement = (customerInfo: any) => {
 const hasAnyActiveEntitlement = (customerInfo: any) =>
   Boolean(getActiveEntitlement(customerInfo));
 
+/** The SDK can return disk-cached CustomerInfo offline. Use its server request
+ * date, never the time at which the app happened to read that cached object. */
+export function getRevenueCatStartupEvidence(customerInfo: any): { verifiedAt: number; subscriptionExpiresAt: number | null } | null {
+  const entitlement = getActiveEntitlement(customerInfo);
+  const verifiedAt = Date.parse(customerInfo?.requestDate);
+  const expiry = entitlement?.expirationDate;
+  const subscriptionExpiresAt = expiry == null ? null : Date.parse(expiry);
+  if (!entitlement || !Number.isFinite(verifiedAt) || verifiedAt > Date.now()
+    || (subscriptionExpiresAt !== null && (!Number.isFinite(subscriptionExpiresAt) || subscriptionExpiresAt <= Date.now()))) return null;
+  return { verifiedAt, subscriptionExpiresAt };
+}
+
 export async function getRevenueCatPackages(userId: string) {
   if (Platform.OS === 'web') return [];
 

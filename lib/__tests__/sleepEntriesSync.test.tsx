@@ -30,8 +30,19 @@ type MockChannel = {
   subscribe: jest.Mock;
 };
 const mockChannels: MockChannel[] = [];
+const mockActiveRead = jest.fn();
+type MockActiveQuery = { select: jest.Mock; eq: jest.Mock; abortSignal: jest.Mock; maybeSingle: jest.Mock };
+const mockActiveQueries: MockActiveQuery[] = [];
 jest.mock('@/lib/supabase', () => ({
   supabase: {
+    from: jest.fn(() => {
+      const query: MockActiveQuery = {
+        select: jest.fn(() => query), eq: jest.fn(() => query),
+        abortSignal: jest.fn(() => query), maybeSingle: jest.fn(() => mockActiveRead()),
+      };
+      mockActiveQueries.push(query);
+      return query;
+    }),
     channel: jest.fn((topic: string) => {
       const channel: MockChannel = {
         topic,
@@ -74,6 +85,8 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockChannels.length = 0;
+  mockActiveQueries.length = 0;
+  mockActiveRead.mockReset().mockResolvedValue({ data: { id: 'running-entry', end_time: null }, error: null });
   appListeners.clear();
   Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, callback) => {
@@ -139,6 +152,11 @@ it('loads on focus and subscribes with separate supported identity filters plus 
     { event: '*', schema: 'public', table: 'sleep_entries', filter: 'partner_id=eq.parent-a' },
     { event: '*', schema: 'public', table: 'sleep_entries', filter: 'shared_with_user_id=eq.parent-a' },
     { event: 'DELETE', schema: 'public', table: 'sleep_entries' },
+    { event:'*',schema:'public',table:'sleep_entries',filter:'baby_id=eq.baby-a' },
+    { event:'*',schema:'public',table:'baby_members',filter:'user_id=eq.parent-a' },
+    { event:'*',schema:'public',table:'sleep_entry_shares',filter:'shared_with_id=eq.parent-a' },
+    { event:'*',schema:'public',table:'account_links',filter:'creator_id=eq.parent-a' },
+    { event:'*',schema:'public',table:'account_links',filter:'invited_id=eq.parent-a' },
   ]);
 });
 
@@ -359,5 +377,91 @@ it('releases a failed refresh and accepts the next event without retry polling',
   expect(refresh).toHaveBeenCalledTimes(1);
   event({ eventType: 'UPDATE', new: { id: 'running-entry', baby_id: 'baby-a' }, old: {} });
   await tick();
+  expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it('scope, membership and share signals request an authorized snapshot instead of applying event values', async () => {
+  await mount();
+  for (const binding of mockChannels[0].bindings.filter(b => b.filter.table !== 'sleep_entries' || b.filter.filter?.startsWith('baby_id='))) {
+    act(() => binding.callback({eventType:'UPDATE',new:{},old:{}}));
+  }
+  await tick(200);
+  expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it.each([{ id: 'running-entry', end_time: '2026-10-09T08:00:00Z' }, null])(
+  'recovers a stopped or deleted partner timer when its realtime event is never delivered: %p', async data => {
+    options = { ...options, activeEntryId: 'running-entry' };
+    mockActiveRead.mockResolvedValue({ data, error: null });
+    await mount();
+    refresh.mockClear(); invalidate.mockClear();
+    await tick(15000);
+    expect(supabase.from).toHaveBeenCalledWith('sleep_entries');
+    expect(mockActiveQueries[0].select).toHaveBeenCalledWith('id,end_time');
+    expect(mockActiveQueries[0].eq).toHaveBeenCalledWith('id', 'running-entry');
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    await tick();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  },
+);
+
+it('only probes the active timer; an unchanged or failed probe never reloads history or changes visible state', async () => {
+  options = { ...options, activeEntryId: 'running-entry' };
+  await mount(); refresh.mockClear(); invalidate.mockClear();
+  await tick(15000);
+  mockActiveRead.mockResolvedValueOnce({ data: null, error: new Error('offline') });
+  await tick(15000);
+  mockActiveRead.mockRejectedValueOnce(new Error('Network request failed'));
+  await tick(15000);
+  expect(mockActiveRead).toHaveBeenCalledTimes(3);
+  expect(refresh).not.toHaveBeenCalled(); expect(invalidate).not.toHaveBeenCalled();
+  await update({ activeEntryId: null });
+  await tick(60000);
+  expect(mockActiveRead).toHaveBeenCalledTimes(3);
+});
+
+it('aborts probes in the background and on blur, and ignores a late result for a replaced timer', async () => {
+  options = { ...options, activeEntryId: 'running-entry' };
+  let resolve!: (value: any) => void;
+  mockActiveRead.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  await mount(); refresh.mockClear(); invalidate.mockClear();
+  await tick(15000);
+  const signal = mockActiveQueries[0].abortSignal.mock.calls[0][0] as AbortSignal;
+  appState('background'); expect(signal.aborted).toBe(true);
+  await tick(60000); expect(mockActiveRead).toHaveBeenCalledTimes(1);
+  await act(async () => { resolve({ data: null, error: null }); });
+  expect(invalidate).not.toHaveBeenCalled();
+  appState('active'); await act(async () => {}); refresh.mockClear(); invalidate.mockClear();
+  mockActiveRead.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  await tick(15000);
+  await update({ activeEntryId: 'new-entry' });
+  await act(async () => { resolve({ data: null, error: null }); });
+  await tick(); expect(refresh).not.toHaveBeenCalled(); expect(invalidate).not.toHaveBeenCalled();
+  mockActiveRead.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  await tick(15000);
+  const lastSignal = mockActiveQueries.at(-1)!.abortSignal.mock.calls[0][0] as AbortSignal;
+  await update({ focused: false }); expect(lastSignal.aborted).toBe(true);
+  await act(async () => { resolve({ data: null, error: null }); });
+  refresh.mockClear(); await tick(60000); expect(refresh).not.toHaveBeenCalled();
+});
+
+it('does not overlap probes or interrupt an ongoing snapshot, and ignores a timed-out probe', async () => {
+  options = { ...options, activeEntryId: 'running-entry' };
+  const pending = deferredRefresh();
+  refresh.mockImplementationOnce(() => pending.promise);
+  await mount(); invalidate.mockClear();
+  await tick(30000);
+  expect(mockActiveRead).not.toHaveBeenCalled(); expect(invalidate).not.toHaveBeenCalled();
+  await act(async () => { pending.resolve(); });
+  let resolve!: (value: any) => void;
+  mockActiveRead.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  await tick(15000);
+  await tick(15000);
+  expect(mockActiveRead).toHaveBeenCalledTimes(1);
+  expect(mockActiveQueries[0].abortSignal.mock.calls[0][0].aborted).toBe(true);
+  await act(async () => { resolve({ data: null, error: null }); });
+  expect(invalidate).not.toHaveBeenCalled();
+  mockActiveRead.mockResolvedValueOnce({ data: null, error: null });
+  await tick(15000); await tick();
   expect(refresh).toHaveBeenCalledTimes(2);
 });

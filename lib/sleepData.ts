@@ -7,6 +7,8 @@ export type SleepQuality = 'good' | 'medium' | 'bad' | null;
 // Interface for a sleep entry
 export interface SleepEntry {
   id?: string;
+  sync_revision?: string;
+  sync_scope_revision?: string;
   user_id?: string;
   baby_id?: string | null;
   start_time: Date | string;

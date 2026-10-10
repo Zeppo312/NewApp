@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, Text, View } from 'react-native';
+import { AppState } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+import { ConnectionRecoveryScreen } from '@/components/ui/connection-recovery-screen';
 
 export const STARTUP_RECOVERY_DELAY_MS = 15_000;
 
@@ -11,10 +12,10 @@ export function StartupRecovery({ locale, onRetry }: { locale: string; onRetry: 
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const copy = locale === 'en'
-    ? { loading: 'Loading …', title: 'The app could not finish loading.', detail: 'Check your connection and try again. Your saved data is retained.', retry: 'Try again' }
+    ? { loading: 'One moment …', checking: 'Lotti Baby is getting ready for you.', title: 'Let’s reconnect', detail: 'Lotti Baby couldn’t finish loading. Check your internet connection and try again.', retry: 'Try again' }
     : locale === 'es'
-      ? { loading: 'Cargando …', title: 'La app no ha podido terminar de cargar.', detail: 'Comprueba tu conexión e inténtalo de nuevo. Tus datos guardados se conservan.', retry: 'Reintentar' }
-      : { loading: 'Lade …', title: 'Die App konnte noch nicht vollständig laden.', detail: 'Prüfe deine Verbindung und versuche es erneut. Deine gespeicherten Daten bleiben erhalten.', retry: 'Erneut versuchen' };
+      ? { loading: 'Un momento …', checking: 'Lotti Baby se está preparando para ti.', title: 'Vamos a reconectar', detail: 'Lotti Baby no ha podido terminar de cargar. Comprueba tu conexión a internet e inténtalo de nuevo.', retry: 'Reintentar' }
+      : { loading: 'Einen Moment …', checking: 'Lotti Baby macht sich für dich bereit.', title: 'Kurz verbinden', detail: 'Lotti Baby konnte noch nicht fertig laden. Prüfe deine Internetverbindung und versuche es erneut.', retry: 'Erneut versuchen' };
   useEffect(() => {
     mounted.current = true;
     const timer = setTimeout(() => {
@@ -44,15 +45,8 @@ export function StartupRecovery({ locale, onRetry }: { locale: string; onRetry: 
     return () => { listener.remove(); clearInterval(timer); };
   }, [unavailable, retry]);
   return (
-    <View testID="startup-recovery" style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 28 }}>
-      {(!unavailable || retrying) && <ActivityIndicator size="large" color="#7D5A50" />}
-      <Text accessibilityRole="header" style={{ marginTop: 20, color: '#7D5A50', fontSize: 18, textAlign: 'center' }}>{unavailable ? copy.title : copy.loading}</Text>
-      {unavailable && <>
-        <Text style={{ marginTop: 12, color: '#5A4A42', textAlign: 'center' }}>{copy.detail}</Text>
-        <Pressable testID="startup-retry" accessibilityRole="button" accessibilityState={{ disabled: retrying }} disabled={retrying} onPress={() => void retry()} style={{ marginTop: 24, minHeight: 48, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 14, backgroundColor: '#E9C9B6', opacity: retrying ? 0.6 : 1 }}>
-          <Text style={{ color: '#332822', fontWeight: '600' }}>{copy.retry}</Text>
-        </Pressable>
-      </>}
-    </View>
+    <ConnectionRecoveryScreen testID="startup-recovery" unavailable={unavailable} retrying={retrying}
+      title={unavailable ? copy.title : copy.loading} message={unavailable ? copy.detail : copy.checking}
+      retryLabel={copy.retry} retryTestID="startup-retry" onRetry={() => void retry()} />
   );
 }

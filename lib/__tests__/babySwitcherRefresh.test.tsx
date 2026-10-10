@@ -18,7 +18,8 @@ jest.mock('@/components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
 jest.mock('@/components/ThemedText', () => ({ ThemedText: jest.requireActual('react-native').Text }));
 jest.mock('expo-image-picker', () => ({}));
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
-jest.mock('../baby', () => ({ listBabies: jest.fn(), createBaby: jest.fn(), syncBabiesForLinkedUsers: jest.fn() }));
+jest.mock('../baby', () => ({
+  readSavedBabies: jest.fn(async () => null), listBabies: jest.fn(), createBaby: jest.fn(), syncBabiesForLinkedUsers: jest.fn() }));
 jest.mock('../supabase', () => ({ supabase: { from: jest.fn() } }));
 
 const levi = { id: 'levi', name: 'Levi', birth_date: '2024-01-01' };
@@ -27,7 +28,7 @@ const full = { data: [levi, pregnancy], error: null };
 const transient = { data: null, error: new Error('Network request failed'), retryable: true };
 const permanent = { data: null, error: { code: '42501', message: 'permission denied' }, retryable: false };
 let current!: ReturnType<typeof useActiveBaby>;
-function Probe() { current = useActiveBaby(); return null; }
+function Probe() { const value = useActiveBaby(); React.useLayoutEffect(() => { current = value; }); return null; }
 function Screen({ open = false }: { open?: boolean }) {
   return <ActiveBabyProvider><Probe /><BabySwitcherButton isOpen={open} showTrigger={false} /></ActiveBabyProvider>;
 }

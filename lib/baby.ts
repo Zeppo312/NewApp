@@ -1,3 +1,5 @@
+import { backendHost, writeSnapshot, readSnapshot, validRows } from './localReadSnapshots';
+import { localHealthGeneration, localHealthAllowed, serializeLocalHealth } from './localHealthStorage';
 import { supabase, getCachedUser } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isTransientBabyListError, type BabyListLoadResult } from './babyListLoading';
@@ -69,6 +71,7 @@ export interface DiaryEntry {
 // Typen für die Alltags-Einträge
 export interface DailyEntry {
   id?: string;
+  local_pending?: boolean;
   baby_id?: string | null;
   entry_date: string;
   entry_type: 'diaper' | 'sleep' | 'feeding' | 'custom' | 'other';
@@ -364,7 +367,10 @@ export const applyLinkedBabySelection = async ({
 };
 
 // Baby-Informationen mit Cache
+export const readSavedBabies = (userId: string) => readSnapshot({ backendHost: backendHost(), userId }, 'baby-list', validRows);
+
 export const listBabies = async (forceRefresh = false, signal?: AbortSignal): Promise<BabyListLoadResult> => {
+  const generation = localHealthGeneration();
   try {
     const { data: userData, error: userError } = await getCachedUser();
     if (signal?.aborted) return { data: null, error: new Error('Baby list request cancelled'), retryable: false };
@@ -439,6 +445,8 @@ export const listBabies = async (forceRefresh = false, signal?: AbortSignal): Pr
 
     // 2. Speichere im Cache
     try {
+      await serializeLocalHealth(cacheKey, async () => {
+      if (!localHealthAllowed(userId, generation) || signal?.aborted) return;
       await AsyncStorage.setItem(
         cacheKey,
         JSON.stringify({
@@ -446,10 +454,12 @@ export const listBabies = async (forceRefresh = false, signal?: AbortSignal): Pr
           timestamp: Date.now(),
         })
       );
+      });
     } catch (cacheError) {
       console.warn('Failed to cache baby list:', cacheError);
     }
 
+    try { await writeSnapshot({ backendHost: backendHost(), userId }, 'baby-list', deduped.map(({id,name,birth_date,photo_url}) => ({id,name,birth_date,photo_url})), new Date().toISOString(), generation); } catch { console.warn('Baby snapshot storage unavailable'); }
     return { data: deduped, error: null, fromCache: false };
   } catch (err) {
     console.error('Failed to list babies:', err);

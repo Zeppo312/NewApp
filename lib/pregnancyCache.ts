@@ -1,3 +1,6 @@
+import { backendHost, readSnapshot, writeSnapshot, invalidateReadSnapshots, localScopeKey, readSnapshotRevision } from './localReadSnapshots';
+import { localHealthGeneration, localHealthAllowed } from './localHealthStorage';
+import { boundedRead } from './boundedRead';
 import { supabase, getDueDateWithLinkedUsers } from './supabase';
 import { getRecommendations, LottiRecommendation } from './supabase/recommendations';
 import { getPregnancyAge, parsePregnancyDate } from './pregnancy-age';
@@ -78,7 +81,7 @@ export async function loadDueDateWithCache(
     async () => {
       const result = await getDueDateWithLinkedUsers(userId);
 
-      if (!result.success) throw new Error('pregnancy_due_date_unavailable');
+      if (!result.success) throw result.error ?? new Error('pregnancy_due_date_unavailable');
       if (!result.dueDate) {
         return {
           date: null,
@@ -126,48 +129,46 @@ export async function loadRecommendationsWithCache(): Promise<{
  *
  * Lädt alle Daten parallel für optimale Performance
  */
-export async function loadPregnancyHomeDataWithCache(
-  userId: string
-): Promise<{
-  profile: { firstName: string; avatarUrl: string | null };
-  dueDate: { date: Date | null; currentWeek: number | null; currentDay: number | null };
-  recommendations: LottiRecommendation[];
-  isStale: boolean;
-}> {
-  // Alle Queries parallel ausführen
-  const [profileResult, dueDateResult, recommendationsResult] = await Promise.all([
-    loadProfileDataWithCache(userId),
-    loadDueDateWithCache(userId),
-    loadRecommendationsWithCache(),
+export async function loadPregnancyHomeDataWithCache(userId: string, options?: {
+  force?: boolean;
+  onConfirmed?: (data: Partial<Pick<PregnancyHomeData, 'profile' | 'dueDate'>>, verifiedAt: string) => void;
+}) {
+  const scope = { backendHost: backendHost(), userId }; const generation = localHealthGeneration(); const readRevision = readSnapshotRevision();
+  const [profile, due] = await Promise.all([
+    readSnapshot(scope, 'pregnancy-profile', (v): v is { firstName: string; avatarUrl: string | null } => !!v && typeof (v as any).firstName === 'string' && ((v as any).avatarUrl === null || typeof (v as any).avatarUrl === 'string')),
+    readSnapshot(scope, 'pregnancy-due', (v): v is string | null => v === null || typeof v === 'string' && !!parsePregnancyDate(v)),
   ]);
-
-  // Bestimme ob irgendwelche Daten stale sind
-  const isStale =
-    profileResult.isStale || dueDateResult.isStale || recommendationsResult.isStale;
-
-  // Background Refresh wenn stale
-  if (isStale) {
-    Promise.all([
-      profileResult.isStale ? profileResult.refresh() : Promise.resolve(profileResult.data!),
-      dueDateResult.isStale ? dueDateResult.refresh() : Promise.resolve(dueDateResult.data!),
-      recommendationsResult.isStale ? recommendationsResult.refresh() : Promise.resolve(recommendationsResult.data!),
-    ]).catch((error) => {
-      console.error('Background refresh failed:', error);
-    });
-  }
-
-  return {
-    profile: profileResult.data || { firstName: '', avatarUrl: null },
-    // Cached Date objects are JSON strings; age must be recalculated today,
-    // rather than carrying yesterday's week through a ten-minute cache.
-    dueDate: (() => {
-      const date = parsePregnancyDate(dueDateResult.data?.date);
-      const age = getPregnancyAge(date);
-      return { date, currentWeek: age?.runningWeek ?? null, currentDay: age?.day ?? null };
-    })(),
-    recommendations: recommendationsResult.data || [],
-    isStale,
+  const dueData = (date: string | Date | null) => { const parsed = parsePregnancyDate(date); const age = getPregnancyAge(parsed); return { date: parsed, currentWeek: age?.runningWeek ?? null, currentDay: age?.day ?? null }; };
+  const refresh = async () => {
+    const results = await Promise.allSettled([
+      (async () => {
+        const { value, at } = await boundedRead(localScopeKey(scope) + ':pregnancy-profile', async signal => {
+        const { data, error } = await supabase.from('profiles').select('first_name,avatar_url').eq('id', userId).abortSignal(signal).single();
+        if (error) throw error;
+        const value = { firstName: data?.first_name ?? '', avatarUrl: data?.avatar_url ?? null }; const at = new Date().toISOString();
+        return { value, at };
+        });
+        if (localHealthAllowed(userId, generation) && readRevision === readSnapshotRevision()) { options?.onConfirmed?.({ profile: value }, at); await writeSnapshot(scope, 'pregnancy-profile', value, at, generation, readRevision).catch(() => {}); }
+        return value;
+      })(),
+      (async () => {
+        const { value, at } = await boundedRead(localScopeKey(scope) + ':pregnancy-due', async signal => {
+        const result = await getDueDateWithLinkedUsers(userId, signal);
+        if (!result.success) throw result.error ?? new Error('pregnancy_due_date_unavailable');
+        const parsed = parsePregnancyDate(result.dueDate); if (result.dueDate && !parsed) throw new Error('pregnancy_due_date_invalid');
+        const value = parsed ? `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}` : null;
+        const at = new Date().toISOString();
+        return { value, at };
+        });
+        if (localHealthAllowed(userId, generation) && readRevision === readSnapshotRevision()) { options?.onConfirmed?.({ dueDate: dueData(value) }, at); await writeSnapshot(scope, 'pregnancy-due', value, at, generation, readRevision).catch(() => {}); }
+        return dueData(value);
+      })(),
+    ]);
+    if (!localHealthAllowed(userId, generation) || readRevision !== readSnapshotRevision() || results.some(result => result.status === 'rejected')) throw new Error('pregnancy_refresh_failed');
+    return true;
   };
+  return { profile: profile?.data ?? { firstName: '', avatarUrl: null }, dueDate: dueData(due?.data ?? null), recommendations: [],
+    isStale: options?.force === true || !profile || !due || [profile.verifiedAt,due.verifiedAt].some(at=>Date.now()-Date.parse(at)>=600000), hasProfile: !!profile, hasDueDate: !!due, verifiedAt: [profile?.verifiedAt, due?.verifiedAt].filter(Boolean).sort()[0], refresh };
 }
 
 /**
@@ -176,6 +177,7 @@ export async function loadPregnancyHomeDataWithCache(
  * Called after: Update Profile, Update Due Date
  */
 export async function invalidatePregnancyCache(userId: string): Promise<void> {
+  await invalidateReadSnapshots(userId, undefined, ['pregnancy-profile', 'pregnancy-due']);
   // Invalidate alle 3 Cache-Keys
   await Promise.all([
     invalidateCacheAfterAction(`pregnancy_profile_${userId}`),
@@ -190,6 +192,7 @@ export async function invalidatePregnancyCache(userId: string): Promise<void> {
  * Invalidate nur Profile Cache
  */
 export async function invalidateProfileCache(userId: string): Promise<void> {
+  await invalidateReadSnapshots(userId, undefined, ['pregnancy-profile']);
   await invalidateCacheAfterAction(`pregnancy_profile_${userId}`);
   console.log('✅ Profile cache invalidated for user:', userId);
 }
@@ -198,6 +201,7 @@ export async function invalidateProfileCache(userId: string): Promise<void> {
  * Invalidate nur Due Date Cache
  */
 export async function invalidateDueDateCache(userId: string): Promise<void> {
+  await invalidateReadSnapshots(userId, undefined, ['pregnancy-due']);
   await invalidateCacheAfterAction(`pregnancy_duedate_${userId}`);
   console.log('✅ Due Date cache invalidated for user:', userId);
 }

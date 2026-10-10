@@ -13,7 +13,7 @@ export interface SleepEntryShare {
 /**
  * Lädt alle sichtbaren Schlafeinträge (eigene und geteilte)
  */
-export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
+export async function loadAllVisibleSleepEntries(babyId?: string, signal?: AbortSignal): Promise<{
   success: boolean;
   entries?: SleepEntry[];
   error?: string;
@@ -30,10 +30,11 @@ export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
     const allEntries: SleepEntry[] = [];
 
     // 1) RPC (explicit parameter to avoid overload ambiguity in PostgREST)
-    const { data: rpcEntries, error: rpcError } = await supabase.rpc(
+    const rpcQuery = supabase.rpc(
       'get_all_visible_sleep_entries',
       { p_baby_id: babyId ?? null }
     );
+    const { data: rpcEntries, error: rpcError } = await (signal ? rpcQuery.abortSignal(signal) : rpcQuery);
     if (rpcError) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden per RPC:', rpcError);
     } else if (rpcEntries) {
@@ -53,7 +54,8 @@ export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
       partnerQuery = partnerQuery.eq('baby_id', babyId);
     }
 
-    const { data: partnerVisible, error: partnerError } = await partnerQuery.order('start_time', { ascending: false });
+    const partnerOrdered = partnerQuery.order('start_time', { ascending: false });
+    const { data: partnerVisible, error: partnerError } = await (signal ? partnerOrdered.abortSignal(signal) : partnerOrdered);
 
     if (partnerError && !partnerError.message?.includes('does not exist')) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden von Partner-Einträgen:', partnerError);
@@ -71,7 +73,11 @@ export async function loadAllVisibleSleepEntries(babyId?: string): Promise<{
       tableQuery = tableQuery.eq('baby_id', babyId);
     }
 
-    const { data: tableShared, error: tableSharedError } = await tableQuery.order('start_time', { ascending: false });
+    const sharedOrdered = tableQuery.order('start_time', { ascending: false });
+    const { data: tableShared, error: tableSharedError } = await (signal ? sharedOrdered.abortSignal(signal) : sharedOrdered);
+    const partialError = rpcError ?? partnerError ?? tableSharedError;
+    if (partialError) return { success: false, error: partialError.message };
+    if (signal?.aborted) return { success: false, error: 'Read cancelled' };
 
     if (tableSharedError && !tableSharedError.message?.includes('does not exist')) {
       console.error('loadAllVisibleSleepEntries: Fehler beim Laden der über Tabelle geteilten Einträge:', tableSharedError);

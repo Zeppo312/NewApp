@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import { supabase, type AppSettings } from './supabase';
 import type { AppLocale } from './localization';
 import { translateNotificationsText } from './notificationsTranslations';
+import { localHealthAllowed } from './localHealthStorage';
+import { readTrackingOutbox, queueVitaminCheck, overlayVitaminChecks, trackingScope } from './trackingOutbox';
 
 const VITAMIN_D_CHECKS_KEY_PREFIX = 'planner:vitamin-d:checks';
 const VITAMIN_D_NOTIFICATION_IDENTIFIER_PREFIX = 'planner:vitamin-d:daily-reminder';
@@ -345,7 +347,9 @@ export async function loadVitaminDReminderState(
   userId: string,
   babyId?: string,
 ): Promise<VitaminDChecks> {
-  const localChecks = await loadLocalChecks(userId, babyId);
+  const savedChecks = await loadLocalChecks(userId, babyId);
+  const operations = await readTrackingOutbox(userId);
+  const localChecks = babyId ? overlayVitaminChecks(savedChecks, operations, babyId) : savedChecks;
 
   if (!babyId) {
     return localChecks;
@@ -365,9 +369,10 @@ export async function loadVitaminDReminderState(
     }
 
     await markRemoteReady(userId, babyId);
-    await persistChecks(userId, remoteChecks, babyId);
+    const visible = overlayVitaminChecks(remoteChecks, await readTrackingOutbox(userId), babyId);
+    await persistChecks(userId, visible, babyId);
 
-    return remoteChecks;
+    return visible;
   } catch (error) {
     if (shouldFallbackToLocal(error)) {
       console.warn('Vitamin D: remote sync unavailable, using local fallback');
@@ -402,6 +407,12 @@ export async function saveVitaminDCompletion(
 
   if (!babyId) {
     await persistChecks(userId, sanitizedChecks);
+    return sanitizedChecks;
+  }
+
+  if (localHealthAllowed(userId)) {
+    await queueVitaminCheck(trackingScope(userId, babyId), dateKey, completed);
+    await persistChecks(userId, sanitizedChecks, babyId).catch(() => {});
     return sanitizedChecks;
   }
 

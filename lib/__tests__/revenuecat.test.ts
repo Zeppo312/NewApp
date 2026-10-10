@@ -10,6 +10,7 @@ import {
   getRevenueCatConfigurationIssue,
   getRevenueCatPlanPricing,
   getRevenueCatEntitlementStatus,
+  getRevenueCatStartupEvidence,
   getTierFromProductId,
   initRevenueCat,
   getRevenueCatSubscriptionSummary,
@@ -60,6 +61,15 @@ jest.mock('@sentry/react-native', () => ({
 const mockPurchases = jest.requireMock('@/lib/purchasesClient');
 const { captureException: mockCaptureException } =
   jest.requireMock('@sentry/react-native');
+
+it('keeps the provider request date and subscription expiry for bounded offline startup', () => {
+  const info = { ...customer(REVENUECAT_PLANS[0]), requestDate: new Date(Date.now() - 3_600_000).toISOString() };
+  expect(getRevenueCatStartupEvidence(info)).toEqual({ verifiedAt: Date.parse(info.requestDate), subscriptionExpiresAt: Date.parse('2027-01-01T00:00:00Z') });
+  expect(getRevenueCatStartupEvidence({ ...info, requestDate: null })).toBeNull();
+  expect(getRevenueCatStartupEvidence({ ...info, requestDate: new Date(Date.now() + 60_000).toISOString() })).toBeNull();
+  const expired = { ...info, entitlements: { active: { LottiBabyAbo: { ...info.entitlements.active.LottiBabyAbo, expirationDate: '2020-01-01' } } } };
+  expect(getRevenueCatStartupEvidence(expired)).toBeNull();
+});
 
 describe('RevenueCat initialization and status', () => {
   beforeAll(() => {

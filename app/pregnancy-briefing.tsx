@@ -32,7 +32,7 @@ import { loadPregnancyBriefingSignals } from '@/lib/pregnancy-briefing-data';
 import { translatePregnancyBriefingText } from '@/lib/pregnancy-briefing-translations';
 import {
   invalidatePregnancyCache,
-  loadPregnancyHomeDataWithCache,
+  loadDueDateWithCache,
 } from '@/lib/pregnancyCache';
 
 const cloneEmptySignals = (): PregnancyBriefingSignals => ({
@@ -91,13 +91,13 @@ export default function PregnancyBriefingScreen() {
         await invalidatePregnancyCache(userId);
       }
       const [homeData, briefingSignals] = await Promise.all([
-        loadPregnancyHomeDataWithCache(userId),
+        loadDueDateWithCache(userId).then(async result => result.isStale ? result.refresh() : result.data),
         loadPregnancyBriefingSignals(userId),
       ]);
       if (currentRequest !== requestVersion.current) return;
 
-      setCurrentWeek(homeData.dueDate.currentWeek);
-      setCurrentDay(homeData.dueDate.currentDay);
+      setCurrentWeek(homeData?.currentWeek ?? null);
+      setCurrentDay(homeData?.currentDay ?? null);
       setSignals(briefingSignals);
       setHasLoadedOnce(true);
     } catch (error) {

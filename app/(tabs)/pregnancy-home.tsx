@@ -1,3 +1,5 @@
+import { AppState } from 'react-native';
+import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -874,34 +876,36 @@ export default function PregnancyHomeScreen() {
   };
 
   // Lädt Benutzerinformationen und aktualisiert die Anzeige
-  const loadUserData = async () => {
-    if (!user?.id) return;
-
-    try {
-      // Load with cache - all data in parallel, instant if cached
-      const { profile, dueDate: dueDateData, isStale } =
-        await loadPregnancyHomeDataWithCache(user.id);
-
-      // Show cached data immediately
-      setUserName(profile.firstName);
-      setDueDate(dueDateData.date);
-      setCurrentWeek(dueDateData.currentWeek);
-      setCurrentDay(dueDateData.currentDay);
-
-      // Background refresh happens automatically in the cache layer if isStale
-      // No need to manually refresh here!
-    } catch (error) {
-      console.error('Fehler beim Laden der Benutzerdaten:', error);
-    }
+  const pregnancyScopeRef = useRef(user?.id); pregnancyScopeRef.current = user?.id;
+  const pregnancyFlight = useRef<{ id: string; task: Promise<boolean> } | null>(null);
+  const [, setPregnancyReadState] = useState<{ verifiedAt?: string; loading?: boolean; failed?: boolean }>({});
+  const loadUserData = (): Promise<boolean> => {
+    if (!user?.id) return Promise.resolve(false);
+    if (pregnancyFlight.current?.id === user.id) return pregnancyFlight.current.task;
+    const id = user.id; const generation = localHealthGeneration();
+    const current = () => pregnancyScopeRef.current === id && localHealthAllowed(id, generation);
+    const task = (async () => {
+      try {
+        setPregnancyReadState(v => ({ ...v, loading: true }));
+        const cached = await loadPregnancyHomeDataWithCache(id, { onConfirmed: (data, at) => {
+          if (!current()) return;
+          if (data.profile) setUserName(data.profile.firstName);
+          if (data.dueDate) { setDueDate(data.dueDate.date); setCurrentWeek(data.dueDate.currentWeek); setCurrentDay(data.dueDate.currentDay); }
+        } });
+        if (!current()) return false;
+        if (cached.hasProfile) setUserName(cached.profile.firstName);
+        if (cached.hasDueDate) { setDueDate(cached.dueDate.date); setCurrentWeek(cached.dueDate.currentWeek); setCurrentDay(cached.dueDate.currentDay); }
+        setPregnancyReadState(v => ({ ...v, verifiedAt: cached.verifiedAt ?? v.verifiedAt }));
+        await cached.refresh();
+        if (!current()) return false;
+        setPregnancyReadState({ verifiedAt: new Date().toISOString() }); return true;
+      } catch { if (current()) setPregnancyReadState(v => ({ ...v, loading: false, failed: true })); return false; }
+    })().finally(() => { if (pregnancyFlight.current?.task === task) pregnancyFlight.current = null; });
+    pregnancyFlight.current = { id, task }; return task;
   };
-
-  useEffect(() => {
-    if (!user) return;
-    const timeoutId = setTimeout(() => {
-      void loadUserData();
-    }, 0);
-    return () => clearTimeout(timeoutId);
-  }, [user]);
+  useEffect(() => { setUserName(''); setDueDate(null); setPregnancyReadState({}); void loadUserData(); }, [user?.id]);
+  useFocusEffect(useCallback(() => { void loadUserData(); }, [user?.id]));
+  useEffect(() => { const listener = AppState.addEventListener('change', state => { if (state === 'active') void loadUserData(); }); return () => listener.remove(); }, [user?.id]);
 
   // Zeigt eine Erfolgsmeldung an, die nach einigen Sekunden ausblendet
   const showUpdateSuccess = () => {
@@ -933,12 +937,8 @@ export default function PregnancyHomeScreen() {
     setRefreshing(true);
 
     try {
-      // Invalidate cache to force fresh data
-      if (user?.id) {
-        await invalidatePregnancyCache(user.id);
-      }
-
-      await loadUserData();
+      const confirmed = await loadUserData();
+      if (!confirmed) return;
 
       // Plattformspezifisches Feedback
       if (Platform.OS === 'android') {

@@ -1,3 +1,13 @@
+import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { useSleepOffline } from '@/contexts/SleepOfflineContext';
+import { useTrackingSync } from '@/contexts/TrackingSyncContext';
+import { TrackingSyncStatus } from '@/components/TrackingSyncStatus';
+import { overlayTrackingRows, readTrackingOutbox, trackingScope, queueTrackingUpdate } from '@/lib/trackingOutbox';
+import { localHealthAllowed } from '@/lib/localHealthStorage';
+import { readSnapshot, validRows } from '@/lib/localReadSnapshots';
+import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
+import { offlineText } from '@/lib/offlineTranslations';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 
@@ -47,6 +57,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBackend } from '@/contexts/BackendContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
+import type { SleepEntry as StoredSleepEntry } from '@/lib/services/SleepEntriesService';
 import { SleepCaptureButton } from '@/components/tracking/SleepCaptureButton';
 import { SleepTimerFace } from '@/components/tracking/SleepTimerFace';
 import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
@@ -1253,10 +1264,17 @@ export default function SleepTrackerScreen() {
   const modalAccentColor = isDark ? '#A26BFF' : '#8E4EC6';
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const sleepOffline = useSleepOffline();
+  const trackingSync = useTrackingSync();
+  const [sleepReadFailed, setSleepReadFailed] = useState(false);
+  const [sleepLiveConfirmed, setSleepLiveConfirmed] = useState(false);
+  const requestedStop = useRef<{ id: string; at: string } | null>(null);
   const { user } = useAuth();
   const userId = user?.id;
   const { activeBackend } = useBackend();
   const { activeBabyId } = useActiveBaby();
+  useEffect(() => { setSleepLiveConfirmed(false); requestedStop.current = null; }, [user?.id, activeBabyId]);
+
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const sleepService = useSleepEntriesService(user?.id);
   const triggerHaptic = useCallback(() => {
@@ -1275,12 +1293,14 @@ export default function SleepTrackerScreen() {
 
   // State management
   const [sleepEntries, setSleepEntries] = useState<ClassifiedSleepEntry[]>([]);
+  const sleepEntriesDisplayRef = useRef(sleepEntries); sleepEntriesDisplayRef.current = sleepEntries;
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadSleepDataRequestIdRef = useRef(0);
   const loadSleepDataRef = useRef<(() => Promise<void>) | null>(null);
   const sleepDataScopeKey = `${userId ?? ''}|${activeBackend}|${activeBabyId ?? ''}`;
   const sleepDataScopeRef = useRef(sleepDataScopeKey);
+  const verifiedSleepScopeRef = useRef('');
   const sleepMutationRef = useRef({ scope: sleepDataScopeKey, pending: 0 });
   const [activeSleepEntry, setActiveSleepEntry] = useState<ClassifiedSleepEntry | null>(null);
   const activeSleepEntryRef = useRef<ClassifiedSleepEntry | null>(null);
@@ -1575,6 +1595,7 @@ export default function SleepTrackerScreen() {
   // A read from another account/baby must never become this screen's timer.
   useEffect(() => {
     sleepDataScopeRef.current = sleepDataScopeKey;
+    verifiedSleepScopeRef.current = '';
     sleepMutationRef.current = { scope: sleepDataScopeKey, pending: 0 };
     invalidateSleepDataRequests();
     activeSleepEntryRef.current = null;
@@ -1802,7 +1823,7 @@ export default function SleepTrackerScreen() {
   // Ohne das hinge das Widget bis zum nächsten 5-Minuten-Lauf in app/_layout.tsx
   // hinterher — beim Starten und Stoppen eines Schlafs die auffälligste Stelle.
   useEffect(() => {
-    if (!activeBabyId) return;
+    if (SLEEP_OFFLINE_ENABLED || !activeBabyId) return;
     void syncSleepWidget(sleepEntries, {
       prediction: sleepPrediction,
       locale: ACTIVE_SLEEP_TRACKER_LOCALE,
@@ -1812,7 +1833,7 @@ export default function SleepTrackerScreen() {
   }, [activeBabyId, babyName, nightWindowSettings, sleepEntries, sleepPrediction]);
 
   useEffect(() => {
-    if (!isLiveStatusLoaded || !sleepActivityService.isLiveActivitySupported()) {
+    if (SLEEP_OFFLINE_ENABLED || !isLiveStatusLoaded || !sleepLiveConfirmed || !sleepActivityService.isLiveActivitySupported()) {
       return;
     }
 
@@ -1851,7 +1872,7 @@ export default function SleepTrackerScreen() {
   }, [activeSleepEntry?.id, activeSleepEntry?.start_time, isLiveStatusLoaded]);
 
   useEffect(() => {
-    if (!isLiveStatusLoaded || !activeSleepEntry?.start_time) {
+    if (SLEEP_OFFLINE_ENABLED || !isLiveStatusLoaded || !activeSleepEntry?.start_time) {
       return;
     }
 
@@ -1879,7 +1900,7 @@ export default function SleepTrackerScreen() {
   // Classify sleep entry by time period
   const classifySleepEntry = useCallback((entry: any, forcedPeriod?: SleepPeriod): ClassifiedSleepEntry => {
     const isActive = !entry.end_time;
-    let period = forcedPeriod ?? getSleepPeriodForEntry(entry, nightWindowSettings);
+    let period = forcedPeriod ?? (entry.local_period === 'night' || entry.local_period === 'day' ? entry.local_period : getSleepPeriodForEntry(entry, nightWindowSettings));
 
     if (!forcedPeriod && isActive && period === 'day') {
       const activeNightWindowKey = getNightWindowKeyForEntry(entry, nightWindowSettings);
@@ -1927,7 +1948,8 @@ export default function SleepTrackerScreen() {
         const result = await sleepService.getEntries(babyId);
 
         if (result.data) {
-          const subMinuteEntries = result.data.filter((entry) => isSubMinuteFinishedSleepEntry(entry));
+          if (SLEEP_OFFLINE_ENABLED) return { success: true, entries: result.data };
+          const subMinuteEntries = result.data.filter((entry) => isSubMinuteFinishedSleepEntry(entry) && !sleepOffline.actions.some(action => action.originalEntryId === entry.id && !['confirmed','discarded'].includes(action.state)));
 
           if (subMinuteEntries.length > 0) {
             const ownEntryIdsToDelete =
@@ -1942,7 +1964,7 @@ export default function SleepTrackerScreen() {
 
             if (ownEntryIdsToDelete.length > 0) {
               const deleteResults = await Promise.all(
-                ownEntryIdsToDelete.map((entryId) => sleepService.deleteEntry(entryId))
+                ownEntryIdsToDelete.map((entryId) => sleepService.deleteEntry(entryId, sleepEntries.find(e => e.id === entryId)))
               );
 
               const failedDeletes = deleteResults.filter((deleteResult) => deleteResult.primary.error);
@@ -1954,7 +1976,7 @@ export default function SleepTrackerScreen() {
             }
           }
 
-          const cleanedEntries = result.data.filter((entry) => !isSubMinuteFinishedSleepEntry(entry));
+          const cleanedEntries = result.data.filter((entry) => !isSubMinuteFinishedSleepEntry(entry) || sleepOffline.actions.some(action => action.originalEntryId === entry.id));
           return { success: true, entries: cleanedEntries };
         }
 
@@ -1969,7 +1991,7 @@ export default function SleepTrackerScreen() {
         return { success: false, entries: [] };
       }
     },
-    [activeBackend, sleepService, user?.id]
+    [activeBackend, sleepService, user?.id, sleepOffline.enabled]
   );
 
   // Timer and history must describe the same fresh server snapshot. A failed
@@ -1993,7 +2015,10 @@ export default function SleepTrackerScreen() {
           : t('alert.loadHistoryFailed'));
       }
 
-      const active = findFreshActiveSleepEntry<(typeof result.entries)[number]>(result.entries);
+      const localOperations = userId ? await readTrackingOutbox(userId) : [];
+      if (!canCommit()) return;
+      const visibleEntries = pendingSleepOverlay<(typeof result.entries)[number]>(overlayTrackingRows<(typeof result.entries)[number]>('sleep',result.entries,localOperations,activeBabyId), sleepOffline.actions);
+      const active = findFreshActiveSleepEntry<(typeof visibleEntries)[number]>(visibleEntries);
       let periodOverride = active?.id ? activeEntryPeriodOverridesRef.current[active.id] : undefined;
       if (active && !periodOverride) {
         periodOverride = await loadStoredActiveSleepPeriodOverride(active) ?? undefined;
@@ -2005,7 +2030,7 @@ export default function SleepTrackerScreen() {
       const classify = classifySleepEntryRef.current;
       const currentNightWindow = nightWindowSettingsRef.current;
       const activeSleep = active ? classify(active, periodOverride) : null;
-      const finishedEntries = result.entries
+      const finishedEntries = visibleEntries
         .filter((entry) => entry.end_time)
         .map((entry) => classify(entry));
       const allEntries = activeSleep ? [activeSleep, ...finishedEntries] : finishedEntries;
@@ -2017,6 +2042,10 @@ export default function SleepTrackerScreen() {
       setActiveSleepEntry(activeSleep);
       setSleepEntries(allEntries);
       setIsLiveStatusLoaded(true);
+      setSleepLiveConfirmed(true);
+      verifiedSleepScopeRef.current = sleepDataScopeKey;
+      sleepEntriesDisplayRef.current = allEntries;
+      setSleepReadFailed(false);
 
       // Auto-select latest entry logic
       if (
@@ -2041,6 +2070,7 @@ export default function SleepTrackerScreen() {
       if (!isLatestRequest()) return;
       console.error('Failed to load sleep data:', error);
       setPredictionLoading(false);
+      setSleepReadFailed(true);
     } finally {
       if (isLatestRequest()) {
         setIsLoading(false);
@@ -2051,6 +2081,41 @@ export default function SleepTrackerScreen() {
   useEffect(() => {
     loadSleepDataRef.current = loadSleepData;
   }, [loadSleepData]);
+
+  useEffect(() => {
+    if (!trackingSync.ready || !user?.id || !activeBabyId || SLEEP_OFFLINE_ENABLED) return;
+    const key = sleepDataScopeKey; let alive = true;
+    void (async () => {
+      const cached = await readSnapshot(trackingScope(user.id,activeBabyId),'tracking-sleep',validRows);
+      const operations = await readTrackingOutbox(user.id);
+      if (!alive || sleepDataScopeRef.current !== key) return;
+      const current = sleepEntriesDisplayRef.current;
+      const verified = verifiedSleepScopeRef.current === key;
+      const base = current.length || verified ? current : cached?.data ?? [];
+      const projected = overlayTrackingRows('sleep',base,operations,activeBabyId,verified ? undefined : cached?.verifiedAt ?? '').map(row => classifySleepEntry(row as any));
+      const active = findFreshActiveSleepEntry(projected);
+      activeSleepEntryRef.current = active; setActiveSleepEntry(active); setSleepEntries(projected);
+      // Local hydration releases the start buttons even with an empty cached history.
+      setIsLiveStatusLoaded(true);
+      if (operations.some(op => op.kind === 'sleep' && op.scope.babyId === activeBabyId && op.state === 'confirmed')) void loadSleepDataRef.current?.();
+    })().catch(() => {});
+    return () => { alive = false; };
+  }, [trackingSync.operations, trackingSync.ready, activeBabyId, sleepDataScopeKey]);
+
+  useEffect(() => {
+    const known = sleepOffline.knownActive;
+    if (!sleepLiveConfirmed && known && known.entry.baby_id === activeBabyId) {
+      const visible = pendingSleepOverlay([known.entry],sleepOffline.actions);
+      const active = visible.find(entry => !entry.end_time);
+      const classified = active ? classifySleepEntry(active as any) : null;
+      activeSleepEntryRef.current = classified; setActiveSleepEntry(classified);
+    }
+    const pendingIds = new Set(sleepOffline.actions.filter(action => !['confirmed','discarded'].includes(action.state)).map(action => action.originalEntryId));
+    setActiveSleepEntry(current => current?.id && pendingIds.has(current.id) ? null : current);
+    if (activeSleepEntryRef.current?.id && pendingIds.has(activeSleepEntryRef.current.id)) activeSleepEntryRef.current = null;
+    setSleepEntries(entries => pendingSleepOverlay(entries,sleepOffline.actions).map(entry => classifySleepEntry(entry)));
+    if (sleepOffline.actions.some(action => ['confirmed','discarded'].includes(action.state))) void loadSleepDataRef.current?.();
+  }, [sleepOffline.actions, sleepOffline.knownActive, activeBabyId]);
 
   // Handle refresh
   const handleRefresh = async () => {
@@ -2070,6 +2135,7 @@ export default function SleepTrackerScreen() {
     babyId: activeBabyId,
     enabled: activeBackend === 'supabase',
     entryIds: visibleSleepEntryIds,
+    activeEntryId: activeSleepEntry?.id,
     onRefresh: refreshSleepData,
     onInvalidate: invalidateSleepDataRequests,
   });
@@ -2079,7 +2145,7 @@ export default function SleepTrackerScreen() {
     referenceDate: Date,
     excludedEntryIds: string[] = [],
   ) => {
-    if (!sleepService) return { updated: 0, failed: 0 };
+    if (!sleepService || SLEEP_OFFLINE_ENABLED) return { updated: 0, failed: 0 };
 
     const excluded = new Set(excludedEntryIds);
     const nightSegments = getNightSessionSegmentsForReference(
@@ -2096,7 +2162,7 @@ export default function SleepTrackerScreen() {
       const entryId = segment.id;
       if (!entryId) continue;
 
-      const result = await sleepService.updateEntry(entryId, { quality });
+      const result = await sleepService.updateEntry(entryId, { quality }, segment);
 
       if (result.primary.error) {
         failed += 1;
@@ -2112,12 +2178,12 @@ export default function SleepTrackerScreen() {
     }
 
     return { updated, failed };
-  }, [nightWindowSettings, sleepEntries, sleepService]);
+  }, [nightWindowSettings, sleepEntries, sleepService, sleepOffline.enabled]);
 
   // Start sleep tracking
   const handleStartSleep = async (period: SleepPeriod) => {
     if (!ensureWritableInCurrentMode()) return false;
-    if (isStartingSleep) return false;
+    if (isStartingSleep || activeSleepEntryRef.current) return false;
     if (!user?.id || !sleepService) {
       Alert.alert(t('common.error'), t('alert.serviceUnavailable'));
       return false;
@@ -2126,7 +2192,7 @@ export default function SleepTrackerScreen() {
     setIsStartingSleep(true);
     const mutation = beginSleepMutation();
     try {
-      const effectivePartnerId = await getEffectivePartnerId();
+      const effectivePartnerId = activeBabyId && localHealthAllowed(user.id) && !SLEEP_OFFLINE_ENABLED ? partnerId : await getEffectivePartnerId();
       if (!mutation.isCurrentScope()) return false;
       const now = new Date();
       const startTime = now.toISOString();
@@ -2134,6 +2200,7 @@ export default function SleepTrackerScreen() {
       // Dual-write to both backends (completely separate, no sync)
       const result = await sleepService.createEntry({
         user_id: user.id,
+        local_period: period,
         baby_id: activeBabyId ?? null,
         start_time: startTime,
         end_time: null, // Active sleep has no end time yet
@@ -2146,7 +2213,7 @@ export default function SleepTrackerScreen() {
 
       if (result.primary.error) {
         console.error('❌ Start sleep error:', result.primary.error);
-        Alert.alert(t('common.error'), t('alert.startFailed'));
+        Alert.alert(t('common.error'), saveErrorMessage(result.primary.error, ACTIVE_SLEEP_TRACKER_LOCALE, t('alert.startFailed')));
         return false;
       }
 
@@ -2176,6 +2243,11 @@ export default function SleepTrackerScreen() {
       mutation.finish();
       await rememberActiveSleepPeriodOverride(entry.id, period, entry.start_time);
       if (!mutation.isCurrentScope()) return true;
+      if (entry.local_pending) {
+        void cancelLocalSleepWindowReminders().catch(() => {});
+        showSuccessSplash('#87CEEB', period === 'night' ? '🌙' : '😴', period === 'night' ? 'sleep_start_night' : 'sleep_start_day');
+        return true;
+      }
 
       // Aktiver Schlaf läuft jetzt: ausstehende Schlaffenster-Erinnerungen sofort entfernen.
       try {
@@ -2231,7 +2303,7 @@ export default function SleepTrackerScreen() {
       return true;
     } catch (error) {
       console.error('❌ Unexpected start sleep error:', error);
-      Alert.alert(t('common.error'), t('alert.unexpectedStart'));
+      Alert.alert(t('common.error'), saveErrorMessage(error, ACTIVE_SLEEP_TRACKER_LOCALE, t('alert.unexpectedStart')));
       return false;
     } finally {
       if (mutation.isCurrentScope()) setIsStartingSleep(false);
@@ -2240,9 +2312,41 @@ export default function SleepTrackerScreen() {
   };
 
   // Stop sleep tracking
-  const handleStopSleep = async (quality: NonNullable<SleepQuality>, notes?: string) => {
+  const handleStopSleep = async (quality: NonNullable<SleepQuality>, notes?: string, request?: { id: string; at: string }) => {
     if (!ensureWritableInCurrentMode()) return;
-    if (!activeSleepEntry?.id || isStoppingSleep || !sleepService) return;
+    if (!activeSleepEntry?.id || isStoppingSleep || !sleepService || request && request.id !== activeSleepEntry.id) return;
+    if (!SLEEP_OFFLINE_ENABLED && trackingSync.ready && user?.id && activeBabyId && localHealthAllowed(user.id)) {
+      const original = activeSleepEntry; const mutation = beginSleepMutation(); setIsStoppingSleep(true);
+      try {
+        const stored = requestedStop.current;
+        const at = request?.at ?? (stored && stored.id === original.id ? stored.at : new Date().toISOString());
+        const durationMs = Math.max(0, Date.parse(at)-new Date(original.start_time).getTime());
+        const duration = Math.round(durationMs/60000); const short = durationMs < MIN_PERSISTED_SLEEP_DURATION_MS;
+        await queueTrackingUpdate('sleep',trackingScope(user.id,activeBabyId),original.id!,{ end_time: at, duration_minutes: duration, quality, notes: notes ?? original.notes ?? null }, original as any, short);
+        if (!mutation.isCurrentScope()) return;
+        requestedStop.current = null; activeSleepEntryRef.current = null; setActiveSleepEntry(null); setPausedNightState(null);
+        setSleepEntries(rows => short ? rows.filter(row=>row.id!==original.id) : rows.map(row=>row.id===original.id ? classifySleepEntry({...row,end_time:at,duration_minutes:duration,quality,notes:notes ?? original.notes ?? null,local_pending:true} as any) : row));
+        void sleepActivityService.endAllSleepActivities().catch(() => {});
+      } catch { Alert.alert(t('common.error'),offlineText(ACTIVE_SLEEP_TRACKER_LOCALE,'storageError')); }
+      finally { mutation.finish(); if (mutation.isCurrentScope()) setIsStoppingSleep(false); }
+      return;
+    }
+    if (sleepOffline.enabled) {
+      const original = activeSleepEntry;
+      const storedRequest = requestedStop.current;
+      const at = request?.at ?? (storedRequest && storedRequest.id === original.id ? storedRequest.at : new Date().toISOString());
+      setIsStoppingSleep(true);
+      const mutation = beginSleepMutation();
+      try {
+        const saved = await sleepOffline.stop(original,at,quality,notes ?? original.notes ?? null);
+        if (requestedStop.current && requestedStop.current.id === original.id && requestedStop.current.at === at) requestedStop.current = null;
+        if (!mutation.isCurrentScope()) return;
+        activeSleepEntryRef.current = null; setActiveSleepEntry(null); setPausedNightState(null);
+        setSleepEntries(entries => entries.map(entry => entry.id === original.id ? classifySleepEntry({ ...entry,end_time:saved.chosenStopAt,duration_minutes:Math.max(0,Math.round((Date.parse(saved.chosenStopAt)-new Date(original.start_time).getTime())/60000)) }) : entry));
+      } catch (error) { Alert.alert(t('common.error'), offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, (error as Error)?.message === 'Original sleep is unavailable' ? 'unavailable' : (error as Error)?.message === 'No matching active snapshot' ? 'localTimer' : 'storageError')); }
+      finally { mutation.finish(); if (mutation.isCurrentScope()) setIsStoppingSleep(false); }
+      return;
+    }
     setIsStoppingSleep(true);
     const mutation = beginSleepMutation();
 
@@ -2253,7 +2357,7 @@ export default function SleepTrackerScreen() {
       const durationMinutes = Math.round(durationMs / 60000);
 
       if (durationMs < MIN_PERSISTED_SLEEP_DURATION_MS) {
-        const deleteResult = await sleepService.deleteEntry(activeSleepEntry.id);
+        const deleteResult = await sleepService.deleteEntry(activeSleepEntry.id, activeSleepEntry);
         if (!mutation.isCurrentScope()) return;
         if (deleteResult.primary.error) {
           console.error('❌ Delete sub-minute sleep error:', deleteResult.primary.error);
@@ -2295,7 +2399,7 @@ export default function SleepTrackerScreen() {
         quality,
         notes: notes ?? null,
         duration_minutes: durationMinutes,
-      });
+      }, activeSleepEntry);
       if (!mutation.isCurrentScope()) return;
 
       if (result.primary.error) {
@@ -2382,7 +2486,7 @@ export default function SleepTrackerScreen() {
       const result = await sleepService.updateEntry(activeSleepEntry.id, {
         end_time: pausedAt.toISOString(),
         duration_minutes: durationMinutes,
-      });
+      }, activeSleepEntry);
       if (!mutation.isCurrentScope()) return;
 
       if (result.primary.error) {
@@ -2406,8 +2510,15 @@ export default function SleepTrackerScreen() {
         : entry));
       mutation.finish();
 
+      if (result.primary.data?.local_pending) {
+        void sleepActivityService.endAllSleepActivities().catch(() => {});
+        delete activeEntryPeriodOverridesRef.current[activeSleepEntry.id];
+        void forgetActiveSleepPeriodOverride(activeSleepEntry.id).catch(() => {});
+        showSuccessSplash('#F2C78A', '⏸️', 'sleep_pause_night');
+        return;
+      }
       try {
-        await sleepActivityService.endAllSleepActivities();
+        if (!SLEEP_OFFLINE_ENABLED) await sleepActivityService.endAllSleepActivities();
       } catch (liveActivityError) {
         console.error('Failed to pause sleep live activity:', liveActivityError);
       }
@@ -2449,7 +2560,7 @@ export default function SleepTrackerScreen() {
     try {
       const result = await sleepService.updateEntry(pausedNightState.lastPausedEntryId, {
         quality,
-      });
+      }, sleepEntries.find(e => e.id === pausedNightState.lastPausedEntryId));
 
       if (result.primary.error) {
         console.error('❌ Finalize paused night error:', result.primary.error);
@@ -2473,6 +2584,7 @@ export default function SleepTrackerScreen() {
         quality === 'good' ? 'sleep_stop_good' : quality === 'bad' ? 'sleep_stop_bad' : 'sleep_stop_medium';
       showSuccessSplash(QUALITY_VISUALS[quality].color, QUALITY_VISUALS[quality].emoji, splashKind);
 
+      if (result.primary.data?.local_pending) return;
       await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
       await loadSleepData();
     } catch (error) {
@@ -2502,19 +2614,22 @@ export default function SleepTrackerScreen() {
     if (!ensureWritableInCurrentMode()) return;
     if (!activeSleepEntry?.id || isStoppingSleep) return;
     const isNightStop = activeSleepEntry.period === 'night';
+    const request = requestedStop.current?.id === activeSleepEntry.id ? requestedStop.current : { id: activeSleepEntry.id, at: new Date().toISOString() };
+    requestedStop.current = request;
+    const cancelRequest = () => { if (requestedStop.current === request) requestedStop.current = null; };
 
     Alert.alert(
       isNightStop ? t('quality.dialogNightTitle') : t('quality.dialogTitle'),
-      isNightStop ? t('quality.dialogNightQuestion') : t('quality.dialogQuestion'),
+      (isNightStop ? t('quality.dialogNightQuestion') : t('quality.dialogQuestion')) + (sleepOffline.enabled ? '\n\n' + offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, 'stopExplain') : ''),
       [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('quality.bad'), onPress: () => void handleStopSleepRef.current('bad') },
-        { text: t('quality.medium'), onPress: () => void handleStopSleepRef.current('medium') },
-        { text: t('quality.good'), onPress: () => void handleStopSleepRef.current('good') },
+        { text: t('common.cancel'), style: 'cancel', onPress: cancelRequest },
+        { text: t('quality.bad'), onPress: () => void handleStopSleepRef.current('bad', undefined, request) },
+        { text: t('quality.medium'), onPress: () => void handleStopSleepRef.current('medium', undefined, request) },
+        { text: t('quality.good'), onPress: () => void handleStopSleepRef.current('good', undefined, request) },
       ],
-      { cancelable: true }
+      { cancelable: true, onDismiss: cancelRequest }
     );
-  }, [activeSleepEntry?.id, activeSleepEntry?.period, ensureWritableInCurrentMode, isStoppingSleep]);
+  }, [activeSleepEntry?.id, activeSleepEntry?.period, ensureWritableInCurrentMode, isStoppingSleep, sleepOffline.enabled]);
 
   const promptSleepQualityForFinalizePausedNight = useCallback(() => {
     if (!ensureWritableInCurrentMode()) return;
@@ -2522,7 +2637,7 @@ export default function SleepTrackerScreen() {
 
     Alert.alert(
       t('quality.dialogNightTitle'),
-      t('quality.dialogNightQuestion'),
+      t('quality.dialogNightQuestion') + (SLEEP_OFFLINE_ENABLED ? '\n\n' + offlineText(ACTIVE_SLEEP_TRACKER_LOCALE,'stopExplain') : ''),
       [
         { text: t('common.cancel'), style: 'cancel' },
         { text: t('quality.bad'), onPress: () => void handleFinalizePausedNightRef.current('bad') },
@@ -2539,6 +2654,7 @@ export default function SleepTrackerScreen() {
     if (!isLiveStatusLoaded) return;
 
     handledLiveStopRequestIdRef.current = liveStopRequestId;
+    if (SLEEP_OFFLINE_ENABLED) { Alert.alert(t('common.notice'), offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, 'nativeReview')); return; }
 
     if (isStoppingSleep) {
       return;
@@ -2564,6 +2680,7 @@ export default function SleepTrackerScreen() {
     if (!isLiveStatusLoaded) return;
 
     handledLivePauseRequestIdRef.current = livePauseRequestId;
+    if (SLEEP_OFFLINE_ENABLED) { Alert.alert(t('common.notice'), offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, 'nativeReview')); return; }
 
     if (isStoppingSleep) {
       return;
@@ -2627,6 +2744,7 @@ export default function SleepTrackerScreen() {
       // SleepInputModal sendet die Daten direkt als Objekt
       const sleepData = payload;
       let createdEntryDateToSelect: Date | null = null;
+      let locallyQueuedEntry: StoredSleepEntry | null = null;
 
       // Validierung der Daten
       if (!sleepData.start_time) {
@@ -2661,7 +2779,7 @@ export default function SleepTrackerScreen() {
             return;
           }
 
-          const deleteResult = await sleepService.deleteEntry(editingEntry.id);
+          const deleteResult = await sleepService.deleteEntry(editingEntry.id, editingEntry);
           if (deleteResult.primary.error) {
             console.error('❌ Delete sub-minute edit error:', deleteResult.primary.error);
             Alert.alert(t('common.error'), t('alert.shortDeleteFailed'));
@@ -2728,7 +2846,7 @@ export default function SleepTrackerScreen() {
         return;
       }
 
-      const effectivePartnerId = await getEffectivePartnerId();
+      const effectivePartnerId = activeBabyId && localHealthAllowed(user.id) && !SLEEP_OFFLINE_ENABLED ? partnerId : await getEffectivePartnerId();
 
       // Robuste Berechnung der duration_minutes
       const calculateDurationMinutes = (startTime: string | Date, endTime: string | Date | null): number | null => {
@@ -2779,11 +2897,11 @@ export default function SleepTrackerScreen() {
           notes: sleepData.notes ?? null,
           duration_minutes: calculatedDuration,
           partner_id: editingEntry.partner_id ?? effectivePartnerId ?? null,
-        });
+        }, editingEntry);
 
         if (result.primary.error) {
           console.error('❌ Update error:', result.primary.error);
-          Alert.alert(t('alert.updateTitle'), `${result.primary.error.message || t('common.unknownError')}`);
+          Alert.alert(t('alert.updateTitle'), saveErrorMessage(result.primary.error, ACTIVE_SLEEP_TRACKER_LOCALE, t('common.unknownError')));
           return;
         }
 
@@ -2792,6 +2910,7 @@ export default function SleepTrackerScreen() {
         }
 
         console.log('✅ Entry updated successfully:', result.primary.data);
+        if (result.primary.data?.local_pending) locallyQueuedEntry = result.primary.data;
         // Splash anzeigen für Bearbeitung
         showSuccessSplash('#4A90E2', '✏️', 'sleep_edit_save');
       } else {
@@ -2816,7 +2935,7 @@ export default function SleepTrackerScreen() {
 
         if (result.primary.error) {
           console.error('❌ Insert error:', result.primary.error);
-          Alert.alert(t('alert.saveTitle'), `${result.primary.error.message || t('common.unknownError')}`);
+          Alert.alert(t('alert.saveTitle'), saveErrorMessage(result.primary.error, ACTIVE_SLEEP_TRACKER_LOCALE, t('common.unknownError')));
           return;
         }
 
@@ -2825,6 +2944,7 @@ export default function SleepTrackerScreen() {
         }
 
         console.log('✅ Entry created successfully:', result.primary.data);
+        if (result.primary.data?.local_pending) locallyQueuedEntry = result.primary.data;
         const createdEntry = classifySleepEntry(result.primary.data!);
         createdEntryDateToSelect = getAssignedDateForEntry(createdEntry, nightWindowSettings);
         // Splash anzeigen für neuen Eintrag
@@ -2839,6 +2959,15 @@ export default function SleepTrackerScreen() {
         setSelectedDate(createdEntryDateToSelect);
       }
 
+      if (locallyQueuedEntry) {
+        const entry = classifySleepEntry(locallyQueuedEntry);
+        setSleepEntries(rows => [entry, ...rows.filter(row => row.id !== entry.id)]);
+        if (!entry.end_time) { activeSleepEntryRef.current = entry; setActiveSleepEntry(entry); }
+        else if (activeSleepEntryRef.current?.id === entry.id) { activeSleepEntryRef.current = null; setActiveSleepEntry(null); }
+        closeManualSleepModal();
+        void cancelLocalSleepWindowReminders().catch(() => {});
+        return;
+      }
       if (
         shouldCancelStaleReminderAfterManualEntry({
           startTime: normalizedStartTime,
@@ -2869,7 +2998,7 @@ export default function SleepTrackerScreen() {
       console.error('❌ Sleep entry save error:', error);
       Alert.alert(
         t('alert.unexpectedSave'),
-        t('alert.unexpectedSaveBody', { error: error instanceof Error ? error.message : t('common.unknownError') })
+        saveErrorMessage(error, ACTIVE_SLEEP_TRACKER_LOCALE, t('common.unknownError'))
       );
     }
   };
@@ -3123,11 +3252,19 @@ export default function SleepTrackerScreen() {
 
     setIsSplittingSegment(true);
     try {
+      if (SLEEP_OFFLINE_ENABLED) {
+        if (!activeBabyId || !resolvedEntryA.sync_scope_revision || !resolvedEntryA.sync_revision || !resolvedEntryB.sync_revision || resolvedEntryA.sync_scope_revision !== resolvedEntryB.sync_scope_revision) return false;
+        const result = await sleepService.versionedBatch(activeBabyId, resolvedEntryA.sync_scope_revision, [
+          { action: 'update', id: resolvedEntryA.id, revision: resolvedEntryA.sync_revision, fields: { end_time: mergedEnd?.toISOString() ?? null } },
+          { action: 'delete', id: resolvedEntryB.id, revision: resolvedEntryB.sync_revision, fields: {} },
+        ]);
+        if (result.error) { Alert.alert(t('common.error'), result.error.message); return false; }
+      } else {
       // Update first entry to span both (including open-ended active segments)
       const updateResult = await sleepService.updateEntry(resolvedEntryA.id, {
         end_time: mergedEnd ? mergedEnd.toISOString() : null,
         duration_minutes: mergedDuration,
-      });
+      }, resolvedEntryA);
 
       if (updateResult.primary.error) {
         console.error('Merge update error:', updateResult.primary.error);
@@ -3139,7 +3276,7 @@ export default function SleepTrackerScreen() {
       }
 
       // Delete second entry
-      const deleteResult = await sleepService.deleteEntry(resolvedEntryB.id);
+      const deleteResult = await sleepService.deleteEntry(resolvedEntryB.id, resolvedEntryB);
       if (deleteResult.primary.error) {
         console.error('Merge delete error:', deleteResult.primary.error);
         Alert.alert(
@@ -3147,6 +3284,8 @@ export default function SleepTrackerScreen() {
           t('alert.mergeDeleteFailed', { error: deleteResult.primary.error.message || t('common.unknownError') })
         );
         return false;
+      }
+
       }
 
       if (!mergedEnd) {
@@ -3165,7 +3304,7 @@ export default function SleepTrackerScreen() {
         }
 
         try {
-          await sleepActivityService.startSleepActivity(mergedStart, babyName);
+          if (!SLEEP_OFFLINE_ENABLED) await sleepActivityService.startSleepActivity(mergedStart, babyName);
         } catch (liveActivityError) {
           console.error('Failed to restart sleep live activity after merge:', liveActivityError);
         }
@@ -3211,7 +3350,7 @@ export default function SleepTrackerScreen() {
       const updateResult = await sleepService.updateEntry(entry.id, {
         [field]: newTime.toISOString(),
         duration_minutes: newDuration,
-      });
+      }, entry);
 
       if (updateResult.primary.error) {
         console.error('Adjust boundary error:', updateResult.primary.error);
@@ -3248,7 +3387,14 @@ export default function SleepTrackerScreen() {
 
     setIsSplittingSegment(true);
     try {
-      const results = await Promise.all(ids.map((entryId) => sleepService.deleteEntry(entryId)));
+      if (SLEEP_OFFLINE_ENABLED) {
+        const group = ids.map(id => sleepEntries.find(e => e.id === id));
+        const revision = group[0]?.sync_scope_revision;
+        if (!activeBabyId || !revision || group.some(e => !e?.sync_revision || e.sync_scope_revision !== revision)) return false;
+        const result = await sleepService.versionedBatch(activeBabyId, revision, group.map(e => ({ action:'delete', id:e!.id, revision:e!.sync_revision, fields:{} })));
+        if (result.error) { Alert.alert(t('common.error'), result.error.message); return false; }
+      } else {
+      const results = await Promise.all(ids.map((entryId) => sleepService.deleteEntry(entryId, sleepEntries.find(e => e.id === entryId))));
       const failedPrimary = results.filter((result) => result.primary.error);
 
       if (failedPrimary.length > 0) {
@@ -3260,6 +3406,8 @@ export default function SleepTrackerScreen() {
       const failedSecondary = results.filter((result) => result.secondary.error);
       if (failedSecondary.length > 0) {
         console.warn('[SleepTracker] Secondary backend delete failed for night group:', failedSecondary.map((item) => item.secondary.error));
+      }
+
       }
 
       await Promise.all(ids.map((entryId) => forgetActiveSleepPeriodOverride(entryId)));
@@ -3302,7 +3450,7 @@ export default function SleepTrackerScreen() {
               }
 
               // Delete entry via service (dual-write)
-              const result = await sleepService.deleteEntry(entryId);
+              const result = await sleepService.deleteEntry(entryId, sleepEntries.find(e => e.id === entryId));
 
               if (result.primary.error) {
                 console.error('❌ Delete error:', result.primary.error);
@@ -4516,6 +4664,7 @@ export default function SleepTrackerScreen() {
 
   return (
     <ThemedBackground style={styles.backgroundImage}>
+      {!sleepLiveConfirmed && sleepOffline.knownActive && <Text>{offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, 'localTimer')}</Text>}
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         
@@ -4545,6 +4694,7 @@ export default function SleepTrackerScreen() {
             />
           }
         >
+          <TrackingSyncStatus babyId={activeBabyId} offline={sleepReadFailed} />
           {/* Status Bar */}
           <StatusMetricsBar
             stats={stats}
@@ -4784,6 +4934,7 @@ export default function SleepTrackerScreen() {
                 <ActivityCard
                   key={entry.id || index}
                   entry={convertSleepToDailyEntry(entry, nightWindowSettings)}
+                  auxiliaryBadgeLabel={(entry as any).local_pending ? offlineText(ACTIVE_SLEEP_TRACKER_LOCALE,'queuedEntry') : null}
                   onDelete={(entryId) => {
                     triggerHaptic();
                     handleDeleteEntry(entryId);

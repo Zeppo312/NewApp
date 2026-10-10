@@ -4,6 +4,12 @@ import { AppState } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { StartupRecovery, STARTUP_RECOVERY_DELAY_MS } from '../../components/StartupRecovery';
 jest.mock('expo-splash-screen', () => ({ hideAsync: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light', textPrimary: '#5C4033', textSecondary: '#7D5A50' }) }));
+jest.mock('../../components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
+jest.mock('../../components/ThemedBackground', () => {
+  const { View } = jest.requireActual('react-native'); return { ThemedBackground: View };
+});
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 describe('bounded startup recovery screen', () => {
   let tree: ReactTestRenderer;
   beforeEach(() => { jest.useFakeTimers(); jest.clearAllMocks(); Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' }); });

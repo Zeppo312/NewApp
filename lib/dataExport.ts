@@ -1,3 +1,5 @@
+import { SLEEP_OFFLINE_ENABLED } from './sleepSyncContract';
+import { readTrackingOutbox } from './trackingOutbox';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
@@ -29,6 +31,7 @@ const EXPORT_TABLES: TableExportConfig[] = [
   { key: 'baby_diary', table: 'baby_diary', orderBy: { column: 'entry_date', ascending: true } },
   { key: 'baby_daily', table: 'baby_daily', orderBy: { column: 'entry_date', ascending: true } },
   { key: 'baby_care_entries', table: 'baby_care_entries', orderBy: { column: 'start_time', ascending: true } },
+  { key: 'tracking_sync_receipts', table: 'tracking_sync_receipts', orderBy: { column: 'created_at', ascending: true } },
   { key: 'weight_entries', table: 'weight_entries', orderBy: { column: 'date', ascending: true } },
   { key: 'cycle_settings', table: 'cycle_settings', single: true },
   { key: 'cycle_periods', table: 'cycle_periods', orderBy: { column: 'period_start_date', ascending: true } },
@@ -129,6 +132,15 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
         exportData[config.key] = [];
         summary[config.key] = 0;
       }
+    }
+
+    const localTracking = await readTrackingOutbox(userId);
+    exportData.local_pending_tracking = localTracking.filter(op => op.state !== 'confirmed');
+    summary.local_pending_tracking = exportData.local_pending_tracking.length;
+    if (SLEEP_OFFLINE_ENABLED) {
+      const receipts = await supabase.rpc('sleep_sync_receipts');
+      if (receipts.error || !Array.isArray(receipts.data)) warnings.push('Schlaf-Abgleichergebnisse konnten nicht exportiert werden.');
+      else { exportData.sleep_sync_receipts = receipts.data; summary.sleep_sync_receipts = receipts.data.length; }
     }
 
     const payload = {

@@ -7,6 +7,7 @@ import { clearPersonalDeviceData, waitForPersonalDeviceCleanup } from '@/lib/acc
 import { setRevenueCatSessionUser } from '@/lib/revenuecat';
 
 jest.mock('@/lib/supabase', () => ({
+  supabaseUrl: 'https://fixture.supabase.co', supabaseAuthStorageKey: 'sb-fixture-auth-token',
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
   signInWithGoogle: jest.fn(), signOut: jest.fn(), isSupabaseReady: () => true, invalidateUserCache: jest.fn(),
 }));

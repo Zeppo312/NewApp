@@ -8,6 +8,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ONBOARDING_COMPLETE_KEY = 'onboarding_complete_v1';
 
+export async function readSavedOnboardingCompletionState(userId: string): Promise<boolean> {
+  try { return await AsyncStorage.getItem(`${ONBOARDING_COMPLETE_KEY}:${userId}`) === '1'; }
+  catch { return false; }
+}
+
 const hasCompletedProfileBasics = (profile: UserProfile | null) => {
   return typeof profile?.first_name === 'string' && profile.first_name.trim().length > 0;
 };
@@ -51,6 +56,5 @@ export const getOnboardingCompletionState = async (knownUserId?: string) => {
     try { await AsyncStorage.removeItem(key); } catch { /* non-blocking */ }
     return false;
   }
-  try { return await AsyncStorage.getItem(key) === '1'; }
-  catch { return false; }
+  return readSavedOnboardingCompletionState(knownUserId);
 };

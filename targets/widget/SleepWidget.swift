@@ -238,7 +238,7 @@ private struct SleepStatusBlock: View {
             HStack(spacing: 5) {
                 SleepStatusIcon(isSleeping: snapshot.isSleeping, size: compact ? 14 : 16)
                 SleepCaption(
-                    text: snapshot.isSleeping ? snapshot.strings.sleepingLabel : snapshot.strings.awakeLabel,
+                    text: snapshot.localStopPending == true ? (snapshot.pendingLabel ?? snapshot.strings.awakeLabel) : (snapshot.isSleeping ? snapshot.strings.sleepingLabel : snapshot.strings.awakeLabel),
                     color: textSecondary
                 )
             }

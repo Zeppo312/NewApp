@@ -1,8 +1,14 @@
+import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { confirmPendingSleepLogout } from '@/lib/sleepLogout';
+import { readStartupDisplaySession, revokeStartupAccess } from '@/lib/startupAccess';
+import { setConsentIdentity } from '@/lib/dataConsentRuntime';
 import { clearPersonalDeviceData, waitForPersonalDeviceCleanup } from '@/lib/accountDeletionCleanup';
 import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import {
   supabase,
+  supabaseUrl,
+  supabaseAuthStorageKey,
   signInWithEmail,
   signUpWithEmail,
   signInWithApple,
@@ -63,8 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const mountedRef = useRef(true);
   const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
 
-  const applySession = useCallback((nextSession: Session | null) => {
-    sessionRevisionRef.current++;
+  const applySession = useCallback((nextSession: Session | null, localDisplay = false) => {
+    if (!localDisplay) sessionRevisionRef.current++;
     const nextUserId = nextSession?.user?.id ?? null;
     const previousUserId = lastSessionUserIdRef.current;
 
@@ -72,6 +78,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // nutzerspezifischen Offline-Caches erhalten. Nur ein echter Wechsel nach
     // initialer Auflösung darf sie verwerfen.
     if (previousUserId !== undefined && previousUserId !== nextUserId) {
+      if (previousUserId) void revokeStartupAccess({ backendHost: new URL(supabaseUrl).host, userId: previousUserId }).catch(() => {
+        console.warn('Startup access could not be cleared after account change');
+      });
       void invalidateAllCaches().catch((cacheError) => {
         console.error('Error invalidating caches after auth user change:', cacheError);
       });
@@ -86,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     }
     lastSessionUserIdRef.current = nextUserId;
+    setConsentIdentity(nextUserId);
     setRevenueCatSessionUser(nextUserId);
 
     setSession(nextSession);
@@ -103,8 +113,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : { data: { session: null }, error: null };
         if (!mountedRef.current || revision !== sessionRevisionRef.current) return null;
         if (result.error) {
-          // A failed cold-start refresh is unresolved, not a signed-out session.
-          // Keep the recovery screen until a retry or authoritative auth event.
+          // A failed refresh is unresolved, not a signed-out session. Keep a
+          // restored local display session; without one, retain recovery.
           console.error('Error refreshing session:', result.error);
           return null;
         }
@@ -157,6 +167,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error setting up auth state change:', error);
     }
 
+    // SDK getSession can wait for an expired token's network refresh. Read the
+    // already persisted session in parallel, guarded by a bounded display grant
+    // and by auth revision so a late disk read cannot undo sign-out/account change.
+    const revision = sessionRevisionRef.current;
+    void readStartupDisplaySession(new URL(supabaseUrl).host, supabaseAuthStorageKey).then(savedSession => {
+      if (!isMounted || revision !== sessionRevisionRef.current || !savedSession || signOutPromiseRef.current) return;
+      applySession(savedSession, true);
+      setLoading(false);
+    });
     void refreshSession();
 
     // Cleanup-Funktion
@@ -229,13 +248,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Abmeldung
+  const logoutUserRef = useRef(user); logoutUserRef.current = user;
+  const logoutChoiceRef = useRef<Promise<{ error: any }> | null>(null);
   const handleSignOut = (): Promise<{ error: any }> => {
+    if (logoutChoiceRef.current) return logoutChoiceRef.current;
+    if (!SLEEP_OFFLINE_ENABLED || !user?.id) return performSignOut();
+    const id = user.id;
+    const choice = (async () => {
+      try { if (!await confirmPendingSleepLogout(id)) return { error: new Error('Sign-out cancelled') }; }
+      catch (error) { return { error }; }
+      if (logoutUserRef.current?.id !== id) return { error: new Error('Account changed') };
+      return performSignOut();
+    })().finally(() => { logoutChoiceRef.current = null; });
+    logoutChoiceRef.current = choice; return choice;
+  };
+  const performSignOut = (): Promise<{ error: any }> => {
     if (signOutPromiseRef.current) return signOutPromiseRef.current;
     sessionRevisionRef.current++;
+    if (user?.id) void revokeStartupAccess({ backendHost: new URL(supabaseUrl).host, userId: user.id }).catch(() => {
+      console.warn('Startup access could not be cleared during sign-out');
+    });
     // Hide private screens immediately, while preserving the persisted token
     // until Supabase has attempted remote session revocation.
     setSession(null);
     setUser(null);
+    setConsentIdentity(null);
     setRevenueCatSessionUser(null);
     invalidateUserCache();
     const operation = (async () => {

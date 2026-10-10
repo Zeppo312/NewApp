@@ -1,3 +1,4 @@
+import { localHealthAllowed, localHealthGeneration } from './localHealthStorage';
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
@@ -6,7 +7,7 @@ import * as Linking from 'expo-linking';
 import { emitLottiMoment } from '@/lib/lottiMomentEvents';
 import { resolveBackendEnvironment } from './backendEnvironment';
 import { assertGoogleProviderEnabled, startGoogleSignIn, type GoogleAuthOptions } from './google-auth';
-import { consentAwareFetch, setConsentIdentity } from './dataConsentRuntime';
+import { consentAwareFetch, setConsentIdentity, getRuntimeDataConsents } from './dataConsentRuntime';
 
 // Supabase-Konfiguration
 // Ersetzen Sie diese Werte mit Ihren eigenen Supabase-Projektdaten
@@ -27,10 +28,14 @@ const isReactNativeRuntime =
   typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
 const isClient = typeof window !== 'undefined' || isReactNativeRuntime;
 
+// Explicitly share the SDK's normal key with local display-session recovery.
+export const supabaseAuthStorageKey = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`;
+
 // Erstellen des Supabase-Clients mit einer Prüfung, ob wir im Browser oder in Node.js sind
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   global: { fetch: consentAwareFetch },
   auth: {
+    storageKey: supabaseAuthStorageKey,
     storage: isClient ? AsyncStorage : undefined,
     autoRefreshToken: true,
     persistSession: true,
@@ -163,6 +168,9 @@ export const invalidateUserCache = () => {
 
 // Listen to auth state changes and invalidate cache
 supabase.auth.onAuthStateChange((event, session) => {
+  // The SDK can emit an unresolved INITIAL_SESSION after an offline refresh.
+  // AuthProvider resolves anonymous startup or restores the bounded local view.
+  if (event === 'INITIAL_SESSION' && !session) return;
   setConsentIdentity(session?.user?.id ?? null);
   if (event === 'SIGNED_OUT' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
     invalidateUserCache();
@@ -525,14 +533,28 @@ export const addBabyCareEntry = async (
   entry: BabyCareEntry,
   babyId?: string,
   options?: {
+    expectedUserId?: string;
+    expectedLocalGeneration?: number;
     diaperInventoryItemId?: string | null;
     // 'none' = bewusst kein Pulver abziehen (z. B. abgepumpte Muttermilch).
     bottleInventoryItemId?: string | null | 'none';
   }
 ) => {
+  let dispatched = false;
   try {
+    const localUserId = getRuntimeDataConsents().userId;
+    const localBabyId = babyId ?? entry.baby_id;
+    if (localUserId && localBabyId && localHealthAllowed(localUserId)) {
+      if (options?.expectedUserId && options.expectedUserId !== localUserId || options?.expectedLocalGeneration !== undefined && options.expectedLocalGeneration !== localHealthGeneration()) throw new Error('Activity scope changed');
+      const { queueTrackingCreate, trackingScope } = await import('./trackingOutbox');
+      const data = await queueTrackingCreate('care', trackingScope(localUserId, localBabyId), entry,
+        entry.entry_type === 'diaper' ? options?.diaperInventoryItemId : options?.bottleInventoryItemId);
+      if (entry.entry_type !== 'custom') emitLottiMoment(entry.entry_type === 'diaper' ? 'care' : 'feeding');
+      return { data, error: null, saveStatus: 'queued' as const };
+    }
     const { data: userData } = await getCachedUser();
-    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
+    if (!userData.user) return { data: null, error: new Error('Nicht angemeldet'), saveStatus: 'rejected' as const };
+    if (options?.expectedUserId && userData.user.id !== options.expectedUserId || options?.expectedLocalGeneration !== undefined && options.expectedLocalGeneration !== localHealthGeneration()) return { data:null,error:new Error('Activity scope changed'),saveStatus:'rejected' as const };
 
     const payload = {
       user_id: userData.user.id,
@@ -558,13 +580,14 @@ export const addBabyCareEntry = async (
       custom_unit: entry.custom_unit ?? null,
     };
 
-    const { data, error } = await supabase
+    dispatched = true;
+    const { data, error, status } = await supabase
       .from('baby_care_entries')
       .insert(payload)
       .select()
       .single();
 
-    if (!error) {
+    if (!error && data?.id) {
       if (payload.entry_type === 'feeding') {
         emitLottiMoment('feeding');
         if (
@@ -598,13 +621,14 @@ export const addBabyCareEntry = async (
       }
     }
 
-    return { data, error };
+    return { data, error, saveStatus: !error && data?.id ? 'confirmed' as const :
+      (error && (/^(22|23)/.test(error.code ?? '') || error.code === '42501' || status === 401 || status === 403) ? 'rejected' as const : 'confirmation_unknown' as const) };
   } catch (err) {
-    return { data: null, error: err };
+    return { data: null, error: err, saveStatus: dispatched ? 'confirmation_unknown' as const : 'rejected' as const };
   }
 };
 
-export const getBabyCareEntriesForDate = async (date: Date, babyId?: string) => {
+export const getBabyCareEntriesForDate = async (date: Date, babyId?: string, signal?: AbortSignal) => {
   try {
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
@@ -624,7 +648,8 @@ export const getBabyCareEntriesForDate = async (date: Date, babyId?: string) => 
       query = query.eq('baby_id', babyId);
     }
 
-    const { data, error } = await query.order('start_time', { ascending: false });
+    const ordered = query.order('start_time', { ascending: false });
+    const { data, error } = await (signal ? ordered.abortSignal(signal) : ordered);
 
     return { data, error };
   } catch (err) {
@@ -657,6 +682,12 @@ export const getBabyCareEntriesForDateRange = async (startDate: Date, endDate: D
 
 export const deleteBabyCareEntry = async (id: string, babyId?: string) => {
   try {
+    const localUserId = getRuntimeDataConsents().userId;
+    if (localUserId && babyId && localHealthAllowed(localUserId)) {
+      const { findLocalTrackingRow, queueTrackingUpdate, trackingScope } = await import('./trackingOutbox');
+      const row = await findLocalTrackingRow('care', localUserId, id, babyId);
+      if (row) { await queueTrackingUpdate('care', trackingScope(localUserId, babyId), id, {}, row, true); return { error: null }; }
+    }
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
@@ -674,6 +705,12 @@ export const deleteBabyCareEntry = async (id: string, babyId?: string) => {
 
 export const stopBabyCareEntryTimer = async (id: string, babyId?: string) => {
   try {
+    const localUserId = getRuntimeDataConsents().userId;
+    if (localUserId && babyId && localHealthAllowed(localUserId)) {
+      const { findLocalTrackingRow, queueTrackingUpdate, trackingScope } = await import('./trackingOutbox');
+      const row = await findLocalTrackingRow('care', localUserId, id, babyId);
+      if (row) { const data = await queueTrackingUpdate('care', trackingScope(localUserId, babyId), id, { end_time: new Date().toISOString() }, row); return { data, error: null }; }
+    }
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { error: new Error('Nicht angemeldet') };
 
@@ -705,6 +742,12 @@ export const updateBabyCareEntry = async (
   babyId?: string
 ) => {
   try {
+    const localUserId = getRuntimeDataConsents().userId;
+    if (localUserId && babyId && localHealthAllowed(localUserId)) {
+      const { findLocalTrackingRow, queueTrackingUpdate, trackingScope } = await import('./trackingOutbox');
+      const row = await findLocalTrackingRow('care', localUserId, id, babyId);
+      if (row) { const data = await queueTrackingUpdate('care', trackingScope(localUserId, babyId), id, updates, row); return { data, error: null }; }
+    }
     const { data: userData } = await getCachedUser();
     if (!userData.user) return { data: null, error: new Error('Nicht angemeldet') };
 
@@ -1891,25 +1934,25 @@ export const deactivateAccountLink = async (linkId: string) => {
 };
 
 // Funktion zum Abrufen des Entbindungstermins mit Informationen über verknüpfte Benutzer
-export const getDueDateWithLinkedUsers = async (userId: string) => {
+export const getDueDateWithLinkedUsers = async (userId: string, signal?: AbortSignal) => {
   try {
     // Verwenden der neuen RPC-Funktion
-    const { data, error } = await supabase.rpc('get_due_date_with_linked_users', {
+    const request = supabase.rpc('get_due_date_with_linked_users', {
       p_user_id: userId
     });
 
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
     if (error) {
       console.error('Error fetching due date with linked users:', error);
       return { success: false, error };
     }
 
-    console.log('Due date with linked users:', data);
     return data; // Die Funktion gibt { success: true, dueDate: ..., isBabyBorn: ..., linkedUsers: [...] } zurück
   } catch (error) {
     console.error('Exception fetching due date with linked users:', error);
     return {
       success: false,
-      error: { message: 'Fehler beim Abrufen des Entbindungstermins.' }
+      error
     };
   }
 };

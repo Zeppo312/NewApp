@@ -1,9 +1,13 @@
+import { clearLocalHealthData } from './localHealthStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { DataConsentScope } from './dataConsentTypes';
 import { DATA_CONSENTS_ENABLED } from './dataConsentRuntime';
+import { clearStartupAccess, STARTUP_ACCESS_PREFIX } from './startupAccess';
 
 /** Ordinary logout must not silently discard an unconfirmed withdrawal. */
 export async function clearDeviceStoragePreservingWithdrawals(): Promise<void> {
+  await clearStartupAccess();
+  await clearLocalHealthData();
   if (!DATA_CONSENTS_ENABLED) { await AsyncStorage.clear(); return; }
   const keys = await AsyncStorage.getAllKeys();
   const withdrawalKeys = keys.filter(key => key.startsWith('data_consent_pending_withdrawal_v1:'));
@@ -14,9 +18,11 @@ export async function clearDeviceStoragePreservingWithdrawals(): Promise<void> {
 
 /** Remove health caches while retaining auth, consent decisions and withdrawals. */
 export async function clearHealthConsentDeviceStorage(): Promise<void> {
+  await clearLocalHealthData();
   const keys = await AsyncStorage.getAllKeys();
   const removable = keys.filter(key => !/^sb-[a-z]{20}-auth-token(?:$|-code-verifier$|-user$)/.test(key)
     && !key.startsWith('data_consent_pending_withdrawal_v1:') && !key.startsWith('data_consent_snapshot_v1:')
+    && !key.startsWith(STARTUP_ACCESS_PREFIX)
     && !key.startsWith('@lottibaby:language-preference'));
   await AsyncStorage.multiRemove(removable);
 }

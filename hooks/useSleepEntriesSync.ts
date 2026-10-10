@@ -19,11 +19,14 @@ export interface SleepEntriesSyncOptions {
   babyId?: string | null;
   enabled: boolean;
   entryIds: readonly string[];
+  activeEntryId?: string | null;
   onRefresh: () => Promise<void>;
   onInvalidate: () => void;
 }
 
 const REFRESH_DEBOUNCE_MS = 200;
+const ACTIVE_CHECK_INTERVAL_MS = 15000;
+const ACTIVE_CHECK_TIMEOUT_MS = 8000;
 let nextSubscriptionId = 0;
 
 /** Refresh the visible sleep screen after partner changes and missed events. */
@@ -32,18 +35,21 @@ export function useSleepEntriesSync({
   babyId,
   enabled,
   entryIds,
+  activeEntryId,
   onRefresh,
   onInvalidate,
 }: SleepEntriesSyncOptions) {
   const callbacksRef = useRef({ onRefresh, onInvalidate });
   const entryIdsRef = useRef(new Set(entryIds));
+  const activeEntryIdRef = useRef(activeEntryId);
 
   // Callbacks and known entries change with the screen state, without creating
   // another subscription or dropping the connection on every timer render.
   useEffect(() => {
     callbacksRef.current = { onRefresh, onInvalidate };
     entryIdsRef.current = new Set(entryIds);
-  }, [entryIds, onInvalidate, onRefresh]);
+    activeEntryIdRef.current = activeEntryId;
+  }, [activeEntryId, entryIds, onInvalidate, onRefresh]);
 
   useFocusEffect(useCallback(() => {
     if (!enabled || !userId) return;
@@ -53,6 +59,7 @@ export function useSleepEntriesSync({
     let timer: ReturnType<typeof setTimeout> | null = null;
     let refreshing = false;
     let refreshPending = false;
+    let activeCheck: AbortController | null = null;
 
     const cancelTimer = () => {
       if (timer !== null) clearTimeout(timer);
@@ -94,6 +101,28 @@ export function useSleepEntriesSync({
         scheduleRefresh();
       }
     };
+
+    // A healthy-looking subscription can still miss a partner's delayed stop.
+    // Probe only the displayed timer, then load the canonical snapshot if it
+    // ended/disappeared. Failed probes preserve the last confirmed screen.
+    const checkActiveSleep = async () => {
+      const entryId = activeEntryIdRef.current;
+      if (!focused || appState !== 'active' || !entryId || activeCheck || refreshing || refreshPending) return;
+      const abort = new AbortController();
+      activeCheck = abort;
+      const timeout = setTimeout(() => abort.abort(), ACTIVE_CHECK_TIMEOUT_MS);
+      try {
+        const { data, error } = await supabase.from('sleep_entries')
+          .select('id,end_time').eq('id', entryId).abortSignal(abort.signal).maybeSingle();
+        if (error || abort.signal.aborted || !focused || appState !== 'active' || activeEntryIdRef.current !== entryId) return;
+        if (data === null || data?.id === entryId && data.end_time != null) requestRefresh();
+      } catch { /* A transport failure cannot confirm that the timer ended. */ }
+      finally {
+        clearTimeout(timeout);
+        if (activeCheck === abort) activeCheck = null;
+      }
+    };
+    const activeCheckInterval = setInterval(() => { void checkActiveSleep(); }, ACTIVE_CHECK_INTERVAL_MS);
 
     const onDelete = (payload: SleepChange) => {
       const id = (payload.old as Partial<SleepChangeRecord>).id;
@@ -138,6 +167,8 @@ export function useSleepEntriesSync({
       schema: 'public',
       table: 'sleep_entries',
     }, onDelete);
+    if (babyId) channel.on('postgres_changes', { event:'*', schema:'public', table:'sleep_entries', filter:`baby_id=eq.${babyId}` }, () => requestRefresh());
+    for (const [table,column] of [['baby_members','user_id'],['sleep_entry_shares','shared_with_id'],['account_links','creator_id'],['account_links','invited_id']] as const) channel.on('postgres_changes', {event:'*',schema:'public',table,filter:`${column}=eq.${userId}`}, () => requestRefresh());
     channel.subscribe((status) => {
       // The SDK rejoins automatically. Read the snapshot after every join,
       // since events missed while disconnected are not replayed.
@@ -147,7 +178,7 @@ export function useSleepEntriesSync({
     const appStateSubscription = AppState.addEventListener('change', (nextState) => {
       const returning = appState !== 'active' && nextState === 'active';
       appState = nextState;
-      if (nextState !== 'active') cancelTimer();
+      if (nextState !== 'active') { cancelTimer(); activeCheck?.abort(); }
       if (returning) requestRefresh(true);
     });
 
@@ -157,6 +188,8 @@ export function useSleepEntriesSync({
       focused = false;
       refreshPending = false;
       cancelTimer();
+      clearInterval(activeCheckInterval);
+      activeCheck?.abort();
       callbacksRef.current.onInvalidate();
       appStateSubscription.remove();
       void supabase.removeChannel(channel).catch((error) => {

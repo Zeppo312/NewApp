@@ -1,3 +1,4 @@
+import { offlineText } from '@/lib/offlineTranslations';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -85,6 +86,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     refreshBabies,
     isLoading,
     loadError,
+    savedListAt,
   } = useActiveBaby();
   const { isBabyBorn, temporaryViewMode, setTemporaryViewMode } = useBabyStatus();
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -574,6 +576,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
             </View>
 
             <View style={styles.listContainer}>
+              {savedListAt && <ThemedText style={[styles.emptyStateHint, {color:subtitleColor}]}>{offlineText(locale, 'asOf', {time:new Date(savedListAt).toLocaleString(locale)})}</ThemedText>}
               {isLoading && (
                 <ThemedText accessibilityRole="text" style={[styles.emptyStateHint, { color: subtitleColor }]}>
                   {listCopy.loading}
