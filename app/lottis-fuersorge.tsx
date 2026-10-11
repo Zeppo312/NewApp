@@ -34,20 +34,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useAdvisorSettings } from '@/hooks/useAdvisorSettings';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import {
-  fetchAdvisorSettings,
   fetchHistory,
   fetchTodayState,
   localDateString,
   markInsightShared,
   markTodayRead,
-  saveAdvisorSettings,
   saveTodayInsight,
   setActed,
   type AdvisorCategory,
   type AdvisorHistoryItem,
-  type AdvisorSettings,
   type AdvisorTodayState,
 } from '@/lib/advisor/advisorStorage';
 import { buildDailySignals } from '@/lib/advisor/buildDailySignals';
@@ -362,7 +360,13 @@ export default function LottisFuersorgeScreen() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   /** Echter Verlauf aus Supabase; null = (noch) nicht verfügbar → Mock zeigen. */
   const [history, setHistory] = useState<AdvisorHistoryItem[] | null>(null);
-  const [settings, setSettings] = useState<AdvisorSettings | null>(null);
+  const {
+    settings,
+    status: settingsSaveStatus,
+    update: updateSettings,
+    retry: retrySettings,
+    reload: reloadSettings,
+  } = useAdvisorSettings(access === true ? user?.id : undefined);
   const [todayState, setTodayState] = useState<AdvisorTodayState | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [clockNow, setClockNow] = useState(() => new Date());
@@ -454,14 +458,12 @@ export default function LottisFuersorgeScreen() {
       }
 
       if (!persistedByServer) messageId = await saveTodayInsight(null, result);
-      const [dbHistory, dbSettings, dbTodayState] = await Promise.all([
+      const [dbHistory, dbTodayState] = await Promise.all([
         fetchHistory(null),
-        fetchAdvisorSettings(),
         fetchTodayState(null),
       ]);
       if (!alive()) return;
       setHistory(dbHistory);
-      setSettings(dbSettings);
       setTodayState(
         dbTodayState ??
           (messageId
@@ -516,18 +518,16 @@ export default function LottisFuersorgeScreen() {
       }
     }
 
-    // Persistenz: heutigen Hinweis in Supabase ablegen, Verlauf +
-    // Einstellungen laden. Fällt still zurück, wenn Tabellen fehlen.
+    // Persistenz: heutigen Hinweis in Supabase ablegen und Verlauf laden.
+    // Fällt still zurück, wenn Tabellen fehlen.
     if (babyId) {
       if (!persistedByServer) messageId = await saveTodayInsight(babyId, result);
-      const [dbHistory, dbSettings, dbTodayState] = await Promise.all([
+      const [dbHistory, dbTodayState] = await Promise.all([
         fetchHistory(babyId),
-        fetchAdvisorSettings(),
         fetchTodayState(babyId),
       ]);
       if (!alive()) return;
       setHistory(dbHistory?.map((item) => localizeStoredAdvisorInsight(locale, item)) ?? dbHistory);
-      setSettings(dbSettings);
       setTodayState(
         dbTodayState ??
           (messageId
@@ -542,10 +542,8 @@ export default function LottisFuersorgeScreen() {
       );
       markTodayRead(babyId);
     } else {
-      const dbSettings = await fetchAdvisorSettings();
       if (!alive()) return;
       setHistory(null);
-      setSettings(dbSettings);
       setTodayState(null);
     }
   }, [activeBaby, isPregnancy, locale, loadPregnancyAnalysis]);
@@ -555,6 +553,7 @@ export default function LottisFuersorgeScreen() {
       // Erst laden, wenn der Zugriff bestätigt ist (kein Persistieren
       // von Hinweisen für Nutzer ohne Freischaltung).
       if (access !== true) return;
+      void reloadSettings?.();
       void loadAnalysis();
       const subscription = AppState.addEventListener('change', (state) => {
         runIdRef.current += 1;
@@ -564,7 +563,7 @@ export default function LottisFuersorgeScreen() {
         runIdRef.current += 1;
         subscription.remove();
       };
-    }, [access, loadAnalysis]),
+    }, [access, loadAnalysis, reloadSettings]),
   );
 
   /** „Erledigt"-Haken einer Verlaufskarte umschalten (optimistisch). */
@@ -584,24 +583,17 @@ export default function LottisFuersorgeScreen() {
     setActed(item.id, acted);
   };
 
-  /** Einstellungen optimistisch aktualisieren + speichern. */
-  const updateSettings = (next: AdvisorSettings) => {
+  /** Der Schalter reagiert sofort; die Warteschlange speichert immer den neuesten Stand. */
+  const toggleTheme = (theme: AdvisorCategory) => {
     if (Platform.OS !== 'web') {
       Haptics.selectionAsync().catch(() => {});
     }
-    setSettings(next);
-    saveAdvisorSettings(next);
-  };
-
-  const toggleTheme = (theme: AdvisorCategory) => {
-    if (!settings) return;
-    const active = settings.themes.includes(theme);
-    updateSettings({
-      ...settings,
-      themes: active
-        ? settings.themes.filter((t) => t !== theme)
-        : [...settings.themes, theme],
-    });
+    updateSettings?.(current => ({
+      ...current,
+      themes: current.themes.includes(theme)
+        ? current.themes.filter(t => t !== theme)
+        : [...current.themes, theme],
+    }));
   };
 
   const toggleDetails = () => {
@@ -1132,7 +1124,17 @@ export default function LottisFuersorgeScreen() {
 
   /** Einstellungen: Themen an/aus + Frequenz (persistiert in Supabase). */
   const renderSettings = () => {
-    if (!settings) return null;
+    if (!settings) return settingsSaveStatus === 'load-error' ? (
+      <View style={styles.settingsSection}>
+        <ThemedText style={styles.historyHeading}>{t('settings')}</ThemedText>
+        <CareGlassCard {...tileProps} radius={22} contentStyle={styles.settingsContent}>
+          <ThemedText adaptive={false} style={styles.settingsHint}>{t('settingsLoadFailed')}</ThemedText>
+          <TouchableOpacity accessibilityRole="button" onPress={retrySettings} style={styles.settingsRetryButton}>
+            <ThemedText adaptive={false} style={styles.privacyLinkText}>{t('settingsRetry')}</ThemedText>
+          </TouchableOpacity>
+        </CareGlassCard>
+      </View>
+    ) : null;
     return (
       <View style={styles.settingsSection}>
         <ThemedText style={styles.historyHeading}>{t('settings')}</ThemedText>
@@ -1162,6 +1164,19 @@ export default function LottisFuersorgeScreen() {
               />
             </View>
           ))}
+
+          {settingsSaveStatus !== 'idle' && (
+            <View style={styles.settingsSyncStatus} accessibilityLiveRegion="polite">
+              <ThemedText adaptive={false} style={styles.settingsHint}>
+                {t(settingsSaveStatus === 'retrying' ? 'settingsRetrying' : 'settingsSaving')}
+              </ThemedText>
+              {settingsSaveStatus === 'retrying' && (
+                <TouchableOpacity accessibilityRole="button" onPress={retrySettings} style={styles.settingsRetryButton}>
+                  <ThemedText adaptive={false} style={styles.privacyLinkText}>{t('settingsRetry')}</ThemedText>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           <ThemedText adaptive={false} style={styles.settingsHint}>
             {t('foregroundHint')}
@@ -1670,6 +1685,8 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
   settingsLabel: { flex: 1, fontSize: 14.5, fontWeight: '600', color: theme.textPrimary },
   settingsLabelColumn: { flex: 1, gap: 2 },
   settingsHint: { fontSize: 11.5, lineHeight: 15, color: theme.textTertiary },
+  settingsSyncStatus: { gap: 4, marginTop: 10 },
+  settingsRetryButton: { alignSelf: 'flex-start', paddingVertical: 10, paddingRight: 12 },
   frequencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   frequencyChip: {
     paddingHorizontal: 14,

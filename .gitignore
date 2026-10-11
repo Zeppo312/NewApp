@@ -73,5 +73,6 @@ app-example
 __pycache__/
 *.pyc
 /supabase/.temp/
+**/supabase/.temp/
 # Also exclude the local build-directory symlink.
 /android/app/build

@@ -4,6 +4,10 @@ import type { AdvisorHistoryItem } from './advisorStorage';
 
 const ui = {
   de: {
+    settingsLoadFailed: 'Deine Einstellungen konnten gerade nicht geladen werden.',
+    settingsSaving: 'Änderung wird gespeichert …',
+    settingsRetrying: 'Speichern gerade nicht möglich. Deine Auswahl bleibt erhalten; wir versuchen es automatisch erneut.',
+    settingsRetry: 'Jetzt erneut versuchen',
     foregroundHint: 'Neue Hinweise entstehen nur, während du Lottis Fürsorge in der App öffnest. Es gibt keine automatische tägliche Auswertung oder Fürsorge-Pushnachrichten.',
     sleep: 'Schlaf', feeding: 'Ernährung', diaper: 'Windeln', weather: 'Wetter', motivation: 'Motivation', daily: 'Täglich', importantOnly: 'Nur Wichtiges', off: 'Aus', today: 'Heute', yesterday: 'Gestern',
     notificationTitle: 'Mitteilungen nicht möglich', notificationMessage: 'Bitte erlaube Lotti Benachrichtigungen in den Systemeinstellungen. Ohne Erlaubnis kann Lotti dir keine Tageshinweise schicken.', shareTitle: 'Übergabe für Lotti', shareFailedTitle: 'Teilen nicht möglich', shareFailedMessage: 'Die Übergabe konnte gerade nicht geöffnet werden.',
@@ -17,6 +21,10 @@ const ui = {
     week: 'Woche', month: 'Monat', year: 'Jahr', meals: 'Mahlzeiten', analyticsTitle: 'Rhythmus & Berichte', analyticsHint: 'Zeiträume vergleichen und Muster gemeinsam betrachten', days: 'Tage', reportLoading: 'Bericht wird aus euren Einträgen aufgebaut …', dataUnavailable: 'Daten gerade nicht erreichbar', dataUnavailableText: 'Der Tagesbereich funktioniert weiter. Der Bericht versucht es beim nächsten Öffnen erneut.', reportGrowing: 'Der Bericht wächst mit euren Einträgen', reportGrowingText: 'Sobald Schlaf, Mahlzeiten oder Windeln erfasst sind, erscheinen hier Vergleiche und Kurven.', comparisonLearning: 'Vergleich lernt noch', stable: 'nahezu stabil', change: '{{arrow}} {{percent}} % zum Vergleich', averageDays: 'Ø aus {{count}} erfassten Tagen', trend: 'Verlauf', trendHint: 'Durchgezogen aktuell · gestrichelt {{comparison}}', noticeable: 'Was auffällt', together: 'Zusammen betrachtet', method: 'Durchschnitte beziehen sich auf Tage mit einem passenden Eintrag. Zusammenhänge zeigen gemeinsame Bewegungen, keine medizinische Bewertung oder Ursache.', chartHistory: '{{metric}}-Verlauf',
   },
   en: {
+    settingsLoadFailed: 'Your settings could not be loaded right now.',
+    settingsSaving: 'Saving your change …',
+    settingsRetrying: 'Could not save right now. Your selection is retained; we will retry automatically.',
+    settingsRetry: 'Try again now',
     foregroundHint: 'New insights are generated only while you open Care in the app. There is no automatic daily analysis or Care push notification.',
     sleep: 'Sleep', feeding: 'Feeding', diaper: 'Diapers', weather: 'Weather', motivation: 'Motivation', daily: 'Daily', importantOnly: 'Important only', off: 'Off', today: 'Today', yesterday: 'Yesterday',
     notificationTitle: 'Notifications unavailable', notificationMessage: 'Allow Lotti notifications in your system settings. Without permission, Lotti cannot send daily insights.', shareTitle: 'Lotti care handoff', shareFailedTitle: 'Could not share', shareFailedMessage: 'The handoff could not be opened right now.',
@@ -30,6 +38,10 @@ const ui = {
     week: 'Week', month: 'Month', year: 'Year', meals: 'Feeds', analyticsTitle: 'Rhythm & reports', analyticsHint: 'Compare periods and explore patterns together', days: 'days', reportLoading: 'Building your report from your entries …', dataUnavailable: 'Data currently unavailable', dataUnavailableText: 'The daily section still works. The report will try again when you next open it.', reportGrowing: 'Your report grows with your entries', reportGrowingText: 'Once sleep, feeds, or diapers are recorded, comparisons and charts will appear here.', comparisonLearning: 'Still learning the comparison', stable: 'almost stable', change: '{{arrow}} {{percent}}% vs. comparison', averageDays: 'Average from {{count}} recorded days', trend: 'Trend', trendHint: 'Solid: current · dashed: {{comparison}}', noticeable: 'What stands out', together: 'Viewed together', method: 'Averages use days with a matching entry. Relationships show values moving together, not a medical assessment or a cause.', chartHistory: '{{metric}} trend',
   },
   es: {
+    settingsLoadFailed: 'No se pudieron cargar tus ajustes ahora.',
+    settingsSaving: 'Guardando el cambio …',
+    settingsRetrying: 'No se pudo guardar ahora. Tu selección se conserva; lo intentaremos de nuevo automáticamente.',
+    settingsRetry: 'Reintentar ahora',
     foregroundHint: 'Los nuevos consejos se generan solo mientras abres Cuidados en la app. No hay análisis diario automático ni notificaciones push de Cuidados.',
     sleep: 'Sueño', feeding: 'Alimentación', diaper: 'Pañales', weather: 'Tiempo', motivation: 'Motivación', daily: 'A diario', importantOnly: 'Solo lo importante', off: 'Desactivado', today: 'Hoy', yesterday: 'Ayer',
     notificationTitle: 'Notificaciones no disponibles', notificationMessage: 'Permite las notificaciones de Lotti en los ajustes del sistema. Sin permiso, Lotti no puede enviarte consejos diarios.', shareTitle: 'Relevo de cuidados de Lotti', shareFailedTitle: 'No se pudo compartir', shareFailedMessage: 'No se pudo abrir el relevo en este momento.',

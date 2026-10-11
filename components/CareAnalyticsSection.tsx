@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import { CareGlassCard } from '@/components/advisor/CareGlassCard';
+import { CareDayCoverageList, CareObservationCard } from '@/components/advisor/care-report-details';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import {
@@ -29,6 +30,7 @@ import { getBabyCareEntriesForDateRange, type BabyCareEntry } from '@/lib/supaba
 import { useLocale } from '@/contexts/LocaleContext';
 import { translateAdvisor, type AdvisorTranslationKey } from '@/lib/advisor/advisorTranslations';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { translateCareAnalytics } from '@/lib/advisor/careAnalyticsTranslations';
 
 const PURPLE = '#5E3DB3';
 const PURPLE_SOFT = '#8E4EC6';
@@ -118,7 +120,7 @@ function TrendChart({
     let drawing = false;
     points.forEach((point, index) => {
       const value = pointValue(point, metric);
-      if (value === null) {
+      if (value === null || point.partial || (metric === 'sleep' && point.openSleep)) {
         drawing = false;
         return;
       }
@@ -170,6 +172,7 @@ function TrendChart({
               fill={theme.pointFill}
               stroke={metricColor(metric, theme.isDark)}
               strokeWidth={2}
+              opacity={point.partial || (metric === 'sleep' && point.openSleep) ? 0.4 : 1}
             />
           );
         })}
@@ -281,51 +284,64 @@ export const CareAnalyticsSection = React.memo(function CareAnalyticsSection({ b
     [isDark],
   );
   const t = (key: AdvisorTranslationKey, params?: Record<string, string | number>) => translateAdvisor(locale, key, params);
+  const analyticsText = (key: Parameters<typeof translateCareAnalytics>[1], params?: Record<string, string | number>) => translateCareAnalytics(locale, key, params);
   const { width: windowWidth } = useWindowDimensions();
-  const chartWidth = Math.max(230, Math.min(560, windowWidth - 80));
+  const chartWidth = Math.max(1, Math.min(560, windowWidth - 80));
   const [period, setPeriod] = useState<CareAnalyticsPeriod>('week');
   const [metric, setMetric] = useState<CareMetricKey>('sleep');
-  const [careEntries, setCareEntries] = useState<BabyCareEntry[]>([]);
-  const [sleepEntries, setSleepEntries] = useState<SleepEntry[]>([]);
+  const [snapshot, setSnapshot] = useState<{ babyId: string; careEntries: BabyCareEntry[]; sleepEntries: SleepEntry[]; now: Date } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [failedBabyId, setFailedBabyId] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
+      const controller = new AbortController();
       const load = async () => {
         if (!babyId) {
-          setCareEntries([]);
-          setSleepEntries([]);
+          setSnapshot(null);
+          setFailedBabyId(null);
           setLoading(false);
           return;
         }
         setLoading(true);
-        setLoadFailed(false);
+        setFailedBabyId(null);
         const now = new Date();
-        const [careResult, sleepResult] = await Promise.all([
-          getBabyCareEntriesForDateRange(getCareAnalyticsEarliestDate(now), now, babyId),
-          loadAllVisibleSleepEntries(babyId),
-        ]);
-        if (cancelled) return;
-        const nextCare = Array.isArray(careResult.data) ? careResult.data : [];
-        const nextSleep = sleepResult.success && Array.isArray(sleepResult.entries) ? sleepResult.entries : [];
-        setCareEntries(nextCare);
-        setSleepEntries(nextSleep);
-        setLoadFailed(Boolean(careResult.error) && !sleepResult.success);
-        setLoading(false);
+        try {
+          const [careResult, sleepResult] = await Promise.all([
+            getBabyCareEntriesForDateRange(getCareAnalyticsEarliestDate(now), now, babyId),
+            loadAllVisibleSleepEntries(babyId, controller.signal),
+          ]);
+          if (cancelled) return;
+          if (careResult.error || !Array.isArray(careResult.data) || !sleepResult.success || !Array.isArray(sleepResult.entries)) {
+            setFailedBabyId(babyId);
+          } else {
+            setSnapshot({ babyId, careEntries: careResult.data, sleepEntries: sleepResult.entries, now });
+          }
+        } catch {
+          if (!cancelled) setFailedBabyId(babyId);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
       };
       void load();
       return () => {
         cancelled = true;
+        controller.abort();
       };
-    }, [babyId]),
+    // Retry must restart the focused loader even when the child stays the same.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [babyId, reload]),
   );
 
+  const currentSnapshot = snapshot?.babyId === babyId ? snapshot : null;
+  const loadFailed = Boolean(babyId && failedBabyId === babyId);
   const report = useMemo(
-    () => buildCareAnalyticsReport({ period, careEntries, sleepEntries, locale }),
-    [careEntries, locale, period, sleepEntries],
+    () => buildCareAnalyticsReport({ period, careEntries: currentSnapshot?.careEntries ?? [], sleepEntries: currentSnapshot?.sleepEntries ?? [], now: currentSnapshot?.now, locale }),
+    [currentSnapshot, locale, period],
   );
+  const detailsKey = `${period}-${currentSnapshot?.now.getTime() ?? 0}`;
 
   const select = (callback: () => void) => {
     if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
@@ -370,58 +386,52 @@ export const CareAnalyticsSection = React.memo(function CareAnalyticsSection({ b
         <View style={styles.reportHeader}>
           <View style={styles.reportHeaderText}>
             <ThemedText adaptive={false} style={styles.reportEyebrow}>{report.title}</ThemedText>
-            <ThemedText adaptive={false} style={styles.reportTitle}>{report.headline}</ThemedText>
+            <ThemedText adaptive={false} style={styles.reportTitle}>{analyticsText('headline')}</ThemedText>
             <ThemedText adaptive={false} style={styles.rangeLabel}>{report.rangeLabel}</ThemedText>
           </View>
-          <View style={styles.coverageBadge}>
+          {currentSnapshot ? <View style={styles.coverageBadge} accessibilityLabel={analyticsText('coverageCount', { count: report.coverageDays, total: report.totalDays })}>
             <Text style={styles.coverageNumber}>{report.coverageDays}</Text>
             <Text style={styles.coverageText}>/{report.totalDays} {t('days')}</Text>
-          </View>
+          </View> : null}
         </View>
 
-        {loading ? (
+        {!babyId ? (
+          <View style={styles.emptyBlock}>
+            <ThemedText adaptive={false} style={styles.emptyTitle}>{analyticsText('chooseBaby')}</ThemedText>
+            <ThemedText adaptive={false} style={styles.emptyText}>{analyticsText('chooseBabyHint')}</ThemedText>
+          </View>
+        ) : !currentSnapshot && (loading || !loadFailed) ? (
           <View style={styles.loadingBlock}>
             <ActivityIndicator color={theme.accent} />
             <ThemedText adaptive={false} style={styles.loadingText}>{t('reportLoading')}</ThemedText>
           </View>
-        ) : loadFailed ? (
+        ) : loadFailed && !currentSnapshot ? (
           <View style={styles.emptyBlock}>
             <Text style={styles.emptyEmoji}>☁️</Text>
             <ThemedText adaptive={false} style={styles.emptyTitle}>{t('dataUnavailable')}</ThemedText>
-            <ThemedText adaptive={false} style={styles.emptyText}>{t('dataUnavailableText')}</ThemedText>
-          </View>
-        ) : !report.hasData ? (
-          <View style={styles.emptyBlock}>
-            <Text style={styles.emptyEmoji}>🌱</Text>
-            <ThemedText adaptive={false} style={styles.emptyTitle}>{t('reportGrowing')}</ThemedText>
-            <ThemedText adaptive={false} style={styles.emptyText}>{t('reportGrowingText')}</ThemedText>
+            <ThemedText adaptive={false} style={styles.emptyText}>{analyticsText('unavailable')}</ThemedText>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setReload((value) => value + 1)} style={styles.retryButton}>
+              <Text style={styles.retryText}>{analyticsText('retry')}</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <>
-            <View style={styles.summaryGrid}>
-              {report.summaries.map((summary) => (
-                <View key={summary.key} style={styles.summaryCard}>
-                  <View style={styles.summaryLabelRow}>
-                    <Text style={styles.summaryEmoji}>{summary.emoji}</Text>
-                    <Text style={styles.summaryLabel}>{summary.label}</Text>
-                  </View>
-                  <Text selectable style={[styles.summaryValue, { color: metricColor(summary.key, isDark) }]}>
-                    {formatValue(summary.key, summary.value, localeTag)}
-                  </Text>
-                  <Text style={styles.summaryChange}>{changeText(summary.changePercent, t)}</Text>
-                  <Text style={styles.summarySample}>{t('averageDays', { count: summary.recordedDays })}</Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={styles.chartHeader}>
-              <View>
-                <ThemedText adaptive={false} style={styles.blockTitle}>{t('trend')}</ThemedText>
-                <ThemedText adaptive={false} style={styles.blockHint}>{t('trendHint', { comparison: report.comparisonLabel })}</ThemedText>
-              </View>
-            </View>
+            {loadFailed ? <View style={styles.insightBlock}>
+              <Text style={styles.insightText}>{analyticsText('unavailable')}</Text>
+              {currentSnapshot ? <Text style={styles.methodText}>{analyticsText('savedData', { time: currentSnapshot.now.toLocaleString(localeTag) })}</Text> : null}
+              <TouchableOpacity accessibilityRole="button" disabled={loading} onPress={() => setReload((value) => value + 1)} style={styles.retryButton}>
+                <Text style={styles.retryText}>{loading ? t('reportLoading') : analyticsText('retry')}</Text>
+              </TouchableOpacity>
+            </View> : null}
+            {loading && currentSnapshot ? <View style={styles.refreshRow}>
+              <ActivityIndicator color={theme.accent} />
+              <Text style={styles.loadingText}>{t('reportLoading')}</Text>
+            </View> : null}
+            {!report.hasData ? <View style={styles.emptyBlock}>
+              <Text style={styles.emptyEmoji}>🌱</Text>
+              <ThemedText adaptive={false} style={styles.emptyTitle}>{t('reportGrowing')}</ThemedText>
+              <ThemedText adaptive={false} style={styles.emptyText}>{t('reportGrowingText')}</ThemedText>
+            </View> : null}
             <View style={styles.metricControl}>
               {METRICS.map((item) => {
                 const active = metric === item.key;
@@ -429,6 +439,8 @@ export const CareAnalyticsSection = React.memo(function CareAnalyticsSection({ b
                   <TouchableOpacity
                     key={item.key}
                     activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     onPress={() => select(() => setMetric(item.key))}
                     style={[
                       styles.metricButton,
@@ -444,40 +456,57 @@ export const CareAnalyticsSection = React.memo(function CareAnalyticsSection({ b
                 );
               })}
             </View>
-            <TrendChart report={report} metric={metric} width={chartWidth} metricLabel={t('chartHistory', { metric: t(metric === 'feeding' ? 'meals' : metric) })} theme={theme} />
+            <CareObservationCard key={`${detailsKey}-${metric}`} insight={report.insights.find((insight) => insight.key === metric)!} colors={theme} />
 
-            <View style={styles.insightBlock}>
-              <View style={styles.insightTitleRow}>
-                <IconSymbol name="sparkles" size={14} color={theme.accent} />
-                <ThemedText adaptive={false} style={styles.insightTitle}>{t('noticeable')}</ThemedText>
-              </View>
-              {report.insightLines.map((line) => (
-                <View key={line} style={styles.insightRow}>
-                  <View style={styles.insightDot} />
-                  <ThemedText adaptive={false} style={styles.insightText}>{line}</ThemedText>
+            <CareDayCoverageList key={detailsKey} report={report} colors={theme} />
+            <View style={styles.summaryGrid}>
+              {report.summaries.map((summary) => (
+                <View key={summary.key} style={styles.summaryCard}>
+                  <View style={styles.summaryLabelRow}>
+                    <Text style={styles.summaryEmoji}>{summary.emoji}</Text>
+                    <Text style={styles.summaryLabel}>{summary.label}</Text>
+                  </View>
+                  <Text selectable style={[styles.summaryValue, { color: metricColor(summary.key, isDark) }]}>
+                    {formatValue(summary.key, summary.value, localeTag)}
+                  </Text>
+                  <Text style={styles.summaryChange}>{changeText(summary.changePercent, t)}</Text>
+                  <Text style={styles.summarySample}>{analyticsText('averageDays', { count: summary.recordedDays })}</Text>
                 </View>
               ))}
             </View>
 
-            <View style={styles.relationshipBlock}>
-              <View style={styles.relationshipHeader}>
-                <View>
-                  <ThemedText adaptive={false} style={styles.blockTitle}>{t('together')}</ThemedText>
-                  <ThemedText adaptive={false} style={styles.blockHint}>{report.relationship.title}</ThemedText>
-                </View>
-                {report.relationship.coefficient !== null ? (
-                  <View style={styles.correlationBadge}>
-                    <Text selectable style={styles.correlationText}>r {report.relationship.coefficient.toFixed(2).replace('.', ',')}</Text>
+            {report.hasData ? (
+              <>
+                <View style={styles.chartHeader}>
+                  <View>
+                    <ThemedText adaptive={false} style={styles.blockTitle}>{t('trend')}</ThemedText>
+                    <ThemedText adaptive={false} style={styles.blockHint}>{t('trendHint', { comparison: report.comparisonLabel })}</ThemedText>
+                    <ThemedText adaptive={false} style={styles.blockHint}>{analyticsText('chartHint')}</ThemedText>
                   </View>
-                ) : null}
-              </View>
-              <RelationshipPlot report={report} width={chartWidth} feedingLabel={t('meals')} diaperLabel={t('diaper')} sleepLabel={t('sleep')} theme={theme} />
-              <ThemedText adaptive={false} style={styles.relationshipText}>{report.relationship.description}</ThemedText>
-            </View>
+                </View>
+                <TrendChart report={report} metric={metric} width={chartWidth} metricLabel={t('chartHistory', { metric: t(metric === 'feeding' ? 'meals' : metric) })} theme={theme} />
+
+                <View style={styles.relationshipBlock}>
+                  <View style={styles.relationshipHeader}>
+                    <View>
+                      <ThemedText adaptive={false} style={styles.blockTitle}>{t('together')}</ThemedText>
+                      <ThemedText adaptive={false} style={styles.blockHint}>{report.relationship.title}</ThemedText>
+                    </View>
+                    {report.relationship.coefficient !== null ? (
+                      <View style={styles.correlationBadge}>
+                        <Text selectable style={styles.correlationText}>r {report.relationship.coefficient.toFixed(2).replace('.', ',')}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <RelationshipPlot report={report} width={chartWidth} feedingLabel={t('meals')} diaperLabel={t('diaper')} sleepLabel={t('sleep')} theme={theme} />
+                  <ThemedText adaptive={false} style={styles.relationshipText}>{report.relationship.description}</ThemedText>
+                </View>
+              </>
+            ) : null}
 
             <View style={styles.methodNote}>
               <IconSymbol name="info.circle" size={13} color={theme.textTertiary} />
-              <ThemedText adaptive={false} style={styles.methodText}>{t('method')}</ThemedText>
+              <ThemedText adaptive={false} style={styles.methodText}>{analyticsText('method')}</ThemedText>
             </View>
           </>
         )}
@@ -502,7 +531,7 @@ const createStyles = (theme: AnalyticsTheme) => StyleSheet.create({
   headingTitle: { fontSize: 17, fontWeight: '800', color: theme.textPrimary },
   headingHint: { fontSize: 12.5, lineHeight: 17, color: theme.textTertiary },
   periodControl: { flexDirection: 'row', padding: 4, borderRadius: 16, backgroundColor: theme.controlSurface },
-  periodButton: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 12, borderCurve: 'continuous' },
+  periodButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 12, borderCurve: 'continuous' },
   periodButtonActive: {
     backgroundColor: theme.raisedSurface,
     boxShadow: theme.isDark ? '0 2px 8px rgba(0,0,0,0.30)' : '0 2px 8px rgba(74,58,51,0.10)',
@@ -520,6 +549,9 @@ const createStyles = (theme: AnalyticsTheme) => StyleSheet.create({
   coverageText: { fontSize: 9.5, fontWeight: '700', color: theme.textTertiary },
   loadingBlock: { minHeight: 170, alignItems: 'center', justifyContent: 'center', gap: 10 },
   loadingText: { fontSize: 12.5, color: theme.textTertiary, textAlign: 'center' },
+  refreshRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  retryButton: { minHeight: 44, padding: 10, justifyContent: 'center', alignItems: 'center' },
+  retryText: { fontSize: 13, fontWeight: '700', color: theme.accent },
   emptyBlock: { minHeight: 180, alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 18 },
   emptyEmoji: { fontSize: 30 },
   emptyTitle: { fontSize: 15, fontWeight: '800', color: theme.textPrimary, textAlign: 'center' },
@@ -537,15 +569,11 @@ const createStyles = (theme: AnalyticsTheme) => StyleSheet.create({
   blockTitle: { fontSize: 14.5, fontWeight: '800', color: theme.textPrimary },
   blockHint: { fontSize: 10.5, lineHeight: 14, color: theme.textTertiary, marginTop: 2 },
   metricControl: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  metricButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.controlBorder, backgroundColor: theme.controlSurface },
+  metricButton: { flexDirection: 'row', minHeight: 44, alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 7, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.controlBorder, backgroundColor: theme.controlSurface },
   metricDot: { width: 7, height: 7, borderRadius: 4 },
   metricText: { fontSize: 11, fontWeight: '700', color: theme.textSecondary },
   insightBlock: { gap: 9, padding: 13, borderRadius: 17, borderCurve: 'continuous', backgroundColor: theme.accentSurface },
-  insightTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  insightTitle: { fontSize: 12.5, fontWeight: '800', color: theme.accent },
-  insightRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  insightDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: theme.accentSoft, marginTop: 7 },
-  insightText: { flex: 1, fontSize: 12.5, lineHeight: 18, color: theme.textSecondary },
+  insightText: { fontSize: 12.5, lineHeight: 18, color: theme.textSecondary },
   relationshipBlock: { gap: 8, paddingTop: 2 },
   relationshipHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
   correlationBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, backgroundColor: theme.accentSurface },

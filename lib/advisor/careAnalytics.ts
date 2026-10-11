@@ -1,6 +1,7 @@
 import type { SleepEntry } from '@/lib/sleepData';
 import type { BabyCareEntry } from '@/lib/supabase';
 import { getAppLocaleTag, type AppLocale } from '@/lib/localization';
+import { translateCareAnalytics } from './careAnalyticsTranslations';
 
 export type CareAnalyticsPeriod = 'week' | 'month' | 'year';
 export type CareMetricKey = 'sleep' | 'feeding' | 'diaper';
@@ -12,6 +13,38 @@ type DailyCareMetric = {
   feedingCount: number;
   diaperCount: number;
   bottleMl: number;
+  isPartial: boolean;
+  entries: Record<CareMetricKey, CareEvidenceEntry[]>;
+};
+
+export type CareEvidenceEntry = {
+  key: string;
+  startTime: string;
+  endTime: string | null;
+  label: string;
+  minutes: number | null;
+  ongoing: boolean;
+};
+
+export type CareDayCoverage = {
+  key: string;
+  label: string;
+  status: 'missing' | 'partial' | 'present';
+  isToday: boolean;
+  openSleep: boolean;
+  missingMetrics: CareMetricKey[];
+  counts: Record<CareMetricKey, number>;
+};
+
+export type CareAnalyticsInsight = {
+  key: CareMetricKey;
+  observation: string;
+  action: string;
+  evidence: string;
+  previousEvidence: string;
+  entries: CareEvidenceEntry[];
+  previousEntries: CareEvidenceEntry[];
+  pendingEntries: CareEvidenceEntry[];
 };
 
 export type CareTrendPoint = {
@@ -20,6 +53,8 @@ export type CareTrendPoint = {
   sleep: number | null;
   feeding: number | null;
   diaper: number | null;
+  partial: boolean;
+  openSleep: boolean;
 };
 
 export type CareMetricSummary = {
@@ -30,6 +65,7 @@ export type CareMetricSummary = {
   previousValue: number | null;
   changePercent: number | null;
   recordedDays: number;
+  previousRecordedDays: number;
 };
 
 export type CareRelationship = {
@@ -54,7 +90,8 @@ export type CareAnalyticsReport = {
   currentTrend: CareTrendPoint[];
   previousTrend: CareTrendPoint[];
   headline: string;
-  insightLines: string[];
+  insights: CareAnalyticsInsight[];
+  dayCoverage: CareDayCoverage[];
   relationship: CareRelationship;
 };
 
@@ -123,6 +160,8 @@ const emptyDailyMetrics = (start: Date, end: Date): DailyCareMetric[] =>
     feedingCount: 0,
     diaperCount: 0,
     bottleMl: 0,
+    isPartial: addDays(date, 1).getTime() > end.getTime(),
+    entries: { sleep: [], feeding: [], diaper: [] },
   }));
 
 const buildDailyMetrics = (
@@ -131,11 +170,12 @@ const buildDailyMetrics = (
   careEntries: BabyCareEntry[],
   sleepEntries: SleepEntry[],
   now: Date,
+  locale: AppLocale,
 ) => {
   const days = emptyDailyMetrics(start, end);
   const byKey = new Map(days.map((day) => [day.key, day]));
 
-  careEntries.forEach((entry) => {
+  careEntries.forEach((entry, index) => {
     const entryDate = validDate(entry.start_time);
     if (!entryDate || entryDate < start || entryDate > end) return;
     const target = byKey.get(dateKey(entryDate));
@@ -144,6 +184,12 @@ const buildDailyMetrics = (
       // Abpumpen und Wasser sind wichtige Logs, aber keine Mahlzeiten.
       if (entry.feeding_type !== 'PUMP' && entry.feeding_type !== 'WATER') {
         target.feedingCount += 1;
+        const label = entry.feeding_type === 'BREAST' ? 'breast' : entry.feeding_type === 'BOTTLE' ? 'bottle' : entry.feeding_type === 'SOLIDS' ? 'solids' : 'feeding';
+        target.entries.feeding.push({
+          key: entry.id ?? `care-${index}`,
+          startTime: entryDate.toISOString(), endTime: entry.end_time ?? null,
+          label: translateCareAnalytics(locale, label), minutes: null, ongoing: false,
+        });
       }
       if (
         entry.feeding_type === 'BOTTLE' &&
@@ -154,16 +200,23 @@ const buildDailyMetrics = (
       }
     } else if (entry.entry_type === 'diaper') {
       target.diaperCount += 1;
+      const label = entry.diaper_type === 'WET' ? 'wet' : entry.diaper_type === 'DIRTY' ? 'dirty' : entry.diaper_type === 'BOTH' ? 'both' : 'diaper';
+      target.entries.diaper.push({
+        key: entry.id ?? `care-${index}`,
+        startTime: entryDate.toISOString(), endTime: null,
+        label: translateCareAnalytics(locale, label), minutes: null, ongoing: false,
+      });
     }
   });
 
-  sleepEntries.forEach((entry) => {
+  sleepEntries.forEach((entry, index) => {
     const sleepStart = validDate(entry.start_time);
     if (!sleepStart) return;
     let sleepEnd = validDate(entry.end_time);
     if (!sleepEnd && typeof entry.duration_minutes === 'number' && entry.duration_minutes > 0) {
       sleepEnd = new Date(sleepStart.getTime() + entry.duration_minutes * 60_000);
     }
+    const ongoing = !sleepEnd;
     if (!sleepEnd) sleepEnd = now;
     if (sleepEnd <= sleepStart || sleepEnd < start || sleepStart > end) return;
 
@@ -177,7 +230,14 @@ const buildDailyMetrics = (
       const overlapStart = Math.max(sleepStart.getTime(), dayStart, start.getTime());
       const overlapEnd = Math.min(sleepEnd.getTime(), dayEnd, end.getTime() + 1);
       if (overlapEnd > overlapStart) {
-        target.sleepMinutes += Math.round((overlapEnd - overlapStart) / 60_000);
+        const minutes = (overlapEnd - overlapStart) / 60_000;
+        target.sleepMinutes += minutes;
+        target.entries.sleep.push({
+          key: entry.id ?? `sleep-${index}`,
+          startTime: sleepStart.toISOString(),
+          endTime: ongoing ? null : sleepEnd.toISOString(),
+          label: translateCareAnalytics(locale, 'sleep'), minutes, ongoing,
+        });
       }
     }
   });
@@ -192,12 +252,24 @@ const dailyValue = (day: DailyCareMetric, metric: CareMetricKey) => {
 };
 
 const averageRecorded = (days: DailyCareMetric[], metric: CareMetricKey) => {
-  const values = days.map((day) => dailyValue(day, metric)).filter((value) => value > 0);
+  const values = eligibleDays(days, metric).map((day) => dailyValue(day, metric));
   if (values.length === 0) return { value: null, recordedDays: 0 };
   return {
     value: values.reduce((sum, value) => sum + value, 0) / values.length,
     recordedDays: values.length,
   };
+};
+
+const eligibleDays = (days: DailyCareMetric[], metric: CareMetricKey) =>
+  days.filter((day) => !day.isPartial && dailyValue(day, metric) > 0 && !day.entries[metric].some((entry) => entry.ongoing));
+
+const evidenceEntries = (days: DailyCareMetric[], metric: CareMetricKey) => {
+  const entries = new Map<string, CareEvidenceEntry>();
+  days.flatMap((day) => day.entries[metric]).forEach((entry) => {
+    const previous = entries.get(entry.key);
+    entries.set(entry.key, { ...entry, minutes: entry.minutes === null ? null : entry.minutes + (previous?.minutes ?? 0) });
+  });
+  return [...entries.values()].sort((a, b) => b.startTime.localeCompare(a.startTime));
 };
 
 const percentChange = (current: number | null, previous: number | null) => {
@@ -217,6 +289,8 @@ const dailyTrend = (days: DailyCareMetric[], locale: AppLocale): CareTrendPoint[
     sleep: day.sleepMinutes > 0 ? day.sleepMinutes : null,
     feeding: day.feedingCount > 0 ? day.feedingCount : null,
     diaper: day.diaperCount > 0 ? day.diaperCount : null,
+    partial: day.isPartial,
+    openSleep: day.entries.sleep.some((entry) => entry.ongoing),
   }));
 
 const monthlyTrend = (days: DailyCareMetric[], locale: AppLocale): CareTrendPoint[] => {
@@ -233,6 +307,8 @@ const monthlyTrend = (days: DailyCareMetric[], locale: AppLocale): CareTrendPoin
       sleep: averageRecorded(bucket, 'sleep').value,
       feeding: averageRecorded(bucket, 'feeding').value,
       diaper: averageRecorded(bucket, 'diaper').value,
+      partial: bucket.some((day) => day.isPartial),
+      openSleep: bucket.some((day) => day.entries.sleep.some((entry) => entry.ongoing)),
     };
   });
 };
@@ -266,11 +342,12 @@ const buildRelationship = (days: DailyCareMetric[], locale: AppLocale): CareRela
   const ranked = candidates
     .map(([x, y]) => {
       const points = days
+        .filter((day) => !day.isPartial && !day.entries[x].some((entry) => entry.ongoing) && !day.entries[y].some((entry) => entry.ongoing))
         .map((day) => ({ x: dailyValue(day, x), y: dailyValue(day, y), key: day.key }))
         .filter((point) => point.x > 0 && point.y > 0);
       return { x, y, points, coefficient: pearson(points) };
     })
-    .sort((a, b) => Math.abs(b.coefficient ?? 0) - Math.abs(a.coefficient ?? 0));
+    .sort((a, b) => Math.abs(b.coefficient ?? 0) - Math.abs(a.coefficient ?? 0) || b.points.length - a.points.length);
 
   const best = ranked[0];
   const coefficient = best.coefficient;
@@ -281,7 +358,9 @@ const buildRelationship = (days: DailyCareMetric[], locale: AppLocale): CareRela
       coefficient,
       sampleDays: best.points.length,
       title,
-      description: locale === 'en' ? `Lotti needs at least 8 days with both values for a reliable comparison. There are currently ${best.points.length}.` : locale === 'es' ? `Lotti necesita al menos 8 días con ambos valores para una comparación fiable. Ahora hay ${best.points.length}.` : `Für eine belastbare Gegenüberstellung braucht Lotti mindestens 8 Tage mit beiden Werten. Aktuell sind es ${best.points.length}.`,
+      description: best.points.length >= 8
+        ? locale === 'en' ? 'The recorded daily values vary too little to calculate a relationship.' : locale === 'es' ? 'Los valores diarios registrados varían demasiado poco para calcular una relación.' : 'Die erfassten Tageswerte variieren zu wenig, um einen Zusammenhang zu berechnen.'
+        : locale === 'en' ? `This comparison needs at least 8 finished days with both values. There are currently ${best.points.length}.` : locale === 'es' ? `Esta comparación necesita al menos 8 días finalizados con ambos valores. Ahora hay ${best.points.length}.` : `Für diese Gegenüberstellung braucht Lotti mindestens 8 Tage mit beiden Werten, jeweils abgeschlossen. Aktuell sind es ${best.points.length}.`,
     };
   }
 
@@ -307,34 +386,29 @@ const formatMinutes = (minutes: number, locale: AppLocale) => {
   return hours > 0 ? `${hours} ${hour}${rest ? ` ${rest} ${minute}` : ''}` : `${rest} ${minute}`;
 };
 
-const buildNarrative = (summaries: CareMetricSummary[], coverageDays: number, totalDays: number, locale: AppLocale) => {
-  const comparable = summaries
-    .filter((summary) => summary.changePercent !== null)
-    .sort((a, b) => Math.abs(b.changePercent ?? 0) - Math.abs(a.changePercent ?? 0));
-  const strongest = comparable[0];
-  const headline = strongest && Math.abs(strongest.changePercent ?? 0) >= 5
-    ? locale === 'en' ? `${strongest.label} ${strongest.changePercent! >= 0 ? 'above' : 'below'} the comparison period` : locale === 'es' ? `${strongest.label} ${strongest.changePercent! >= 0 ? 'por encima' : 'por debajo'} del periodo de comparación` : `${strongest.label} ${strongest.changePercent! >= 0 ? 'über' : 'unter'} dem Vergleichszeitraum`
-    : coverageDays >= Math.min(totalDays, 5)
-      ? locale === 'en' ? 'Your rhythm is becoming visible' : locale === 'es' ? 'Vuestro ritmo empieza a verse' : 'Euer Rhythmus wird sichtbar'
-      : locale === 'en' ? 'Lotti is still learning your rhythm' : locale === 'es' ? 'Lotti aún está aprendiendo vuestro ritmo' : 'Lotti sammelt noch euren Rhythmus';
-
-  const insightLines: string[] = [];
-  comparable.slice(0, 2).forEach((summary) => {
-    const change = Math.round(Math.abs(summary.changePercent ?? 0));
-    if (change < 3) {
-      insightLines.push(locale === 'en' ? `${summary.label} was almost stable compared with the previous period.` : locale === 'es' ? `${summary.label} se mantuvo casi estable frente al periodo anterior.` : `${summary.label} war nahezu stabil gegenüber dem Vergleichszeitraum.`);
-    } else {
-      insightLines.push(locale === 'en' ? `${summary.label} averaged ${change}% ${summary.changePercent! >= 0 ? 'higher' : 'lower'} per day.` : locale === 'es' ? `${summary.label} tuvo una media diaria un ${change} % ${summary.changePercent! >= 0 ? 'mayor' : 'menor'}.` : `${summary.label} lag im Tagesdurchschnitt ${change} % ${summary.changePercent! >= 0 ? 'höher' : 'niedriger'}.`);
-    }
+const buildInsights = (summaries: CareMetricSummary[], days: DailyCareMetric[], previousDays: DailyCareMetric[], locale: AppLocale): CareAnalyticsInsight[] => {
+  const t = (key: Parameters<typeof translateCareAnalytics>[1], params?: Record<string, string | number>) => translateCareAnalytics(locale, key, params);
+  return summaries.map((summary) => {
+    const includedDays = eligibleDays(days, summary.key);
+    const entries = evidenceEntries(includedDays, summary.key);
+    const previousEntries = evidenceEntries(eligibleDays(previousDays, summary.key), summary.key);
+    const pendingEntries = evidenceEntries(days.filter((day) => !includedDays.includes(day)), summary.key);
+    const unit = t(summary.key === 'sleep' ? 'sleepUnit' : summary.key);
+    const valueText = (value: number | null) => value === null ? '–' : summary.key === 'sleep' ? formatMinutes(value, locale) : value.toLocaleString(getAppLocaleTag(locale), { maximumFractionDigits: 1 });
+    const observation = summary.value === null ? t('noAverage') : t('average', { value: valueText(summary.value), unit });
+    const change = summary.changePercent;
+    const comparison = change === null ? t('noComparison') : Math.abs(change) < 3 ? t('stable') : t(change >= 0 ? 'higher' : 'lower', { percent: Math.round(Math.abs(change)) });
+    const hasGaps = days.some((day) => !day.isPartial && (dailyValue(day, summary.key) === 0 || day.entries[summary.key].some((entry) => entry.ongoing)))
+      || previousDays.some((day) => !day.isPartial && dailyValue(day, summary.key) === 0);
+    return {
+      key: summary.key,
+      observation: `${observation} ${comparison}`,
+      action: pendingEntries.some((entry) => entry.ongoing) ? t('finish') : summary.value === null ? t('start') : hasGaps ? t('check') : t('keep'),
+      evidence: t('evidence', { count: entries.length, days: summary.recordedDays, value: valueText(summary.value), unit }),
+      previousEvidence: t('evidence', { count: previousEntries.length, days: summary.previousRecordedDays, value: valueText(summary.previousValue), unit }),
+      entries, previousEntries, pendingEntries,
+    };
   });
-  if (insightLines.length === 0) {
-    insightLines.push(locale === 'en' ? 'Once several days are recorded in both periods, Lotti can show changes reliably.' : locale === 'es' ? 'Cuando haya varios días registrados en ambos periodos, Lotti mostrará los cambios de forma fiable.' : 'Sobald in beiden Zeiträumen mehrere Tage erfasst sind, zeigt Lotti Veränderungen zuverlässig an.');
-  }
-  const sleep = summaries.find((summary) => summary.key === 'sleep');
-  if (sleep?.value !== null && sleep?.value !== undefined) {
-    insightLines.push(locale === 'en' ? `Recorded sleep days averaged ${formatMinutes(sleep.value, locale)}.` : locale === 'es' ? `En los días con sueño registrado, la media fue de ${formatMinutes(sleep.value, locale)}.` : `An erfassten Schlaftagen waren es im Mittel ${formatMinutes(sleep.value, locale)}.`);
-  }
-  return { headline, insightLines: insightLines.slice(0, 3) };
 };
 
 const formatRange = (start: Date, end: Date, locale: AppLocale) => {
@@ -368,6 +442,7 @@ export const buildCareAnalyticsReport = ({
     careEntries,
     sleepEntries,
     now,
+    locale,
   );
   const previousDays = buildDailyMetrics(
     range.previousStart,
@@ -375,6 +450,7 @@ export const buildCareAnalyticsReport = ({
     careEntries,
     sleepEntries,
     now,
+    locale,
   );
   const coverageDays = currentDays.filter(
     (day) => day.sleepMinutes > 0 || day.feedingCount > 0 || day.diaperCount > 0,
@@ -393,9 +469,21 @@ export const buildCareAnalyticsReport = ({
           ? percentChange(current.value, previous.value)
           : null,
       recordedDays: current.recordedDays,
+      previousRecordedDays: previous.recordedDays,
     };
   });
-  const narrative = buildNarrative(summaries, coverageDays, currentDays.length, locale);
+  const dayCoverage: CareDayCoverage[] = currentDays.map((day) => {
+    const missingMetrics = (Object.keys(meta) as CareMetricKey[]).filter((key) => day.entries[key].length === 0);
+    return {
+      key: day.key,
+      label: day.date.toLocaleDateString(getAppLocaleTag(locale), { day: '2-digit', month: 'short', year: period === 'year' ? 'numeric' : undefined }),
+      status: missingMetrics.length === 3 ? 'missing' : missingMetrics.length > 0 ? 'partial' : 'present',
+      isToday: day.key === dateKey(now),
+      openSleep: day.entries.sleep.some((entry) => entry.ongoing),
+      missingMetrics,
+      counts: { sleep: day.entries.sleep.length, feeding: day.feedingCount, diaper: day.diaperCount },
+    };
+  });
 
   return {
     period,
@@ -408,8 +496,9 @@ export const buildCareAnalyticsReport = ({
     summaries,
     currentTrend: period === 'year' ? monthlyTrend(currentDays, locale) : dailyTrend(currentDays, locale),
     previousTrend: period === 'year' ? monthlyTrend(previousDays, locale) : dailyTrend(previousDays, locale),
-    headline: narrative.headline,
-    insightLines: narrative.insightLines,
+    headline: translateCareAnalytics(locale, 'headline'),
+    insights: buildInsights(summaries, currentDays, previousDays, locale),
+    dayCoverage,
     relationship: buildRelationship(currentDays, locale),
   };
 };

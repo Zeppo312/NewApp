@@ -4,7 +4,7 @@
  * Speichert den Tages-Hinweis in `advisor_messages` (1 Zeile pro
  * Nutzer/Baby/Tag) und die Nutzer-Einstellungen in `advisor_settings`.
  *
- * Alle Funktionen sind bewusst fehlertolerant: Existieren die Tabellen
+ * Hinweise sind bewusst fehlertolerant: Existieren die Tabellen
  * (noch) nicht oder ist der Nutzer offline, liefern sie null/Defaults
  * zurück und die Seite fällt auf das bisherige Mock-Verhalten zurück.
  */
@@ -457,44 +457,38 @@ export const saveReliefEvent = async (
   }
 };
 
-/** Einstellungen laden – fehlen sie, gelten die Defaults. */
-export const fetchAdvisorSettings = async (): Promise<AdvisorSettings> => {
+/** Einstellungen laden – nur eine fehlende Zeile verwendet die Defaults. */
+export const fetchAdvisorSettings = async (expectedUserId?: string): Promise<AdvisorSettings> => {
   const userId = await getUserId();
+  if (expectedUserId && userId !== expectedUserId) throw new Error('Advisor settings account changed');
   if (!userId) return { ...DEFAULT_ADVISOR_SETTINGS };
 
-  try {
-    const { data, error } = await supabase
-      .from('advisor_settings')
-      .select(
-        'enabled, frequency, themes, quiet_hours_start, quiet_hours_end, push_enabled',
-      )
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (error || !data) return { ...DEFAULT_ADVISOR_SETTINGS };
-    return {
-      enabled: data.enabled ?? true,
-      frequency: (data.frequency as AdvisorFrequency) || 'daily',
-      themes:
-        Array.isArray(data.themes) && data.themes.length > 0
-          ? (data.themes as AdvisorCategory[])
-          : [...ALL_ADVISOR_THEMES],
-      quietHoursStart: data.quiet_hours_start ?? 21,
-      quietHoursEnd: data.quiet_hours_end ?? 7,
-      pushEnabled: data.push_enabled === true,
-    };
-  } catch {
-    return { ...DEFAULT_ADVISOR_SETTINGS };
-  }
+  const { data, error } = await supabase
+    .from('advisor_settings')
+    .select('enabled, frequency, themes, quiet_hours_start, quiet_hours_end, push_enabled')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { ...DEFAULT_ADVISOR_SETTINGS, themes: [...ALL_ADVISOR_THEMES] };
+  return {
+    enabled: data.enabled ?? true,
+    frequency: (data.frequency as AdvisorFrequency) || 'daily',
+    themes: Array.isArray(data.themes) ? (data.themes as AdvisorCategory[]) : [...ALL_ADVISOR_THEMES],
+    quietHoursStart: data.quiet_hours_start ?? 21,
+    quietHoursEnd: data.quiet_hours_end ?? 7,
+    pushEnabled: data.push_enabled === true,
+  };
 };
 
 /** Einstellungen speichern (Upsert auf user_id). */
 export const saveAdvisorSettings = async (
   settings: AdvisorSettings,
-): Promise<void> => {
+  options?: { expectedUserId?: string; signal?: AbortSignal },
+): Promise<boolean> => {
   const userId = await getUserId();
-  if (!userId) return;
+  if (!userId || (options?.expectedUserId && userId !== options.expectedUserId) || options?.signal?.aborted) return false;
   try {
-    await supabase.from('advisor_settings').upsert(
+    let query = supabase.from('advisor_settings').upsert(
       {
         user_id: userId,
         enabled: settings.enabled,
@@ -506,8 +500,11 @@ export const saveAdvisorSettings = async (
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id' },
-    );
+    ).select('user_id');
+    if (options?.signal) query = query.abortSignal(options.signal);
+    const { data, error } = await query.single();
+    return !error && data?.user_id === userId;
   } catch {
-    // best effort
+    return false;
   }
 };

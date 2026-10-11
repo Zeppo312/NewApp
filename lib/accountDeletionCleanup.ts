@@ -8,6 +8,7 @@ import { clearShoppingWidget } from './shoppingWidget';
 import { sleepActivityService } from './sleepActivityService';
 import { clearConversations } from './askLotti/chatStore';
 import { clearDeviceStoragePreservingWithdrawals } from './dataConsentCleanup';
+import { clearAdvisorSettingsSync } from './advisor/settingsSync';
 
 let cleanup: Promise<string[]> | null = null;
 export async function waitForPersonalDeviceCleanup(): Promise<void> {
@@ -28,6 +29,7 @@ export function clearPersonalDeviceData(): Promise<string[]> {
 async function performCleanup(): Promise<string[]> {
  const tasks: [string, () => Promise<unknown>][] = [
   ['app-cache', invalidateAllCaches], ['conversations', clearConversations],
+  ['advisor-settings', clearAdvisorSettingsSync],
   ['notifications', cancelAllScheduledNotificationsAsync], ['delivered-notifications', dismissAllNotificationsAsync],
   ['sleep-widget', clearSleepWidget], ['planner-widget', clearPlannerWidget], ['shopping-widget', clearShoppingWidget],
   ['images', clearImageCache],

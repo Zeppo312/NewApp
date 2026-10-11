@@ -1,4 +1,10 @@
-# Aktuelle Fortschreibung – Erinnerungsmails 04.10.2026
+# Aktueller Stand – Löschalarm abgeschaltet 10.10.2026
+
+Auf ausdrücklichen Nutzerauftrag sind die beiden Mailcrons `account-deletion-alert-production` und `account-deletion-alert-qa` seit **14:29 Uhr Europe/Berlin** pausiert (`active=false`). Damit sind sämtliche planmäßigen Löschalarmmails einschließlich technischer Störungsmeldungen ausgeschaltet. Die unabhängige Nachprüfung um 14:30 Uhr bestätigt in beiden Projekten null aktive Alarmjobs, null laufende Alarmjobs und null wartende Alarmrequests. Andere Cronjobs sind unverändert. Details und Wiederaufnahme: [Änderungsbericht](deletion-alert-disabled-20261010.md).
+
+Die folgenden Abschnitte dokumentieren frühere Betriebsstände; ihre Aussagen über aktive Alarmcrons gelten nicht mehr.
+
+# Erhaltener Stand – Erinnerungsmails 04.10.2026
 
 Auf ausdrücklichen Nutzerauftrag sind die stündlichen Erinnerungen für die beiden bekannten unveränderten Anbieterfälle in QA und Produktion quittiert. Die offenen Lösch-/Anbieterstände bleiben erhalten; neue oder geänderte Fälle und technische Störungen lösen weiter Alarm aus. Beide Alarmcrons bestätigen am 04.10. 06:35 UTC HTTP200/`healthy=true`/`sent=false`. Maßgeblich ist der [Änderungs- und Prüfbericht](deletion-alert-reminders-20261004.md).
 
