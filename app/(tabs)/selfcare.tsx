@@ -1,7 +1,9 @@
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { PeriodTabs } from '@/components/ui/period-tabs';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Animated, Text, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, Alert, StatusBar, Animated, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
@@ -13,7 +15,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { supabase } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { useSmartBack } from '@/contexts/NavigationContext';
-import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, GlassCard, PRIMARY, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
+import { LiquidGlassCard, LAYOUT_PAD, TIMELINE_INSET, PRIMARY, GLASS_OVERLAY, GLASS_OVERLAY_DARK } from '@/constants/DesignGuide';
 import * as Haptics from 'expo-haptics';
 import { ProgressCircle } from '@/components/ProgressCircle';
 import {
@@ -528,39 +530,9 @@ export default function SelfcareScreen() {
   };
 
   const TopTabs = () => (
-    <GlassCard
-      style={styles.topTabsContainer}
-      intensity={22}
-      overlayColor={glassOverlay}
-      borderColor={glassBorder}
-    >
-      <View style={styles.topTabsInner}>
-        {([
-          { id: 'day', labelKey: 'tab.day', icon: 'sun.max.fill' },
-          { id: 'week', labelKey: 'tab.week', icon: 'chart.bar.fill' },
-          { id: 'month', labelKey: 'tab.month', icon: 'calendar' },
-        ] as const).map((tab) => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[styles.topTab, selectedTab === tab.id && styles.activeTopTab]}
-            onPress={() => handleSelectTab(tab.id)}
-            activeOpacity={0.85}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: selectedTab === tab.id }}
-            accessibilityLabel={t(tab.labelKey)}
-          >
-            <IconSymbol
-              name={tab.icon}
-              size={15}
-              color={selectedTab === tab.id ? textPrimary : iconSecondary}
-            />
-            <Text style={[styles.topTabText, selectedTab === tab.id && styles.activeTopTabText]}>
-              {t(tab.labelKey)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </GlassCard>
+    <PeriodTabs value={selectedTab} isDark={isDark}
+      labels={{ day: t('tab.day'), week: t('tab.week'), month: t('tab.month') }}
+      onSelect={handleSelectTab} style={{ marginHorizontal: 0 }} />
   );
 
   const WeekView = () => {
@@ -599,14 +571,11 @@ export default function SelfcareScreen() {
     return (
       <View style={styles.weekViewContainer}>
         <View style={styles.weekNavigationContainer}>
-          <TouchableOpacity
-            style={styles.weekNavButton}
-            onPress={() => setWeekOffset((prev) => prev - 1)}
-            accessibilityRole="button"
+          <PeriodNavigationButton direction="previous"
             accessibilityLabel={t('nav.previousWeek')}
-          >
-            <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
-          </TouchableOpacity>
+            isDark={isDark} color={textSecondary}
+            onPress={() => setWeekOffset((prev) => prev - 1)}
+          />
 
           <View style={styles.weekHeaderCenter}>
             <ThemedText style={styles.weekHeaderTitle}>{t('nav.weekOverview')}</ThemedText>
@@ -616,14 +585,11 @@ export default function SelfcareScreen() {
             </ThemedText>
           </View>
 
-          <TouchableOpacity
-            style={styles.weekNavButton}
-            onPress={() => setWeekOffset((prev) => prev + 1)}
-            accessibilityRole="button"
+          <PeriodNavigationButton direction="next"
             accessibilityLabel={t('nav.nextWeek')}
-          >
-            <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
-          </TouchableOpacity>
+            isDark={isDark} color={textSecondary}
+            onPress={() => setWeekOffset((prev) => prev + 1)}
+          />
         </View>
 
         <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
@@ -830,14 +796,11 @@ export default function SelfcareScreen() {
     return (
       <View style={styles.monthViewContainer}>
         <View style={styles.monthNavigationContainer}>
-          <TouchableOpacity
-            style={styles.monthNavButton}
-            onPress={() => setMonthOffset((prev) => prev - 1)}
-            accessibilityRole="button"
+          <PeriodNavigationButton direction="previous"
             accessibilityLabel={t('nav.previousMonth')}
-          >
-            <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
-          </TouchableOpacity>
+            isDark={isDark} color={textSecondary}
+            onPress={() => setMonthOffset((prev) => prev - 1)}
+          />
 
           <View style={styles.monthHeaderCenter}>
             <ThemedText style={styles.monthHeaderTitle}>{t('nav.monthOverview')}</ThemedText>
@@ -846,16 +809,12 @@ export default function SelfcareScreen() {
             </ThemedText>
           </View>
 
-          <TouchableOpacity
-            style={[styles.monthNavButton, monthOffset >= 0 && styles.disabledNavButton]}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={t('nav.nextMonth')}
+            isDark={isDark} color={textSecondary}
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset((prev) => Math.min(prev + 1, 0))}
-            accessibilityRole="button"
-            accessibilityLabel={t('nav.nextMonth')}
-            accessibilityState={{ disabled: monthOffset >= 0 }}
-          >
-            <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
-          </TouchableOpacity>
+          />
         </View>
 
         <LiquidGlassCard style={styles.analyticsCard} intensity={26} overlayColor={glassOverlay} borderColor={glassBorder}>
@@ -1041,14 +1000,11 @@ export default function SelfcareScreen() {
 
           {selectedTab === 'day' && (
             <View style={styles.dayNavigationContainer}>
-              <TouchableOpacity
-                style={styles.weekNavButton}
-                onPress={goToPreviousDay}
-                accessibilityRole="button"
+              <PeriodNavigationButton direction="previous"
                 accessibilityLabel={t('nav.previousDay')}
-              >
-                <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
-              </TouchableOpacity>
+                isDark={isDark} color={textSecondary}
+                onPress={goToPreviousDay}
+              />
 
               <View style={styles.weekHeaderCenter}>
                 <ThemedText style={styles.weekHeaderTitle}>{t('nav.dayOverview')}</ThemedText>
@@ -1058,16 +1014,12 @@ export default function SelfcareScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={[styles.weekNavButton, isNextDayDisabled && styles.disabledNavButton]}
-                onPress={goToNextDay}
-                disabled={isNextDayDisabled}
-                accessibilityRole="button"
+              <PeriodNavigationButton direction="next"
                 accessibilityLabel={t('nav.nextDay')}
-                accessibilityState={{ disabled: isNextDayDisabled }}
-              >
-                <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
-              </TouchableOpacity>
+                isDark={isDark} color={textSecondary}
+                disabled={isNextDayDisabled}
+                onPress={goToNextDay}
+              />
             </View>
           )}
 
@@ -1500,45 +1452,12 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
       paddingTop: 0,
       paddingBottom: 160,
     },
-    topTabsContainer: {
-      borderRadius: 22,
-      marginTop: 6,
-      marginBottom: 16,
-    },
-    topTabsInner: {
-      flexDirection: 'row',
-      padding: 4,
-      gap: 4,
-    },
     dayNavigationContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 16,
       marginTop: 0,
-    },
-    topTab: {
-      flex: 1,
-      minHeight: 42,
-      borderRadius: 18,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      borderWidth: 1.2,
-      borderColor: 'transparent',
-    },
-    activeTopTab: {
-      borderColor: isDark ? 'rgba(193,149,247,0.68)' : 'rgba(94,61,179,0.65)',
-      backgroundColor: accentSoft,
-    },
-    topTabText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: textSecondary,
-    },
-    activeTopTabText: {
-      color: textAccent,
     },
     weekViewContainer: {
       gap: 18,
@@ -1549,21 +1468,6 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 16,
-    },
-    weekNavButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1.3,
-      borderColor: glassBorder,
-      backgroundColor: glassSurface,
-    },
-    weekNavButtonText: {
-      fontSize: 22,
-      color: textSecondary,
-      fontWeight: '700',
     },
     weekHeaderCenter: {
       alignItems: 'center',
@@ -1696,19 +1600,6 @@ const createStyles = ({ isDark, textPrimary, textSecondary }: SelfcareStyleConfi
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 16,
-    },
-    monthNavButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      borderWidth: 1.3,
-      borderColor: glassBorder,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: glassSurface,
-    },
-    disabledNavButton: {
-      opacity: 0.35,
     },
     monthHeaderCenter: {
       flex: 1,

@@ -3,6 +3,7 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { TYPOGRAPHY } from '@/constants/Typography';
 import { androidHomeShadow } from './home-glass';
 
 /** Shared with both Home modes so their overview chrome stays identical. */
@@ -51,7 +52,7 @@ export function HomeCarouselDots({ count, index, dark, onSelect, getLabel }: {
 
 const styles = StyleSheet.create({
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title: { flex: 1, minWidth: 0, marginRight: 8, fontSize: 22, fontWeight: '700', letterSpacing: -0.3, lineHeight: 28 },
+  title: { ...TYPOGRAPHY.sectionTitle, flex: 1, minWidth: 0, marginRight: 8 },
   chevron: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)', borderRadius: 12, padding: 8, borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },

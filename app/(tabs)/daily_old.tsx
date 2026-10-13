@@ -1,3 +1,8 @@
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
+import { ContentCard as GlassCard, ContentCard as LiquidGlassCard } from '@/components/ui/content-card';
+import { PeriodTabs } from '@/components/ui/period-tabs';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { CONTENT_LAYOUT, METRIC_TEXT, METRIC_TEXT_LARGE, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY } from '@/constants/DesignGuide';
 import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
 import { saveErrorMessage } from '@/lib/saveErrorMessage';
 import { localDateKey, readSnapshot, writeSnapshot, validRows } from '@/lib/localReadSnapshots';
@@ -25,6 +30,7 @@ import {
   Animated,
   AppState,
   Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import DraggableFlatList, { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -77,7 +83,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SupabaseErrorHandler } from '@/lib/errorHandler';
 
 import { BlurView } from 'expo-blur';
-import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, PRIMARY } from '@/constants/DesignGuide';
+
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
 import { buildFeedingOverview } from '@/lib/feedingOverview';
@@ -840,6 +846,7 @@ const QuickActionRow: React.FC<{
 };
 
 export default function DailyScreen() {
+  const { fontScale } = useWindowDimensions();
   const { locale } = useLocale();
   ACTIVE_DAILY_LOCALE = locale;
   DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
@@ -2462,15 +2469,9 @@ export default function DailyScreen() {
     ]);
   };
 
-  const TopTabs = () => (
-    <View style={s.topTabsContainer}>
-      {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[s.topTab, visibleTab === tab && s.activeTopTab]} intensity={22}>
-          <TouchableOpacity
-            style={s.topTabInner}
-            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
-            pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
-            onPress={() => {
+  const TopTabs = () => (<PeriodTabs value={visibleTab} isDark={isDark} monthLocked={isMonthViewLocked}
+    labels={{ day: t('view.day'), week: t('view.week'), month: t('view.month') }}
+    onSelect={(tab) => {
               if (tab === 'month' && isMonthViewLocked) {
                 showMonthViewLockedAlert();
                 return;
@@ -2482,18 +2483,7 @@ export default function DailyScreen() {
                 setSelectedDate(new Date());
                 triggerShowDateNav();
               }
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={[s.topTabText, { color: textSecondary }, visibleTab === tab && s.activeTopTabText]}>
-              {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
-              {tab === 'month' && isMonthViewLocked ? '  🔒' : ''}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
-      ))}
-    </View>
-  );
+            }} />);
 
   // Week navigation functions
   const goToPreviousWeek = () => setWeekOffset((o) => o - 1);
@@ -2541,9 +2531,11 @@ export default function DailyScreen() {
       <View style={s.weekViewContainer}>
         {/* Week Navigation - identical structure */}
         <View style={s.weekNavigationContainer}>
-          <TouchableOpacity style={s.weekNavButton} onPress={goToPreviousWeek}>
-            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
-          </TouchableOpacity>
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={t('navigation.previousWeek')}
+            isDark={isDark} color={textSecondary}
+            onPress={goToPreviousWeek}
+          />
 
           <View style={s.weekHeaderCenter}>
             <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
@@ -2552,9 +2544,11 @@ export default function DailyScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity style={s.weekNavButton} onPress={goToNextWeek}>
-            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
-          </TouchableOpacity>
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={t('navigation.nextWeek')}
+            isDark={isDark} color={textSecondary}
+            onPress={goToNextWeek}
+          />
         </View>
 
         {/* Wickeln diese Woche - Design Guide konform mit Liquid Glass (EXAKT wie Sleep-Tracker) */}
@@ -2822,9 +2816,11 @@ export default function DailyScreen() {
       <View style={s.monthViewContainer}>
         {/* Monats-Navigation - exakt gleich wie Wochenübersicht */}
         <View style={s.weekNavigationContainer}>
-          <TouchableOpacity style={s.weekNavButton} onPress={() => setMonthOffset(o => o - 1)}>
-            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
-          </TouchableOpacity>
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={t('navigation.previousMonth')}
+            isDark={isDark} color={textSecondary}
+            onPress={() => setMonthOffset(o => o - 1)}
+          />
 
           <View style={s.weekHeaderCenter}>
             <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
@@ -2833,13 +2829,12 @@ export default function DailyScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={[s.weekNavButton, monthOffset >= 0 && s.disabledNavButton]}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={t('navigation.nextMonth')}
+            isDark={isDark} color={textSecondary}
             disabled={monthOffset >= 0}
             onPress={() => setMonthOffset(o => o + 1)}
-          >
-            <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
-          </TouchableOpacity>
+          />
         </View>
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
@@ -3020,7 +3015,7 @@ export default function DailyScreen() {
     return (
       <View style={s.kpiRow}>
         <TouchableOpacity
-          style={s.kpiCardShell}
+          style={[s.kpiCardShell, fontScale >= 1.3 && { flexBasis: '100%' }]}
           activeOpacity={0.92}
           onPress={() => setShowFeedingOverviewModal(true)}
           accessibilityRole="button"
@@ -3043,22 +3038,22 @@ export default function DailyScreen() {
               {feedingStatValue}
               <Text style={s.kpiMlUnit}>{feedingStatUnit === 'ml' ? ' ml' : '×'}</Text>
             </Text>
-            <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubPrimary, { color: textSecondary }]}>
+            <Text numberOfLines={fontScale >= 1.3 ? undefined : 3} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubPrimary, { color: textSecondary }]}>
               {feedingPrimaryDetail}
             </Text>
             {feedingSecondaryDetail ? (
-              <Text numberOfLines={2} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
+              <Text numberOfLines={fontScale >= 1.3 ? undefined : 3} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
                 {feedingSecondaryDetail}
               </Text>
             ) : (
-              <Text numberOfLines={1} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
+              <Text numberOfLines={fontScale >= 1.3 ? undefined : 3} ellipsizeMode="tail" style={[s.kpiSub, s.kpiSubSecondary, { color: textSecondary }]}>
                 {t('summary.tap')}
               </Text>
             )}
           </GlassCard>
         </TouchableOpacity>
 
-        <View style={s.kpiCardShell}>
+        <View style={[s.kpiCardShell, fontScale >= 1.3 && { flexBasis: '100%' }]}>
           <GlassCard
             style={s.kpiCard}
             intensity={24}
@@ -3094,6 +3089,7 @@ export default function DailyScreen() {
           showBackButton
           onBackPress={() => router.push('/(tabs)/home')}
         />
+        {TopTabs()}
 
         <TrackingSyncStatus babyId={activeBabyId} offline={!!dayReadState.failed} />
         {visibleTab === 'day' && !trackingSync.ready && <LocalReadStatus {...dayReadState} onRetry={() => void loadEntries()} />}
@@ -3138,7 +3134,6 @@ export default function DailyScreen() {
           contentContainerStyle={s.scrollContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         >
-          {TopTabs()}
 
           {visibleTab === 'week' ? (
             WeekView()
@@ -3148,25 +3143,23 @@ export default function DailyScreen() {
             <View style={s.content}>
               {/* Day Navigation - gleich wie Sleep-Tracker */}
               <View style={s.weekNavigationContainer}>
-                <TouchableOpacity
-                  style={s.weekNavButton}
+                <PeriodNavigationButton direction="previous"
+                  accessibilityLabel={t('navigation.previousDay')}
+                  isDark={isDark} color={textSecondary}
                   onPress={() => changeRelativeDate(-1)}
-                >
-                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>‹</Text>
-                </TouchableOpacity>
+                />
                 <View style={s.weekHeaderCenter}>
                   <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
                   <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
                     {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={[s.weekNavButton, new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0) && s.disabledNavButton]}
+                <PeriodNavigationButton direction="next"
+                  accessibilityLabel={t('navigation.nextDay')}
+                  isDark={isDark} color={textSecondary}
                   disabled={new Date(selectedDate).setHours(0,0,0,0) >= new Date().setHours(0,0,0,0)}
                   onPress={() => changeRelativeDate(1)}
-                >
-                  <Text style={[s.weekNavButtonText, { color: textSecondary }]}>›</Text>
-                </TouchableOpacity>
+                />
               </View>
 
               <QuickActionRow
@@ -3701,24 +3694,21 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
   },
   readOnlyPreviewTitle: {
+    ...TYPOGRAPHY.label,
     color: '#FFE2B3',
-    fontSize: 13,
-    fontWeight: '700',
     marginBottom: 2,
   },
   readOnlyPreviewText: {
+    ...TYPOGRAPHY.bodySmall,
     color: 'rgba(255, 240, 220, 0.95)',
-    fontSize: 12,
-    fontWeight: '500',
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.sectionTitle,
     marginTop: SECTION_GAP_TOP,
     marginBottom: SECTION_GAP_BOTTOM,
-    fontSize: 14,
-    fontWeight: '700',
     color: '#7D5A50',
-    textAlign: 'center',
+    textAlign: 'left',
     width: '100%',
   },
   vitaminDStrip: {
@@ -3758,8 +3748,7 @@ const s = StyleSheet.create({
     gap: 6,
   },
   vitaminDTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    ...TYPOGRAPHY.label,
     color: PRIMARY,
   },
   vitaminDSignalDot: {
@@ -3768,8 +3757,7 @@ const s = StyleSheet.create({
     borderRadius: 999,
   },
   vitaminDSignalText: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...TYPOGRAPHY.caption,
   },
   vitaminDControlRow: {
     flexDirection: 'row',
@@ -3836,9 +3824,8 @@ const s = StyleSheet.create({
     paddingVertical: 12,
   },
   vitaminDTimelineText: {
+    ...TYPOGRAPHY.label,
     flex: 1,
-    fontSize: 13,
-    fontWeight: '700',
   },
   vitaminDTimelineActions: {
     flexDirection: 'row',
@@ -3869,12 +3856,12 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.35)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.65)',
+    minHeight: 52,
   },
   recipeText: {
+    ...TYPOGRAPHY.bodyStrong,
     marginLeft: 8,
-    fontWeight: '600',
     color: PRIMARY,
-    fontSize: 15,
   },
 
   // Glass base
@@ -3896,7 +3883,11 @@ const s = StyleSheet.create({
   // Date spider
   dateSpiderWrap: { paddingHorizontal: 14 },
   dateSpiderCard: { paddingHorizontal: 18, paddingVertical: 8, borderRadius: 16 },
-  dateSpiderText: { fontSize: 14, fontWeight: '700', color: PRIMARY, textAlign: 'center' },
+  dateSpiderText: {
+    ...TYPOGRAPHY.label,
+    color: PRIMARY,
+    textAlign: 'center',
+  },
 
   // Timer Banner
   timerBanner: {
@@ -3907,8 +3898,14 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  timerType: { fontSize: 14, fontWeight: '700' },
-  timerTime: { fontSize: 22, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
+  timerType: {
+    ...TYPOGRAPHY.label,
+  },
+  timerTime: {
+    ...METRIC_TEXT,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
   timerStopButton: {
     width: 44,
     height: 44,
@@ -3972,21 +3969,23 @@ const s = StyleSheet.create({
   },
   quickActionDoneButton: {
     minWidth: 84,
-    height: 38,
+    height: undefined,
     borderRadius: 19,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    minHeight: 44,
+    paddingVertical: 8,
   },
   quickActionDoneText: {
-    fontSize: 14,
-    fontWeight: '800',
+    ...TYPOGRAPHY.buttonSmall,
   },
   circleButtonWrap: {
     width: QUICK_BUTTON_SIZE,
-    height: QUICK_BUTTON_SIZE,
+    height: undefined,
     overflow: 'visible',
+    minHeight: 96,
   },
   quickActionFooterWrap: {
     marginLeft: QUICK_BUTTON_GAP,
@@ -4011,10 +4010,8 @@ const s = StyleSheet.create({
   },
   circleEmoji: { fontSize: 26, lineHeight: 30, textAlign: 'center' },
   circleLabel: {
+    ...TYPOGRAPHY.caption,
     marginTop: 4,
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
     color: '#7D5A50',
     textAlign: 'center',
     alignSelf: 'stretch',
@@ -4054,17 +4051,13 @@ const s = StyleSheet.create({
     fontWeight: '800',
   },
   quickActionPlusLabel: {
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '800',
+    ...TYPOGRAPHY.label,
     textAlign: 'center',
     alignSelf: 'stretch',
   },
   quickActionPlusMeta: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '600',
     textAlign: 'center',
     alignSelf: 'stretch',
   },
@@ -4074,31 +4067,61 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 8,
+    gap: CONTENT_LAYOUT.itemGap,
+    flexWrap: 'wrap',
   },
   kpiCardShell: {
-    width: '48%',
+    width: undefined,
+    flexGrow: 1,
+    flexBasis: 140,
+    minWidth: 0,
   },
   kpiCard: {
     width: '100%',
     minHeight: 154,
-    borderRadius: 20,
-    paddingVertical: 18,
-    paddingHorizontal: 14,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+    paddingVertical: CONTENT_LAYOUT.cardPadding,
+    paddingHorizontal: CONTENT_LAYOUT.compactPadding,
     borderWidth: 1,
     overflow: 'hidden',
   },
   kpiCardInteractive: {},
   kpiHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   kpiHeaderRowSpaced: { justifyContent: 'space-between' },
-  kpiHeaderCopy: { flexDirection: 'row', alignItems: 'center' },
+  kpiHeaderCopy: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
   kpiEmoji: { fontSize: 14, marginRight: 6 },
-  kpiTitle: { fontSize: 14, fontWeight: '700', color: '#7D5A50' },
-  kpiValue: { fontSize: 34, fontWeight: '800', color: PRIMARY, fontVariant: ['tabular-nums'] },
+  kpiTitle: {
+    ...TYPOGRAPHY.label,
+    color: '#7D5A50',
+    flexShrink: 1,
+  },
+  kpiValue: {
+    ...METRIC_TEXT_LARGE,
+    color: PRIMARY,
+    fontVariant: ['tabular-nums'],
+  },
   kpiValueCentered: { textAlign: 'center', width: '100%' },
-  kpiMlUnit: { fontSize: 18, fontWeight: '700' },
-  kpiSub: { marginTop: 6, fontSize: 12, color: '#7D5A50', textAlign: 'center' },
+  kpiMlUnit: {
+    ...TYPOGRAPHY.label,
+  },
+  kpiSub: {
+    ...TYPOGRAPHY.bodySmall,
+    marginTop: 6,
+    color: '#7D5A50',
+    textAlign: 'center',
+  },
   kpiSubPrimary: { textAlign: 'center', fontWeight: '700', width: '100%', maxWidth: '100%' },
-  kpiSubSecondary: { marginTop: 2, fontSize: 11, textAlign: 'center', width: '100%', maxWidth: '100%' },
+  kpiSubSecondary: {
+    ...TYPOGRAPHY.caption,
+    marginTop: 2,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '100%',
+  },
 
   feedingOverviewOverlay: {
     flex: 1,
@@ -4341,39 +4364,22 @@ const s = StyleSheet.create({
     marginBottom: SECTION_GAP_BOTTOM,
     paddingHorizontal: LAYOUT_PAD,
   },
-  weekNavButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    padding: 6,
-  },
-  disabledNavButton: {
-    opacity: 0.35,
-  },
-  weekNavButtonText: {
-    fontSize: 24,
-    color: PRIMARY,
-    fontWeight: 'bold',
-  },
   weekHeaderCenter: {
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 16,
+    minWidth: 0,
   },
   weekHeaderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 6,
+    textAlign: 'center',
   },
   weekHeaderSubtitle: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
+    textAlign: 'center',
   },
   weekCalendar: {
     flexDirection: 'row',
@@ -4397,14 +4403,12 @@ const s = StyleSheet.create({
     minHeight: 80,
   },
   weekDayName: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.caption,
     color: '#7D5A50',
     marginBottom: 4,
   },
   weekDayNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 8,
   },
@@ -4450,11 +4454,10 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
   chartTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#5D4A40',           // Dunkler für bessere Lesbarkeit auf Glass
+    ...TYPOGRAPHY.headline,
+    color: '#5D4A40',
     textAlign: 'center',
-    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
+    marginBottom: SECTION_GAP_BOTTOM,
     textShadowColor: 'rgba(255, 255, 255, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -4522,7 +4525,10 @@ const s = StyleSheet.create({
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendSwatch: { width: 12, height: 12, borderRadius: 3 },
-  legendLabel: { fontSize: 12, color: '#7D5A50', fontWeight: '600' },
+  legendLabel: {
+    ...TYPOGRAPHY.caption,
+    color: '#7D5A50',
+  },
   legendBreast: { backgroundColor: '#8E4EC6' }, // Lila für Stillen
   legendBottle: { backgroundColor: '#4A90E2' }, // Blau für Fläschchen
   legendSolids: { backgroundColor: '#F5A623' }, // Orange für Beikost
@@ -4531,8 +4537,7 @@ const s = StyleSheet.create({
     marginBottom: 20,
   },
   daySectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
     color: '#5E3DB3',
     marginBottom: 12,
     paddingHorizontal: 4,
@@ -4549,8 +4554,7 @@ const s = StyleSheet.create({
     padding: 24,
   },
   summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: SECTION_GAP_BOTTOM,
     textAlign: 'center',
@@ -4568,17 +4572,15 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    ...METRIC_TEXT,
     color: '#7D5A50',
     marginBottom: 6,
     fontVariant: ['tabular-nums'],
   },
   statLabel: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
     textAlign: 'center',
-    fontWeight: '500',
   },
   // Month View Styles (EXAKT wie Sleep-Tracker)
   monthViewContainer: {
@@ -4593,31 +4595,16 @@ const s = StyleSheet.create({
     marginBottom: SECTION_GAP_BOTTOM,
     paddingHorizontal: LAYOUT_PAD,
   },
-  monthNavButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  monthNavButtonText: {
-    fontSize: 24,
-    color: PRIMARY,
-    fontWeight: 'bold',
-  },
   monthHeaderCenter: {
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 16,
   },
   monthHeaderTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 4,
+    textAlign: 'center',
   },
   monthSummaryCard: {
     padding: 0,

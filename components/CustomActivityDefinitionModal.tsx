@@ -1,22 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { ActionButton } from '@/components/ui/action-button';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
+  FormSection,
+  FormSheet,
+  FormTextInput,
+} from '@/components/ui/form-sheet';
+import { FormColors } from '@/constants/Colors';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { Colors } from '@/constants/Colors';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import {
   CustomActivityType,
   CustomActivityTypeDraft,
@@ -24,7 +18,14 @@ import {
 } from '@/lib/customActivities';
 import { translateDailyText } from '@/lib/dailyTranslations';
 
-const COLORS = ['#5E3DB3', '#4A90E2', '#35B6B4', '#38A169', '#F5A623', '#E25555'];
+const COLORS = [
+  '#5E3DB3',
+  '#4A90E2',
+  '#35B6B4',
+  '#38A169',
+  '#F5A623',
+  '#E25555',
+];
 const EMOJI_SUGGESTIONS = ['⭐️', '💊', '🛁', '🌡️', '🤸', '🦷', '💧', '🌿'];
 const UNIT_SUGGESTIONS = ['ml', 'g', 'mg', 'Tropfen', 'Stück'];
 
@@ -51,14 +52,19 @@ export default function CustomActivityDefinitionModal({
   onArchive,
 }: Props) {
   const { locale } = useLocale();
-  const insets = useSafeAreaInsets();
-  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
+
+  const t = (key: Parameters<typeof translateDailyText>[1]) =>
+    translateDailyText(locale, key);
   const adaptiveColors = useAdaptiveColors();
-  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
-  const textPrimary = isDark ? Colors.dark.textPrimary : '#342824';
-  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const fieldBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)';
-  const borderColor = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(125,90,80,0.14)';
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' ||
+    adaptiveColors.isDarkBackground;
+  const {
+    text: textPrimary,
+    secondary: textSecondary,
+    field: fieldBackground,
+    border: borderColor,
+  } = FormColors[isDark ? 'dark' : 'light'];
 
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState('⭐️');
@@ -75,7 +81,9 @@ export default function CustomActivityDefinitionModal({
     setTrackingMode(initialValue?.tracking_mode ?? 'event');
     setUnit(initialValue?.unit ?? '');
     setDefaultQuantity(
-      initialValue?.default_quantity == null ? '' : String(initialValue.default_quantity).replace('.', ','),
+      initialValue?.default_quantity == null
+        ? ''
+        : String(initialValue.default_quantity).replace('.', ','),
     );
     setColor(initialValue?.color ?? COLORS[0]);
     setBusy(false);
@@ -142,204 +150,218 @@ export default function CustomActivityDefinitionModal({
   };
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10), backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <GlassSheetSurface isDark={isDark} style={styles.panel}>
-          <View style={[styles.handle, { backgroundColor: borderColor }]} />
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
+    <FormSheet
+      visible={visible}
+      isDark={isDark}
+      title={initialValue ? t('custom.editTitle') : t('custom.newTitle')}
+      subtitle={t('custom.definitionHint')}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel={t('common.cancel')}
+      busy={busy}
+      onConfirm={handleSave}
+    >
+      <FormSection isDark={isDark} label={t('custom.name')}>
+        <FormTextInput
+          isDark={isDark}
+          value={name}
+          onChangeText={setName}
+          maxLength={40}
+          placeholder={t('custom.namePlaceholder')}
+        />
+      </FormSection>
+
+      <FormSection isDark={isDark} label={t('custom.emoji')}>
+        <FormTextInput
+          isDark={isDark}
+          value={emoji}
+          onChangeText={setEmoji}
+          maxLength={32}
+        />
+      </FormSection>
+
+      <Text style={[styles.fieldHint, { color: textSecondary }]}>
+        {t('custom.emojiHint')}
+      </Text>
+
+      <View style={styles.emojiRow}>
+        {EMOJI_SUGGESTIONS.map((suggestion) => (
+          <TouchableOpacity
+            key={suggestion}
+            style={[
+              styles.emojiChip,
+              { backgroundColor: fieldBackground, borderColor },
+              emoji === suggestion && { borderColor: color, borderWidth: 2 },
+            ]}
+            onPress={() => setEmoji(suggestion)}
           >
-            <View style={styles.titleRow}>
-              <Text allowFontScaling={false} style={styles.previewEmoji}>{emoji.trim() || '⭐️'}</Text>
-              <View style={styles.titleCopy}>
-                <Text style={[styles.title, { color: textPrimary }]}>
-                  {initialValue ? t('custom.editTitle') : t('custom.newTitle')}
+            <Text allowFontScaling={false} style={styles.emojiChipText}>
+              {suggestion}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <FormSection isDark={isDark} label={t('custom.tracking')}>
+        <View style={styles.segmentRow}>
+          {trackingOptions.map((option) => {
+            const selected = trackingMode === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.segment,
+                  {
+                    backgroundColor: selected ? color : fieldBackground,
+                    borderColor: selected ? color : borderColor,
+                  },
+                ]}
+                onPress={() => setTrackingMode(option.value)}
+              >
+                <Text allowFontScaling={false} style={styles.segmentEmoji}>
+                  {option.emoji}
                 </Text>
-                <Text style={[styles.subtitle, { color: textSecondary }]}>{t('custom.definitionHint')}</Text>
-              </View>
-            </View>
-
-            <Text style={[styles.label, { color: textPrimary }]}>{t('custom.name')}</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              maxLength={40}
-              placeholder={t('custom.namePlaceholder')}
-              placeholderTextColor={textSecondary}
-              style={[styles.input, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
-            />
-
-            <Text style={[styles.label, { color: textPrimary }]}>{t('custom.emoji')}</Text>
-            <TextInput
-              value={emoji}
-              onChangeText={setEmoji}
-              maxLength={32}
-              style={[styles.input, styles.emojiInput, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
-            />
-            <Text style={[styles.fieldHint, { color: textSecondary }]}>{t('custom.emojiHint')}</Text>
-            <View style={styles.emojiRow}>
-              {EMOJI_SUGGESTIONS.map((suggestion) => (
-                <TouchableOpacity
-                  key={suggestion}
+                <Text
                   style={[
-                    styles.emojiChip,
-                    { backgroundColor: fieldBackground, borderColor },
-                    emoji === suggestion && { borderColor: color, borderWidth: 2 },
-                  ]}
-                  onPress={() => setEmoji(suggestion)}
-                >
-                  <Text allowFontScaling={false} style={styles.emojiChipText}>{suggestion}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={[styles.label, { color: textPrimary }]}>{t('custom.tracking')}</Text>
-            <View style={styles.segmentRow}>
-              {trackingOptions.map((option) => {
-                const selected = trackingMode === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.segment,
-                      {
-                        backgroundColor: selected ? color : fieldBackground,
-                        borderColor: selected ? color : borderColor,
-                      },
-                    ]}
-                    onPress={() => setTrackingMode(option.value)}
-                  >
-                    <Text allowFontScaling={false} style={styles.segmentEmoji}>{option.emoji}</Text>
-                    <Text style={[styles.segmentLabel, { color: selected ? '#FFFFFF' : textSecondary }]}>
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {trackingMode === 'quantity' ? (
-              <>
-                <Text style={[styles.label, { color: textPrimary }]}>{t('custom.unit')}</Text>
-                <TextInput
-                  value={unit}
-                  onChangeText={setUnit}
-                  maxLength={20}
-                  placeholder={t('custom.unitPlaceholder')}
-                  placeholderTextColor={textSecondary}
-                  style={[styles.input, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
-                />
-                <View style={styles.chipRow}>
-                  {UNIT_SUGGESTIONS.map((suggestion) => (
-                    <TouchableOpacity
-                      key={suggestion}
-                      style={[styles.chip, { backgroundColor: fieldBackground, borderColor }]}
-                      onPress={() => setUnit(suggestion)}
-                    >
-                      <Text style={[styles.chipText, { color: textSecondary }]}>{suggestion}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={[styles.label, { color: textPrimary }]}>{t('custom.defaultQuantity')}</Text>
-                <TextInput
-                  value={defaultQuantity}
-                  onChangeText={setDefaultQuantity}
-                  keyboardType="decimal-pad"
-                  inputMode="decimal"
-                  placeholder={t('custom.defaultQuantityPlaceholder')}
-                  placeholderTextColor={textSecondary}
-                  style={[styles.input, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
-                />
-              </>
-            ) : null}
-
-            <Text style={[styles.label, { color: textPrimary }]}>{t('custom.color')}</Text>
-            <View style={styles.colorRow}>
-              {COLORS.map((item) => (
-                <TouchableOpacity
-                  key={item}
-                  accessibilityRole="button"
-                  accessibilityLabel={item}
-                  onPress={() => setColor(item)}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: item },
-                    color === item && styles.colorDotSelected,
+                    styles.segmentLabel,
+                    { color: selected ? '#FFFFFF' : textSecondary },
                   ]}
                 >
-                  {color === item ? <Text style={styles.colorCheck}>✓</Text> : null}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </FormSection>
 
-          <View style={[styles.bottomBar, { borderTopColor: borderColor }]}>
-            {initialValue && onArchive ? (
-              <TouchableOpacity style={styles.archiveButton} onPress={handleArchive} disabled={busy}>
-                <Text style={styles.archiveText}>{t('custom.archive')}</Text>
+      {trackingMode === 'quantity' ? (
+        <>
+          <Text style={[styles.label, { color: textPrimary }]}>
+            {t('custom.unit')}
+          </Text>
+          <FormTextInput
+            isDark={isDark}
+            value={unit}
+            onChangeText={setUnit}
+            maxLength={20}
+            placeholder={t('custom.unitPlaceholder')}
+          />
+          <View style={styles.chipRow}>
+            {UNIT_SUGGESTIONS.map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion}
+                style={[
+                  styles.chip,
+                  { backgroundColor: fieldBackground, borderColor },
+                ]}
+                onPress={() => setUnit(suggestion)}
+              >
+                <Text style={[styles.chipText, { color: textSecondary }]}>
+                  {suggestion}
+                </Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={[styles.cancelButton, { borderColor }]} onPress={onClose} disabled={busy}>
-                <Text style={[styles.cancelText, { color: textSecondary }]}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: color }, busy && styles.disabled]}
-              onPress={handleSave}
-              disabled={busy}
-            >
-              <Text style={styles.saveText}>{t('custom.save')}</Text>
-            </TouchableOpacity>
+            ))}
           </View>
-        </GlassSheetSurface>
-      </KeyboardAvoidingView>
-    </Modal>
+
+          <Text style={[styles.label, { color: textPrimary }]}>
+            {t('custom.defaultQuantity')}
+          </Text>
+          <FormTextInput
+            isDark={isDark}
+            value={defaultQuantity}
+            onChangeText={setDefaultQuantity}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            placeholder={t('custom.defaultQuantityPlaceholder')}
+          />
+        </>
+      ) : null}
+
+      <FormSection isDark={isDark} label={t('custom.color')}>
+        <View style={styles.colorRow}>
+          {COLORS.map((item) => (
+            <TouchableOpacity
+              key={item}
+              accessibilityRole="button"
+              accessibilityLabel={item}
+              onPress={() => setColor(item)}
+              style={[
+                styles.colorDot,
+                { backgroundColor: item },
+                color === item && styles.colorDotSelected,
+              ]}
+            >
+              {color === item ? <Text style={styles.colorCheck}>✓</Text> : null}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </FormSection>
+      {initialValue && onArchive && (
+        <ActionButton
+          variant="destructive"
+          isDark={isDark}
+          disabled={busy}
+          label={t('custom.archive')}
+          onPress={handleArchive}
+        />
+      )}
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
-  panel: {
-    maxHeight: '100%',
-    flexShrink: 1,
-  },
-  handle: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 9 },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 20, gap: 14 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 8 },
-  previewEmoji: { fontSize: 38 },
-  titleCopy: { flex: 1 },
-  title: { fontSize: 20, fontWeight: '600' },
-  subtitle: { fontSize: 13, lineHeight: 18, marginTop: 3 },
-  label: { fontSize: 14, fontWeight: '600', marginTop: 7 },
-  input: { minHeight: 48, borderRadius: 22, borderWidth: 1, paddingHorizontal: 14, fontSize: 16 },
-  emojiInput: { fontSize: 24 },
+  label: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
+
   fieldHint: { fontSize: 12, lineHeight: 17 },
   emojiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  emojiChip: { width: 42, height: 42, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  emojiChip: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   emojiChipText: { fontSize: 22 },
   segmentRow: { flexDirection: 'row', gap: 8 },
-  segment: { flex: 1, minHeight: 72, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 8 },
+  segment: {
+    flex: 1,
+    minHeight: 72,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
   segmentEmoji: { fontSize: 20 },
-  segmentLabel: { fontSize: 12, fontWeight: '600', marginTop: 5, textAlign: 'center' },
+  segmentLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 5,
+    textAlign: 'center',
+  },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 14, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
+  chip: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
   chipText: { fontSize: 13, fontWeight: '700' },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingVertical: 4 },
-  colorDot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  colorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  colorDot: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   colorDotSelected: { borderWidth: 3, borderColor: '#FFFFFF' },
   colorCheck: { color: '#FFFFFF', fontWeight: '700', fontSize: 17 },
-  bottomBar: { flexShrink: 0, flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18 },
-  cancelButton: { flex: 1, minHeight: 50, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontSize: 15, fontWeight: '600' },
-  archiveButton: { flex: 1, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(226,85,85,0.12)' },
-  archiveText: { color: '#E25555', fontSize: 15, fontWeight: '600' },
-  saveButton: { flex: 1.3, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  saveText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  disabled: { opacity: 0.55 },
 });

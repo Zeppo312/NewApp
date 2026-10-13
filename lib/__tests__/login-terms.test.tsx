@@ -40,7 +40,8 @@ jest.mock('@/components/account-linking-qr-modal', () => ({ AccountLinkingQrModa
 
 let tree: ReactTestRenderer;
 const originalOS = Platform.OS;
-const button = (label: string) => tree.root.findAllByType(TouchableOpacity).find(node =>
+const button = (label: string) => [...tree.root.findAllByType(TouchableOpacity),
+  ...tree.root.findAll(node => node.props.accessibilityRole === 'button' && typeof node.props.onPress === 'function')].find(node =>
   node.findAllByType(Text).some(text => text.props.children === label))!;
 const mount = () => act(() => { tree = create(<LoginScreen />); });
 const enterCredentials = () => act(() => {

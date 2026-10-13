@@ -5,6 +5,12 @@ import { ThemedBackground } from '@/components/ThemedBackground';
 
 const HomeBlurTarget = createContext<RefObject<View | null> | undefined>(undefined);
 
+/** Other Android screens can retain a readable frost without sampling content. */
+export function useHomeBlurAvailable() {
+  const target = use(HomeBlurTarget);
+  return Platform.OS !== 'android' || (Boolean(target) && Number(Platform.Version) >= 31);
+}
+
 /** Share only the wallpaper as the blur source, never the cards themselves. */
 export function HomeBackground({ children, style, ...props }: ComponentProps<typeof ThemedBackground>) {
   const blurTarget = useRef<View | null>(null);

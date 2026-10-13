@@ -1,47 +1,45 @@
-import { useAuth } from '@/contexts/AuthContext';
-import { useActivityDraft } from '@/hooks/useActivityDraft';
-import { backendHost } from '@/lib/localReadSnapshots';
-import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
-import { getBabyCareEntriesForDate } from '@/lib/supabase';
-import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
-import { offlineText } from '@/lib/offlineTranslations';
-import { saveErrorMessage } from '@/lib/saveErrorMessage';
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  View,
-  Modal,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Platform,
-  ScrollView,
-  LayoutAnimation,
-  Image,
-  Alert,
-  TextInputProps,
-  useWindowDimensions,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
-import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
-import { getSampleRecipeImage, RECIPE_SAMPLES } from '@/lib/recipes-samples';
-import { fetchRecipes, RecipeRecord } from '@/lib/recipes';
 import TextInputOverlay from '@/components/modals/TextInputOverlay';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import DateTimePicker,{ DateTimePickerEvent } from '@/components/ui/DateTimePicker';
+import { FormField,FormSheet } from '@/components/ui/form-sheet';
+import { Colors,FormColors } from '@/constants/Colors';
+import { TYPOGRAPHY } from '@/constants/Typography';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
-import { DailyTranslationKey, getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
+import { useActivityDraft } from '@/hooks/useActivityDraft';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
+import { DailyTranslationKey,getDailyLocaleTag,translateDailyText } from '@/lib/dailyTranslations';
+import { isBeforeHistoryCutoff,useFeatureAccess,useHistoryCutoff } from '@/lib/entitlements';
+import { localHealthAllowed,localHealthGeneration } from '@/lib/localHealthStorage';
+import { backendHost } from '@/lib/localReadSnapshots';
+import { offlineText } from '@/lib/offlineTranslations';
+import { fetchRecipes,RecipeRecord } from '@/lib/recipes';
+import { getSampleRecipeImage,RECIPE_SAMPLES } from '@/lib/recipes-samples';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
 import {
-  computeTotalQuantity,
-  fetchDiaperInventoryItems,
-  fetchFormulaInventoryItems,
-  InventoryItem,
+computeTotalQuantity,
+fetchDiaperInventoryItems,
+fetchFormulaInventoryItems,
+InventoryItem,
 } from '@/lib/shopping';
+import { getBabyCareEntriesForDate } from '@/lib/supabase';
+import { useRouter } from 'expo-router';
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
+import {
+Alert,
+Image,
+Keyboard,
+LayoutAnimation,
+Platform,
+StyleSheet,
+Text,
+TextInputProps,
+TouchableOpacity,
+TouchableWithoutFeedback,
+useWindowDimensions,
+View
+} from 'react-native';
 
 // Typ-Definitionen
 type ActivityType = 'feeding' | 'diaper' | 'other';
@@ -138,7 +136,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   initialData,
 }) => {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+
   const { width, fontScale } = useWindowDimensions();
   const useWideOptions = width < 360 || fontScale > 1.2;
   const { locale } = useLocale();
@@ -151,7 +149,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   const isDark = forceDarkMode ?? (colorScheme === 'dark');
 
   // Theme und Farben - angepasst für Dark Mode
-  const theme = isDark ? {
+  const baseTheme = isDark ? {
     background: Colors.dark.background,
     modalBackground: 'rgba(45, 37, 34, 0.98)', // Dark background
     text: Colors.dark.text, // Light text for contrast
@@ -176,6 +174,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     orange: '#F5A623', // Orange for Beikost
     purple: '#9B59B6', // Solid purple
   };
+  const formPalette = FormColors[isDark ? 'dark' : 'light'];
+  const theme = { ...baseTheme, text: formPalette.text, textSecondary: formPalette.secondary, lightGray: formPalette.field, mediumGray: formPalette.border };
 
   // States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -727,8 +727,6 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
     const showEndTime = activityType !== 'diaper';
     const pickerInlineBg = isDark ? 'rgba(20, 20, 24, 0.95)' : 'rgba(255, 255, 255, 0.9)';
     const pickerInlineBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)';
-    const pickerCardBg = isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)';
-    const pickerCardBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
 
     return (
     <View style={styles.section}>
@@ -738,55 +736,22 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       </Text>
 
       <View style={[styles.timeRow, !showEndTime && styles.timeRowSingle]}> 
-        <TouchableOpacity
-          style={[
-            styles.timeButton,
-            !showEndTime && styles.timeButtonSingle,
-            isDark && {
-              backgroundColor: 'rgba(24, 24, 28, 0.92)',
-              borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.14)',
-            },
-          ]}
-          onPress={openStartPicker}
-        >
-          <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{t('input.start')}</Text>
-          <Text style={[styles.timeValue, { color: theme.text }]}>
-            {safeModalStartTime.toLocaleString(localeTag, {
+        <FormField isDark={isDark} onPress={openStartPicker}
+    label={t('input.start')} value={safeModalStartTime.toLocaleString(localeTag, {
               hour: '2-digit',
               minute: '2-digit',
               day: '2-digit',
               month: '2-digit',
             })}
-          </Text>
-        </TouchableOpacity>
+     style={{flex:1}}  />
 
         {showEndTime && (
-          <TouchableOpacity
-            style={[
-              styles.timeButton,
-              isDark && {
-                backgroundColor: 'rgba(24, 24, 28, 0.92)',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.14)',
-              },
-              startTimer && styles.timeButtonDisabled,
-            ]}
-            onPress={() => {
+          <FormField isDark={isDark} onPress={() => {
               if (startTimer) return;
               setEndTimeVisible(true);
               openEndPicker();
             }}
-            activeOpacity={startTimer ? 1 : 0.7}
-          >
-            <Text style={[styles.timeLabel, { color: theme.textSecondary }]}>{t('input.end')}</Text>
-            <Text
-              style={[
-                styles.timeValue,
-                startTimer ? [styles.timeDisabledText, { color: theme.textSecondary }] : { color: theme.text },
-              ]}
-            >
-              {startTimer
+    label={t('input.end')} value={startTimer
                 ? t('input.timerRunning')
                 : safeModalEndTime
                 ? safeModalEndTime.toLocaleString(localeTag, {
@@ -796,9 +761,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                     month: '2-digit',
                   })
                 : t('input.open')}
-            </Text>
-            {startTimer && <Text style={[styles.timeHint, { color: theme.textSecondary }]}>{t('input.timerHint')}</Text>}
-          </TouchableOpacity>
+     style={{flex:1}}  />
         )}
       </View>
 
@@ -871,147 +834,75 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       )}
 
       {Platform.OS === 'ios' && showStartPicker && (
-        <Modal
-          visible={showStartPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            commitStartPickerDraft();
-            setShowStartPicker(false);
-          }}
-        >
-          <View style={styles.manualPickerOverlay}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                commitStartPickerDraft();
-                setShowStartPicker(false);
+        <FormSheet
+            visible={showStartPicker}
+            isDark={isDark}
+            title={t('input.start')}
+            onClose={() => setShowStartPicker(false)}
+            onCancel={() => setShowStartPicker(false)}
+            confirmLabel={t('common.done')}
+            onConfirm={() => {
+              commitStartPickerDraft();
+              setShowStartPicker(false);
+            }}
+            scrollable={false}
+          >
+            <DateTimePicker
+              value={(() => {
+                const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
+                d.setSeconds(0, 0);
+                return d;
+              })()}
+              minimumDate={MIN_VALID_MANUAL_DATE}
+              maximumDate={MAX_VALID_MANUAL_DATE}
+              mode="datetime"
+              display="spinner"
+              locale={localeTag}
+              onChange={(event, d) => {
+                if (event.type === 'dismissed') return;
+                setStartPickerDraft((prev) => getSafePickerDateFromEvent(event, d, prev));
               }}
-              activeOpacity={1}
+              accentColor={theme.accent}
+              themeVariant={isDark ? 'dark' : 'light'}
+              style={styles.manualPickerSpinner}
             />
-            <View
-              style={[
-                styles.manualPickerCard,
-                {
-                  backgroundColor: pickerCardBg,
-                  borderColor: pickerCardBorder,
-                },
-              ]}
-            >
-              <View style={styles.manualPickerHeader}>
-                <TouchableOpacity
-                  onPress={() => setShowStartPicker(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
-                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>{t('input.start')}</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    commitStartPickerDraft();
-                    setShowStartPicker(false);
-                  }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>{t('common.done')}</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={(() => {
-                  const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
-                  d.setSeconds(0, 0);
-                  return d;
-                })()}
-                minimumDate={MIN_VALID_MANUAL_DATE}
-                maximumDate={MAX_VALID_MANUAL_DATE}
-                mode="datetime"
-                display="spinner"
-                locale={localeTag}
-                onChange={(event, d) => {
-                  if (event.type === 'dismissed') return;
-                  setStartPickerDraft((prev) =>
-                    getSafePickerDateFromEvent(event, d, prev)
-                  );
-                }}
-                accentColor={theme.accent}
-                themeVariant={isDark ? 'dark' : 'light'}
-                style={styles.manualPickerSpinner}
-              />
-            </View>
-          </View>
-        </Modal>
+          </FormSheet>
       )}
 
       {showEndTime && Platform.OS === 'ios' && showEndPicker && (
-        <Modal
-          visible={showEndPicker}
-          transparent
-          animationType="fade"
-          onRequestClose={() => {
-            commitEndPickerDraft();
-            setShowEndPicker(false);
-          }}
-        >
-          <View style={styles.manualPickerOverlay}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                commitEndPickerDraft();
-                setShowEndPicker(false);
+        <FormSheet
+            visible={showEndPicker}
+            isDark={isDark}
+            title={t('input.end')}
+            onClose={() => setShowEndPicker(false)}
+            onCancel={() => setShowEndPicker(false)}
+            confirmLabel={t('common.done')}
+            onConfirm={() => {
+              commitEndPickerDraft();
+              setShowEndPicker(false);
+            }}
+            scrollable={false}
+          >
+            <DateTimePicker
+              value={(() => {
+                const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
+                d.setSeconds(0, 0);
+                return d;
+              })()}
+              minimumDate={MIN_VALID_MANUAL_DATE}
+              maximumDate={MAX_VALID_MANUAL_DATE}
+              mode="datetime"
+              display="spinner"
+              locale={localeTag}
+              onChange={(event, d) => {
+                if (event.type === 'dismissed') return;
+                setEndPickerDraft((prev) => getSafePickerDateFromEvent(event, d, prev));
               }}
-              activeOpacity={1}
+              accentColor={theme.accent}
+              themeVariant={isDark ? 'dark' : 'light'}
+              style={styles.manualPickerSpinner}
             />
-            <View
-              style={[
-                styles.manualPickerCard,
-                {
-                  backgroundColor: pickerCardBg,
-                  borderColor: pickerCardBorder,
-                },
-              ]}
-            >
-              <View style={styles.manualPickerHeader}>
-                <TouchableOpacity
-                  onPress={() => setShowEndPicker(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[styles.manualPickerActionText, { color: theme.textSecondary }]}>{t('common.cancel')}</Text>
-                </TouchableOpacity>
-                <Text style={[styles.manualPickerTitle, { color: theme.text }]}>{t('input.end')}</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    commitEndPickerDraft();
-                    setShowEndPicker(false);
-                  }}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={[styles.manualPickerActionText, { color: theme.accent }]}>{t('common.done')}</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={(() => {
-                  const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
-                  d.setSeconds(0, 0);
-                  return d;
-                })()}
-                minimumDate={MIN_VALID_MANUAL_DATE}
-                maximumDate={MAX_VALID_MANUAL_DATE}
-                mode="datetime"
-                display="spinner"
-                locale={localeTag}
-                onChange={(event, d) => {
-                  if (event.type === 'dismissed') return;
-                  setEndPickerDraft((prev) =>
-                    getSafePickerDateFromEvent(event, d, prev)
-                  );
-                }}
-                accentColor={theme.accent}
-                themeVariant={isDark ? 'dark' : 'light'}
-                style={styles.manualPickerSpinner}
-              />
-            </View>
-          </View>
-        </Modal>
+          </FormSheet>
       )}
 
       {!restricted && activityType === 'feeding' && feedingType !== 'pump' && feedingType !== 'water' && (
@@ -1071,7 +962,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       default: return theme.lightGray;
     }
   };
-  
+
   const getModalTitle = () => {
     switch (activityType) {
       case 'feeding': return isPumpSelection ? t('feeding.pump') : isWaterSelection ? t('feeding.water') : t('input.newFeeding');
@@ -1088,28 +979,6 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
   };
 
   // --- RENDER FUNKTIONEN ---
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.cancel')} style={[styles.headerButton, { backgroundColor: theme.lightGray }]} onPress={() => void closeModal()}>
-        <Text style={styles.closeHeaderButtonText}>✕</Text>
-      </TouchableOpacity>
-      <View style={styles.headerCenter}>
-        <Text style={[styles.modalTitle, { color: theme.text }]}>{getModalTitle()}</Text>
-        <Text style={[styles.modalSubtitle, { color: theme.textSecondary }]}>{getModalSubtitle()}</Text>
-      </View>
-      <TouchableOpacity 
-        style={[styles.headerButton, { backgroundColor: theme.accent }]} 
-        accessibilityRole="button"
-        accessibilityLabel={t('custom.saveEntry')}
-        disabled={saving || isSubmitting || canDraft && (!draft.ready || draft.unknown)}
-        accessibilityState={{ disabled: saving || isSubmitting || canDraft && (!draft.ready || draft.unknown), busy: saving || isSubmitting }}
-        onPress={() => void handleSave()}
-      >
-        <Text style={styles.saveHeaderButtonText}>✓</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   const renderFeedingSideSelector = () => (
     <View style={styles.sideSelectorContainer}>
@@ -1130,8 +999,6 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
       ))}
     </View>
   );
-
-
 
   const renderVolumeControl = () => {
     const quickVolumes = [60, 90, 120, 150, 180, 210];
@@ -1584,16 +1451,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </TouchableOpacity>
 
         {diaperFeverMeasured && (
-          <TouchableOpacity
-            style={[
-              styles.diaperHealthInput,
-              {
-                backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
-                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
-              },
-            ]}
-            activeOpacity={0.9}
-            onPress={() => {
+          <FormField isDark={isDark} onPress={() => {
               setFocusValue(diaperTemperatureC);
               setFocusConfig({
                 field: 'diaper_temperature_c',
@@ -1603,17 +1461,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 inputMode: 'decimal',
               });
             }}
-          >
-            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>{t('input.temperature')}</Text>
-            <Text
-              style={[
-                styles.diaperHealthInputValue,
-                { color: diaperTemperatureC.trim() ? theme.text : theme.textSecondary },
-              ]}
-            >
-              {diaperTemperatureC.trim() ? `${diaperTemperatureC.trim()} °C` : t('input.enterValue')}
-            </Text>
-          </TouchableOpacity>
+    label={t('input.temperature')} value={diaperTemperatureC.trim() ? `${diaperTemperatureC.trim()} °C` : t('input.enterValue')}
+       />
         )}
 
         <TouchableOpacity
@@ -1643,16 +1492,7 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
         </TouchableOpacity>
 
         {diaperSuppositoryGiven && (
-          <TouchableOpacity
-            style={[
-              styles.diaperHealthInput,
-              {
-                backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : 'rgba(255,255,255,0.82)',
-                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
-              },
-            ]}
-            activeOpacity={0.9}
-            onPress={() => {
+          <FormField isDark={isDark} onPress={() => {
               setFocusValue(diaperSuppositoryDoseMg);
               setFocusConfig({
                 field: 'diaper_suppository_dose_mg',
@@ -1662,17 +1502,8 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
                 inputMode: 'numeric',
               });
             }}
-          >
-            <Text style={[styles.diaperHealthInputLabel, { color: theme.textSecondary }]}>{t('input.dose')}</Text>
-            <Text
-              style={[
-                styles.diaperHealthInputValue,
-                { color: diaperSuppositoryDoseMg.trim() ? theme.text : theme.textSecondary },
-              ]}
-            >
-              {diaperSuppositoryDoseMg.trim() ? `${diaperSuppositoryDoseMg.trim()} mg` : t('input.enterValue')}
-            </Text>
-          </TouchableOpacity>
+    label={t('input.dose')} value={diaperSuppositoryDoseMg.trim() ? `${diaperSuppositoryDoseMg.trim()} mg` : t('input.enterValue')}
+       />
         )}
       </View>
       ) : null}
@@ -1725,117 +1556,191 @@ const ActivityInputModal: React.FC<ActivityInputModalProps> = ({
            <Text style={{ fontSize: 20, transform: [{ rotate: isNotesVisible ? '90deg' : '0deg' }] }}>›</Text>
          </TouchableOpacity>
          {isNotesVisible && (
-            <TouchableOpacity
-              style={[
-                styles.notesInput,
-                {
-                  backgroundColor: isDark ? 'rgba(24, 24, 28, 0.92)' : theme.lightGray,
-                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : '#E0E0E0',
-                },
-              ]}
-              activeOpacity={0.9}
-              onPress={openNotesEditor}
-            >
-              <Text
-                style={{ color: notes.trim() ? theme.text : theme.textSecondary, fontSize: 14 }}
-                numberOfLines={3}
-              >
-                  {notes.trim() || t('input.details')}
-              </Text>
-            </TouchableOpacity>
+            <FormField isDark={isDark} onPress={openNotesEditor}
+     value={notes.trim()} placeholder={t('input.details')}
+    multiline   />
          )}
       </View>
   );
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={() => void closeModal()}>
-      <View
-        style={[
-          styles.modalOverlay,
-          { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10) },
-          { backgroundColor: isDark ? 'rgba(0, 0, 0, 0.62)' : 'rgba(0, 0, 0, 0.4)' },
-        ]}
+    <FormSheet
+        visible={visible}
+        isDark={isDark}
+        title={getModalTitle()}
+        subtitle={getModalSubtitle()}
+        onClose={() => void closeModal()}
+        onCancel={() => closeModal()}
+        busy={saving || isSubmitting}
+        confirmDisabled={canDraft && (!draft.ready || draft.unknown)}
+        onConfirm={() => handleSave()}
+        overlays={
+          <>
+            <TextInputOverlay
+              visible={!!focusConfig}
+              label={focusConfig?.label ?? ''}
+              value={focusValue}
+              placeholder={focusConfig?.placeholder}
+              multiline={!!focusConfig?.multiline}
+              keyboardType={focusConfig?.keyboardType}
+              inputMode={focusConfig?.inputMode}
+              onClose={closeFocusEditor}
+              onSubmit={(next) => saveFocusEditor(next)}
+              onChangeText={setFocusValue}
+            />
+          </>
+        }
       >
-        {/* This empty view allows closing the modal by tapping the background */}
-        <TouchableWithoutFeedback onPress={() => void closeModal()}>
-            <View style={StyleSheet.absoluteFill} />
-        </TouchableWithoutFeedback>
-
-        <GlassSheetSurface isDark={isDark} style={styles.modalContent}>
-            <View style={[styles.sheetHandle, { backgroundColor: theme.mediumGray }]} />
-            {renderHeader()}
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
+        {canDraft &&
+          (draft.choice ||
+            draft.corrupt ||
+            draft.error ||
+            draft.unknown ||
+            (inventoryFailed &&
+              (!!selectedDiaperItemId ||
+                (!!selectedFormulaItemId && selectedFormulaItemId !== 'none')))) && (
+            <View
+              style={[
+                styles.draftFeedback,
+                { backgroundColor: theme.lightGray, borderColor: theme.mediumGray },
+              ]}
+              accessibilityLiveRegion="polite"
             >
-                {canDraft && (draft.choice || draft.corrupt || draft.error || draft.unknown || inventoryFailed && (!!selectedDiaperItemId || !!selectedFormulaItemId && selectedFormulaItemId !== 'none')) && (
-                  <View style={[styles.draftFeedback, { backgroundColor: theme.lightGray, borderColor: theme.mediumGray }]} accessibilityLiveRegion="polite">
-                    {draft.choice && <>
-                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('restore')} · {activeBaby?.name ?? activeBabyId} · {new Date(draft.choice.values.startTime).toLocaleString(locale)}</Text>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={draft.resume}><Text style={{ color: theme.text }}>{ot('resume')}</Text></TouchableOpacity>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard()}><Text style={{ color: theme.text }}>{ot('discard')}</Text></TouchableOpacity>
-                    </>}
-                    {draft.corrupt && <>
-                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('corrupt')}</Text>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard()}><Text style={{ color: theme.text }}>{ot('discard')}</Text></TouchableOpacity>
-                    </>}
-                    {inventoryFailed && (!!selectedDiaperItemId || !!selectedFormulaItemId && selectedFormulaItemId !== 'none') && <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => setInventoryAttempt(v => v + 1)}><Text style={{ color: theme.text }}>{ot('inventoryCheck')} · {ot('retry')}</Text></TouchableOpacity>}
-                    {draft.error && <>
-                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('storageError')}</Text>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.flush().catch(() => {})}><Text style={{ color: theme.text }}>{ot('retry')}</Text></TouchableOpacity>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => Alert.alert(ot('onlineAnyway'), ot('unsafe'), [{ text: ot('back') }, { text: ot('onlineAnyway'), onPress: () => void handleSave(true) }])}><Text style={{ color: theme.text }}>{ot('onlineAnyway')}</Text></TouchableOpacity>
-                    </>}
-                    {draft.unknown && <>
-                      <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('unknown')}</Text>
-                      <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void inspectHistory()}><Text style={{ color: theme.text }}>{ot('checkHistory')}</Text></TouchableOpacity>
-                      {reviewEntries !== null && <>
-                        {reviewEntries.map(entry => <Text key={entry.id} style={[styles.draftFeedbackText, { color: theme.text }]}>{new Date(entry.start_time).toLocaleString(locale)} · {entry.feeding_volume_ml ?? entry.diaper_type ?? ''} · {entry.notes ?? ''}</Text>)}
-                        <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.discard().then(onClose)}><Text style={{ color: theme.text }}>{ot('alreadyInHistory')}</Text></TouchableOpacity>
-                        <TouchableOpacity accessibilityRole="button" style={styles.draftFeedbackAction} onPress={() => void draft.allowRetryAfterReview().then(() => setReviewEntries(null))}><Text style={{ color: theme.text }}>{ot('notInHistory')}</Text></TouchableOpacity>
-                      </>}
-                    </>}
-                  </View>
+              {draft.choice && (
+                <>
+                  <Text style={[styles.draftFeedbackText, { color: theme.text }]}>
+                    {ot('restore')} · {activeBaby?.name ?? activeBabyId} ·{' '}
+                    {new Date(draft.choice.values.startTime).toLocaleString(locale)}
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={draft.resume}
+                  >
+                    <Text style={{ color: theme.text }}>{ot('resume')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() => void draft.discard()}
+                  >
+                    <Text style={{ color: theme.text }}>{ot('discard')}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {draft.corrupt && (
+                <>
+                  <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('corrupt')}</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() => void draft.discard()}
+                  >
+                    <Text style={{ color: theme.text }}>{ot('discard')}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {inventoryFailed &&
+                (!!selectedDiaperItemId ||
+                  (!!selectedFormulaItemId && selectedFormulaItemId !== 'none')) && (
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() => setInventoryAttempt((v) => v + 1)}
+                  >
+                    <Text style={{ color: theme.text }}>
+                      {ot('inventoryCheck')} · {ot('retry')}
+                    </Text>
+                  </TouchableOpacity>
                 )}
-                {/* This wrapper ensures keyboard dismiss works inside the scroll view */}
-                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                    <View pointerEvents={canDraft && (!draft.ready || draft.unknown) ? 'none' : 'auto'} style={{width: '100%', alignItems: 'center'}}>
-                        {activityType === 'feeding' && renderFeedingSection()}
-                        {activityType === 'diaper' && renderDiaperSection()}
-                        {renderTimeSection()}
-                        {renderNotes()}
+              {draft.error && (
+                <>
+                  <Text style={[styles.draftFeedbackText, { color: theme.text }]}>
+                    {ot('storageError')}
+                  </Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() => void draft.flush().catch(() => {})}
+                  >
+                    <Text style={{ color: theme.text }}>{ot('retry')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() =>
+                      Alert.alert(ot('onlineAnyway'), ot('unsafe'), [
+                        { text: ot('back') },
+                        { text: ot('onlineAnyway'), onPress: () => void handleSave(true) },
+                      ])
+                    }
+                  >
+                    <Text style={{ color: theme.text }}>{ot('onlineAnyway')}</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {draft.unknown && (
+                <>
+                  <Text style={[styles.draftFeedbackText, { color: theme.text }]}>{ot('unknown')}</Text>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    style={styles.draftFeedbackAction}
+                    onPress={() => void inspectHistory()}
+                  >
+                    <Text style={{ color: theme.text }}>{ot('checkHistory')}</Text>
+                  </TouchableOpacity>
+                  {reviewEntries !== null && (
+                    <>
+                      {reviewEntries.map((entry) => (
+                        <Text key={entry.id} style={[styles.draftFeedbackText, { color: theme.text }]}>
+                          {new Date(entry.start_time).toLocaleString(locale)} ·{' '}
+                          {entry.feeding_volume_ml ?? entry.diaper_type ?? ''} · {entry.notes ?? ''}
+                        </Text>
+                      ))}
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        style={styles.draftFeedbackAction}
+                        onPress={() => void draft.discard().then(onClose)}
+                      >
+                        <Text style={{ color: theme.text }}>{ot('alreadyInHistory')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        style={styles.draftFeedbackAction}
+                        onPress={() =>
+                          void draft.allowRetryAfterReview().then(() => setReviewEntries(null))
+                        }
+                      >
+                        <Text style={{ color: theme.text }}>{ot('notInHistory')}</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              )}
+            </View>
+          )}
 
-                        {/* Löschen-Button nur beim Bearbeiten anzeigen */}
-                        {initialData?.id && onDelete && (
-                          <TouchableOpacity
-                            style={styles.deleteButton}
-                            onPress={handleDelete}
-                            activeOpacity={0.85}
-                          >
-                            <Text style={styles.deleteButtonText}>{t('input.deleteEntry')}</Text>
-                          </TouchableOpacity>
-                        )}
-                    </View>
-                </TouchableWithoutFeedback>
-            </ScrollView>
-        </GlassSheetSurface>
-      </View>
+        {/* This wrapper ensures keyboard dismiss works inside the scroll view */}
 
-      <TextInputOverlay
-        visible={!!focusConfig}
-        label={focusConfig?.label ?? ''}
-        value={focusValue}
-        placeholder={focusConfig?.placeholder}
-        multiline={!!focusConfig?.multiline}
-        keyboardType={focusConfig?.keyboardType}
-        inputMode={focusConfig?.inputMode}
-        onClose={closeFocusEditor}
-        onSubmit={(next) => saveFocusEditor(next)}
-        onChangeText={setFocusValue}
-      />
-    </Modal>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View
+            pointerEvents={canDraft && (!draft.ready || draft.unknown) ? 'none' : 'auto'}
+            style={{ width: '100%', alignItems: 'center' }}
+          >
+            {activityType === 'feeding' && renderFeedingSection()}
+            {activityType === 'diaper' && renderDiaperSection()}
+            {renderTimeSection()}
+            {renderNotes()}
+
+            {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+            {initialData?.id && onDelete && (
+              <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} activeOpacity={0.85}>
+                <Text style={styles.deleteButtonText}>{t('input.deleteEntry')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      </FormSheet>
   );
 };
 
@@ -1845,78 +1750,9 @@ const styles = StyleSheet.create({
   draftFeedback: { width: '100%', marginBottom: 20, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8, borderWidth: 1, borderRadius: 20 },
   draftFeedbackText: { fontSize: 14, lineHeight: 21 },
   draftFeedbackAction: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    paddingHorizontal: 10,
-  },
-  modalContent: {
-    flexShrink: 1,
-    maxHeight: '100%',
-  },
-  sheetHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    alignSelf: 'center',
-    marginTop: 10,
-  },
-  scrollView: { flexShrink: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 22,
-  },
-  closeHeaderButtonText: {
-    fontSize: 20,
-    fontWeight: '400',
-    color: '#888888',
-  },
-  headerCenter: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 20,
-    textAlign: 'center',
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  modalSubtitle: {
-    textAlign: 'center',
-    fontSize: 14,
-    marginTop: 2,
-    color: '#A8978E',
-  },
-  saveHeaderButtonText: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  section: {
-    marginBottom: 28,
-    width: '100%',
-    alignItems: 'center',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 14,
-    width: '100%',
-    textAlign: 'left',
-  },
+
+  section: { width: '100%', gap: 8, marginBottom: 20 },
+  sectionTitle: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
   sectionTitleEmoji: {
     fontSize: 16,
     fontWeight: '600',
@@ -2036,29 +1872,7 @@ const styles = StyleSheet.create({
   },
   timeRow: { flexDirection: 'row', flexWrap: 'wrap', width: '100%', gap: 12 },
   timeRowSingle: { gap: 0 },
-  timeButton: {
-    flexGrow: 1,
-    flexBasis: '45%',
-    minWidth: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: 22,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: 'rgba(160,145,136,0.18)',
-    padding: 16,
-    alignItems: 'center',
-  },
-  timeButtonSingle: {
-    width: '100%',
-    flexBasis: '100%',
-  },
-  timeButtonDisabled: {
-    opacity: 0.72,
-  },
-  timeLabel: { fontSize: 12, color: '#888888', fontWeight: '600', marginBottom: 5 },
-  timeValue: { fontSize: 16, color: '#333333', fontWeight: 'bold' },
-  timeDisabledText: { color: '#777' },
-  timeHint: { marginTop: 6, fontSize: 12, color: '#777' },
+
   datePickerContainer: {
     marginTop: 15,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -2073,35 +1887,12 @@ const styles = StyleSheet.create({
   datePickerActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
   datePickerCancel: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, backgroundColor: '#8E4EC6' },
   datePickerCancelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  manualPickerOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  manualPickerCard: {
-    marginHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 22,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  manualPickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
+
   manualPickerActionText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  manualPickerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
+
   manualPickerSpinner: {
     width: '100%',
     height: 220,
@@ -2371,22 +2162,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '500',
   },
-  diaperHealthInput: {
-    width: '100%',
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  diaperHealthInputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  diaperHealthInputValue: {
-    marginTop: 4,
-    fontSize: 15,
-    fontWeight: '700',
-  },
+
   sideSelectorContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -2426,17 +2202,7 @@ const styles = StyleSheet.create({
   chevronUp: {
     transform: [{ rotate: '180deg' }],
   },
-  notesInput: {
-    height: 100,
-    textAlignVertical: 'top',
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 15,
-    backgroundColor: 'rgba(240, 240, 240, 0.9)',
-    width: '100%',
-    marginTop: 10,
-  },
+
   deleteButton: {
     width: '100%',
     marginTop: 30,

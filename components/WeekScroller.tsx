@@ -1,3 +1,5 @@
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -14,7 +16,7 @@ interface WeekScrollerProps {
 }
 
 const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect }) => {
-  const { localeTag } = useLocale();
+  const { locale, localeTag } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
@@ -303,23 +305,21 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
     return (
       <View style={styles.weekContainer}>
         <View style={styles.weekHeader}>
-          <TouchableOpacity
-            style={styles.weekNavButton}
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'week')}
+            isDark={isDark} color={theme.text}
             onPress={goToPreviousWeek}
-          >
-            <IconSymbol name="chevron.left" size={20} color={theme.text} />
-          </TouchableOpacity>
+          />
 
           <ThemedText style={styles.monthYearText}>
             {monthYear}
           </ThemedText>
 
-          <TouchableOpacity
-            style={styles.weekNavButton}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'week')}
+            isDark={isDark} color={theme.text}
             onPress={goToNextWeek}
-          >
-            <IconSymbol name="chevron.right" size={20} color={theme.text} />
-          </TouchableOpacity>
+          />
         </View>
 
         <FlatList
@@ -363,11 +363,6 @@ const styles = StyleSheet.create({
     paddingBottom: 5,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(125, 90, 80, 0.1)',
-  },
-  weekNavButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   monthYearText: {
     fontSize: 16,

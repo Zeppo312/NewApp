@@ -1,5 +1,5 @@
 import { offlineText } from '@/lib/offlineTranslations';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AlertButton,
@@ -7,19 +7,30 @@ import {
   Easing,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { CachedImage } from '@/components/CachedImage';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { ContentColors, getActionColors, LavenderColors } from '@/constants/Colors';
+import { FORM_LAYOUT } from '@/constants/Forms';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { ActionButton } from '@/components/ui/action-button';
+import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
+import { AvatarModalMaterial } from '@/components/ui/avatar-modal-material';
+import { GlassCloseButton } from '@/components/ui/glass-close-button';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import MotionView, { useReducedMotion } from 'react-native-reanimated';
+import { useAvatarModalMotion } from '@/hooks/useAvatarModalMotion';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { createBaby, deleteBaby, getBabyInfo, saveBabyInfo } from '@/lib/baby';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useBabySwitchTransition } from '@/contexts/BabySwitchTransitionContext';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -33,6 +44,27 @@ type BabySwitcherButtonProps = {
   showSwitchHint?: boolean;
   isOpen?: boolean;
   onOpenChange?: (isOpen: boolean) => void;
+};
+
+const LOADING_HINT_DELAY_MS = 500;
+
+const DelayedLoadingHint = (props: React.ComponentProps<typeof ThemedText>) => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setVisible(true), LOADING_HINT_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  // Reserve the text's natural height so revealing it does not resize the modal.
+  return (
+    <ThemedText
+      {...props}
+      style={[props.style, !visible && { opacity: 0 }]}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+    />
+  );
 };
 
 const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
@@ -49,33 +81,34 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     en: { error: 'Error', switchFailed: 'The active child could not be changed.', child: 'Child', createFailed: 'The new child could not be created.', pregnancyFailed: 'Pregnancy setup could not be prepared.', deleteFailed: 'The child could not be deleted.', notPossible: 'Not possible', needOne: 'You need at least one child in the app.', deleteQuestion: 'Delete child?', deleteBody: (name: string) => `Are you sure you want to delete “${name}”? This cannot be undone.`, cancel: 'Cancel', delete: 'Delete', editOpenFailed: 'The child could not be opened for editing.', edit: 'Edit', deleteChild: 'Delete child', manage: (name: string) => `Manage “${name}”`, whatDo: 'What would you like to do?', cannotDelete: (name: string) => `“${name}” cannot be deleted because at least one child must remain.`, permission: 'Permission required', photoPermission: 'Please allow access to your photos.', imageProcess: 'The image could not be processed.', imageSave: "The baby's photo could not be saved.", imageChange: "The baby's photo could not be changed.", select: 'Select child', none: 'No children found.', active: 'Active', activeChild: 'Active child', updating: 'Updating photo…', changeImage: 'Change photo', view: 'View', pregnancyMode: 'View pregnancy mode', babyMode: 'View baby mode', temporary: 'Temporarily active (up to 10 minutes)', createNew: 'Create new', creating: 'Creating…', createChild: 'Add child', preparing: 'Preparing…', createPregnancy: 'Add pregnancy' },
     es: { error: 'Error', switchFailed: 'No se pudo cambiar el niño activo.', child: 'Niño', createFailed: 'No se pudo crear el nuevo niño.', pregnancyFailed: 'No se pudo preparar el embarazo.', deleteFailed: 'No se pudo eliminar el niño.', notPossible: 'No es posible', needOne: 'Necesitas al menos un niño en la aplicación.', deleteQuestion: '¿Eliminar niño?', deleteBody: (name: string) => `¿Seguro que quieres eliminar a «${name}»? Esta acción no se puede deshacer.`, cancel: 'Cancelar', delete: 'Eliminar', editOpenFailed: 'No se pudo abrir el niño para editarlo.', edit: 'Editar', deleteChild: 'Eliminar niño', manage: (name: string) => `Gestionar «${name}»`, whatDo: '¿Qué quieres hacer?', cannotDelete: (name: string) => `No se puede eliminar a «${name}» porque debe quedar al menos un niño.`, permission: 'Permiso necesario', photoPermission: 'Permite el acceso a tus fotos.', imageProcess: 'No se pudo procesar la imagen.', imageSave: 'No se pudo guardar la foto del bebé.', imageChange: 'No se pudo cambiar la foto del bebé.', select: 'Seleccionar niño', none: 'No se encontraron niños.', active: 'Activo', activeChild: 'Niño activo', updating: 'Actualizando foto…', changeImage: 'Cambiar foto', view: 'Vista', pregnancyMode: 'Ver modo embarazo', babyMode: 'Ver modo bebé', temporary: 'Activo temporalmente (máx. 10 minutos)', createNew: 'Crear nuevo', creating: 'Creando…', createChild: 'Añadir niño', preparing: 'Preparando…', createPregnancy: 'Añadir embarazo' },
   }[locale];
-  const colorScheme = useColorScheme() ?? 'light';
+  const { effectiveScheme: colorScheme } = useAdaptiveColors();
   const listCopy = {
     de: { loading: 'Kinder werden aktualisiert …', failed: 'Kinder konnten nicht aktualisiert werden.', retry: 'Erneut versuchen' },
     en: { loading: 'Updating children …', failed: 'Could not update children.', retry: 'Try again' },
     es: { loading: 'Actualizando niños …', failed: 'No se pudieron actualizar los niños.', retry: 'Volver a intentar' },
   }[locale];
-  const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
-  const modalBgColor = isDark ? Colors.dark.cardLight : '#FFF7F3';
-  const textColor = isDark ? Colors.dark.text : '#7D5A50';
-  const subtitleColor = isDark ? Colors.dark.textTertiary : '#A8978E';
-  const rowBgColor = isDark ? Colors.dark.cardDark : '#FFFFFF';
-  const backdropColor = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)';
-  const modalBorderColor = isDark ? 'rgba(233, 216, 194, 0.22)' : 'rgba(125, 90, 80, 0.08)';
-  const rowBorderColor = isDark ? 'rgba(233, 216, 194, 0.2)' : 'rgba(125, 90, 80, 0.1)';
-  const activeRowBorderColor = isDark ? 'rgba(233, 201, 182, 0.55)' : '#E9C9B6';
-  const activeRowBgColor = isDark ? 'rgba(233, 201, 182, 0.16)' : 'rgba(233, 201, 182, 0.2)';
-  const rowFallbackBgColor = isDark ? 'rgba(248, 240, 229, 0.12)' : 'rgba(125, 90, 80, 0.08)';
-  const sectionDividerColor = isDark ? 'rgba(233, 216, 194, 0.18)' : 'rgba(125, 90, 80, 0.1)';
-  const actionIconColor = isDark ? 'rgba(248, 240, 229, 0.72)' : 'rgba(125, 90, 80, 0.55)';
-  const activeStateIconColor = isDark ? '#F2D0B9' : '#E9C9B6';
-  const primaryButtonBgColor = isDark ? '#DEC1AE' : '#E9C9B6';
-  const primaryButtonTextColor = isDark ? Colors.light.textPrimary : textColor;
-  const secondaryButtonBgColor = isDark ? 'rgba(248, 240, 229, 0.12)' : 'rgba(233, 201, 182, 0.25)';
-  const secondaryButtonBorderColor = isDark ? 'rgba(233, 216, 194, 0.35)' : 'rgba(125, 90, 80, 0.25)';
-  const secondaryButtonTextColor = isDark ? Colors.dark.text : textColor;
-  const triggerBgColor = isDark ? 'rgba(248, 240, 229, 0.16)' : 'rgba(255, 255, 255, 0.6)';
+  const forms = LavenderColors[colorScheme];
+  const actions = getActionColors(colorScheme, 'lavender');
+  const textColor = forms.text;
+  const subtitleColor = forms.secondary;
+  const rowBgColor = forms.field;
+  const rowBorderColor = forms.border;
+  const activeStateIconColor = isDark ? '#D9B8F4' : actions.primary;
+  const activeRowBorderColor = activeStateIconColor;
+  const activeRowBgColor = ContentColors[colorScheme].selected;
+  const rowFallbackBgColor = actions.secondary;
+  const sectionDividerColor = forms.border;
+  const actionIconColor = forms.secondary;
+  const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
+  const { runSwitch, isSwitching } = useBabySwitchTransition();
+  const switchCopy = {
+    de: { close: 'Schließen', babyArea: 'Babyzeit', pregnancyArea: 'Schwangerschaft' },
+    en: { close: 'Close', babyArea: 'Baby days', pregnancyArea: 'Pregnancy' },
+    es: { close: 'Cerrar', babyArea: 'Etapa del bebé', pregnancyArea: 'Embarazo' },
+  }[locale];
+  const triggerBgColor = forms.field;
   const router = useRouter();
   const { user } = useAuth();
   const {
@@ -94,30 +127,57 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const [isCreatingPregnancy, setIsCreatingPregnancy] = useState(false);
   const [deletingBabyId, setDeletingBabyId] = useState<string | null>(null);
   const [isChangingPhoto, setIsChangingPhoto] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [pendingSelectionId, setPendingSelectionId] = useState<string | null>(null);
+  const [displayedBabyMode, setDisplayedBabyMode] = useState(isBabyBorn);
+  const selectionLocked = useRef(false);
+  const selectionRevision = useRef(0);
+  const currentUser = useRef(user?.id);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    currentUser.current = user?.id;
+    selectionLocked.current = false;
+    // Auth changed: this account must not inherit a pending selection's UI lock.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsSelecting(false);
+    setPendingSelectionId(null);
+    return () => { mounted.current = false; selectionRevision.current += 1; };
+  }, [user?.id]);
+  const actionBusy = isCreatingBaby || isCreatingPregnancy || isChangingPhoto || Boolean(deletingBabyId);
   const modalIsOpen = isOpen ?? internalIsOpen;
+  const setModalOpen = (nextIsOpen: boolean) => {
+    if (isOpen === undefined) setInternalIsOpen(nextIsOpen);
+    onOpenChange?.(nextIsOpen);
+  };
+  const { presented: modalPresented, isClosing: isPopupClosing, triggerRef, panelRef, panelStyle, contentStyle, materialStyle, shapeProps, backdropStyle, dismiss: dismissPopup, onPanelLayout, onShow } = useAvatarModalMotion({ open: modalIsOpen, scope: user?.id, onClosed: () => setModalOpen(false) });
+  const busy = isSelecting || isSwitching || actionBusy || isPopupClosing;
+
+  useLayoutEffect(() => {
+    // Keep the mode button's wrapping stable while the popup dismisses.
+    // Capture the current area before an open popup is painted.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (modalIsOpen && !busy) setDisplayedBabyMode(isBabyBorn);
+  }, [modalIsOpen, busy, isBabyBorn]);
 
   useEffect(() => {
     if (modalIsOpen && user?.id) void refreshBabies();
   }, [modalIsOpen, refreshBabies, user?.id]);
 
-  const setModalOpen = (nextIsOpen: boolean) => {
-    if (isOpen === undefined) {
-      setInternalIsOpen(nextIsOpen);
-    }
-    onOpenChange?.(nextIsOpen);
+  const closeModal = () => {
+    if (!busy && !selectionLocked.current) void dismissPopup();
   };
 
-  const navigateFromModal = (
+  const navigateFromModal = async (
     href: string | { pathname: string; params?: Record<string, string> },
     options?: { replace?: boolean; viewMode?: 'baby' | 'pregnancy' | null },
   ) => {
+    if (!await dismissPopup()) return;
     if (options?.viewMode !== undefined) {
       setTemporaryViewMode(options.viewMode);
     }
 
-    setModalOpen(false);
-
-    // Defer navigation so the modal's close update can be processed first.
+    // Let the native Modal dismiss after its reverse animation before routing.
     setTimeout(() => {
       if (options?.replace) {
         router.replace(href as any);
@@ -136,32 +196,63 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
 
   const getHomeRouteForBaby = async (babyId: string): Promise<'/(tabs)/home' | '/(tabs)/pregnancy-home'> => {
     const knownBaby = babies.find((baby) => baby.id === babyId);
-    if (knownBaby?.birth_date) {
-      return '/(tabs)/home';
-    }
+    if (knownBaby?.birth_date) return '/(tabs)/home';
 
-    const { data } = await getBabyInfo(babyId);
+    const { data, error } = await getBabyInfo(babyId);
+    if (error) {
+      // Keep a saved pregnancy usable offline. When online, a newly recorded
+      // birth still takes precedence over the list shown when the popup opened.
+      if (knownBaby?.birth_date === null) return '/(tabs)/pregnancy-home';
+      throw error;
+    }
     return data?.birth_date ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
   };
 
   const handleSelectBaby = async (babyId: string) => {
+    if (busy || selectionLocked.current) return;
+    selectionLocked.current = true;
+    setIsSelecting(true);
+    setPendingSelectionId(babyId);
+    const revision = selectionRevision.current;
+    const userId = user?.id;
+    const isCurrent = () => mounted.current && currentUser.current === userId && selectionRevision.current === revision;
     try {
-      await setActiveBabyId(babyId);
-      if (!navigateOnSelect) { setModalOpen(false); return; }
-      const targetRoute = await getHomeRouteForBaby(babyId);
-      navigateFromModal(targetRoute, {
-        replace: true,
-        viewMode: targetRoute === '/(tabs)/home' ? 'baby' : 'pregnancy',
-      });
+      const targetRoute = navigateOnSelect ? await getHomeRouteForBaby(babyId) : null;
+      if (!isCurrent()) return;
+      // Keep the source avatar visible until the panel has returned to it.
+      if (!await dismissPopup() || !isCurrent()) return;
+      const change = async () => {
+        if (!isCurrent()) return;
+        if (babyId !== activeBabyId) await setActiveBabyId(babyId);
+        if (!isCurrent()) return;
+        if (!targetRoute) return;
+        await navigateFromModal(targetRoute, {
+          replace: true,
+          viewMode: targetRoute === '/(tabs)/home' ? 'baby' : 'pregnancy',
+        });
+      };
+      // Embedded editors keep their current form, so only area changes use the veil.
+      const knownBaby = babies.find((baby) => baby.id === babyId);
+      const changesArea = babyId !== activeBabyId || (
+        knownBaby?.birth_date !== undefined && Boolean(knownBaby.birth_date) !== isBabyBorn
+      );
+      if (navigateOnSelect && changesArea) await runSwitch(change);
+      else await change();
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('Error switching active baby:', error);
-      setModalOpen(false);
       Alert.alert(c.error, c.switchFailed);
+    } finally {
+      if (isCurrent()) {
+        selectionLocked.current = false;
+        setIsSelecting(false);
+        setPendingSelectionId(null);
+      }
     }
   };
 
   const handleCreateBaby = async () => {
-    if (isCreatingBaby) return;
+    if (isCreatingBaby || selectionLocked.current || isSwitching) return;
     setIsCreatingBaby(true);
 
     const fallbackName = `${c.child} ${babies.length + 1}`;
@@ -179,7 +270,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       await refreshBabies();
       if (created?.id) {
         await setActiveBabyId(created.id);
-        navigateFromModal({
+        await navigateFromModal({
           pathname: '/(tabs)/baby',
           params: {
             babyId: created.id,
@@ -192,18 +283,18 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
         return;
       }
 
-      setModalOpen(false);
+      await dismissPopup();
     } finally {
       setIsCreatingBaby(false);
     }
   };
 
   const handleOpenPregnancySetup = async () => {
-    if (isCreatingPregnancy) return;
+    if (isCreatingPregnancy || selectionLocked.current || isSwitching) return;
     setIsCreatingPregnancy(true);
 
     try {
-      navigateFromModal('/pregnancy-setup');
+      await navigateFromModal('/pregnancy-setup');
     } catch (error) {
       console.error('Error preparing pregnancy setup:', error);
       Alert.alert(c.error, c.pregnancyFailed);
@@ -212,12 +303,22 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     }
   };
 
-  const handleSwitchViewMode = () => {
+  const handleSwitchViewMode = async () => {
+    if (busy || selectionLocked.current) return;
+    selectionLocked.current = true;
+    setIsSelecting(true);
+    const revision = selectionRevision.current;
     const targetMode = isBabyBorn ? 'pregnancy' : 'baby';
     const targetRoute = targetMode === 'baby' ? '/(tabs)/home' : '/(tabs)/pregnancy-home';
-    setTemporaryViewMode(targetMode);
-    setModalOpen(false);
-    router.replace(targetRoute as any);
+    try {
+      if (!await dismissPopup()) return;
+      await runSwitch(() => navigateFromModal(targetRoute, { replace: true, viewMode: targetMode }));
+    } finally {
+      if (mounted.current && selectionRevision.current === revision) {
+        selectionLocked.current = false;
+        setIsSelecting(false);
+      }
+    }
   };
 
   const runDeleteBaby = async (babyId: string, fallbackBabyId: string | null) => {
@@ -273,7 +374,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const handleEditBaby = async (babyId: string) => {
     try {
       await setActiveBabyId(babyId);
-      navigateFromModal({
+      await navigateFromModal({
         pathname: '/(tabs)/baby',
         params: {
           babyId,
@@ -289,7 +390,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   };
 
   const handleBabyActions = (babyId: string, label: string) => {
-    if (deletingBabyId) return;
+    if (deletingBabyId || selectionLocked.current || isSwitching) return;
 
     const canDelete = babies.length > 1;
     const actions: AlertButton[] = [
@@ -320,7 +421,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   };
 
   const handleChangePhoto = async () => {
-    if (!activeBabyId || isChangingPhoto) return;
+    if (!activeBabyId || isChangingPhoto || selectionLocked.current || isSwitching) return;
 
     setIsChangingPhoto(true);
     try {
@@ -406,7 +507,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
   const [hintScale] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
-    if (!showSwitchHint || !showTrigger) return;
+    if (!showSwitchHint || !showTrigger || reducedMotion || modalPresented) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(2600),
@@ -419,9 +520,10 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
       loop.stop();
       hintScale.setValue(1);
     };
-  }, [showSwitchHint, showTrigger, hintScale]);
+  }, [showSwitchHint, showTrigger, hintScale, reducedMotion, modalPresented]);
 
   const animatePress = (pressed: boolean) => {
+    if (reducedMotion) return;
     Animated.spring(pressScale, {
       toValue: pressed ? 0.92 : 1,
       useNativeDriver: true,
@@ -438,13 +540,16 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
     <>
       {showTrigger && (
         <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={c.select}
           activeOpacity={0.9}
-          onPress={() => setModalOpen(true)}
+          onPress={() => { if (!busy) setModalOpen(true); }}
           onPressIn={() => animatePress(true)}
           onPressOut={() => animatePress(false)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          disabled={isLoading && babies.length === 0}
+          disabled={busy || (isLoading && babies.length === 0)}
         >
+         <View ref={triggerRef} collapsable={false} testID="baby-switcher-trigger" style={{ width: size, height: size }}>
          <Animated.View style={[styles.avatarButton, { width: size, height: size, transform: [{ scale: pressScale }] }]}>
           <View
             style={[
@@ -471,7 +576,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                   width: size,
                   height: size,
                   borderRadius: size / 2,
-                  borderColor: theme.text,
+                  borderColor: forms.secondary,
                 },
               ]}
             >
@@ -479,7 +584,7 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
                 style={[
                   styles.avatarInitial,
                   {
-                    color: theme.text,
+                    color: forms.text,
                     fontSize: Math.round(size * 0.34),
                     lineHeight: Math.round(size * 0.4),
                   },
@@ -549,170 +654,232 @@ const BabySwitcherButton: React.FC<BabySwitcherButtonProps> = ({
             </Animated.View>
           )}
          </Animated.View>
+         </View>
         </TouchableOpacity>
       )}
 
-      <Modal
-        visible={modalIsOpen}
-        transparent
-        statusBarTranslucent
-        navigationBarTranslucent
-        animationType="fade"
-        onRequestClose={() => setModalOpen(false)}
-      >
-        <Pressable style={[styles.modalBackdrop, { backgroundColor: backdropColor }]} onPress={() => setModalOpen(false)}>
-          <Pressable
-            style={[
-              styles.modalCard,
-              { backgroundColor: modalBgColor, borderColor: modalBorderColor, shadowOpacity: isDark ? 0.28 : 0.1 },
-            ]}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <View style={styles.modalHeader}>
-              <ThemedText style={[styles.modalTitle, { color: textColor }]}>{c.select}</ThemedText>
-              <TouchableOpacity onPress={() => setModalOpen(false)}>
-                <IconSymbol name="xmark" size={18} color={textColor} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.listContainer}>
-              {savedListAt && <ThemedText style={[styles.emptyStateHint, {color:subtitleColor}]}>{offlineText(locale, 'asOf', {time:new Date(savedListAt).toLocaleString(locale)})}</ThemedText>}
-              {isLoading && (
-                <ThemedText accessibilityRole="text" style={[styles.emptyStateHint, { color: subtitleColor }]}>
-                  {listCopy.loading}
-                </ThemedText>
-              )}
-              {!isLoading && loadError && (
-                <View style={styles.emptyState}>
-                  <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
-                    {listCopy.failed}
-                  </ThemedText>
-                  <TouchableOpacity accessibilityRole="button" onPress={() => { void refreshBabies(); }}>
-                    <ThemedText style={[styles.retryText, { color: textColor }]}>{listCopy.retry}</ThemedText>
-                  </TouchableOpacity>
-                </View>
-              )}
-              {!isLoading && !loadError && babies.length === 0 && (
-                <View style={styles.emptyState}>
-                  <ThemedText style={[styles.emptyStateTitle, { color: textColor }]}>
-                    {c.none}
-                  </ThemedText>
-                </View>
-              )}
-              {babies.map((baby, index) => {
-                const label = baby.name?.trim() || `${c.child} ${index + 1}`;
-                const isActive = baby.id === activeBabyId;
-                const isDeletingThisBaby = baby.id != null && deletingBabyId === baby.id;
-                return (
-                  <TouchableOpacity
-                    key={baby.id ?? `${label}-${index}`}
-                    style={[
-                      styles.babyRow,
-                      { backgroundColor: rowBgColor, borderColor: rowBorderColor },
-                      isActive && { borderColor: activeRowBorderColor, backgroundColor: activeRowBgColor },
-                    ]}
-                    onPress={() => baby.id && handleSelectBaby(baby.id)}
-                    disabled={Boolean(deletingBabyId)}
-                  >
-                    {baby.photo_url ? (
-                      <CachedImage
-                        uri={baby.photo_url}
-                        style={styles.babyRowAvatar}
-                        showLoader={false}
+      {modalPresented && (
+        <Modal
+          visible={modalPresented}
+          transparent
+          statusBarTranslucent
+          navigationBarTranslucent
+          animationType="none"
+          onShow={onShow}
+          onRequestClose={closeModal}
+        >
+          <View style={[styles.modalViewport, {
+            paddingTop: insets.top + FORM_LAYOUT.edge,
+            paddingBottom: Math.max(insets.bottom, FORM_LAYOUT.edge),
+            paddingLeft: Math.max(insets.left, FORM_LAYOUT.edge),
+            paddingRight: Math.max(insets.right, FORM_LAYOUT.edge),
+          }]}>
+            <MotionView.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, backdropStyle]}>
+              <Pressable
+                accessible={false}
+                focusable={false}
+                disabled={busy}
+                style={[StyleSheet.absoluteFill, { backgroundColor: forms.backdrop }]}
+                onPress={closeModal}
+              />
+            </MotionView.View>
+            <View
+              ref={panelRef}
+              collapsable={false}
+              onLayout={onPanelLayout}
+              style={styles.modalCard}
+              testID="baby-switcher-layout"
+            >
+              <MotionView.View
+                pointerEvents={isPopupClosing ? 'none' : 'auto'}
+                style={[styles.modalSurface, panelStyle]}
+                testID="baby-switcher-motion"
+              >
+                <MotionView.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.modalShadow, materialStyle]} />
+                <GlassSheetSurface isDark={isDark} tone="lavender" style={styles.modalSurface} testID="baby-switcher-panel"
+                  material={<AvatarModalMaterial isDark={isDark} shapeProps={shapeProps} materialStyle={materialStyle} />}
+                >
+                  <MotionView.View style={[styles.modalSurface, contentStyle]} testID="baby-switcher-content">
+                    <View style={styles.modalHeader}>
+                      <GlassCloseButton
+                        accessibilityLabel={switchCopy.close}
+                        disabled={busy}
+                        onPress={closeModal}
+                        isDark={isDark}
                       />
-                    ) : (
-                      <View style={[styles.babyRowAvatar, styles.babyRowFallback, { backgroundColor: rowFallbackBgColor }]}>
-                        <ThemedText style={[styles.babyRowInitial, { color: textColor }]}>
-                          {label.charAt(0).toUpperCase()}
-                        </ThemedText>
-                      </View>
-                    )}
-                    <View style={styles.babyRowText}>
-                      <ThemedText style={[styles.babyRowTitle, { color: textColor }]}>{label}</ThemedText>
-                      {isActive && <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>{c.active}</ThemedText>}
+                      <ThemedText accessibilityRole="header" style={[styles.modalTitle, { color: textColor }]}>{c.select}</ThemedText>
+                      <View style={styles.headerSpacer} />
                     </View>
-                    {isActive && (
-                      <IconSymbol name="checkmark.circle.fill" size={18} color={activeStateIconColor} />
-                    )}
-                    {baby.id && (
-                      <TouchableOpacity
-                        style={[
-                          styles.babyActionsButton,
-                          (isDeletingThisBaby || Boolean(deletingBabyId)) && styles.deleteBabyButtonDisabled,
-                        ]}
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          handleBabyActions(baby.id as string, label);
-                        }}
-                        disabled={isDeletingThisBaby || Boolean(deletingBabyId)}
-                      >
-                        <IconSymbol
-                          name="ellipsis.circle.fill"
-                          size={18}
-                          color={actionIconColor}
+                    <ScrollView
+                      testID="baby-switcher-scroll"
+                      style={styles.modalScroll}
+                      contentContainerStyle={styles.modalContent}
+                      showsVerticalScrollIndicator={false}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      <View style={styles.listContainer}>
+                        {!isLoading && savedListAt && <ThemedText style={[styles.emptyStateHint, {color:subtitleColor}]}>{offlineText(locale, 'asOf', {time:new Date(savedListAt).toLocaleString(locale)})}</ThemedText>}
+                        {modalIsOpen && isLoading && babies.length === 0 && user?.id && (
+                          <DelayedLoadingHint key={user.id} accessibilityRole="text" style={[styles.emptyStateHint, { color: subtitleColor }]}>
+                            {listCopy.loading}
+                          </DelayedLoadingHint>
+                        )}
+                        {!isLoading && loadError && (
+                          <View style={styles.emptyState}>
+                            <ThemedText style={[styles.emptyStateHint, { color: subtitleColor }]}>
+                              {listCopy.failed}
+                            </ThemedText>
+                            <TouchableOpacity accessibilityRole="button" onPress={() => { void refreshBabies(); }}>
+                              <ThemedText style={[styles.retryText, { color: textColor }]}>{listCopy.retry}</ThemedText>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                        {!isLoading && !loadError && babies.length === 0 && (
+                          <View style={styles.emptyState}>
+                            <ThemedText style={[styles.emptyStateTitle, { color: textColor }]}>
+                              {c.none}
+                            </ThemedText>
+                          </View>
+                        )}
+                        {babies.map((baby, index) => {
+                          const label = baby.name?.trim() || `${c.child} ${index + 1}`;
+                          const isActive = baby.id === (pendingSelectionId ?? activeBabyId);
+                          const isDeletingThisBaby = baby.id != null && deletingBabyId === baby.id;
+                          return (
+                            <View
+                              key={baby.id ?? `${label}-${index}`}
+                              testID={`baby-switcher-row-${baby.id ?? index}`}
+                              style={[
+                                styles.babyRow,
+                                { backgroundColor: rowBgColor, borderColor: rowBorderColor },
+                                isActive && { borderColor: activeRowBorderColor, backgroundColor: activeRowBgColor },
+                              ]}
+                            >
+                              <TouchableOpacity
+                                style={styles.babySelectButton}
+                                accessibilityRole="radio"
+                                accessibilityLabel={label}
+                                accessibilityHint={baby.birth_date ? switchCopy.babyArea : switchCopy.pregnancyArea}
+                                accessibilityState={{ checked: isActive, disabled: busy, busy: isSelecting }}
+                                onPress={() => { if (baby.id) void handleSelectBaby(baby.id); }}
+                                disabled={busy}
+                              >
+                                {baby.photo_url ? (
+                                  <CachedImage
+                                    uri={baby.photo_url}
+                                    style={styles.babyRowAvatar}
+                                    showLoader={false}
+                                  />
+                                ) : (
+                                  <View style={[styles.babyRowAvatar, styles.babyRowFallback, { backgroundColor: rowFallbackBgColor }]}>
+                                    <ThemedText style={[styles.babyRowInitial, { color: textColor }]}>
+                                      {label.charAt(0).toUpperCase()}
+                                    </ThemedText>
+                                  </View>
+                                )}
+                                <View style={styles.babyRowText}>
+                                  <ThemedText style={[styles.babyRowTitle, { color: textColor }]}>{label}</ThemedText>
+                                  <ThemedText style={[styles.babyRowSubtitle, { color: subtitleColor }]}>
+                                    {baby.birth_date ? switchCopy.babyArea : switchCopy.pregnancyArea}
+                                  </ThemedText>
+                                </View>
+                                <View style={styles.selectionMark}>
+                                  {isActive && <IconSymbol name="checkmark.circle.fill" size={18} color={activeStateIconColor} />}
+                                </View>
+                              </TouchableOpacity>
+                              {baby.id && (
+                                <TouchableOpacity
+                                  accessibilityRole="button"
+                                  accessibilityLabel={c.manage(label)}
+                                  style={[
+                                    styles.babyActionsButton,
+                                    (isDeletingThisBaby || actionBusy) && styles.deleteBabyButtonDisabled,
+                                  ]}
+                                  onPress={(event) => {
+                                    event.stopPropagation();
+                                    handleBabyActions(baby.id as string, label);
+                                  }}
+                                  disabled={busy}
+                                >
+                                  <IconSymbol
+                                    name="ellipsis.circle.fill"
+                                    size={18}
+                                    color={actionIconColor}
+                                  />
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          );
+                        })}
+                      </View>
+
+                      <View style={[styles.section, { borderTopColor: sectionDividerColor }]}>
+                        <ThemedText style={[styles.sectionTitle, { color: textColor }]}>{c.activeChild}</ThemedText>
+                        <ActionButton
+                          tone="lavender"
+                          label={c.changeImage}
+                          busy={isChangingPhoto}
+                          busyLabel={c.updating}
+                          variant="secondary"
+                          isDark={isDark}
+                          interactionDisabled={isSelecting || isSwitching}
+                          onPress={handleChangePhoto}
+                          disabled={!activeBabyId || (actionBusy && !isChangingPhoto)}
                         />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                      </View>
 
-            <View style={[styles.photoSection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.photoSectionTitle, { color: textColor }]}>{c.activeChild}</ThemedText>
-              <TouchableOpacity
-                style={[styles.photoButton, { backgroundColor: primaryButtonBgColor }, isChangingPhoto && styles.createButtonDisabled]}
-                onPress={handleChangePhoto}
-                disabled={!activeBabyId || isChangingPhoto}
-              >
-                <ThemedText style={[styles.photoButtonText, { color: primaryButtonTextColor }]}>
-                  {isChangingPhoto ? c.updating : c.changeImage}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
+                      <View style={[styles.section, { borderTopColor: sectionDividerColor }]}>
+                        <ThemedText style={[styles.sectionTitle, { color: textColor }]}>{c.view}</ThemedText>
+                        <ActionButton
+                          tone="lavender"
+                          label={displayedBabyMode ? c.pregnancyMode : c.babyMode}
+                          variant="secondary"
+                          isDark={isDark}
+                          interactionDisabled={isSelecting || isSwitching}
+                          disabled={actionBusy}
+                          onPress={() => { void handleSwitchViewMode(); }}
+                        />
+                          <ThemedText
+                            accessibilityElementsHidden={!temporaryViewMode}
+                            importantForAccessibility={temporaryViewMode ? 'auto' : 'no-hide-descendants'}
+                            style={[styles.viewModeHint, { color: subtitleColor, opacity: temporaryViewMode ? 1 : 0 }]}
+                          >
+                            {c.temporary}
+                          </ThemedText>
+                      </View>
 
-            <View style={[styles.viewModeSection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.viewModeTitle, { color: textColor }]}>{c.view}</ThemedText>
-              <TouchableOpacity style={[styles.viewModeButton, { backgroundColor: primaryButtonBgColor }]} onPress={handleSwitchViewMode}>
-                <ThemedText style={[styles.viewModeButtonText, { color: primaryButtonTextColor }]}>
-                  {isBabyBorn ? c.pregnancyMode : c.babyMode}
-                </ThemedText>
-              </TouchableOpacity>
-              {temporaryViewMode && (
-                <ThemedText style={[styles.viewModeHint, { color: subtitleColor }]}>
-                  {c.temporary}
-                </ThemedText>
-              )}
+                      <View style={[styles.section, { borderTopColor: sectionDividerColor }]}>
+                        <ThemedText style={[styles.sectionTitle, { color: textColor }]}>{c.createNew}</ThemedText>
+                        <ActionButton
+                          tone="lavender"
+                          label={c.createChild}
+                          busy={isCreatingBaby}
+                          busyLabel={c.creating}
+                          isDark={isDark}
+                          interactionDisabled={isSelecting || isSwitching}
+                          onPress={handleCreateBaby}
+                          disabled={actionBusy && !isCreatingBaby}
+                        />
+                        <ActionButton
+                          tone="lavender"
+                          label={c.createPregnancy}
+                          busy={isCreatingPregnancy}
+                          busyLabel={c.preparing}
+                          variant="secondary"
+                          isDark={isDark}
+                          interactionDisabled={isSelecting || isSwitching}
+                          onPress={handleOpenPregnancySetup}
+                          disabled={actionBusy && !isCreatingPregnancy}
+                        />
+                      </View>
+                    </ScrollView>
+                  </MotionView.View>
+                </GlassSheetSurface>
+              </MotionView.View>
             </View>
-
-            <View style={[styles.newBabySection, { borderTopColor: sectionDividerColor }]}>
-              <ThemedText style={[styles.newBabyTitle, { color: textColor }]}>{c.createNew}</ThemedText>
-              <TouchableOpacity
-                style={[styles.createButton, { backgroundColor: primaryButtonBgColor }, isCreatingBaby && styles.createButtonDisabled]}
-                onPress={handleCreateBaby}
-                disabled={isCreatingBaby}
-              >
-                <ThemedText style={[styles.createButtonText, { color: primaryButtonTextColor }]}>
-                  {isCreatingBaby ? c.creating : c.createChild}
-                </ThemedText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.secondaryActionButton,
-                  { borderColor: secondaryButtonBorderColor, backgroundColor: secondaryButtonBgColor },
-                  (isCreatingPregnancy || isCreatingBaby) && styles.createButtonDisabled,
-                ]}
-                onPress={handleOpenPregnancySetup}
-                disabled={isCreatingPregnancy || isCreatingBaby}
-              >
-                <ThemedText style={[styles.secondaryActionButtonText, { color: secondaryButtonTextColor }]}>
-                  {isCreatingPregnancy ? c.preparing : c.createPregnancy}
-                </ThemedText>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          </View>
+        </Modal>
+      )}
     </>
   );
 };
@@ -789,188 +956,72 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  modalBackdrop: {
+  modalViewport: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
-    padding: 24,
   },
   modalCard: {
-    backgroundColor: '#FFF7F3',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 440,
+    maxHeight: '100%',
+    flexShrink: 1,
   },
+  modalSurface: { maxHeight: '100%', flexShrink: 1 },
+  modalShadow: { borderRadius: 32, boxShadow: '0 8px 32px rgba(35,25,20,0.14)' },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
-  listContainer: {
     gap: 8,
-    marginBottom: 16,
+    padding: FORM_LAYOUT.contentPadding,
+    paddingBottom: 16,
   },
-  emptyState: {
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+  headerSpacer: { width: FORM_LAYOUT.closeSize },
+  modalTitle: { ...TYPOGRAPHY.dialogTitle, flex: 1, textAlign: 'center' },
+  modalScroll: { flexShrink: 1 },
+  modalContent: {
+    paddingHorizontal: FORM_LAYOUT.contentPadding,
+    paddingBottom: FORM_LAYOUT.contentPadding,
+    gap: FORM_LAYOUT.sectionGap,
   },
-  emptyStateTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-  },
-  emptyStateHint: {
-    fontSize: 12,
-    // color wird dynamisch gesetzt
-    marginTop: 4,
-  },
-  retryText: {
-    fontSize: 13,
-    fontWeight: '600',
-    paddingVertical: 8,
-  },
+  listContainer: { gap: 10 },
+  emptyState: { paddingVertical: 8 },
+  emptyStateTitle: TYPOGRAPHY.label,
+  emptyStateHint: { ...TYPOGRAPHY.caption, marginTop: 4 },
+  retryText: { ...TYPOGRAPHY.buttonSmall, paddingVertical: 8 },
   babyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    minHeight: 76,
+    padding: 12,
+    borderRadius: FORM_LAYOUT.fieldRadius,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: 'rgba(125, 90, 80, 0.1)',
   },
-  babyRowAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    marginRight: 10,
-  },
-  babyRowFallback: {
+  babyRowAvatar: { width: 44, height: 44, borderRadius: 22, marginRight: 12 },
+  babySelectButton: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center' },
+  selectionMark: { width: 20, alignItems: 'center', marginLeft: 4 },
+  babyRowFallback: { alignItems: 'center', justifyContent: 'center' },
+  babyRowInitial: TYPOGRAPHY.headline,
+  babyRowText: { flex: 1, minWidth: 0 },
+  babyRowTitle: TYPOGRAPHY.bodyStrong,
+  babyRowSubtitle: { ...TYPOGRAPHY.caption, marginTop: 2 },
+  babyActionsButton: {
+    marginLeft: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(125, 90, 80, 0.08)',
   },
-  babyRowInitial: {
-    fontSize: 13,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-  },
-  babyRowText: {
-    flex: 1,
-  },
-  babyRowTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-  },
-  babyRowSubtitle: {
-    fontSize: 12,
-    // color wird dynamisch gesetzt
-    marginTop: 2,
-  },
-  babyActionsButton: {
-    marginLeft: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  deleteBabyButtonDisabled: {
-    opacity: 0.55,
-  },
-  photoSection: {
+  deleteBabyButtonDisabled: { opacity: 0.55 },
+  section: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(125, 90, 80, 0.1)',
-    paddingTop: 12,
-    marginBottom: 12,
+    paddingTop: FORM_LAYOUT.sectionGap,
+    gap: FORM_LAYOUT.fieldGap,
   },
-  photoSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  photoButton: {
-    backgroundColor: '#E9C9B6',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  photoButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  viewModeSection: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(125, 90, 80, 0.1)',
-    paddingTop: 12,
-    marginBottom: 12,
-  },
-  viewModeTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  viewModeButton: {
-    backgroundColor: '#E9C9B6',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  viewModeButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  viewModeHint: {
-    fontSize: 12,
-    marginTop: 6,
-  },
-  newBabySection: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(125, 90, 80, 0.1)',
-    paddingTop: 12,
-  },
-  newBabyTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-    marginBottom: 8,
-  },
-  createButton: {
-    backgroundColor: '#E9C9B6',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  createButtonDisabled: {
-    opacity: 0.7,
-  },
-  secondaryActionButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(125, 90, 80, 0.25)',
-    backgroundColor: 'rgba(233, 201, 182, 0.25)',
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  secondaryActionButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  createButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
+  sectionTitle: TYPOGRAPHY.label,
+  viewModeHint: TYPOGRAPHY.caption,
 });
 
 export default BabySwitcherButton;

@@ -1,3 +1,6 @@
+import { useLocale } from '@/contexts/LocaleContext';
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -13,6 +16,7 @@ interface ZenMonthViewProps {
 }
 
 const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect }) => {
+  const { locale } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const isDark = colorScheme === 'dark';
@@ -245,23 +249,21 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
       {isExpanded && (
         <ScrollView style={styles.content}>
           <View style={styles.monthNavigation}>
-            <TouchableOpacity
-              style={styles.navButton}
+            <PeriodNavigationButton direction="previous"
+              accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'month')}
+              isDark={isDark} color={theme.text}
               onPress={goToPreviousMonth}
-            >
-              <IconSymbol name="chevron.left" size={20} color={theme.text} />
-            </TouchableOpacity>
+            />
 
             <ThemedText style={styles.monthYearTextLarge}>
               {formatMonthYear(selectedDate)}
             </ThemedText>
 
-            <TouchableOpacity
-              style={styles.navButton}
+            <PeriodNavigationButton direction="next"
+              accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'month')}
+              isDark={isDark} color={theme.text}
               onPress={goToNextMonth}
-            >
-              <IconSymbol name="chevron.right" size={20} color={theme.text} />
-            </TouchableOpacity>
+            />
           </View>
 
           <View style={styles.calendar}>
@@ -393,11 +395,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 15,
-  },
-  navButton: {
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   monthYearTextLarge: {
     fontSize: 18,

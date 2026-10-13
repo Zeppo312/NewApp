@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
-import { Colors } from '@/constants/Colors';
+import { Colors, ContentColors } from '@/constants/Colors';
+import { CONTENT_LAYOUT, TYPOGRAPHY } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -49,78 +50,6 @@ let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
 let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
 const t = (key: PregnancyHomeTranslationKey, params?: Record<string, string | number>) =>
   translatePregnancyHomeText(ACTIVE_PREGNANCY_HOME_LOCALE, key, params);
-
-function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
-  const anim = React.useState(() => new Animated.Value(0))[0];
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 4200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(anim, {
-          toValue: 0,
-          duration: 4200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [anim]);
-
-  const translateX = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-120, 120],
-  });
-
-  const translateY = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [6, -6],
-  });
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFill,
-        { borderRadius: radius, overflow: 'hidden' },
-      ]}
-    >
-      <Animated.View
-        style={{
-          position: 'absolute',
-          top: 2,
-          left: -140,
-          width: 220,
-          height: 8,
-          opacity: 0.65,
-          transform: [{ translateX }, { translateY }, { rotate: '-10deg' }],
-        }}
-      >
-        <LinearGradient
-          colors={[
-            'rgba(255,255,255,0)',
-            'rgba(255,255,255,0.6)',
-            'rgba(255,255,255,0)',
-          ]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={{
-            width: '100%',
-            height: '100%',
-          }}
-        />
-      </Animated.View>
-    </View>
-  );
-}
 
 function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
   const [layout, setLayout] = useState({ width: 0, height: 0 });
@@ -471,7 +400,7 @@ export default function PregnancyHomeScreen() {
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
-  const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const glassBlurBg = ContentColors[isDark ? 'dark' : 'light'].surface;
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuth();
@@ -486,6 +415,11 @@ export default function PregnancyHomeScreen() {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const age = usePregnancyAge(dueDate);
   const [userName, setUserName] = useState('');
+  const metadataFirstName =
+    typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name : '';
+  const metadataFullName =
+    typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+  const displayName = userName || metadataFirstName || metadataFullName || t('greeting.fallbackName');
   const [currentWeek, setCurrentWeek] = useState<number | null>(null);
   const [currentDay, setCurrentDay] = useState<number | null>(null);
   useEffect(() => {
@@ -1468,10 +1402,10 @@ export default function PregnancyHomeScreen() {
 
                 <View style={styles.greetingHeader}>
                   <View style={styles.greetingTextBlock}>
-                    <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, isCompactAndroid && styles.greetingCompact, { color: textPrimary }]}>
-                      {t('greeting.hello', { name: userName || t('greeting.fallbackName') })}
+                    <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
+                      {t('greeting.hello', { name: displayName })}
                     </ThemedText>
-                    <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, isCompactAndroid && styles.dateTextCompact, { color: textPrimary }]}>
+                    <ThemedText adaptive={false} style={[styles.liquidGlassSecondaryText, styles.dateText, { color: textPrimary }]}>
                       {formatDate()}
                     </ThemedText>
                   </View>
@@ -1517,7 +1451,6 @@ export default function PregnancyHomeScreen() {
                 ) : null}
               </ThemedView>
             </HomeGlassSurface>
-            <GlassBorderGlint radius={30} />
           </View>
 
           {renderOverviewSection()}
@@ -1553,26 +1486,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    padding: CONTENT_LAYOUT.edge,
     paddingBottom: 40,
   },
   contentContainerCompact: {
-    paddingHorizontal: 16,
+    paddingHorizontal: CONTENT_LAYOUT.edge,
   },
   greetingContainerCompact: {
-    paddingHorizontal: 16,
-    paddingTop: 22,
-    paddingBottom: 18,
-  },
-  greetingCompact: {
-    fontSize: 26,
-    lineHeight: 32,
-    includeFontPadding: false,
-  },
-  dateTextCompact: {
-    fontSize: 16,
-    lineHeight: 22,
-    includeFontPadding: false,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
   },
   summaryContainerCompact: {
     padding: 16,
@@ -1752,19 +1675,24 @@ const styles = StyleSheet.create({
     ...androidHomeShadow,
   },
   greetingCardWrapper: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+    marginBottom: CONTENT_LAYOUT.sectionGap,
     overflow: 'hidden',
   },
   greetingGlassBackground: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
   },
   greetingGlassContainer: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+    boxShadow: CONTENT_LAYOUT.cardShadow,
   },
   greetingContainer: {
-    paddingTop: 26,
-    paddingHorizontal: 24,
-    paddingBottom: 22,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
     backgroundColor: 'transparent',
     position: 'relative',
   },
@@ -1780,19 +1708,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   greeting: {
-    fontSize: 30,
-    fontWeight: '700',
+    ...TYPOGRAPHY.display,
     marginBottom: 4,
-    letterSpacing: -0.5,
-    lineHeight: 36,
   },
   dateText: {
-    fontSize: 18,
+    ...TYPOGRAPHY.bodySmall,
     opacity: 0.8,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
   profileBadge: {
+    width: 68,
+    height: 68,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -1800,7 +1725,7 @@ const styles = StyleSheet.create({
   },
   greetingGloss: {
     ...StyleSheet.absoluteFill,
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
   },
 
   // Tip Container

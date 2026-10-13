@@ -15,7 +15,7 @@ import { LocalizedLegalDocument } from '@/components/LocalizedLegalDocument';
 const BulletList = ({ items }: { items: string[] }) => (
   <View style={styles.list}>
     {items.map((item, index) => (
-      <ThemedText key={`bullet-${index}`} style={styles.listItem}>
+      <ThemedText key={`bullet-${index}`} type="body" style={styles.listItem}>
         {`\u2022 ${item}`}
       </ThemedText>
     ))}
@@ -24,7 +24,7 @@ const BulletList = ({ items }: { items: string[] }) => (
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={styles.section}>
-    <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+    <ThemedText type="sectionTitle" style={styles.sectionTitle}>{title}</ThemedText>
     {children}
   </View>
 );
@@ -57,32 +57,32 @@ export default function ImpressumScreen() {
               ]}
             >
               <Section title="Angaben zum Anbieter">
-                <ThemedText style={styles.paragraph}>Name/Firma: Laura-Michelle Zeppenfeld</ThemedText>
-                <ThemedText style={styles.paragraph}>Straße, Hausnummer: Tilburger Str. 31</ThemedText>
-                <ThemedText style={styles.paragraph}>PLZ, Ort: 28259 Bremen</ThemedText>
-                <ThemedText style={styles.paragraph}>Land: Deutschland</ThemedText>
-                <ThemedText style={styles.paragraph}>Status: Kleinunternehmer</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Name/Firma: Laura-Michelle Zeppenfeld</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Straße, Hausnummer: Tilburger Str. 31</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>PLZ, Ort: 28259 Bremen</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Land: Deutschland</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Status: Kleinunternehmer</ThemedText>
               </Section>
 
               <Section title="Kontakt">
-                <ThemedText style={styles.paragraph}>E-Mail: support@lottibaby.de</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>E-Mail: support@lottibaby.de</ThemedText>
               </Section>
 
               <Section title="Vertretungsberechtigte Person(en)">
-                <ThemedText style={styles.paragraph}>Laura-Michelle Zeppenfeld</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Laura-Michelle Zeppenfeld</ThemedText>
               </Section>
 
               <Section title="Registereintrag (falls vorhanden)">
-                <ThemedText style={styles.paragraph}>Registergericht: Wird nachgereicht</ThemedText>
-                <ThemedText style={styles.paragraph}>Registernummer: Wird nachgereicht</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Registergericht: Wird nachgereicht</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Registernummer: Wird nachgereicht</ThemedText>
               </Section>
 
               <Section title="Umsatzsteuer-Identifikationsnummer (falls vorhanden)">
-                <ThemedText style={styles.paragraph}>Wird nachgereicht</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Wird nachgereicht</ThemedText>
               </Section>
 
               <Section title="Verantwortlich für den Inhalt">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Laura-Michelle Zeppenfeld, Tilburger Str. 31, 28259 Bremen, Deutschland
                 </ThemedText>
               </Section>
@@ -129,21 +129,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: 8,
   },
   paragraph: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
   },
   list: {
     paddingLeft: 4,
   },
   listItem: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
   },
 });

@@ -1,19 +1,8 @@
-import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  TextInputProps,
-} from "react-native";
-import { GlassSheetSurface } from "@/components/ui/glass-sheet-surface";
-import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { FormSheet, FormTextInput } from '@/components/ui/form-sheet';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import React, { useState } from 'react';
+import { TextInputProps } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -21,34 +10,23 @@ type Props = {
   value: string;
   placeholder?: string;
   multiline?: boolean;
+  /** @deprecated Action colors come from the shared action palette. */
   accentColor?: string;
   submitLabel?: string;
-  keyboardType?: TextInputProps["keyboardType"];
-  inputMode?: TextInputProps["inputMode"];
+  keyboardType?: TextInputProps['keyboardType'];
+  inputMode?: TextInputProps['inputMode'];
   onClose: () => void;
   onSubmit: (next: string) => void;
   onChangeText?: (next: string) => void;
 };
 
-const DEFAULT_ACCENT = "#5E3DB3";
-
-type OverlayContentProps = Omit<Props, "visible"> & {
-  palette: {
-    backdrop: string;
-    card: string;
-    cardBorder: string;
-    text: string;
-    textSecondary: string;
-    field: string;
-    fieldBorder: string;
-    placeholder: string;
-    ghostBg: string;
-  };
-  blurTint: "dark" | "extraLight" | "light" | "default" | undefined;
-  resolvedAccentColor: string;
+type OverlayContentProps = Omit<Props, 'visible'> & {
+  visible: boolean;
+  isDark: boolean;
 };
 
 const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
+  visible,
   label,
   value,
   placeholder,
@@ -59,84 +37,34 @@ const TextInputOverlayContent: React.FC<OverlayContentProps> = ({
   onClose,
   onSubmit,
   onChangeText,
-  palette,
-  blurTint,
-  resolvedAccentColor,
+  isDark,
 }) => {
   const { locale } = useLocale();
-  const actions = { de: { cancel: 'Abbrechen', done: 'Fertig' }, en: { cancel: 'Cancel', done: 'Done' }, es: { cancel: 'Cancelar', done: 'Listo' } }[locale];
+  const done = { de: 'Fertig', en: 'Done', es: 'Listo' }[locale];
   const [text, setText] = useState(value);
-  const bottomLift = Platform.OS === "ios" ? 12 : 12;
-
-  const handleSubmit = () => {
-    onSubmit(text);
-  };
-
   return (
-    <>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={[styles.backdrop, { backgroundColor: palette.backdrop }]} />
-      </TouchableWithoutFeedback>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-        style={[styles.center, { paddingBottom: bottomLift }]}
-      >
-        <GlassSheetSurface
-          isDark={blurTint === 'dark'}
-          style={[
-            styles.card,
-            { backgroundColor: palette.card, borderColor: palette.cardBorder },
-          ]}
-        >
-          <Text style={[styles.label, { color: palette.text }]}>{label}</Text>
-          <TextInput
-            style={[
-              styles.input,
-              multiline && styles.inputMultiline,
-              {
-                backgroundColor: palette.field,
-                borderColor: palette.fieldBorder,
-                color: palette.text,
-              },
-            ]}
-            value={text}
-            onChangeText={next => { setText(next); onChangeText?.(next); }}
-            placeholder={placeholder}
-            placeholderTextColor={palette.placeholder}
-            autoFocus
-            multiline={!!multiline}
-            textAlignVertical={multiline ? "top" : "center"}
-            keyboardType={keyboardType}
-            inputMode={inputMode}
-          />
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.actionGhost, { backgroundColor: palette.ghostBg }]}
-              onPress={onClose}
-            >
-              <Text
-                style={[
-                  styles.actionGhostLabel,
-                  { color: palette.textSecondary },
-                ]}
-              >
-                {actions.cancel}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.actionPrimary,
-                { backgroundColor: resolvedAccentColor },
-              ]}
-              onPress={handleSubmit}
-            >
-              <Text style={styles.actionPrimaryLabel}>{submitLabel || actions.done}</Text>
-            </TouchableOpacity>
-          </View>
-        </GlassSheetSurface>
-      </KeyboardAvoidingView>
-    </>
+    <FormSheet
+      visible={visible}
+      title={label}
+      isDark={isDark}
+      onClose={onClose}
+      onConfirm={() => onSubmit(text)}
+      confirmLabel={submitLabel || done}
+    >
+      <FormTextInput
+        isDark={isDark}
+        value={text}
+        placeholder={placeholder}
+        autoFocus
+        multiline={!!multiline}
+        keyboardType={keyboardType}
+        inputMode={inputMode}
+        onChangeText={(next) => {
+          setText(next);
+          onChangeText?.(next);
+        }}
+      />
+    </FormSheet>
   );
 };
 
@@ -146,134 +74,34 @@ const TextInputOverlay: React.FC<Props> = ({
   value,
   placeholder,
   multiline,
-  accentColor,
   submitLabel,
   keyboardType,
   inputMode,
   onClose,
   onSubmit,
+  onChangeText,
 }) => {
   const adaptiveColors = useAdaptiveColors();
   const isDark =
-    adaptiveColors.effectiveScheme === "dark" ||
+    adaptiveColors.effectiveScheme === 'dark' ||
     adaptiveColors.isDarkBackground;
-  const resolvedAccentColor =
-    accentColor ?? (isDark ? adaptiveColors.accent : DEFAULT_ACCENT);
-  const blurTint = isDark ? "dark" : "extraLight";
-  const palette = {
-    backdrop: isDark ? "rgba(0,0,0,0.62)" : "rgba(0,0,0,0.45)",
-    card: isDark ? "rgba(10,10,14,0.94)" : "rgba(255,255,255,0.95)",
-    cardBorder: isDark ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.72)",
-    text: isDark ? adaptiveColors.textPrimary : "#7D5A50",
-    textSecondary: isDark ? adaptiveColors.textSecondary : "#6B4C3B",
-    field: isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.92)",
-    fieldBorder: isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.06)",
-    placeholder: isDark ? "rgba(248,240,229,0.58)" : "rgba(125,90,80,0.55)",
-    ghostBg: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.05)",
-  };
-
-  return (
-    <Modal
+  return visible ? (
+    <TextInputOverlayContent
+      key={label}
       visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      {visible && (
-        <TextInputOverlayContent
-          key={`${label}:${value}`}
-          label={label}
-          value={value}
-          placeholder={placeholder}
-          multiline={multiline}
-          accentColor={accentColor}
-          submitLabel={submitLabel}
-          keyboardType={keyboardType}
-          inputMode={inputMode}
-          onClose={onClose}
-          onSubmit={onSubmit}
-          palette={palette}
-          blurTint={blurTint}
-          resolvedAccentColor={resolvedAccentColor}
-        />
-      )}
-    </Modal>
-  );
+      label={label}
+      value={value}
+      placeholder={placeholder}
+      multiline={multiline}
+      submitLabel={submitLabel}
+      keyboardType={keyboardType}
+      inputMode={inputMode}
+      onClose={onClose}
+      onSubmit={onSubmit}
+      isDark={isDark}
+      onChangeText={onChangeText}
+    />
+  ) : null;
 };
-
-const styles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
-  center: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: "flex-end",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 520,
-    borderRadius: 30,
-    overflow: "hidden",
-    padding: 18,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.72)",
-  },
-  label: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#7D5A50",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  input: {
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#7D5A50",
-  },
-  inputMultiline: {
-    minHeight: 170,
-    paddingVertical: 14,
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-    marginTop: 16,
-  },
-  actionGhost: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 22,
-    minHeight: 44,
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  actionGhostLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#6B4C3B",
-  },
-  actionPrimary: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 22,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  actionPrimaryLabel: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#fff",
-  },
-});
 
 export default TextInputOverlay;

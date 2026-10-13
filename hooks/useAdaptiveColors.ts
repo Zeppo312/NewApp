@@ -73,11 +73,13 @@ export type AdaptiveColors = typeof darkBackgroundColors;
 export function useAdaptiveColors(): AdaptiveColors & {
   effectiveScheme: 'light' | 'dark';
   hasCustomBackground: boolean;
+  isPhotoBackground: boolean;
   isDarkBackground: boolean;
   systemColors: typeof Colors.light;
 } {
   const systemColorScheme = useColorScheme() ?? 'light';
-  const { hasCustomBackground, isDarkBackground } = useBackground();
+  const { hasCustomBackground, isDarkBackground, selectedBackground } = useBackground();
+  const isPhotoBackground = selectedBackground === 'custom';
   const { autoDarkModeEnabled } = useTheme();
 
   // Standardmäßig nur den gespeicherten Bildmodus für echte Hintergrundauswahl nutzen.
@@ -106,6 +108,7 @@ export function useAdaptiveColors(): AdaptiveColors & {
       ...adaptiveColors,
       effectiveScheme,
       hasCustomBackground,
+      isPhotoBackground,
       isDarkBackground: effectiveIsDarkBackground,
       systemColors,
     };
@@ -134,6 +137,7 @@ export function useAdaptiveColors(): AdaptiveColors & {
     tabIconSelected: systemColors.tabIconSelected,
     effectiveScheme,
     hasCustomBackground,
+    isPhotoBackground,
     isDarkBackground: effectiveIsDarkBackground,
     systemColors,
   };

@@ -8,6 +8,10 @@ jest.mock('@/hooks/useColorScheme', () => ({ useColorScheme: () => 'light' }));
 jest.mock('@/hooks/useAdaptiveColors', () => ({
   useAdaptiveColors: () => ({ hasCustomBackground: false, isDarkBackground: false }),
 }));
+jest.mock('@/components/ui/home-glass', () => ({
+  HomeGlassSurface: jest.requireActual('react-native').View,
+  useHomeBlurAvailable: () => true,
+}));
 jest.mock('@/components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
 
 describe('sleep timer text layers', () => {

@@ -1,9 +1,9 @@
 // src/components/Header/Header.tsx (oder dein Pfad)
 
-import React from 'react';
-import { Platform, StyleSheet, View, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
@@ -27,6 +27,8 @@ export interface HeaderProps {
 // Original-Farben für hellen Modus
 const HEADER_TITLE_COLOR_LIGHT = '#7D5A50';
 const HEADER_SUBTITLE_COLOR_LIGHT = '#A8978E';
+const HEADER_ACTION_SIZE = 44;
+const HEADER_TEXT_GAP = 12;
 
 const Header: React.FC<HeaderProps> = ({
   title,
@@ -44,6 +46,10 @@ const Header: React.FC<HeaderProps> = ({
   const navigation = useNavigation();
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
+  const [leftWidth, setLeftWidth] = useState(HEADER_ACTION_SIZE);
+  const [rightWidth, setRightWidth] = useState(HEADER_ACTION_SIZE);
+  // Symmetrischer Platz hält den Titel auch neben mehreren Aktionen mittig.
+  const titleInset = Math.max(HEADER_ACTION_SIZE, leftWidth, rightWidth) + HEADER_TEXT_GAP;
   // React Native's legacy SafeAreaView only protects iOS. Include Android's
   // camera/status-bar inset unless the screen already applies it.
   const topSpacing = styles.header.paddingTop
@@ -70,37 +76,44 @@ const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <View style={[styles.header, { paddingTop: topSpacing }]}>
+    <View style={[styles.header, {
+      paddingTop: topSpacing,
+      minHeight: topSpacing + HEADER_ACTION_SIZE + styles.header.paddingBottom,
+    }]}>
       {/* Linker Bereich - absolut positioniert */}
-      <View style={[styles.sideContainer, styles.left, { top: topSpacing }]}>
+      <View
+        style={[styles.sideContainer, styles.left, { top: topSpacing }]}
+        onLayout={(event) => setLeftWidth(Math.ceil(event.nativeEvent.layout.width))}
+      >
         <View style={styles.leftContentWrapper}>
           {showBackButton && (
-            <TouchableOpacity
-              accessibilityRole="button"
+            <PeriodNavigationButton
+              direction="previous"
               accessibilityLabel={backAccessibilityLabel}
-              style={styles.backButton}
+              isDark={useDarkMode || colorScheme === 'dark'}
+              color={iconColor}
               onPress={handleBackPress}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <IconSymbol name="chevron.left" size={20} color={iconColor} />
-            </TouchableOpacity>
+            />
           )}
           {leftContent}
         </View>
       </View>
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
-      <View style={styles.titleContainer} pointerEvents="none">
-        <ThemedText style={[styles.title, { color: titleColor }]} numberOfLines={2} ellipsizeMode="tail">
+      <View style={[styles.titleContainer, { paddingHorizontal: titleInset }]} pointerEvents="none">
+        <ThemedText type="pageTitle" style={[styles.title, { color: titleColor }]} numberOfLines={2} ellipsizeMode="tail">
           {title}
         </ThemedText>
         {subtitle && (
-          <ThemedText style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</ThemedText>
+          <ThemedText type="bodySmall" style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</ThemedText>
         )}
       </View>
       
       {/* Rechter Bereich - absolut positioniert */}
-      <View style={[styles.sideContainer, styles.right, { top: topSpacing }]}>
+      <View
+        style={[styles.sideContainer, styles.right, { top: topSpacing }]}
+        onLayout={(event) => setRightWidth(Math.ceil(event.nativeEvent.layout.width))}
+      >
         <View style={styles.rightContentRow}>
           {rightContent}
           {showBabySwitcher && <BabySwitcherButton />}
@@ -130,8 +143,8 @@ const styles = StyleSheet.create({
   },
   left: {
     left: 16,
-    minWidth: 44,
-    height: 44, // gutes Tap-Target
+    minWidth: HEADER_ACTION_SIZE,
+    height: HEADER_ACTION_SIZE,
   },
   leftContentWrapper: {
     flexDirection: 'row',
@@ -140,8 +153,8 @@ const styles = StyleSheet.create({
   },
   right: {
     right: 16,
-    minWidth: 44,
-    height: 44,
+    minWidth: HEADER_ACTION_SIZE,
+    height: HEADER_ACTION_SIZE,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -150,28 +163,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-  },
   titleContainer: {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    paddingHorizontal: 64,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '700',
     textAlign: 'center',
     flexShrink: 1,
-    lineHeight: 28,
   },
   subtitle: {
-    fontSize: 13,
     marginTop: 3,
     textAlign: 'center',
   },

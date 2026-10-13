@@ -15,7 +15,7 @@ import { LocalizedLegalDocument } from '@/components/LocalizedLegalDocument';
 const BulletList = ({ items }: { items: string[] }) => (
   <View style={styles.list}>
     {items.map((item, index) => (
-      <ThemedText key={`bullet-${index}`} style={styles.listItem}>
+      <ThemedText key={`bullet-${index}`} type="body" style={styles.listItem}>
         {`\u2022 ${item}`}
       </ThemedText>
     ))}
@@ -24,7 +24,7 @@ const BulletList = ({ items }: { items: string[] }) => (
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={styles.section}>
-    <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+    <ThemedText type="sectionTitle" style={styles.sectionTitle}>{title}</ThemedText>
     {children}
   </View>
 );
@@ -58,11 +58,11 @@ export default function NutzungsbedingungenScreen() {
                 { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#FFF5EE', borderColor: theme.border },
               ]}
             >
-              <ThemedText style={styles.pageTitle}>Nutzungsbedingungen</ThemedText>
-              <ThemedText style={styles.paragraph}>Stand: 26. August 2026</ThemedText>
+              <ThemedText type="pageTitle">Nutzungsbedingungen</ThemedText>
+              <ThemedText type="bodySmall" style={styles.paragraph}>Stand: 26. August 2026</ThemedText>
 
               <Section title="Geltungsbereich">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Diese Nutzungsbedingungen regeln die Nutzung der App Lotti Baby sowie aller darin angebotenen Inhalte,
                   Funktionen und Abonnements. Anbieterin ist Laura-Michelle Zeppenfeld, Tilburger Str. 31, 28259 Bremen,
                   Deutschland.
@@ -70,7 +70,7 @@ export default function NutzungsbedingungenScreen() {
               </Section>
 
               <Section title="Leistungsbeschreibung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Lotti Baby unterstützt Nutzerinnen und Nutzer mit digitalen Funktionen rund um Schwangerschaft,
                   Baby-Alltag, Planung und Dokumentation. Der konkrete Funktionsumfang kann sich weiterentwickeln, um
                   die App technisch, inhaltlich oder rechtlich anzupassen.
@@ -100,14 +100,14 @@ export default function NutzungsbedingungenScreen() {
               </Section>
 
               <Section title="Kündigung und Verwaltung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Verwaltung, Kündigung und Wiederherstellung von Abonnements erfolgt über die jeweiligen
                   Store-Einstellungen beziehungsweise die dafür vorgesehenen Funktionen innerhalb der App.
                 </ThemedText>
               </Section>
 
               <Section title="Kein medizinischer Rat">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Inhalte von Lotti Baby dienen der allgemeinen Information, Organisation und Dokumentation. Sie
                   ersetzen keine medizinische Beratung, Diagnose oder Behandlung. Bei gesundheitlichen Beschwerden oder
                   Unsicherheiten ist ärztlicher Rat einzuholen.
@@ -124,13 +124,13 @@ export default function NutzungsbedingungenScreen() {
               </Section>
 
               <Section title="Eigene Inhalte">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   In Lotti Baby werden eigene Inhalte erstellt und gespeichert, etwa Tagebucheinträge, Fotos,
                   Tracking-Daten, Listen und Profilangaben. Diese Inhalte sind privat: Sie werden nicht
                   veröffentlicht und sind ausschließlich für das eigene Konto sichtbar sowie – sofern eine
                   Partnerverknüpfung eingerichtet wurde – für die damit verbundene Person.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Rechte an eigenen Inhalten verbleiben bei der Person, die sie erstellt hat. Mit dem Speichern
                   eines Inhalts räumt sie Lotti Baby für die Dauer seiner Bereitstellung ein unentgeltliches,
                   nicht ausschließliches und räumlich unbeschränktes Nutzungsrecht ein, soweit dies erforderlich ist,
@@ -138,7 +138,7 @@ export default function NutzungsbedingungenScreen() {
                   und zu vervielfältigen. Dieses Recht darf ausschließlich in dem für Betrieb, Bereitstellung und
                   Sicherheit der App erforderlichen Umfang durch beauftragte technische Dienstleister ausgeübt werden.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wer Inhalte einstellt, bestätigt, über die dafür erforderlichen Rechte zu verfügen und keine Rechte
                   Dritter zu verletzen. Nach dem Löschen eines Inhalts endet das eingeräumte Nutzungsrecht, soweit
                   keine vorübergehende Speicherung in Sicherungskopien oder eine weitere Aufbewahrung zur Erfüllung
@@ -147,18 +147,18 @@ export default function NutzungsbedingungenScreen() {
               </Section>
 
               <Section title="Verfügbarkeit und Änderungen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Es besteht kein Anspruch auf eine jederzeit unterbrechungsfreie Verfügbarkeit. Wartungen, Updates,
                   technische Störungen oder Sicherheitsmaßnahmen können die Nutzung zeitweise einschränken.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Anbieterin kann Funktionen anpassen, erweitern oder einstellen, soweit dies unter Berücksichtigung
                   der Interessen der Nutzerinnen und Nutzer zumutbar ist.
                 </ThemedText>
               </Section>
 
               <Section title="Haftung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Anbieterin haftet unbeschränkt bei Vorsatz, grober Fahrlässigkeit, bei Verletzung von Leben,
                   Körper oder Gesundheit sowie nach den zwingenden Vorschriften des Produkthaftungsrechts. Im Übrigen
                   haftet die Anbieterin nur bei Verletzung wesentlicher Vertragspflichten; in diesem Fall ist die Haftung
@@ -167,23 +167,23 @@ export default function NutzungsbedingungenScreen() {
               </Section>
 
               <Section title="Datenschutz">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Informationen zur Verarbeitung personenbezogener Daten finden sich in der Datenschutzerklärung innerhalb
                   der App.
                 </ThemedText>
               </Section>
 
               <Section title="Ergänzende Store-Bedingungen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Für Käufe über iOS kann ergänzend die Standard-Endnutzerlizenz von Apple gelten.
                 </ThemedText>
                 <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(APPLE_EULA_URL)}>
-                  <ThemedText style={styles.linkText}>{APPLE_EULA_URL}</ThemedText>
+                  <ThemedText type="link" style={styles.linkText}>{APPLE_EULA_URL}</ThemedText>
                 </Pressable>
               </Section>
 
               <Section title="Kontakt">
-                <ThemedText style={styles.paragraph}>support@lottibaby.de</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>support@lottibaby.de</ThemedText>
               </Section>
             </View>
           </ScrollView>
@@ -214,34 +214,22 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     gap: 10,
   },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
   section: {
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: 8,
   },
   paragraph: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
   },
   list: {
     paddingLeft: 4,
   },
   listItem: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
   },
   linkText: {
-    fontSize: 14,
-    lineHeight: 22,
     color: '#5E3DB3',
     textDecorationLine: 'underline',
   },

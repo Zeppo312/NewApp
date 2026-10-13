@@ -1,23 +1,20 @@
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { BlurView } from "expo-blur";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { ActionColors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
-import {
-  GLASS_BORDER,
-  GLASS_OVERLAY,
-  PRIMARY,
-} from "@/constants/PlannerDesign";
 import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   onPress: () => void;
+  accessibilityLabel?: string;
   bottomInset?: number;
   rightInset?: number;
 };
 
 export const FloatingAddButton: React.FC<Props> = ({
   onPress,
+  accessibilityLabel,
   bottomInset = 16,
   rightInset = 16,
 }) => {
@@ -26,10 +23,7 @@ export const FloatingAddButton: React.FC<Props> = ({
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
     adaptiveColors.isDarkBackground;
-  const overlayColor = isDark ? "rgba(0,0,0,0.35)" : GLASS_OVERLAY;
-  const borderColor = isDark ? "rgba(255,255,255,0.22)" : GLASS_BORDER;
-  const iconColor = isDark ? adaptiveColors.accent : PRIMARY;
-  const blurTint = isDark ? "dark" : "light";
+  const colors = ActionColors[isDark ? 'dark' : 'light'];
 
   return (
     <View
@@ -39,29 +33,12 @@ export const FloatingAddButton: React.FC<Props> = ({
       <Pressable
         onPress={onPress}
         accessibilityRole="button"
-        accessibilityLabel={{ de: 'Schnell hinzufügen', en: 'Quick add', es: 'Añadir rápidamente' }[locale]}
-        style={({ pressed }) => [
-          styles.btn,
-          pressed && { transform: [{ scale: 0.98 }] },
-        ]}
+        accessibilityLabel={accessibilityLabel ?? { de: 'Schnell hinzufügen', en: 'Quick add', es: 'Añadir rápidamente' }[locale]}
+        style={({ pressed }) => [styles.btn, { backgroundColor: pressed ? colors.primaryPressed : colors.primary }]}
       >
-        <BlurView
-          intensity={22}
-          tint={blurTint}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: overlayColor,
-              borderRadius: 28,
-              borderWidth: 1,
-              borderColor,
-            },
-          ]}
-        />
-        <IconSymbol name="plus" color={iconColor as any} size={26} />
+        <View accessible={false} importantForAccessibility="no-hide-descendants">
+          <IconSymbol name="plus" color={colors.onPrimary} size={26} />
+        </View>
       </Pressable>
     </View>
   );
@@ -70,16 +47,13 @@ export const FloatingAddButton: React.FC<Props> = ({
 const styles = StyleSheet.create({
   wrap: { position: "absolute", zIndex: 10, alignItems: "flex-end" },
   btn: {
+    // Keep the familiar floating plus shape; its colors use the common action pair.
     width: 56,
     height: 56,
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    boxShadow: '0 4px 10px rgba(0,0,0,0.14)',
   },
 });
 

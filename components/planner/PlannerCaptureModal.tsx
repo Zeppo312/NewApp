@@ -1,39 +1,38 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-  Keyboard,
-  LayoutAnimation,
-  StyleProp,
-  ViewStyle,
-  TextStyle,
-  Alert,
-} from "react-native";
 import DateTimePicker from "@/components/ui/DateTimePicker";
-import { BlurView } from "expo-blur";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { PRIMARY, GLASS_OVERLAY } from "@/constants/PlannerDesign";
+import { FormField,FormSheet } from '@/components/ui/form-sheet';
+import { FormColors } from '@/constants/Colors';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from "react";
 import {
-  adaptPlannerColor,
-  isSamePlannerColor,
-  normalizePlannerColor,
-  PLANNER_ITEM_COLORS,
-} from "@/constants/PlannerColors";
-import { Colors } from "@/constants/Colors";
-import { PlannerAssignee, PlannerEvent, PlannerTodo } from "@/services/planner";
-import TextInputOverlay from "@/components/modals/TextInputOverlay";
-import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
-import { getSafePickerDate, parseSafeDate } from "@/lib/safeDate";
+Alert,
+Keyboard,
+LayoutAnimation,
+Platform,
+StyleProp,
+StyleSheet,
+Text,
+TextStyle,
+TouchableOpacity,
+TouchableWithoutFeedback,
+View,
+ViewStyle
+} from "react-native";
+
 import IOSBottomDatePicker from "@/components/modals/IOSBottomDatePicker";
+import TextInputOverlay from "@/components/modals/TextInputOverlay";
+import { ActionButton } from "@/components/ui/action-button";
+import {
+adaptPlannerColor,
+isSamePlannerColor,
+normalizePlannerColor,
+PLANNER_ITEM_COLORS,
+} from "@/constants/PlannerColors";
+import { GLASS_OVERLAY,PRIMARY } from "@/constants/PlannerDesign";
 import { useLocale } from "@/contexts/LocaleContext";
-import { getPlannerLocaleTag, PlannerTranslationKey, translatePlannerText } from "@/lib/plannerTranslations";
+import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
+import { getPlannerLocaleTag,PlannerTranslationKey,translatePlannerText } from "@/lib/plannerTranslations";
+import { getSafePickerDate,parseSafeDate } from "@/lib/safeDate";
+import { PlannerAssignee,PlannerEvent,PlannerTodo } from "@/services/planner";
 
 export type PlannerCaptureType = "todo" | "event";
 type FocusField = "title" | "location" | "notes";
@@ -174,20 +173,20 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     adaptiveColors.effectiveScheme === "dark" ||
     adaptiveColors.isDarkBackground;
   const accentColor = isDark ? adaptiveColors.accent : PRIMARY;
-  const blurTint = isDark ? "dark" : "extraLight";
+
   const theme = useMemo(
     () => ({
-      text: isDark ? Colors.dark.textPrimary : THEME.text,
-      textSecondary: isDark ? Colors.dark.textSecondary : THEME.textSecondary,
+      text: FormColors[isDark ? "dark" : "light"].text,
+      textSecondary: FormColors[isDark ? "dark" : "light"].secondary,
       overlay: isDark ? "rgba(0,0,0,0.58)" : "rgba(0,0,0,0.35)",
       pickerOverlay: isDark ? "rgba(0,0,0,0.62)" : "rgba(0,0,0,0.4)",
       sheetBackground: isDark ? "rgba(8,8,12,0.96)" : "rgba(255,255,255,0.96)",
       sheetBorder: isDark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.45)",
-      field: isDark ? "rgba(255,255,255,0.08)" : THEME.field,
+      field: FormColors[isDark ? "dark" : "light"].field,
       block: isDark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.85)",
       blockStrong: isDark ? "rgba(18,18,22,0.92)" : "rgba(255,255,255,0.95)",
       soft: isDark ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.6)",
-      border: isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.05)",
+      border: FormColors[isDark ? "dark" : "light"].border,
       divider: isDark ? "rgba(255,255,255,0.12)" : THEME.divider,
       iconButton: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.08)",
       accentSoft: isDark ? toRgba(accentColor, 0.22) : "rgba(94,61,179,0.08)",
@@ -217,6 +216,7 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [assignee, setAssignee] = useState<PlannerAssignee>("me");
   const [selectedBabyId, setSelectedBabyId] = useState<string | null>(null);
   const [showTimeRangeModal, setShowTimeRangeModal] = useState(false);
+  const periodBeforeEdit = useRef<{ start: Date; end: Date | null; showEnd: boolean; allDay: boolean } | null>(null);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [focusConfig, setFocusConfig] = useState<FocusConfig | null>(null);
@@ -228,7 +228,6 @@ export const PlannerCaptureModal: React.FC<Props> = ({
   const [recurrenceEndsOn, setRecurrenceEndsOn] = useState<Date | null>(null);
   const [color, setColor] = useState<string | null>(null);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const insets = useSafeAreaInsets();
 
   const partnerLabel = useMemo(() => {
     if (!ownerOptions || ownerOptions.length === 0) return t("person.partner");
@@ -362,6 +361,26 @@ export const PlannerCaptureModal: React.FC<Props> = ({
 
     return `${dayLabel(startTime)} · ${t("capture.fromTime", { time: timeLabel(startTime) })}`;
   }, [isAllDay, startTime, endTime, showEnd, localeTag, t]);
+
+  const openPeriod = () => {
+    periodBeforeEdit.current = { start: new Date(startTime), end: endTime ? new Date(endTime) : null,
+      showEnd, allDay: isAllDay };
+    setShowTimeRangeModal(true);
+  };
+
+  const closePeriod = (apply = false) => {
+    const previous = periodBeforeEdit.current;
+    if (!apply && previous) {
+      setStartTime(previous.start);
+      setEndTime(previous.end);
+      setShowEnd(previous.showEnd);
+      setIsAllDay(previous.allDay);
+    }
+    periodBeforeEdit.current = null;
+    setShowTimeRangeModal(false);
+    setShowStartPicker(false);
+    setShowEndPicker(false);
+  };
 
   const setEventMode = (nextIsAllDay: boolean) => {
     if (nextIsAllDay === isAllDay) return;
@@ -567,23 +586,11 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     dateOnly: boolean = false,
   ) => (
     <View
-      style={[
-        styles.pickerBlock,
-        { backgroundColor: theme.block, borderColor: theme.border },
-      ]}
+      style={styles.pickerBlock}
     >
-      <TouchableOpacity
-        style={styles.selectorHeader}
-        onPress={() => setVisible(true)}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.pickerLabel, { color: theme.textSecondary }]}>
-          {label}
-        </Text>
-        <Text style={[styles.selectorValue, { color: theme.text }]}>
-          {dateOnly ? formatDate(value) : formatDateTime(value)}
-        </Text>
-      </TouchableOpacity>
+      <FormField isDark={isDark} onPress={() => setVisible(true)}
+    label={label} value={dateOnly ? formatDate(value) : formatDateTime(value)}
+       />
       {Platform.OS === "ios" ? (
         <IOSBottomDatePicker
           visible={visible}
@@ -959,1264 +966,780 @@ export const PlannerCaptureModal: React.FC<Props> = ({
     }
   }, [visible]);
 
-  const renderInlineField = (
-    value: string,
-    placeholder: string,
-    onPress: () => void,
-    style: StyleProp<ViewStyle>,
-    multiline = false,
-    textStyle?: StyleProp<TextStyle>,
-  ) => {
-    const mergedStyle = Array.isArray(style)
-      ? [
-          styles.inlineFieldBase,
-          ...style,
-          multiline && styles.inlineFieldMultiline,
-        ]
-      : [
-          styles.inlineFieldBase,
-          style,
-          multiline && styles.inlineFieldMultiline,
-        ];
-
-    return (
-      <TouchableOpacity
-        style={mergedStyle}
-        activeOpacity={0.9}
-        onPress={onPress}
-      >
-        <Text
-          style={
-            value
-              ? [styles.inputValue, { color: theme.text }, textStyle]
-              : [styles.inputPlaceholder, { color: theme.textSecondary }, textStyle]
-          }
-          numberOfLines={multiline ? 3 : 1}
-        >
-          {value || placeholder}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+  const renderInlineField = (value: string, placeholder: string, onPress: () => void,
+   _style: StyleProp<ViewStyle>, multiline = false, _textStyle?: StyleProp<TextStyle>) =>
+   <FormField isDark={isDark} value={value} placeholder={placeholder} onPress={onPress} multiline={multiline} />;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={onClose}
-    >
-      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={StyleSheet.absoluteFill} />
-        </TouchableWithoutFeedback>
-        <BlurView
-          intensity={80}
-          tint={blurTint}
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: theme.sheetBackground,
-              borderTopColor: theme.sheetBorder,
-              borderTopWidth: 1,
-            },
-          ]}
-        >
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={[
-                styles.roundButton,
-                { backgroundColor: theme.iconButton },
-              ]}
-              onPress={onClose}
-            >
-              <Text style={[styles.roundButtonLabel, { color: theme.text }]}>
-                ✕
-              </Text>
-            </TouchableOpacity>
-            <View style={styles.headerCenter}>
-              <Text style={[styles.title, { color: theme.text }]}>
-                {editingItem
-                  ? currentType === "todo"
-                    ? t("capture.editTodo")
-                    : t("capture.editEvent")
-                  : currentType === "todo"
-                    ? t("capture.newTodo")
-                    : t("capture.newEvent")}
-              </Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                {showAdvancedOptions ? t("capture.details") : t("capture.quick")}
-              </Text>
-            </View>
-            <View style={styles.roundButton} />
-          </View>
-
-          <ScrollView
-            style={styles.scroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-              <View style={styles.contentWrapper}>
-                <View style={styles.typeSwitchRow}>
-                  {(["todo", "event"] as PlannerCaptureType[]).map(
-                    (btnType) => (
-                      <TouchableOpacity
-                        key={btnType}
-                        style={[
-                          styles.typeSwitchButton,
-                          {
-                            backgroundColor: theme.soft,
-                            borderColor: theme.border,
-                          },
-                          currentType === btnType &&
-                            styles.typeSwitchButtonActive,
-                          currentType === btnType && {
-                            backgroundColor: accentColor,
-                            borderColor: accentColor,
-                          },
-                        ]}
-                        onPress={() => setCurrentType(btnType)}
-                      >
-                        <Text
-                          style={[
-                            styles.typeSwitchLabel,
-                            { color: theme.text },
-                            currentType === btnType &&
-                              styles.typeSwitchLabelActive,
-                          ]}
-                        >
-                          {btnType === "todo" ? t("capture.todo") : t("capture.event")}
-                        </Text>
-                      </TouchableOpacity>
-                    ),
-                  )}
-                </View>
-                {renderInlineField(
-                  title,
-                  t("capture.title"),
-                  () =>
-                    openFocusEditor({
-                      field: "title",
-                      label: t("capture.title"),
-                      placeholder: t("capture.title"),
-                    }),
-                  [styles.titleInput, { backgroundColor: theme.field }],
-                  false,
-                  styles.titleFieldText,
-                )}
-
-                <TouchableOpacity
-                  style={[
-                    styles.advancedToggleButton,
-                    {
-                      backgroundColor: showAdvancedOptions
-                        ? theme.accentSoft
-                        : theme.field,
-                      borderColor: showAdvancedOptions
-                        ? accentColor
-                        : theme.border,
-                    },
-                  ]}
-                  onPress={() => setShowAdvancedOptions((prev) => !prev)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    showAdvancedOptions
-                      ? t("capture.lessA11y")
-                      : t("capture.moreA11y")
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.advancedToggleText,
-                      { color: showAdvancedOptions ? accentColor : theme.text },
-                    ]}
-                  >
-                    {showAdvancedOptions ? t("capture.less") : t("capture.more")}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.advancedToggleIcon,
-                      {
-                        color: showAdvancedOptions
-                          ? accentColor
-                          : theme.textSecondary,
-                      },
-                    ]}
-                  >
-                    {showAdvancedOptions ? "˄" : "˅"}
-                  </Text>
-                </TouchableOpacity>
-
-                {showAdvancedOptions && (
-                  <View style={styles.section}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      {t("capture.for")}
-                    </Text>
+    <FormSheet
+        visible={visible}
+        isDark={isDark}
+        title={
+          editingItem
+            ? currentType === 'todo'
+              ? t('capture.editTodo')
+              : t('capture.editEvent')
+            : currentType === 'todo'
+              ? t('capture.newTodo')
+              : t('capture.newEvent')
+        }
+        subtitle={showAdvancedOptions ? t('capture.details') : t('capture.quick')}
+        onClose={onClose}
+        onCancel={onClose}
+        confirmDisabled={!title.trim()}
+        onConfirm={handleSave}
+        overlays={
+          <>
+            {showAssigneePicker && (
+              <FormSheet
+                visible={showAssigneePicker}
+                isDark={isDark}
+                title={t('capture.forWhom')}
+                onClose={() => setShowAssigneePicker(false)}
+              >
+                {assigneeOptions.map((opt) => {
+                  const isChild = opt.value === 'child';
+                  const isSelected = isChild
+                    ? assignee === 'child' && (opt.babyId ?? null) === (selectedBabyId ?? null)
+                    : assignee === opt.value;
+                  return (
                     <TouchableOpacity
-                      style={[
-                        styles.dropdownField,
-                        {
-                          backgroundColor: theme.field,
-                          borderColor: theme.border,
-                        },
-                      ]}
-                      onPress={() => setShowAssigneePicker(true)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.dropdownValue, { color: theme.text }]}>
-                        {selectedAssigneeLabel}
-                      </Text>
-                      <Text
-                        style={[styles.dropdownChevron, { color: theme.textSecondary }]}
-                      >
-                        ▾
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {showAdvancedOptions && (
-                  <View style={styles.section}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      {t("capture.color")}
-                    </Text>
-                    <View style={styles.colorSelector}>
-                      <TouchableOpacity
-                        style={[
-                          styles.colorSwatch,
-                          {
-                            backgroundColor: theme.field,
-                            borderColor: color ? theme.border : accentColor,
-                            borderWidth: color ? 1 : 3,
-                          },
-                        ]}
-                        activeOpacity={0.85}
-                        onPress={() => setColor(null)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: !color }}
-                        accessibilityLabel={t("capture.colorAuto")}
-                      >
-                        <Text
-                          style={[
-                            styles.colorSwatchAutoLabel,
-                            { color: color ? theme.textSecondary : accentColor },
-                          ]}
-                        >
-                          A
-                        </Text>
-                      </TouchableOpacity>
-                      {PLANNER_ITEM_COLORS.map((option) => {
-                        const selected = isSamePlannerColor(color, option.hex);
-                        return (
-                          <TouchableOpacity
-                            key={option.key}
-                            style={[
-                              styles.colorSwatch,
-                              {
-                                backgroundColor: adaptPlannerColor(
-                                  option.hex,
-                                  isDark,
-                                ),
-                                borderColor: selected
-                                  ? theme.text
-                                  : "transparent",
-                                borderWidth: selected ? 3 : 1,
-                              },
-                            ]}
-                            activeOpacity={0.85}
-                            onPress={() => setColor(option.hex)}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected }}
-                            accessibilityLabel={t(
-                              `color.${option.key}` as PlannerTranslationKey,
-                            )}
-                          >
-                            {selected ? (
-                              <Text style={styles.colorSwatchCheck}>✓</Text>
-                            ) : null}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    <Text
-                      style={[
-                        styles.colorHint,
-                        { color: theme.textSecondary },
-                      ]}
-                    >
-                      {selectedColorLabel}
-                    </Text>
-                  </View>
-                )}
-
-                {showAdvancedOptions && (
-                <View style={styles.section}>
-                  <View style={styles.recurrenceToggleRow}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      {t("capture.repeat")}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.recurrenceToggle,
-                        {
-                          backgroundColor: repeatEnabled
-                            ? accentColor
-                            : theme.field,
-                          borderColor: repeatEnabled ? accentColor : theme.border,
-                        },
-                      ]}
-                      activeOpacity={0.85}
-                      onPress={toggleRepeatEnabled}
-                    >
-                      <Text
-                        style={[
-                          styles.recurrenceToggleText,
-                          { color: repeatEnabled ? "#fff" : theme.text },
-                        ]}
-                      >
-                        {repeatEnabled ? t("capture.on") : t("capture.off")}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {repeatEnabled && (
-                    <View style={styles.recurrenceContent}>
-                      <View style={styles.recurrenceShortcuts}>
-                        <TouchableOpacity
-                          style={[
-                            styles.recurrenceShortcut,
-                            {
-                              backgroundColor: everyDayShortcutActive
-                                ? accentColor
-                                : theme.soft,
-                              borderColor: everyDayShortcutActive
-                                ? accentColor
-                                : theme.border,
-                            },
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => setRepeatDays([1, 2, 3, 4, 5, 6, 7])}
-                        >
-                          <Text
-                            style={[
-                              styles.recurrenceShortcutText,
-                              {
-                                color: everyDayShortcutActive ? "#fff" : theme.text,
-                              },
-                            ]}
-                          >
-                            {t("capture.daily")}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.recurrenceShortcut,
-                            {
-                              backgroundColor: weekdaysShortcutActive
-                                ? accentColor
-                                : theme.soft,
-                              borderColor: weekdaysShortcutActive
-                                ? accentColor
-                                : theme.border,
-                            },
-                          ]}
-                          activeOpacity={0.85}
-                          onPress={() => setRepeatDays([1, 2, 3, 4, 5])}
-                        >
-                          <Text
-                            style={[
-                              styles.recurrenceShortcutText,
-                              {
-                                color: weekdaysShortcutActive ? "#fff" : theme.text,
-                              },
-                            ]}
-                          >
-                            {t("capture.weekdays")}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.weekdaySelector}>
-                        {WEEKDAY_OPTIONS.map((day) => {
-                          const selected = sanitizedRepeatDays.includes(day.value);
-                          return (
-                            <TouchableOpacity
-                              key={day.value}
-                              style={[
-                                styles.weekdayButton,
-                                {
-                                  backgroundColor: selected
-                                    ? accentColor
-                                    : theme.field,
-                                  borderColor: selected
-                                    ? accentColor
-                                    : theme.border,
-                                },
-                              ]}
-                              activeOpacity={0.85}
-                              onPress={() => toggleRepeatDay(day.value)}
-                            >
-                              <Text
-                                style={[
-                                  styles.weekdayLabel,
-                                  { color: selected ? "#fff" : theme.text },
-                                ]}
-                              >
-                                {t((['weekday.mon', 'weekday.tue', 'weekday.wed', 'weekday.thu', 'weekday.fri', 'weekday.sat', 'weekday.sun'] as PlannerTranslationKey[])[day.value - 1])}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                      <Text
-                        style={[
-                          styles.sectionLabelSecondary,
-                          styles.recurrenceMetaLabel,
-                          { color: theme.textSecondary },
-                        ]}
-                      >
-                        {t("capture.seriesEnd")}
-                      </Text>
-                      {recurrenceEndsOn ? (
-                        <>
-                          {renderDateSelector(
-                            t("capture.endsOn"),
-                            recurrenceEndsOn,
-                            showRecurrenceEndPicker,
-                            setShowRecurrenceEndPicker,
-                            (date) => {
-                              const normalized = new Date(date);
-                              normalized.setHours(0, 0, 0, 0);
-                              setRecurrenceEndsOn(normalized);
-                            },
-                            true,
-                          )}
-                          <TouchableOpacity
-                            style={[
-                              styles.timeButton,
-                              { backgroundColor: theme.field },
-                            ]}
-                            onPress={() => {
-                              setRecurrenceEndsOn(null);
-                              setShowRecurrenceEndPicker(false);
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.timeButtonLabel,
-                                { color: theme.text },
-                              ]}
-                            >
-                              {t("capture.noEnd")}
-                            </Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <TouchableOpacity
-                          style={[
-                            styles.timeButton,
-                            { backgroundColor: theme.field },
-                          ]}
-                          onPress={() => {
-                            const initialRecurrenceEnd = new Date(baseDate);
-                            initialRecurrenceEnd.setHours(0, 0, 0, 0);
-                            setRecurrenceEndsOn(initialRecurrenceEnd);
-                            setShowRecurrenceEndPicker(true);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.timeButtonLabel,
-                              { color: theme.text },
-                            ]}
-                          >
-                            {t("capture.addEndDate")}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-                </View>
-                )}
-
-                {currentType === "event" && (
-                  <View style={styles.section}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      {t("capture.period")}
-                    </Text>
-                    <TouchableOpacity
-                      style={[
-                        styles.dropdownField,
-                        {
-                          backgroundColor: theme.field,
-                          borderColor: theme.border,
-                        },
-                      ]}
-                      onPress={() => setShowTimeRangeModal(true)}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[styles.dropdownValue, { color: theme.text }]}>
-                        {timeRangeSummary}
-                      </Text>
-                      <Text
-                        style={[styles.dropdownChevron, { color: theme.textSecondary }]}
-                      >
-                        ▾
-                      </Text>
-                    </TouchableOpacity>
-                    {showAdvancedOptions &&
-                      renderInlineField(
-                        location,
-                        t("capture.locationOptional"),
-                        () =>
-                          openFocusEditor({
-                            field: "location",
-                            label: t("capture.location"),
-                            placeholder: t("capture.locationOptional"),
-                          }),
-                        [
-                          styles.locationField,
-                          styles.locationInput,
-                          {
-                            backgroundColor: theme.field,
-                            borderColor: theme.border,
-                          },
-                        ],
-                      )}
-                    {showAdvancedOptions && !repeatEnabled && (
-                      <View style={styles.section}>
-                        <Text
-                          style={[
-                            styles.sectionLabelSecondary,
-                            { color: theme.textSecondary },
-                          ]}
-                        >
-                          {t("capture.reminder")}
-                        </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.dropdownField,
-                            styles.dropdownFieldCompact,
-                            {
-                              backgroundColor: theme.field,
-                              borderColor: theme.border,
-                            },
-                          ]}
-                          onPress={() => setShowReminderPicker(true)}
-                          activeOpacity={0.85}
-                        >
-                          <Text style={[styles.dropdownValue, { color: theme.text }]}>
-                            {selectedReminderLabel}
-                          </Text>
-                          <Text
-                            style={[styles.dropdownChevron, { color: theme.textSecondary }]}
-                          >
-                            ▾
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {currentType !== "event" && (
-                  <View style={styles.section}>
-                    <Text style={[styles.sectionLabel, { color: theme.text }]}>
-                      {t("capture.time")}
-                    </Text>
-                    {hasDueTime ? (
-                      <>
-                        {renderDateSelector(
-                          t("capture.due"),
-                          dueTime ?? startTime,
-                          showDuePicker,
-                          setShowDuePicker,
-                          (date) => setDueTime(date),
-                        )}
-                        <TouchableOpacity
-                          style={[
-                            styles.timeButton,
-                            { backgroundColor: theme.field },
-                          ]}
-                          onPress={() => {
-                            if (repeatEnabled) {
-                              return;
-                            }
-                            setHasDueTime(false);
-                            setDueTime(null);
-                            setShowDuePicker(false);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.timeButtonLabel,
-                              { color: theme.text },
-                            ]}
-                          >
-                            {repeatEnabled ? t("capture.timeRequired") : t("capture.noDate")}
-                          </Text>
-                        </TouchableOpacity>
-                      </>
-                    ) : (
-                      <TouchableOpacity
-                        style={[
-                          styles.timeButton,
-                          { backgroundColor: theme.field },
-                        ]}
-                        onPress={() => {
-                          setHasDueTime(true);
-                          setDueTime(dueTime ?? startTime);
-                          setShowDuePicker(true);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.timeButtonLabel,
-                            { color: theme.text },
-                          ]}
-                        >
-                          {t("capture.addDate")}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-
-                {showAdvancedOptions && (
-                <View style={styles.section}>
-                  <TouchableOpacity
-                    style={styles.notesHeader}
-                    onPress={toggleNotes}
-                  >
-                    <Text
-                      style={[
-                        styles.sectionLabel,
-                        { marginBottom: 0, color: theme.text },
-                      ]}
-                    >
-                      {t("capture.notes")}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.notesToggle,
-                        {
-                          color: theme.textSecondary,
-                          transform: [
-                            { rotate: notesExpanded ? "-90deg" : "90deg" },
-                          ],
-                        },
-                      ]}
-                    >
-                      ›
-                    </Text>
-                  </TouchableOpacity>
-                  {notesExpanded &&
-                    renderInlineField(
-                      notes,
-                      t("capture.detailsPlaceholder"),
-                      () =>
-                        openFocusEditor({
-                          field: "notes",
-                          label: t("capture.notesPlain"),
-                          placeholder: t("capture.detailsPlaceholder"),
-                          multiline: true,
-                        }),
-                      [
-                        styles.notesInput,
-                        {
-                          backgroundColor: theme.field,
-                          borderColor: theme.border,
-                        },
-                      ],
-                      true,
-                    )}
-                </View>
-                )}
-
-                {/* Löschen-Button nur beim Bearbeiten anzeigen */}
-                {editingItem?.item.id && onDelete && (
-                  <TouchableOpacity
-                    style={[
-                      styles.deleteButton,
-                      {
-                        backgroundColor: theme.deleteBg,
-                        borderColor: theme.deleteBorder,
-                      },
-                    ]}
-                    onPress={handleDelete}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[
-                        styles.deleteButtonText,
-                        { color: theme.deleteText },
-                      ]}
-                    >
-                      {t("capture.deleteEntry")}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </TouchableWithoutFeedback>
-          </ScrollView>
-
-          <View
-            style={[
-              styles.footer,
-              {
-                borderTopColor: theme.border,
-                paddingBottom: Math.max(insets.bottom, 12),
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={[
-                styles.footerSecondaryButton,
-                { backgroundColor: theme.soft, borderColor: theme.border },
-              ]}
-              onPress={onClose}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={t("common.cancel")}
-            >
-              <Text style={[styles.footerSecondaryText, { color: theme.text }]}>
-                {t("common.cancel")}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.footerPrimaryButton,
-                { backgroundColor: accentColor, shadowColor: accentColor },
-              ]}
-              onPress={handleSave}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel={t("common.save")}
-            >
-              <Text style={styles.footerPrimaryText}>✓ {t("common.save")}</Text>
-            </TouchableOpacity>
-          </View>
-        </BlurView>
-
-        {showAssigneePicker && (
-          <Modal
-            visible={showAssigneePicker}
-            animationType="fade"
-            transparent
-            statusBarTranslucent
-            navigationBarTranslucent
-            onRequestClose={() => setShowAssigneePicker(false)}
-          >
-            <View
-              style={[
-                styles.pickerOverlay,
-                { backgroundColor: theme.pickerOverlay },
-              ]}
-            >
-              <TouchableWithoutFeedback
-                onPress={() => setShowAssigneePicker(false)}
-              >
-                <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
-              <BlurView
-                intensity={80}
-                tint={blurTint}
-                style={[
-                  styles.pickerSheet,
-                  {
-                    backgroundColor: theme.sheetBackground,
-                    borderColor: theme.sheetBorder,
-                    borderWidth: 1,
-                  },
-                ]}
-              >
-                <View style={styles.pickerHeader}>
-                  <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    {t("capture.forWhom")}
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowAssigneePicker(false)}>
-                    <Text
-                      style={[styles.pickerCloseButton, { color: theme.text }]}
-                    >
-                      ✕
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView>
-                  {assigneeOptions.map((opt) => {
-                    const isChild = opt.value === "child";
-                    const isSelected = isChild
-                      ? assignee === "child" &&
-                        (opt.babyId ?? null) === (selectedBabyId ?? null)
-                      : assignee === opt.value;
-                    return (
-                      <TouchableOpacity
-                        key={opt.key}
-                        style={[
-                          styles.pickerOption,
-                          { borderBottomColor: theme.divider },
-                          isSelected && styles.pickerOptionActive,
-                          isSelected && {
-                            backgroundColor: theme.accentSoft,
-                          },
-                        ]}
-                        onPress={() => {
-                          setAssignee(opt.value);
-                          setSelectedBabyId(isChild ? (opt.babyId ?? null) : null);
-                          setShowAssigneePicker(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.pickerOptionText,
-                            { color: theme.text },
-                            isSelected && styles.pickerOptionTextActive,
-                            isSelected && { color: accentColor },
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </BlurView>
-            </View>
-          </Modal>
-        )}
-
-        {showTimeRangeModal && (
-          <Modal
-            visible={showTimeRangeModal}
-            animationType="slide"
-            transparent
-            statusBarTranslucent
-            navigationBarTranslucent
-            onRequestClose={() => {
-              setShowTimeRangeModal(false);
-              setShowStartPicker(false);
-              setShowEndPicker(false);
-            }}
-          >
-            <View
-              style={[
-                styles.timeRangeModalOverlay,
-                { backgroundColor: theme.pickerOverlay },
-              ]}
-            >
-              <TouchableWithoutFeedback
-                onPress={() => {
-                  setShowTimeRangeModal(false);
-                  setShowStartPicker(false);
-                  setShowEndPicker(false);
-                }}
-              >
-                <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
-              <BlurView
-                intensity={80}
-                tint={blurTint}
-                style={[
-                  styles.timeRangeModalSheet,
-                  {
-                    paddingBottom: Math.max(insets.bottom, 12),
-                    backgroundColor: theme.sheetBackground,
-                    borderColor: theme.sheetBorder,
-                    borderWidth: 1,
-                  },
-                ]}
-              >
-                <View style={styles.pickerHeader}>
-                  <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    {t("capture.period")}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      setShowTimeRangeModal(false);
-                      setShowStartPicker(false);
-                      setShowEndPicker(false);
-                    }}
-                    style={[
-                      styles.modalDoneButton,
-                      { backgroundColor: accentColor },
-                    ]}
-                    accessibilityLabel={t("capture.applyPeriod")}
-                  >
-                    <Text
-                      style={[styles.modalDoneLabel, { color: "#fff" }]}
-                    >
-                      ✓
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.timeRangeModalContent}
-                >
-                  <View style={styles.section}>
-                    <Text
-                      style={[styles.sectionLabel, { color: theme.textSecondary }]}
-                    >
-                      {t("capture.clock")}
-                    </Text>
-                    <View style={styles.timeModeRow}>
-                      <TouchableOpacity
-                        style={[
-                          styles.timeModeOption,
-                          {
-                            backgroundColor: theme.soft,
-                            borderColor: theme.border,
-                          },
-                          isAllDay && styles.timeModeOptionActive,
-                          isAllDay && {
-                            backgroundColor: accentColor,
-                            borderColor: accentColor,
-                          },
-                        ]}
-                        onPress={() => setEventMode(true)}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[
-                            styles.timeModeOptionLabel,
-                            { color: theme.text },
-                            isAllDay && styles.timeModeOptionLabelActive,
-                          ]}
-                        >
-                          {t("common.allDay")}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.timeModeOption,
-                          {
-                            backgroundColor: theme.soft,
-                            borderColor: theme.border,
-                          },
-                          !isAllDay && styles.timeModeOptionActive,
-                          !isAllDay && {
-                            backgroundColor: accentColor,
-                            borderColor: accentColor,
-                          },
-                        ]}
-                        onPress={() => setEventMode(false)}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[
-                            styles.timeModeOptionLabel,
-                            { color: theme.text },
-                            !isAllDay && styles.timeModeOptionLabelActive,
-                          ]}
-                        >
-                          {t("capture.withTime")}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {isAllDay ? (
-                    <>
-                      {renderDateSelector(
-                        t("capture.from"),
-                        startTime,
-                        showStartPicker,
-                        setShowStartPicker,
-                        (date) => {
-                          const allDayStart = new Date(date);
-                          allDayStart.setHours(0, 0, 0, 0);
-                          setStartTime(allDayStart);
-
-                          if (endTime && endTime < allDayStart) {
-                            const allDayEnd = new Date(allDayStart);
-                            allDayEnd.setHours(23, 59, 59, 999);
-                            setEndTime(allDayEnd);
-                          }
-                        },
-                        true,
-                      )}
-                      {renderDateSelector(
-                        t("capture.to"),
-                        endTime ?? startTime,
-                        showEndPicker,
-                        setShowEndPicker,
-                        (date) => {
-                          const allDayEnd = new Date(date);
-                          allDayEnd.setHours(23, 59, 59, 999);
-
-                          if (allDayEnd < startTime) {
-                            setEndTime(new Date(startTime.getTime()));
-                            (endTime ?? startTime).setHours(23, 59, 59, 999);
-                          } else {
-                            setEndTime(allDayEnd);
-                          }
-                        },
-                        true,
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {renderDateSelector(
-                        t("capture.start"),
-                        startTime,
-                        showStartPicker,
-                        setShowStartPicker,
-                        (date) => {
-                          setStartTime(date);
-                          if (showEnd && endTime && endTime < date) {
-                            setEndTime(new Date(date.getTime() + 30 * 60000));
-                          }
-                        },
-                        false,
-                      )}
-                      {showEnd && endTime ? (
-                        <>
-                          {renderDateSelector(
-                            t("capture.end"),
-                            endTime,
-                            showEndPicker,
-                            setShowEndPicker,
-                            setEndTime,
-                          )}
-                          {endTime.getTime() !== startTime.getTime() && (
-                            <TouchableOpacity
-                              style={styles.removeEndButton}
-                              onPress={() => {
-                                setShowEnd(false);
-                                setEndTime(null);
-                                setShowEndPicker(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.removeEndLabel,
-                                  { color: theme.textSecondary },
-                                ]}
-                              >
-                                {t("capture.removeEnd")}
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-                        </>
-                      ) : (
-                        <TouchableOpacity
-                          style={[
-                            styles.timeButton,
-                            { backgroundColor: theme.field },
-                          ]}
-                          onPress={() => {
-                            const defaultEnd = new Date(
-                              startTime.getTime() + 30 * 60000,
-                            );
-                            setEndTime(defaultEnd);
-                            setShowEnd(true);
-                            setShowEndPicker(true);
-                          }}
-                        >
-                          <Text
-                            style={[styles.timeButtonLabel, { color: theme.text }]}
-                          >
-                            {t("capture.addEnd")}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </>
-                  )}
-                </ScrollView>
-              </BlurView>
-            </View>
-          </Modal>
-        )}
-
-        {showReminderPicker && (
-          <Modal
-            visible={showReminderPicker}
-            animationType="fade"
-            transparent
-            statusBarTranslucent
-            navigationBarTranslucent
-            onRequestClose={() => setShowReminderPicker(false)}
-          >
-            <View
-              style={[
-                styles.pickerOverlay,
-                { backgroundColor: theme.pickerOverlay },
-              ]}
-            >
-              <TouchableWithoutFeedback
-                onPress={() => setShowReminderPicker(false)}
-              >
-                <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
-              <BlurView
-                intensity={80}
-                tint={blurTint}
-                style={[
-                  styles.pickerSheet,
-                  {
-                    backgroundColor: theme.sheetBackground,
-                    borderColor: theme.sheetBorder,
-                    borderWidth: 1,
-                  },
-                ]}
-              >
-                <View style={styles.pickerHeader}>
-                  <Text style={[styles.pickerTitle, { color: theme.text }]}>
-                    {t("capture.reminder")}
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowReminderPicker(false)}>
-                    <Text
-                      style={[styles.pickerCloseButton, { color: theme.text }]}
-                    >
-                      ✕
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView>
-                  {REMINDER_OPTIONS.map((minutes) => (
-                    <TouchableOpacity
-                      key={minutes === null ? "none" : minutes}
+                      key={opt.key}
                       style={[
                         styles.pickerOption,
                         { borderBottomColor: theme.divider },
-                        reminderMinutes === minutes && styles.pickerOptionActive,
-                        reminderMinutes === minutes && {
+                        isSelected && styles.pickerOptionActive,
+                        isSelected && {
                           backgroundColor: theme.accentSoft,
                         },
                       ]}
                       onPress={() => {
-                        setReminderMinutes(minutes);
-                        setShowReminderPicker(false);
+                        setAssignee(opt.value);
+                        setSelectedBabyId(isChild ? (opt.babyId ?? null) : null);
+                        setShowAssigneePicker(false);
                       }}
                     >
                       <Text
                         style={[
                           styles.pickerOptionText,
                           { color: theme.text },
-                          reminderMinutes === minutes &&
-                            styles.pickerOptionTextActive,
-                          reminderMinutes === minutes && {
-                            color: accentColor,
-                          },
+                          isSelected && styles.pickerOptionTextActive,
+                          isSelected && { color: accentColor },
                         ]}
                       >
-                        {formatReminderLabel(minutes, t)}
+                        {opt.label}
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </BlurView>
-            </View>
-          </Modal>
-        )}
+                  );
+                })}
+              </FormSheet>
+            )}
+            {showTimeRangeModal && (
+              <FormSheet
+                visible={showTimeRangeModal}
+                isDark={isDark}
+                title={t('capture.period')}
+                onClose={() => closePeriod()}
+                onCancel={() => closePeriod()}
+                confirmLabel={t('capture.applyPeriod')}
+                onConfirm={() => closePeriod(true)}
+              >
+                <View style={styles.section}>
+                  <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>
+                    {t('capture.clock')}
+                  </Text>
+                  <View style={styles.timeModeRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.timeModeOption,
+                        {
+                          backgroundColor: theme.soft,
+                          borderColor: theme.border,
+                        },
+                        isAllDay && styles.timeModeOptionActive,
+                        isAllDay && {
+                          backgroundColor: accentColor,
+                          borderColor: accentColor,
+                        },
+                      ]}
+                      onPress={() => setEventMode(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.timeModeOptionLabel,
+                          { color: theme.text },
+                          isAllDay && styles.timeModeOptionLabelActive,
+                        ]}
+                      >
+                        {t('common.allDay')}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.timeModeOption,
+                        {
+                          backgroundColor: theme.soft,
+                          borderColor: theme.border,
+                        },
+                        !isAllDay && styles.timeModeOptionActive,
+                        !isAllDay && {
+                          backgroundColor: accentColor,
+                          borderColor: accentColor,
+                        },
+                      ]}
+                      onPress={() => setEventMode(false)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.timeModeOptionLabel,
+                          { color: theme.text },
+                          !isAllDay && styles.timeModeOptionLabelActive,
+                        ]}
+                      >
+                        {t('capture.withTime')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
 
-        <TextInputOverlay
-          visible={!!focusConfig}
-          label={focusConfig?.label ?? ""}
-          value={focusValue}
-          placeholder={focusConfig?.placeholder}
-          multiline={!!focusConfig?.multiline}
-          accentColor={accentColor}
-          onClose={closeFocusEditor}
-          onSubmit={(next) => saveFocusEditor(next)}
-        />
-      </View>
-    </Modal>
+                {isAllDay ? (
+                  <>
+                    {renderDateSelector(
+                      t('capture.from'),
+                      startTime,
+                      showStartPicker,
+                      setShowStartPicker,
+                      (date) => {
+                        const allDayStart = new Date(date);
+                        allDayStart.setHours(0, 0, 0, 0);
+                        setStartTime(allDayStart);
+
+                        if (endTime && endTime < allDayStart) {
+                          const allDayEnd = new Date(allDayStart);
+                          allDayEnd.setHours(23, 59, 59, 999);
+                          setEndTime(allDayEnd);
+                        }
+                      },
+                      true,
+                    )}
+                    {renderDateSelector(
+                      t('capture.to'),
+                      endTime ?? startTime,
+                      showEndPicker,
+                      setShowEndPicker,
+                      (date) => {
+                        const allDayEnd = new Date(date);
+                        allDayEnd.setHours(23, 59, 59, 999);
+
+                        if (allDayEnd < startTime) {
+                          setEndTime(new Date(startTime.getTime()));
+                          (endTime ?? startTime).setHours(23, 59, 59, 999);
+                        } else {
+                          setEndTime(allDayEnd);
+                        }
+                      },
+                      true,
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {renderDateSelector(
+                      t('capture.start'),
+                      startTime,
+                      showStartPicker,
+                      setShowStartPicker,
+                      (date) => {
+                        setStartTime(date);
+                        if (showEnd && endTime && endTime < date) {
+                          setEndTime(new Date(date.getTime() + 30 * 60000));
+                        }
+                      },
+                      false,
+                    )}
+                    {showEnd && endTime ? (
+                      <>
+                        {renderDateSelector(
+                          t('capture.end'),
+                          endTime,
+                          showEndPicker,
+                          setShowEndPicker,
+                          setEndTime,
+                        )}
+                        {endTime.getTime() !== startTime.getTime() && (
+                          <ActionButton
+                            variant="secondary"
+                            size="compact"
+                            isDark={isDark}
+                            label={t('capture.removeEnd')}
+                            style={styles.removeEndButton}
+                            onPress={() => {
+                              setShowEnd(false);
+                              setEndTime(null);
+                              setShowEndPicker(false);
+                            }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <ActionButton
+                        variant="secondary"
+                        isDark={isDark}
+                        label={t('capture.addEnd')}
+                        onPress={() => {
+                          const defaultEnd = new Date(startTime.getTime() + 30 * 60000);
+                          setEndTime(defaultEnd);
+                          setShowEnd(true);
+                          setShowEndPicker(true);
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+              </FormSheet>
+            )}
+            {showReminderPicker && (
+              <FormSheet
+                visible={showReminderPicker}
+                isDark={isDark}
+                title={t('capture.reminder')}
+                onClose={() => setShowReminderPicker(false)}
+              >
+                {REMINDER_OPTIONS.map((minutes) => (
+                  <TouchableOpacity
+                    key={minutes === null ? 'none' : minutes}
+                    style={[
+                      styles.pickerOption,
+                      { borderBottomColor: theme.divider },
+                      reminderMinutes === minutes && styles.pickerOptionActive,
+                      reminderMinutes === minutes && {
+                        backgroundColor: theme.accentSoft,
+                      },
+                    ]}
+                    onPress={() => {
+                      setReminderMinutes(minutes);
+                      setShowReminderPicker(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerOptionText,
+                        { color: theme.text },
+                        reminderMinutes === minutes && styles.pickerOptionTextActive,
+                        reminderMinutes === minutes && {
+                          color: accentColor,
+                        },
+                      ]}
+                    >
+                      {formatReminderLabel(minutes, t)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </FormSheet>
+            )}
+            <TextInputOverlay
+              visible={!!focusConfig}
+              label={focusConfig?.label ?? ''}
+              value={focusValue}
+              placeholder={focusConfig?.placeholder}
+              multiline={!!focusConfig?.multiline}
+              onClose={closeFocusEditor}
+              onSubmit={(next) => saveFocusEditor(next)}
+            />
+          </>
+        }
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.contentWrapper}>
+            <View style={styles.typeSwitchRow}>
+              {(['todo', 'event'] as PlannerCaptureType[]).map((btnType) => (
+                <TouchableOpacity
+                  key={btnType}
+                  style={[
+                    styles.typeSwitchButton,
+                    {
+                      backgroundColor: theme.soft,
+                      borderColor: theme.border,
+                    },
+                    currentType === btnType && styles.typeSwitchButtonActive,
+                    currentType === btnType && {
+                      backgroundColor: accentColor,
+                      borderColor: accentColor,
+                    },
+                  ]}
+                  onPress={() => setCurrentType(btnType)}
+                >
+                  <Text
+                    style={[
+                      styles.typeSwitchLabel,
+                      { color: theme.text },
+                      currentType === btnType && styles.typeSwitchLabelActive,
+                    ]}
+                  >
+                    {btnType === 'todo' ? t('capture.todo') : t('capture.event')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {renderInlineField(
+              title,
+              t('capture.title'),
+              () =>
+                openFocusEditor({
+                  field: 'title',
+                  label: t('capture.title'),
+                  placeholder: t('capture.title'),
+                }),
+              [styles.titleInput, { backgroundColor: theme.field }],
+              false,
+              styles.titleFieldText,
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.advancedToggleButton,
+                {
+                  backgroundColor: showAdvancedOptions ? theme.accentSoft : theme.field,
+                  borderColor: showAdvancedOptions ? accentColor : theme.border,
+                },
+              ]}
+              onPress={() => setShowAdvancedOptions((prev) => !prev)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={showAdvancedOptions ? t('capture.lessA11y') : t('capture.moreA11y')}
+            >
+              <Text
+                style={[
+                  styles.advancedToggleText,
+                  { color: showAdvancedOptions ? accentColor : theme.text },
+                ]}
+              >
+                {showAdvancedOptions ? t('capture.less') : t('capture.more')}
+              </Text>
+              <Text
+                style={[
+                  styles.advancedToggleIcon,
+                  {
+                    color: showAdvancedOptions ? accentColor : theme.textSecondary,
+                  },
+                ]}
+              >
+                {showAdvancedOptions ? '˄' : '˅'}
+              </Text>
+            </TouchableOpacity>
+
+            {showAdvancedOptions && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('capture.for')}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownField,
+                    {
+                      backgroundColor: theme.field,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                  onPress={() => setShowAssigneePicker(true)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                    {selectedAssigneeLabel}
+                  </Text>
+                  <Text style={[styles.dropdownChevron, { color: theme.textSecondary }]}>▾</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {showAdvancedOptions && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('capture.color')}</Text>
+                <View style={styles.colorSelector}>
+                  <TouchableOpacity
+                    style={[
+                      styles.colorSwatch,
+                      {
+                        backgroundColor: theme.field,
+                        borderColor: color ? theme.border : accentColor,
+                        borderWidth: color ? 1 : 3,
+                      },
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={() => setColor(null)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: !color }}
+                    accessibilityLabel={t('capture.colorAuto')}
+                  >
+                    <Text
+                      style={[
+                        styles.colorSwatchAutoLabel,
+                        { color: color ? theme.textSecondary : accentColor },
+                      ]}
+                    >
+                      A
+                    </Text>
+                  </TouchableOpacity>
+                  {PLANNER_ITEM_COLORS.map((option) => {
+                    const selected = isSamePlannerColor(color, option.hex);
+                    return (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={[
+                          styles.colorSwatch,
+                          {
+                            backgroundColor: adaptPlannerColor(option.hex, isDark),
+                            borderColor: selected ? theme.text : 'transparent',
+                            borderWidth: selected ? 3 : 1,
+                          },
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={() => setColor(option.hex)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel={t(`color.${option.key}` as PlannerTranslationKey)}
+                      >
+                        {selected ? <Text style={styles.colorSwatchCheck}>✓</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={[styles.colorHint, { color: theme.textSecondary }]}>
+                  {selectedColorLabel}
+                </Text>
+              </View>
+            )}
+
+            {showAdvancedOptions && (
+              <View style={styles.section}>
+                <View style={styles.recurrenceToggleRow}>
+                  <Text style={[styles.sectionLabel, { color: theme.text }]}>
+                    {t('capture.repeat')}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.recurrenceToggle,
+                      {
+                        backgroundColor: repeatEnabled ? accentColor : theme.field,
+                        borderColor: repeatEnabled ? accentColor : theme.border,
+                      },
+                    ]}
+                    activeOpacity={0.85}
+                    onPress={toggleRepeatEnabled}
+                  >
+                    <Text
+                      style={[
+                        styles.recurrenceToggleText,
+                        { color: repeatEnabled ? '#fff' : theme.text },
+                      ]}
+                    >
+                      {repeatEnabled ? t('capture.on') : t('capture.off')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {repeatEnabled && (
+                  <View style={styles.recurrenceContent}>
+                    <View style={styles.recurrenceShortcuts}>
+                      <TouchableOpacity
+                        style={[
+                          styles.recurrenceShortcut,
+                          {
+                            backgroundColor: everyDayShortcutActive ? accentColor : theme.soft,
+                            borderColor: everyDayShortcutActive ? accentColor : theme.border,
+                          },
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={() => setRepeatDays([1, 2, 3, 4, 5, 6, 7])}
+                      >
+                        <Text
+                          style={[
+                            styles.recurrenceShortcutText,
+                            {
+                              color: everyDayShortcutActive ? '#fff' : theme.text,
+                            },
+                          ]}
+                        >
+                          {t('capture.daily')}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.recurrenceShortcut,
+                          {
+                            backgroundColor: weekdaysShortcutActive ? accentColor : theme.soft,
+                            borderColor: weekdaysShortcutActive ? accentColor : theme.border,
+                          },
+                        ]}
+                        activeOpacity={0.85}
+                        onPress={() => setRepeatDays([1, 2, 3, 4, 5])}
+                      >
+                        <Text
+                          style={[
+                            styles.recurrenceShortcutText,
+                            {
+                              color: weekdaysShortcutActive ? '#fff' : theme.text,
+                            },
+                          ]}
+                        >
+                          {t('capture.weekdays')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.weekdaySelector}>
+                      {WEEKDAY_OPTIONS.map((day) => {
+                        const selected = sanitizedRepeatDays.includes(day.value);
+                        return (
+                          <TouchableOpacity
+                            key={day.value}
+                            style={[
+                              styles.weekdayButton,
+                              {
+                                backgroundColor: selected ? accentColor : theme.field,
+                                borderColor: selected ? accentColor : theme.border,
+                              },
+                            ]}
+                            activeOpacity={0.85}
+                            onPress={() => toggleRepeatDay(day.value)}
+                          >
+                            <Text
+                              style={[styles.weekdayLabel, { color: selected ? '#fff' : theme.text }]}
+                            >
+                              {t(
+                                (
+                                  [
+                                    'weekday.mon',
+                                    'weekday.tue',
+                                    'weekday.wed',
+                                    'weekday.thu',
+                                    'weekday.fri',
+                                    'weekday.sat',
+                                    'weekday.sun',
+                                  ] as PlannerTranslationKey[]
+                                )[day.value - 1],
+                              )}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <Text
+                      style={[
+                        styles.sectionLabelSecondary,
+                        styles.recurrenceMetaLabel,
+                        { color: theme.textSecondary },
+                      ]}
+                    >
+                      {t('capture.seriesEnd')}
+                    </Text>
+                    {recurrenceEndsOn ? (
+                      <>
+                        {renderDateSelector(
+                          t('capture.endsOn'),
+                          recurrenceEndsOn,
+                          showRecurrenceEndPicker,
+                          setShowRecurrenceEndPicker,
+                          (date) => {
+                            const normalized = new Date(date);
+                            normalized.setHours(0, 0, 0, 0);
+                            setRecurrenceEndsOn(normalized);
+                          },
+                          true,
+                        )}
+                        <ActionButton
+                          variant="secondary"
+                          isDark={isDark}
+                          label={t('capture.noEnd')}
+                          onPress={() => {
+                            setRecurrenceEndsOn(null);
+                            setShowRecurrenceEndPicker(false);
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <ActionButton
+                        variant="secondary"
+                        isDark={isDark}
+                        label={t('capture.addEndDate')}
+                        onPress={() => {
+                          const initialRecurrenceEnd = new Date(baseDate);
+                          initialRecurrenceEnd.setHours(0, 0, 0, 0);
+                          setRecurrenceEndsOn(initialRecurrenceEnd);
+                          setShowRecurrenceEndPicker(true);
+                        }}
+                      />
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {currentType === 'event' && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('capture.period')}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.dropdownField,
+                    {
+                      backgroundColor: theme.field,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                  onPress={openPeriod}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.dropdownValue, { color: theme.text }]}>{timeRangeSummary}</Text>
+                  <Text style={[styles.dropdownChevron, { color: theme.textSecondary }]}>▾</Text>
+                </TouchableOpacity>
+                {showAdvancedOptions &&
+                  renderInlineField(
+                    location,
+                    t('capture.locationOptional'),
+                    () =>
+                      openFocusEditor({
+                        field: 'location',
+                        label: t('capture.location'),
+                        placeholder: t('capture.locationOptional'),
+                      }),
+                    [
+                      styles.locationField,
+                      styles.locationInput,
+                      {
+                        backgroundColor: theme.field,
+                        borderColor: theme.border,
+                      },
+                    ],
+                  )}
+                {showAdvancedOptions && !repeatEnabled && (
+                  <View style={styles.section}>
+                    <Text style={[styles.sectionLabelSecondary, { color: theme.textSecondary }]}>
+                      {t('capture.reminder')}
+                    </Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.dropdownField,
+                        styles.dropdownFieldCompact,
+                        {
+                          backgroundColor: theme.field,
+                          borderColor: theme.border,
+                        },
+                      ]}
+                      onPress={() => setShowReminderPicker(true)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.dropdownValue, { color: theme.text }]}>
+                        {selectedReminderLabel}
+                      </Text>
+                      <Text style={[styles.dropdownChevron, { color: theme.textSecondary }]}>▾</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {currentType !== 'event' && (
+              <View style={styles.section}>
+                <Text style={[styles.sectionLabel, { color: theme.text }]}>{t('capture.time')}</Text>
+                {hasDueTime ? (
+                  <>
+                    {renderDateSelector(
+                      t('capture.due'),
+                      dueTime ?? startTime,
+                      showDuePicker,
+                      setShowDuePicker,
+                      (date) => setDueTime(date),
+                    )}
+                    <ActionButton
+                      variant="secondary"
+                      isDark={isDark}
+                      disabled={repeatEnabled}
+                      label={repeatEnabled ? t('capture.timeRequired') : t('capture.noDate')}
+                      onPress={() => {
+                        if (repeatEnabled) {
+                          return;
+                        }
+                        setHasDueTime(false);
+                        setDueTime(null);
+                        setShowDuePicker(false);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <ActionButton
+                    variant="secondary"
+                    isDark={isDark}
+                    label={t('capture.addDate')}
+                    onPress={() => {
+                      setHasDueTime(true);
+                      setDueTime(dueTime ?? startTime);
+                      setShowDuePicker(true);
+                    }}
+                  />
+                )}
+              </View>
+            )}
+
+            {showAdvancedOptions && (
+              <View style={styles.section}>
+                <TouchableOpacity style={styles.notesHeader} onPress={toggleNotes}>
+                  <Text style={[styles.sectionLabel, { marginBottom: 0, color: theme.text }]}>
+                    {t('capture.notes')}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.notesToggle,
+                      {
+                        color: theme.textSecondary,
+                        transform: [{ rotate: notesExpanded ? '-90deg' : '90deg' }],
+                      },
+                    ]}
+                  >
+                    ›
+                  </Text>
+                </TouchableOpacity>
+                {notesExpanded &&
+                  renderInlineField(
+                    notes,
+                    t('capture.detailsPlaceholder'),
+                    () =>
+                      openFocusEditor({
+                        field: 'notes',
+                        label: t('capture.notesPlain'),
+                        placeholder: t('capture.detailsPlaceholder'),
+                        multiline: true,
+                      }),
+                    [
+                      styles.notesInput,
+                      {
+                        backgroundColor: theme.field,
+                        borderColor: theme.border,
+                      },
+                    ],
+                    true,
+                  )}
+              </View>
+            )}
+
+            {/* Löschen-Button nur beim Bearbeiten anzeigen */}
+            {editingItem?.item.id && onDelete && (
+              <ActionButton
+                style={styles.deleteButton}
+                variant="destructive"
+                isDark={isDark}
+                label={t('common.delete')}
+                accessibilityLabel={t('capture.deleteEntry')}
+                onPress={handleDelete}
+              />
+            )}
+          </View>
+        </TouchableWithoutFeedback>
+      </FormSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  sheet: {
-    backgroundColor: "transparent",
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    overflow: "hidden",
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    maxHeight: "92%",
-  },
-  scroll: {
-    flexShrink: 1,
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  footerSecondaryButton: {
-    minHeight: 52,
-    paddingHorizontal: 20,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  footerSecondaryText: {
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  footerPrimaryButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  footerPrimaryText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 18,
-  },
-  headerCenter: {
-    alignItems: "center",
-    flex: 1,
-  },
-  roundButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  roundButtonLabel: {
-    fontSize: 20,
-    color: THEME.text,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: THEME.text,
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
-    color: THEME.textSecondary,
-  },
-  contentWrapper: {
-    paddingBottom: 20,
-    gap: 24,
-  },
+
+  contentWrapper: { gap: 20 },
   typeSwitchRow: {
     flexDirection: "row",
     gap: 12,
@@ -2282,29 +1805,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: THEME.textSecondary,
   },
-  inlineFieldBase: {
-    alignItems: "flex-start",
-    justifyContent: "center",
-  },
-  inlineFieldMultiline: {
-    justifyContent: "flex-start",
-  },
-  inputValue: {
-    color: THEME.text,
-    fontSize: 16,
-  },
-  inputPlaceholder: {
-    color: THEME.textSecondary,
-    fontSize: 16,
-  },
-  section: {
-    gap: 12,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: THEME.text,
-  },
+
+  section: { gap: 8 },
+  sectionLabel: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
   sectionLabelSecondary: {
     fontSize: 13,
     fontWeight: "600",
@@ -2393,29 +1896,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  pickerBlock: {
-    backgroundColor: "rgba(255,255,255,0.85)",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
-    padding: 12,
-    gap: 8,
-  },
-  selectorHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  pickerLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: THEME.textSecondary,
-  },
-  selectorValue: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: THEME.text,
-  },
+  pickerBlock: { gap: 8 },
+
   pickerInner: {
     borderRadius: 12,
     overflow: "hidden",
@@ -2424,35 +1906,6 @@ const styles = StyleSheet.create({
   },
   dateTimePicker: {
     alignSelf: "stretch",
-  },
-  pickerActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingHorizontal: 8,
-    paddingBottom: 6,
-  },
-  pickerActionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "rgba(94,61,179,0.08)",
-  },
-  pickerActionLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: PRIMARY,
-  },
-  timeButton: {
-    borderRadius: 16,
-    backgroundColor: THEME.field,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  timeButtonLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: THEME.text,
   },
   dropdownField: {
     borderRadius: 16,
@@ -2505,13 +1958,6 @@ const styles = StyleSheet.create({
   removeEndButton: {
     alignSelf: "flex-start",
     marginTop: 4,
-    paddingHorizontal: 2,
-    paddingVertical: 2,
-  },
-  removeEndLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: THEME.textSecondary,
   },
   locationField: {
     borderRadius: 16,
@@ -2548,86 +1994,8 @@ const styles = StyleSheet.create({
   deleteButton: {
     width: "100%",
     marginTop: 30,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 107, 107, 0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 107, 107, 0.35)",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#FF6B6B",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  deleteButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#D63031",
-  },
-  pickerOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  timeRangeModalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  timeRangeModalSheet: {
-    width: "100%",
-    maxHeight: "82%",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: "hidden",
-    paddingTop: 20,
-    paddingBottom: 12,
-  },
-  timeRangeModalContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 14,
-  },
-  pickerSheet: {
-    width: "80%",
-    maxHeight: "60%",
-    borderRadius: 20,
-    overflow: "hidden",
-    paddingVertical: 20,
-  },
-  pickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-  },
-  pickerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: THEME.text,
-  },
-  pickerCloseButton: {
-    fontSize: 24,
-    color: THEME.text,
-    fontWeight: "600",
-  },
-  modalDoneButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalDoneLabel: {
-    fontSize: 22,
-    fontWeight: "700",
-    lineHeight: 24,
-  },
+
   pickerOption: {
     paddingHorizontal: 20,
     paddingVertical: 16,

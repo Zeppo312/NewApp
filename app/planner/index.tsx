@@ -1,3 +1,5 @@
+import { PeriodTabs } from '@/components/ui/period-tabs';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 import React, {
@@ -26,6 +28,7 @@ import Header from "@/components/Header";
 import { ThemedBackground } from "@/components/ThemedBackground";
 import { ThemedText } from "@/components/ThemedText";
 import { IconSymbol } from "@/components/ui/IconSymbol";
+import { ActionButton } from "@/components/ui/action-button";
 import GreetingCardView from "@/components/planner/GreetingCard";
 import TodayOverviewCardView from "@/components/planner/TodayOverviewCard";
 import { FloatingAddButton } from "@/components/planner/FloatingAddButton";
@@ -58,7 +61,6 @@ import * as Haptics from "expo-haptics";
 import { useAuth } from "@/contexts/AuthContext";
 import { getLinkedUsers, supabase } from "@/lib/supabase";
 import {
-  GlassCard,
   LiquidGlassCard,
   GLASS_OVERLAY,
   GLASS_OVERLAY_DARK,
@@ -1379,69 +1381,12 @@ function PlannerScreenContent() {
         <Header title={headerTitle} subtitle={navTitle} showBackButton />
 
         <View style={{ paddingHorizontal: LAYOUT_PAD, paddingTop: 0 }}>
-          <View style={styles.topTabsContainer}>
-            {(["day", "week", "month"] as const).map((tab) => {
-              const isActive = selectedTab === tab;
-              return (
-                <GlassCard
-                  key={tab}
-                  style={[
-                    styles.topTab,
-                    isActive && {
-                      borderColor: toRgba(accentColor, 0.66),
-                      backgroundColor: isDark
-                        ? toRgba(accentColor, 0.16)
-                        : "rgba(255,255,255,0.86)",
-                    },
-                  ]}
-                  intensity={22}
-                  overlayColor={
-                    isDark ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.14)"
-                  }
-                  borderColor={
-                    isActive ? toRgba(accentColor, 0.66) : glassBorder
-                  }
-                >
-                  <TouchableOpacity
-                    style={styles.topTabInner}
-                    onPress={() => setSelectedTab(tab)}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <Text
-                      style={[
-                        styles.topTabText,
-                        { color: isActive ? accentColor : textSecondary },
-                      ]}
-                    >
-                      {tab === "day"
-                        ? t('view.day')
-                        : tab === "week"
-                          ? t('view.week')
-                          : t('view.month')}
-                    </Text>
-                  </TouchableOpacity>
-                </GlassCard>
-              );
-            })}
-          </View>
+          <PeriodTabs value={selectedTab} isDark={isDark}
+            labels={{ day: t('view.day'), week: t('view.week'), month: t('view.month') }}
+            onSelect={setSelectedTab} style={{ marginHorizontal: 0 }} />
 
           <View style={styles.dayNavigationContainer}>
-            <TouchableOpacity
-              style={[
-                styles.weekNavButton,
-                {
-                  borderColor: isDark
-                    ? "rgba(255,255,255,0.24)"
-                    : "rgba(255,255,255,0.35)",
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(255,255,255,0.12)",
-                },
-              ]}
-              onPress={() => shiftDateByTab(-1)}
-              accessibilityRole="button"
+            <PeriodNavigationButton direction="previous"
               accessibilityLabel={
                 selectedTab === "day"
                   ? t('navigation.previousDay')
@@ -1449,13 +1394,9 @@ function PlannerScreenContent() {
                     ? t('navigation.previousWeek')
                     : t('navigation.previousMonth')
               }
-            >
-              <ThemedText
-                style={[styles.weekNavButtonText, { color: textPrimary }]}
-              >
-                ‹
-              </ThemedText>
-            </TouchableOpacity>
+              isDark={isDark} color={textPrimary}
+              onPress={() => shiftDateByTab(-1)}
+            />
 
             <View style={styles.weekHeaderCenter}>
               <ThemedText
@@ -1470,20 +1411,7 @@ function PlannerScreenContent() {
               </ThemedText>
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.weekNavButton,
-                {
-                  borderColor: isDark
-                    ? "rgba(255,255,255,0.24)"
-                    : "rgba(255,255,255,0.35)",
-                  backgroundColor: isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(255,255,255,0.12)",
-                },
-              ]}
-              onPress={() => shiftDateByTab(1)}
-              accessibilityRole="button"
+            <PeriodNavigationButton direction="next"
               accessibilityLabel={
                 selectedTab === "day"
                   ? t('navigation.nextDay')
@@ -1491,13 +1419,9 @@ function PlannerScreenContent() {
                     ? t('navigation.nextWeek')
                     : t('navigation.nextMonth')
               }
-            >
-              <ThemedText
-                style={[styles.weekNavButtonText, { color: textPrimary }]}
-              >
-                ›
-              </ThemedText>
-            </TouchableOpacity>
+              isDark={isDark} color={textPrimary}
+              onPress={() => shiftDateByTab(1)}
+            />
           </View>
         </View>
 
@@ -1642,26 +1566,15 @@ function PlannerScreenContent() {
                             </Text>
                           )}
                           {calendarSyncSettings?.enabled && (
-                            <TouchableOpacity
-                              style={[
-                                styles.calendarSyncIconButton,
-                                {
-                                  borderColor: toRgba(accentEventColor, 0.35),
-                                  backgroundColor: toRgba(accentEventColor, 0.12),
-                                },
-                              ]}
-                              activeOpacity={0.85}
-                              disabled={calendarSyncLoading}
+                            <ActionButton
+                              variant="secondary"
+                              size="compact"
+                              isDark={isDark}
+                              label={t('sync.action')}
+                              busy={calendarSyncLoading}
                               onPress={() => runCalendarSync()}
-                              accessibilityRole="button"
                               accessibilityLabel={t('sync.actionAccessibility')}
-                            >
-                              <IconSymbol
-                                name="arrow.triangle.2.circlepath"
-                                size={16}
-                                color={accentEventColor as any}
-                              />
-                            </TouchableOpacity>
+                            />
                           )}
                         </View>
                       )}
@@ -2512,8 +2425,7 @@ const styles = StyleSheet.create({
   },
   calendarSyncFooter: {
     marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "space-between",
     gap: 10,
   },
@@ -2521,14 +2433,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "700",
-  },
-  calendarSyncIconButton: {
-    width: 34,
-    height: 34,
-    borderWidth: 1,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
   },
   floatingList: {
     paddingHorizontal: LAYOUT_PAD,
@@ -2588,43 +2492,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 6,
   },
-  topTabsContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 0,
-    marginBottom: 6,
-  },
-  topTab: {
-    borderRadius: 20,
-    overflow: "hidden",
-    borderWidth: 1,
-  },
-  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { borderColor: "rgba(94,61,179,0.65)" },
-  topTabText: { fontSize: 13, fontWeight: "700", color: TEXT_PRIMARY },
-  activeTopTabText: { color: PRIMARY },
   dayNavigationContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 6,
     marginTop: 0,
-  },
-  weekNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.3,
-    borderColor: "rgba(255,255,255,0.35)",
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  weekNavButtonText: {
-    fontSize: 22,
-    color: TEXT_PRIMARY,
-    fontWeight: "700",
   },
   weekHeaderCenter: {
     alignItems: "center",

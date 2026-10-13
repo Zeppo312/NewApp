@@ -1,32 +1,32 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Modal, SafeAreaView, StatusBar, Text, TouchableWithoutFeedback, Platform, TextInputProps , Dimensions } from 'react-native';
-import DateTimePicker from '@/components/ui/DateTimePicker';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedBackground } from '@/components/ThemedBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { LineChart } from 'react-native-chart-kit';
-import { getSizeEntries as getWeightEntries, deleteSizeEntry as deleteWeightEntry, SizeEntry as WeightEntry, SizeSubject as WeightSubject, saveSizeEntry as saveWeightEntry } from '@/lib/size';
-import { Stack } from 'expo-router';
-import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
 import ActivityCard from '@/components/ActivityCard';
-import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
-import FloatingAddButton from '@/components/planner/FloatingAddButton';
-import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import Header from '@/components/Header';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import FloatingAddButton from '@/components/planner/FloatingAddButton';
+import { ThemedBackground } from '@/components/ThemedBackground';
+import { ThemedText } from '@/components/ThemedText';
+import DateTimePicker from '@/components/ui/DateTimePicker';
+import { FormField,FormSection,FormSheet } from '@/components/ui/form-sheet';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { Colors } from '@/constants/Colors';
+import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,LAYOUT_PAD,LiquidGlassCard,SECTION_GAP_BOTTOM,SECTION_GAP_TOP } from '@/constants/DesignGuide';
+import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { parseSafeDate } from '@/lib/safeDate';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import {
-  translateGrowthTrackerText,
-  type GrowthTrackerTranslationKey,
+translateGrowthTrackerText,
+type GrowthTrackerTranslationKey,
 } from '@/lib/growthTrackerTranslations';
+import { parseSafeDate } from '@/lib/safeDate';
+import { deleteSizeEntry as deleteWeightEntry,getSizeEntries as getWeightEntries,saveSizeEntry as saveWeightEntry,SizeEntry as WeightEntry,SizeSubject as WeightSubject } from '@/lib/size';
+import { Stack } from 'expo-router';
+import { useEffect,useMemo,useState } from 'react';
+import { ActivityIndicator,Alert,Dimensions,Modal,Platform,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TextInputProps,TouchableOpacity,View } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const SUBJECT_COLORS: Record<WeightSubject, string> = {
   mom: '#5E3DB3',
@@ -93,7 +93,7 @@ export default function SizeTrackerScreen() {
   // Dark Mode angepasste Farben (wie in sleep-tracker.tsx)
   const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const headerTextColor = textSecondary; // Ersetzt HEADER_TEXT_COLOR
+   // Ersetzt HEADER_TEXT_COLOR
 
   // Glass-Overlay Farbe: bei dunklem Hintergrund abgedunkelt (wie im Sleep-Tracker Wochenansicht)
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
@@ -213,6 +213,7 @@ export default function SizeTrackerScreen() {
   };
 
   const closeWeightModal = () => {
+    if (isSaving) return;
     setWeightModalVisible(false);
     setShowDatePicker(false);
     setEditingEntry(null);
@@ -649,229 +650,125 @@ export default function SizeTrackerScreen() {
   };
 
   const renderWeightCaptureModal = () => (
-    <Modal
-      visible={weightModalVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={closeWeightModal}
-    >
-      <View style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)' }]}>
-        <TouchableWithoutFeedback onPress={closeWeightModal}>
-          <View style={StyleSheet.absoluteFill} />
-        </TouchableWithoutFeedback>
-
-        <BlurView
-          intensity={80}
-          tint={isDark ? 'dark' : 'extraLight'}
-          style={[
-            styles.modalContent,
-            {
-              backgroundColor: isDark ? 'rgba(10,10,12,0.86)' : 'transparent',
-              borderTopWidth: isDark ? 1 : 0,
-              borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'transparent',
-              paddingBottom: Math.max(28, insets.bottom + 16),
-            },
-          ]}
-        >
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={[
-                styles.headerButton,
-                styles.headerButtonGhost,
-                { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' },
-              ]}
-              onPress={closeWeightModal}
-            >
-              <Text style={[styles.closeHeaderButtonText, { color: headerTextColor }]}>✕</Text>
-            </TouchableOpacity>
-            <View style={styles.headerCenter}>
-              <Text style={[styles.modalTitle, { color: headerTextColor }]}>{editingEntry ? t('size.edit') : t('size.add')}</Text>
-              <Text style={[styles.modalSubtitle, { color: headerTextColor }]}>{t('size.modalSubtitle', { baby: babyLabel })}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.headerButton,
-                styles.saveHeaderButton,
-                { backgroundColor: PLANNER_PRIMARY },
-                (isSaving || isReadOnlyPreviewMode) && styles.saveHeaderButtonDisabled,
-              ]}
-              onPress={handleSaveWeightEntry}
-              disabled={isSaving || isReadOnlyPreviewMode}
-            >
-              <Text style={styles.saveHeaderButtonText}>✓</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.modalScrollContent}
-          >
-            <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) })}</Text>
-              <View
-                style={[
-                  styles.pickerBlock,
-                  {
-                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
-                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.inlineField,
-                    {
-                      backgroundColor: isDark ? 'rgba(24,24,28,0.92)' : 'rgba(255,255,255,0.92)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
-                    },
-                  ]}
-                  activeOpacity={0.9}
-                    onPress={() =>
-                      openFocusEditor({
-                        field: 'weight',
-                        label: t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) }),
-                        placeholder: isBabySubject(weightModalSubject) ? 'z. B. 52,3' : 'z. B. 165,4',
-                        keyboardType: 'decimal-pad',
-                        inputMode: 'decimal',
-                      })
-                    }
-                >
-                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>{t('size.field')}</Text>
-                  <Text style={[weightInput.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightInput.trim() ? headerTextColor : `${headerTextColor}B3` }]}>
-                    {weightInput.trim()
-                      ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}`
-                      : t('field.tapEnter')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('field.date')}</Text>
-              <View
-                style={[
-                  styles.pickerBlock,
-                  {
-                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
-                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
-                  },
-                ]}
-              >
-                <TouchableOpacity style={styles.selectorHeader} onPress={() => setShowDatePicker((prev) => !prev)} activeOpacity={0.9}>
-                  <Text style={[styles.pickerLabel, { color: headerTextColor }]}>{t('field.measurementDate')}</Text>
-                  <Text style={[styles.selectorValue, { color: headerTextColor }]}>{formatDisplayDate(weightDate)}</Text>
-                </TouchableOpacity>
-                {showDatePicker && Platform.OS !== 'ios' && (
-                  <View
-                    style={[
-                      styles.pickerInner,
-                      {
-                        backgroundColor: isDark ? 'rgba(22,22,26,0.95)' : 'rgba(255,255,255,0.95)',
-                      },
-                    ]}
-                  >
-                    <DateTimePicker
-                      value={weightDate}
-                      mode="date"
-                      display="default"
-                      themeVariant={isDark ? 'dark' : 'light'}
-                      accentColor={PLANNER_PRIMARY}
-                      minimumDate={MIN_VALID_TRACKER_DATE}
-                      onChange={(event, date) => {
-                        if (date) {
-                          const normalized = new Date(date);
-                          normalized.setHours(12, 0, 0, 0);
-                          setWeightDate(normalized);
-                        }
-                        if (Platform.OS !== 'ios') {
-                          setShowDatePicker(false);
-                        } else if (event?.type === 'dismissed') {
-                          setShowDatePicker(false);
-                        }
-                      }}
-                      maximumDate={new Date()}
-                      style={styles.dateTimePicker}
-                    />
-                  </View>
-                )}
-                {Platform.OS === 'ios' && (
-                  <IOSBottomDatePicker
-                    visible={showDatePicker}
-                    title={t('field.chooseDate')}
-                    value={weightDate}
-                    mode="date"
-                    minimumDate={MIN_VALID_TRACKER_DATE}
-                    maximumDate={new Date()}
-                    onClose={() => setShowDatePicker(false)}
-                    onConfirm={(date) => {
-                      const normalized = new Date(date);
-                      normalized.setHours(12, 0, 0, 0);
-                      setWeightDate(normalized);
-                      setShowDatePicker(false);
-                    }}
-                    initialVariant="calendar"
-                  />
-                )}
-              </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: headerTextColor }]}>{t('field.notes')}</Text>
-              <View
-                style={[
-                  styles.pickerBlock,
-                  {
-                    backgroundColor: isDark ? 'rgba(18,18,22,0.76)' : 'rgba(255,255,255,0.85)',
-                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
-                  },
-                ]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.inlineField,
-                    styles.inlineFieldMultiline,
-                    {
-                      backgroundColor: isDark ? 'rgba(24,24,28,0.92)' : 'rgba(255,255,255,0.92)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.05)',
-                    },
-                  ]}
-                  activeOpacity={0.9}
-                  onPress={() =>
-                    openFocusEditor({
-                      field: 'notes',
-                      label: t('field.notes'),
-                      placeholder: t('field.notesHint'),
-                      multiline: true,
-                    })
-                  }
-                >
-                  <Text style={[styles.inlineFieldLabel, { color: headerTextColor }]}>{t('field.details')}</Text>
-                  <Text
-                    style={[weightNotes.trim() ? styles.inlineFieldValue : styles.inlineFieldPlaceholder, { color: weightNotes.trim() ? headerTextColor : `${headerTextColor}B3` }]}
-                    numberOfLines={3}
-                  >
-                    {weightNotes.trim() || t('field.tapAdd')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </ScrollView>
+    <FormSheet
+        visible={weightModalVisible}
+        title={t(editingEntry ? 'size.edit' : 'size.add')}
+        subtitle={t('size.modalSubtitle', { baby: babyLabel })}
+        isDark={isDark}
+        onClose={closeWeightModal}
+        onConfirm={handleSaveWeightEntry}
+        busy={isSaving}
+        confirmDisabled={isReadOnlyPreviewMode || !weightInput.trim()}
+        overlays={
           <TextInputOverlay
             visible={!!focusConfig}
             label={focusConfig?.label ?? ''}
             value={focusValue}
             placeholder={focusConfig?.placeholder}
             multiline={!!focusConfig?.multiline}
-            accentColor={PLANNER_PRIMARY}
             keyboardType={focusConfig?.keyboardType}
             inputMode={focusConfig?.inputMode}
             onClose={closeFocusEditor}
             onSubmit={(next) => saveFocusEditor(next)}
           />
-        </BlurView>
-      </View>
-    </Modal>
+        }
+      >
+        <FormSection
+          isDark={isDark}
+          label={t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) })}
+        >
+          <FormField
+            isDark={isDark}
+            value={
+              weightInput.trim() ? `${weightInput.trim()} ${getWeightUnit(weightModalSubject)}` : ''
+            }
+            placeholder={t('field.tapEnter')}
+            onPress={() =>
+              openFocusEditor({
+                field: 'weight',
+                label: t('size.fieldWithUnit', { unit: getWeightUnit(weightModalSubject) }),
+                placeholder: isBabySubject(weightModalSubject) ? 'z. B. 52,3' : 'z. B. 165,4',
+                keyboardType: 'decimal-pad',
+                inputMode: 'decimal',
+              })
+            }
+          />
+        </FormSection>
+        <FormSection isDark={isDark} label={t('field.date')}>
+          <FormField
+            isDark={isDark}
+            value={formatDisplayDate(weightDate)}
+            onPress={() => setShowDatePicker((prev) => !prev)}
+          />
+          {showDatePicker && Platform.OS !== 'ios' && (
+            <View
+              style={[
+                styles.pickerInner,
+                {
+                  backgroundColor: isDark ? 'rgba(22,22,26,0.95)' : 'rgba(255,255,255,0.95)',
+                },
+              ]}
+            >
+              <DateTimePicker
+                value={weightDate}
+                mode="date"
+                display="default"
+                themeVariant={isDark ? 'dark' : 'light'}
+                accentColor={PLANNER_PRIMARY}
+                minimumDate={MIN_VALID_TRACKER_DATE}
+                onChange={(event, date) => {
+                  if (date) {
+                    const normalized = new Date(date);
+                    normalized.setHours(12, 0, 0, 0);
+                    setWeightDate(normalized);
+                  }
+                  if (Platform.OS !== 'ios') {
+                    setShowDatePicker(false);
+                  } else if (event?.type === 'dismissed') {
+                    setShowDatePicker(false);
+                  }
+                }}
+                maximumDate={new Date()}
+                style={styles.dateTimePicker}
+              />
+            </View>
+          )}
+          {Platform.OS === 'ios' && (
+            <IOSBottomDatePicker
+              visible={showDatePicker}
+              title={t('field.chooseDate')}
+              value={weightDate}
+              mode="date"
+              minimumDate={MIN_VALID_TRACKER_DATE}
+              maximumDate={new Date()}
+              onClose={() => setShowDatePicker(false)}
+              onConfirm={(date) => {
+                const normalized = new Date(date);
+                normalized.setHours(12, 0, 0, 0);
+                setWeightDate(normalized);
+                setShowDatePicker(false);
+              }}
+              initialVariant="calendar"
+            />
+          )}
+        </FormSection>
+        <FormSection isDark={isDark} label={t('field.notes')}>
+          <FormField
+            isDark={isDark}
+            multiline
+            value={weightNotes.trim()}
+            placeholder={t('field.tapAdd')}
+            onPress={() =>
+              openFocusEditor({
+                field: 'notes',
+                label: t('field.notes'),
+                placeholder: t('field.notesHint'),
+                multiline: true,
+              })
+            }
+          />
+        </FormSection>
+      </FormSheet>
   );
 
   // Rendere die SaveView-Komponente
@@ -915,7 +812,7 @@ export default function SizeTrackerScreen() {
 
         <SafeAreaView style={styles.safeArea}>
           <StatusBar hidden={true} />
-          
+
           <Header title={t('size.title')} subtitle={headerSubtitle} showBackButton />
 
           {isReadOnlyPreviewMode && (
@@ -926,7 +823,7 @@ export default function SizeTrackerScreen() {
               </ThemedText>
             </View>
           )}
-          
+
           <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
@@ -1132,82 +1029,7 @@ const styles = StyleSheet.create({
   topTabText: { fontSize: 13, fontWeight: '700' }, // color wird dynamisch gesetzt
   activeTopTabText: { fontWeight: '800' },
   // Modal styles (match Planner Capture)
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  modalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    width: '100%',
-    overflow: 'hidden',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  modalScrollContent: {
-    paddingBottom: 24,
-    gap: 20,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 22,
-  },
-  headerButtonGhost: {
-    backgroundColor: 'rgba(0,0,0,0.08)',
-  },
-  closeHeaderButtonText: {
-    fontSize: 20,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
-  headerCenter: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-    // color wird dynamisch gesetzt
-  },
-  saveHeaderButton: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  saveHeaderButtonDisabled: {
-    opacity: 0.55,
-  },
-  saveHeaderButtonText: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  section: {
-    width: '100%',
-    gap: 12,
-  },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-  },
+
   typeSwitchRow: {
     flexDirection: 'row',
     gap: 12,
@@ -1238,29 +1060,7 @@ const styles = StyleSheet.create({
   typeSwitchLabelActive: {
     color: '#fff',
   },
-  pickerBlock: {
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    padding: 12,
-    gap: 8,
-  },
-  selectorHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pickerLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    // color wird dynamisch gesetzt
-  },
-  selectorValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
+
   pickerInner: {
     borderRadius: 14,
     overflow: 'hidden',
@@ -1287,34 +1087,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  inlineField: {
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    gap: 6,
-  },
-  inlineFieldMultiline: {
-    minHeight: 110,
-    justifyContent: 'flex-start',
-  },
-  inlineFieldLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
-  inlineFieldValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    // color wird dynamisch gesetzt
-  },
-  inlineFieldPlaceholder: {
-    fontSize: 16,
-    fontWeight: '600',
-    // color wird dynamisch gesetzt
-  },
+
   subjectSwitcherCard: {
     borderRadius: 20,
     padding: 18,

@@ -2,6 +2,43 @@
 
 Diese Dokumentation enthält die Design-Richtlinien für die Wehen-Tracker App, um ein konsistentes Erscheinungsbild und eine einheitliche Benutzererfahrung zu gewährleisten.
 
+## Aktuelle gemeinsame Grundlage
+
+Für die umgestellten Screens und Dialoge gelten die gemeinsamen Textrollen,
+[Aktionen](actions.md), [Formulare](forms.md) und `CONTENT_LAYOUT` aus
+`constants/DesignGuide.tsx`. Die älteren Trackerwerte weiter unten beschreiben
+noch vorhandene Legacy-Stile und sind keine Vorlage für neue Anpassungen.
+
+Seit dem 13. Oktober 2026 verwenden Home, Unser Tag und Schlaf sanftes Frostglas
+statt fast deckender weißer Karten. `ContentColors` definiert neutrale helle
+und dunkle Materialien; `GLASS_MATERIAL` bündelt Unschärfe und Reflexstärken.
+`ContentCard` und die kompatiblen `GlassCard`/`LiquidGlassCard`-Wrapper verwenden
+dasselbe vorhandene Glasmaterial aus `components/ui/GlassCard.tsx`.
+Eigene Fotos erhalten eine durchlässigere Glasfläche in beiden Modi; flächige
+weiße Reflexflecken entfallen. Fehlende Android-Unschärfe und „Transparenz
+reduzieren“ erhalten weiterhin eine dichtere Lesefläche. Formular-Sheets sind dichter als Lesekarten;
+sekundäre Aktionen und Eingabefelder bleiben für ihre Aufgabe klar lesbar.
+Warme Textfarben, Brandlila, fachliche Farbtöne und Hintergrundauswahl bleiben.
+
+Home, Unser Tag und Schlaf behalten dieselben Abstände und Textrollen.
+`PeriodTabs` zeigt einzelne Glas-Pills mit violetter Kontur/Text für die
+Auswahl. Der Schlaftimer verwendet eine kompakte bläuliche Glasfläche und
+Hinweise in der Uhr; größere Systemschrift bekommt Hinweise unter der Uhr.
+Die Timerziffern sind bis zum Faktor 1,4 vergrößerbar, Erklärungstexte skalieren
+mit der Systemschrift. [Korrektur und Prüfung](home-refinement-ota-20261013.md).
+
+Die sichtbaren Zeitauswahl-Pills sind nun 38 Punkte hoch, bei mindestens
+44 Punkten Touchfläche. Text und Schloss bleiben in einer zentrierten
+Inhaltszeile; große Schrift erhält weniger horizontales Padding und darf
+bei Bedarf ganze Pills in eine neue Zeile schieben. Die ruhende Schlafuhr
+ist zusätzlich ein Startknopf mit dem bestehenden Start-/Fortsetzen-Ablauf.
+[Korrektur und Bedienungsprüfung](sleep-clock-start-ota-20261013.md).
+
+`PeriodTabs` wird auch im Planer und bei Mama Self Care verwendet. Labels und
+Auswahlabläufe bleiben im jeweiligen Screen; die gemeinsame Komponente zeichnet
+die flachen Glas-Pills. Hat der Elterncontainer bereits Bildschirm-Padding,
+setzt er nur die horizontale Außenmarge der Komponente auf null.
+
 ## Farbschema
 
 Die App verwendet ein warmes, weiches Beige-Farbschema, das für werdende Mütter angenehm und beruhigend wirkt.
@@ -40,26 +77,12 @@ Die App verwendet ein warmes, weiches Beige-Farbschema, das für werdende Mütte
 
 ## Typografie
 
-- **Überschriften**:
-  - Größe: 24px
-  - Schriftart: System-Standard, fett
-  - Farbe: `#7D5A50` (dunkles Braun)
-  - Zeilenhöhe: 40px (um Buchstaben mit Überlängen Platz zu geben)
-
-- **Untertitel**:
-  - Größe: 18px
-  - Schriftart: System-Standard, fett
-  - Farbe: `#7D5A50`
-
-- **Normaler Text**:
-  - Größe: 16px
-  - Schriftart: System-Standard, normal
-  - Farbe: `#7D5A50`
-
-- **Kleiner Text**:
-  - Größe: 14px
-  - Schriftart: System-Standard, normal
-  - Farbe: `#7D5A50`
+Für neue und umgestellte Texte gelten die appweiten
+[Textrollen](typography.md) aus `constants/Typography.ts`. `ThemedText` wählt über
+`type` ein vollständiges Profil aus Größe, Gewicht und Zeilenhöhe. Die
+Systemschrift und die bestehenden Theme-Farben bleiben erhalten. Bestehende
+Ansichten werden schrittweise auf die Rollen umgestellt; besondere
+Timerdarstellungen benötigen dabei eine eigene Layoutprüfung.
 
 ## UI-Komponenten
 

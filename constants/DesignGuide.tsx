@@ -1,7 +1,16 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { ContentGlassMaterial } from '@/components/ui/content-glass-material';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { ActionColors, ContentColors } from '@/constants/Colors';
+import { ACTION_BUTTON_LAYOUT } from '@/constants/Actions';
+import { GLASS_MATERIAL } from '@/constants/Materials';
+
+export { TYPOGRAPHY } from '@/constants/Typography';
+export type { TextRole } from '@/constants/Typography';
+export { ACTION_BUTTON_LAYOUT } from '@/constants/Actions';
+export { GLASS_MATERIAL } from '@/constants/Materials';
 
 // Centralized design tokens and reusable glass components
 
@@ -11,21 +20,35 @@ export const SECTION_GAP_TOP = 20;
 export const SECTION_GAP_BOTTOM = 12;
 
 export const RADIUS = 22;
-export const PRIMARY = '#8E4EC6';
+export const PRIMARY = ActionColors.light.primary;
 // Helles Brand-Lila für Icons und Text auf dunklen bzw. getönten Flächen.
 export const PRIMARY_DARK_FOREGROUND = '#E9D5FF';
 export const TEXT_PRIMARY = '#7D5A50';
-export const GLASS_BORDER = 'rgba(255,255,255,0.55)';
-export const GLASS_OVERLAY = 'rgba(255,255,255,0.16)';
+export const GLASS_BORDER = ContentColors.light.border;
+export const GLASS_OVERLAY = ContentColors.light.surface;
 export const GRID_GAP = 8;
 
-// Adaptive Glass-Farben für dunkle Hintergrundbilder
-export const GLASS_BORDER_DARK = 'rgba(255,255,255,0.25)';
-export const GLASS_OVERLAY_DARK = 'rgba(0,0,0,0.35)';
+// Shared rhythm for Home and the two everyday tracking screens.
+export const CONTENT_LAYOUT = {
+  edge: LAYOUT_PAD,
+  cardPadding: 20,
+  compactPadding: 16,
+  sectionGap: 24,
+  itemGap: 12,
+  cardRadius: RADIUS,
+  innerRadius: 16,
+  cardShadow: '0 4px 16px rgba(35,25,20,0.08)',
+} as const;
+export const METRIC_TEXT = { ...TYPOGRAPHY.dialogTitle, fontVariant: ['tabular-nums' as const] };
+export const METRIC_TEXT_LARGE = { ...TYPOGRAPHY.display, fontVariant: ['tabular-nums' as const] };
 
-export const FONT_SM = 12;
-export const FONT_MD = 14;
-export const FONT_LG = 18;
+// Adaptive Glass-Farben für dunkle Hintergrundbilder
+export const GLASS_BORDER_DARK = ContentColors.dark.border;
+export const GLASS_OVERLAY_DARK = ContentColors.dark.surface;
+
+export const FONT_SM = TYPOGRAPHY.caption.fontSize;
+export const FONT_MD = TYPOGRAPHY.bodySmall.fontSize;
+export const FONT_LG = TYPOGRAPHY.headline.fontSize;
 
 export const designTokens = {
   LAYOUT_PAD,
@@ -44,14 +67,20 @@ export const designTokens = {
   FONT_SM,
   FONT_MD,
   FONT_LG,
+  TYPOGRAPHY,
+  ACTION_BUTTON_LAYOUT,
+  CONTENT_LAYOUT,
+  GLASS_MATERIAL,
+  METRIC_TEXT,
+  METRIC_TEXT_LARGE,
 };
 
 // Generic GlassCard wrapper
-// Passt sich nur bei dunklem Hintergrundbild an
+// Kompatibler Wrapper mit dem gemeinsamen hellen/dunklen Kartenmaterial.
 export function GlassCard({
   children,
   style,
-  intensity = 26,
+  intensity = GLASS_MATERIAL.contentBlurIntensity,
   overlayColor,
   borderColor,
 }: {
@@ -63,24 +92,21 @@ export function GlassCard({
 }) {
   const adaptiveColors = useAdaptiveColors();
 
-  // Nur bei dunklem Hintergrundbild adaptive Farben verwenden
-  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const useDarkMode = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
 
-  const resolvedOverlayColor = overlayColor ?? (useDarkMode ? GLASS_OVERLAY_DARK : GLASS_OVERLAY);
   const resolvedBorderColor = borderColor ?? (useDarkMode ? GLASS_BORDER_DARK : GLASS_BORDER);
-  const blurTint = useDarkMode ? 'dark' : 'light';
+  const resolvedRadius = StyleSheet.flatten(style)?.borderRadius ?? RADIUS;
 
   return (
     <View style={[styles.glassContainer, { borderColor: resolvedBorderColor }, style]}>
-      <BlurView style={StyleSheet.absoluteFill} intensity={intensity} tint={blurTint} />
-      <View style={[styles.glassOverlay, { backgroundColor: resolvedOverlayColor }]} />
+      <ContentGlassMaterial intensity={intensity} overlayColor={overlayColor} isDark={useDarkMode} radius={resolvedRadius} />
       {children}
     </View>
   );
 }
 
 // Tappable Liquid Glass Card (with inner overlay)
-// Passt sich nur bei dunklem Hintergrundbild an
+// Gleiche Materialrollen wie ContentCard, mit bestehender Touchable-Schnittstelle.
 export const LiquidGlassCard: React.FC<{
   children: React.ReactNode;
   style?: any;
@@ -93,7 +119,7 @@ export const LiquidGlassCard: React.FC<{
 }> = ({
   children,
   style,
-  intensity = 24,
+  intensity = GLASS_MATERIAL.contentBlurIntensity,
   overlayColor,
   borderColor,
   onPress,
@@ -106,12 +132,9 @@ export const LiquidGlassCard: React.FC<{
   const resolvedRadius = radius ?? flattenedStyle?.borderRadius ?? RADIUS;
   const radiusStyle = { borderRadius: resolvedRadius };
 
-  // Nur bei dunklem Hintergrundbild adaptive Farben verwenden
-  const useDarkMode = adaptiveColors.hasCustomBackground && adaptiveColors.isDarkBackground;
+  const useDarkMode = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
 
-  const resolvedOverlayColor = overlayColor ?? (useDarkMode ? GLASS_OVERLAY_DARK : 'rgba(255,255,255,0.15)');
-  const resolvedBorderColor = borderColor ?? (useDarkMode ? GLASS_BORDER_DARK : 'rgba(255,255,255,0.3)');
-  const blurTint = useDarkMode ? 'dark' : 'light';
+  const resolvedBorderColor = borderColor ?? (useDarkMode ? GLASS_BORDER_DARK : GLASS_BORDER);
 
   return (
     <CardComponent
@@ -120,18 +143,10 @@ export const LiquidGlassCard: React.FC<{
       onPress={onPress}
       activeOpacity={activeOpacity}
     >
-      <BlurView
-        intensity={intensity}
-        tint={blurTint}
-        style={[styles.liquidGlassBackground as any, radiusStyle]}
-      >
         <View style={[styles.liquidGlassContainer as any, { borderColor: resolvedBorderColor, borderRadius: resolvedRadius }]}>
-          <View
-            style={[styles.liquidGlassOverlay as any, { backgroundColor: resolvedOverlayColor, borderRadius: resolvedRadius }]}
-          />
+          <ContentGlassMaterial intensity={intensity} overlayColor={overlayColor} isDark={useDarkMode} radius={resolvedRadius} />
           {children}
         </View>
-      </BlurView>
     </CardComponent>
   );
 };

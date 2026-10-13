@@ -1,3 +1,5 @@
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { CONTENT_LAYOUT, METRIC_TEXT, METRIC_TEXT_LARGE } from '@/constants/DesignGuide';
 import { useSleepOffline } from '@/contexts/SleepOfflineContext';
 import { saveErrorMessage } from '@/lib/saveErrorMessage';
 import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
@@ -18,9 +20,10 @@ import { usePathname, useRouter , useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { HomeBackground, HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
+import { HomeBackground, androidHomeShadow } from '@/components/ui/home-glass';
 import { HomeCarouselDots, HomeOverviewHeading } from '@/components/ui/home-overview';
 import { Colors } from '@/constants/Colors';
+import { ContentCard } from '@/components/ui/content-card';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -440,77 +443,7 @@ function pickLatestHomeTimer(...timers: (HomeActiveTimer | null)[]): HomeActiveT
     .sort((a, b) => b.start - a.start)[0] ?? null;
 }
 
-function GlassBorderGlint({ radius = 30 }: { radius?: number }) {
-  const anim = React.useState(() => new Animated.Value(0))[0];
 
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, {
-          toValue: 1,
-          duration: 4200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(anim, {
-          toValue: 0,
-          duration: 4200,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    animation.start();
-    return () => animation.stop();
-  }, [anim]);
-
-  const translateX = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-120, 120],
-  });
-
-  const translateY = anim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [6, -6],
-  });
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFill,
-        { borderRadius: radius, overflow: 'hidden' },
-      ]}
-    >
-      <Animated.View
-        style={{
-          position: 'absolute',
-          top: 2,
-          left: -140,
-          width: 220,
-          height: 8,
-          opacity: 0.65,
-          transform: [{ translateX }, { translateY }, { rotate: '-10deg' }],
-        }}
-      >
-        <LinearGradient
-          colors={[
-            'rgba(255,255,255,0)',
-            'rgba(255,255,255,0.6)',
-            'rgba(255,255,255,0)',
-          ]}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={{
-            width: '100%',
-            height: '100%',
-          }}
-        />
-      </Animated.View>
-    </View>
-  );
-}
 
 function hexToRgba(hex: string, alpha: number) {
   const normalized = hex.replace('#', '');
@@ -879,8 +812,7 @@ export default function HomeScreen() {
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
   const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
-  const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
-  const glassBlurBg = isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.35)';
+  const glassCardBg = 'transparent';
   const sleepOffline = useSleepOffline();
   const homePendingRef = useRef(sleepOffline.actions); homePendingRef.current = sleepOffline.actions;
   const { user } = useAuth();
@@ -1656,10 +1588,8 @@ export default function HomeScreen() {
 
     return (
       <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
-        <HomeGlassSurface
-          intensity={22}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[styles.liquidGlassBackground, styles.greetingGlassBackground, { backgroundColor: glassBlurBg }]}
+        <ContentCard
+          style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
         >
           <ThemedView
             style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, isCompactAndroid && styles.greetingContainerCompact, { backgroundColor: glassCardBg }]}
@@ -1677,10 +1607,10 @@ export default function HomeScreen() {
 
             <View style={styles.greetingHeader}>
               <View style={styles.greetingTextBlock}>
-                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, isCompactAndroid && styles.greetingCompact, { color: textPrimary }]}>
+                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
                   {t('greeting.hello', { name: displayName })}
                 </ThemedText>
-                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, isCompactAndroid && styles.dateTextCompact, { color: textPrimary }]}>
+                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                   {formatDate()}
                 </ThemedText>
               </View>
@@ -1726,8 +1656,8 @@ export default function HomeScreen() {
               <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
             )}
           </ThemedView>
-        </HomeGlassSurface>
-        <GlassBorderGlint radius={30} />
+        </ContentCard>
+
       </View>
     );
   };
@@ -1806,10 +1736,7 @@ export default function HomeScreen() {
           }
         }}
       >
-        <HomeGlassSurface
-          intensity={22}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[styles.liquidGlassBackground, { backgroundColor: glassBlurBg }]}
+        <ContentCard style={styles.liquidGlassBackground}
         >
           <ThemedView
             style={[styles.summaryContainer, styles.liquidGlassContainer, isCompactAndroid && styles.summaryContainerCompact, { backgroundColor: glassCardBg }]}
@@ -1919,7 +1846,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           </ThemedView>
-        </HomeGlassSurface>
+        </ContentCard>
       </TouchableOpacity>
     );
   };
@@ -1933,10 +1860,7 @@ export default function HomeScreen() {
 
     return (
       <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
-        <HomeGlassSurface
-          intensity={22}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[styles.liquidGlassBackground, cardHeightStyle, { backgroundColor: glassBlurBg }]}
+        <ContentCard style={[styles.liquidGlassBackground, cardHeightStyle]}
         >
           <ThemedView
             style={[
@@ -2003,7 +1927,7 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.recommendationEmptyWrapper}>
                 <View style={styles.sectionTitleContainer}>
-                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary, fontSize: 22 }]}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary }]}>
                     {t('shop.eyebrow')}
                   </ThemedText>
                   <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
@@ -2017,7 +1941,7 @@ export default function HomeScreen() {
               </View>
             )}
           </ThemedView>
-        </HomeGlassSurface>
+        </ContentCard>
       </View>
     );
   };
@@ -2130,9 +2054,7 @@ export default function HomeScreen() {
           options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
         ]}
       >
-        <HomeGlassSurface
-          intensity={item.blurIntensity ?? 24}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
+        <ContentCard overlayColor={item.cardBackgroundColor}
           style={styles.liquidGlassCardBackground}
         >
           <View
@@ -2141,8 +2063,9 @@ export default function HomeScreen() {
               styles.liquidGlassCard,
               scaledCardSizing,
               {
-                backgroundColor: item.cardBackgroundColor,
-                borderColor: 'rgba(255, 255, 255, 0.35)',
+                backgroundColor: 'transparent',
+                borderWidth: 0,
+                boxShadow: 'none',
               },
               isEditing ? styles.quickAccessEditorCard : null,
             ]}
@@ -2187,11 +2110,11 @@ export default function HomeScreen() {
             <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
               {item.title}
             </ThemedText>
-            <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+            <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '400' }]}>
               {item.description}
             </ThemedText>
           </View>
-        </HomeGlassSurface>
+        </ContentCard>
       </View>
     );
   };
@@ -2241,9 +2164,7 @@ export default function HomeScreen() {
               activeOpacity={0.86}
               onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
-              <HomeGlassSurface
-                intensity={card.blurIntensity ?? 24}
-                tint={colorScheme === 'dark' ? 'dark' : 'light'}
+              <ContentCard overlayColor={card.cardBackgroundColor}
                 style={styles.liquidGlassCardBackground}
               >
                 <View
@@ -2252,8 +2173,9 @@ export default function HomeScreen() {
                     styles.quickAccessHiddenTileCard,
                     scaledHiddenTileSizing,
                     {
-                      backgroundColor: card.cardBackgroundColor,
-                      borderColor: 'rgba(255, 255, 255, 0.28)',
+                      backgroundColor: 'transparent',
+                      borderWidth: 0,
+                      boxShadow: 'none',
                     },
                   ]}
                 >
@@ -2284,11 +2206,11 @@ export default function HomeScreen() {
                   <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
                     {card.title}
                   </ThemedText>
-                  <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                  <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '400' }]}>
                     {t('quick.restore')}
                   </ThemedText>
                 </View>
-              </HomeGlassSurface>
+              </ContentCard>
             </TouchableOpacity>
           ))}
         </View>
@@ -2298,7 +2220,7 @@ export default function HomeScreen() {
 
   const renderQuickAccessCards = () => (
     <View style={styles.cardsSection}>
-      <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary, fontSize: 22 }]}>
+      <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary }]}>
         {t('quick.title')}
       </ThemedText>
 
@@ -2461,16 +2383,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    padding: CONTENT_LAYOUT.edge,
     paddingBottom: 40,
   },
   contentContainerCompact: {
-    paddingHorizontal: 16,
+    paddingHorizontal: CONTENT_LAYOUT.edge,
   },
   greetingContainerCompact: {
-    paddingHorizontal: 16,
-    paddingTop: 22,
-    paddingBottom: 18,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
   },
   greetingCompact: {
     fontSize: 26,
@@ -2483,7 +2405,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   summaryContainerCompact: {
-    padding: 16,
+    padding: CONTENT_LAYOUT.cardPadding,
   },
   loadingContainer: {
     flex: 1,
@@ -2491,50 +2413,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    ...TYPOGRAPHY.body,
     marginTop: 10,
-    fontSize: 16,
   },
 
   // Liquid Glass styles - Core Components
   liquidGlassWrapper: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: CONTENT_LAYOUT.sectionGap,
     borderRadius: 22,
     overflow: 'hidden',
   },
   greetingCardWrapper: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
     overflow: 'hidden',
   },
   greetingGlassBackground: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
   },
   greetingGlassContainer: {
-    borderRadius: 30,
+    borderRadius: CONTENT_LAYOUT.cardRadius,
   },
   liquidGlassBackground: {
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.35)', // stärkerer Frostglas-Effekt
   },
   liquidGlassContainer: {
     borderRadius: 22,
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 0,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0,
     shadowRadius: 14,
-    elevation: 8,
+    elevation: 0,
     ...androidHomeShadow,
+    boxShadow: 'none',
   },
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    paddingTop: 26,
-    paddingHorizontal: 24,
-    paddingBottom: 22,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
     backgroundColor: 'transparent',
     position: 'relative',
   },
@@ -2551,17 +2473,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   greeting: {
-    fontSize: 30,
-    fontWeight: '700',
+    ...TYPOGRAPHY.display,
     marginBottom: 4,
-    letterSpacing: -0.5,
-    lineHeight: 36,
   },
   dateText: {
-    fontSize: 18,
+    ...TYPOGRAPHY.bodySmall,
     opacity: 0.8,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
   profileBadge: {
     flexShrink: 0,
@@ -2635,16 +2552,10 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   activeTimerLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    ...TYPOGRAPHY.caption,
   },
   activeTimerTitle: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    ...TYPOGRAPHY.headline,
   },
   activeTimerChevron: {
     width: 28,
@@ -2665,18 +2576,12 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   activeTimerElapsed: {
-    fontSize: 34,
-    lineHeight: 38,
-    fontWeight: '800',
-    letterSpacing: -1,
+    ...METRIC_TEXT_LARGE,
     fontVariant: ['tabular-nums'],
   },
   activeTimerElapsedSeconds: {
+    ...TYPOGRAPHY.bodyStrong,
     marginLeft: 1,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '700',
-    letterSpacing: -0.4,
     fontVariant: ['tabular-nums'],
   },
   activeTimerSincePill: {
@@ -2686,9 +2591,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   activeTimerSince: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'right',
   },
   activeTimerTrack: {
@@ -2726,17 +2629,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sleepCardTitle: {
+    ...TYPOGRAPHY.headline,
     marginTop: 1,
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '700',
-    letterSpacing: -0.2,
   },
   sleepCardSubtitle: {
+    ...TYPOGRAPHY.bodySmall,
     marginTop: 0,
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '500',
   },
   sleepCardElapsedRow: {
     flexDirection: 'row',
@@ -2744,18 +2642,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   sleepCardElapsed: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '800',
-    letterSpacing: -0.8,
+    ...METRIC_TEXT_LARGE,
     fontVariant: ['tabular-nums'],
   },
   sleepCardElapsedSeconds: {
+    ...TYPOGRAPHY.bodyStrong,
     marginLeft: 1,
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
     fontVariant: ['tabular-nums'],
   },
   sleepCardFooter: {
@@ -2769,9 +2661,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   sleepCardFooterText: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.caption,
   },
   sleepCardTrack: {
     height: 5,
@@ -2863,11 +2753,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   recommendationEyebrow: {
+    ...TYPOGRAPHY.caption,
     color: 'rgba(255, 255, 255, 0.84)',
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '800',
-    letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginBottom: 3,
     textShadowColor: 'rgba(0, 0, 0, 0.35)',
@@ -2889,20 +2776,15 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   recommendationTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '800',
+    ...TYPOGRAPHY.sectionTitle,
     color: '#FFFFFF',
-    letterSpacing: -0.25,
     textShadowColor: 'rgba(0, 0, 0, 0.45)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
   recommendationDescription: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 16,
     marginTop: 2,
     textShadowColor: 'rgba(0, 0, 0, 0.4)',
     textShadowOffset: { width: 0, height: 1 },
@@ -2921,8 +2803,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.9)',
   },
   recommendationButtonText: {
-    fontSize: 12,
-    fontWeight: '800',
+    ...TYPOGRAPHY.buttonSmall,
     color: '#5E3DB3',
   },
   recommendationEmptyWrapper: {
@@ -2938,7 +2819,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   recommendationEmptyText: {
-    fontSize: 13,
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
     marginTop: 8,
     textAlign: 'center',
@@ -2956,13 +2837,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
+    ...TYPOGRAPHY.sectionTitle,
     flex: 1,
     minWidth: 0,
     marginRight: 8,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-    lineHeight: 28,
   },
   statsContainer: {
     flexDirection: 'row',
@@ -2990,15 +2868,12 @@ const styles = StyleSheet.create({
 
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: '800',
+    ...METRIC_TEXT,
     marginVertical: 4,
-    letterSpacing: -1,
   },
   statLabel: {
-    fontSize: 13,
+    ...TYPOGRAPHY.label,
     textAlign: 'center',
-    fontWeight: '600',
     opacity: 0.9,
   },
 
@@ -3009,46 +2884,47 @@ const styles = StyleSheet.create({
   },
   liquidGlassSecondaryText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
+    fontWeight: '400',
   },
 
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.34)',
-    borderRadius: 16,
-    padding: 8,
+    borderRadius: CONTENT_LAYOUT.innerRadius,
+    padding: CONTENT_LAYOUT.itemGap,
     marginHorizontal: 0,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 0,
     ...androidHomeShadow,
     minHeight: 66,
     justifyContent: 'center',
     alignItems: 'center',
+    boxShadow: 'none',
   },
   liquidGlassStatIcon: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 32,
-    // Android emoji glyphs need more room than their nominal font size.
     padding: Platform.OS === 'android' ? 6 : 14,
     marginBottom: 6,
     alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 0,
     ...androidHomeShadow,
     width: 64,
     height: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.9)',
+    boxShadow: 'none',
   },
   statEmoji: {
     fontSize: 32,
@@ -3064,17 +2940,14 @@ const styles = StyleSheet.create({
     }),
   },
   liquidGlassStatValue: {
+    ...METRIC_TEXT,
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 24,
-    fontWeight: '900',
     textAlign: 'center',
-    letterSpacing: -1,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     marginTop: 2,
     marginBottom: 2,
-    lineHeight: 26,
   },
   statValueContainer: {
     minHeight: 56,
@@ -3083,13 +2956,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   feedingMlUnit: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...TYPOGRAPHY.label,
   },
   liquidGlassStatLabel: {
+    ...TYPOGRAPHY.label,
     color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 12,
-    fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,
   },
@@ -3101,19 +2972,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   feedingDetailPrimary: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
+    ...TYPOGRAPHY.caption,
     textAlign: 'center',
     width: '100%',
     maxWidth: '100%',
     flexShrink: 1,
   },
   feedingDetailSecondary: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 10,
-    fontWeight: '600',
-    lineHeight: 12,
     opacity: 0.9,
     textAlign: 'center',
     width: '100%',
@@ -3139,20 +3006,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   cardsSectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 6,
-    textAlign: 'center',
+    ...TYPOGRAPHY.sectionTitle,
+    marginBottom: 8,
+    textAlign: 'left',
     color: '#6B4C3B',
-    letterSpacing: -0.3,
   },
   quickAccessHint: {
-    fontSize: 13,
-    textAlign: 'center',
+    ...TYPOGRAPHY.bodySmall,
+    textAlign: 'left',
     marginBottom: 16,
   },
   quickAccessHiddenHint: {
-    fontSize: 12,
+    ...TYPOGRAPHY.caption,
     textAlign: 'center',
     marginBottom: 12,
   },
@@ -3179,19 +3044,20 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 22,
-    padding: 16,
+    padding: CONTENT_LAYOUT.compactPadding,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 128,
-    height: 140,
-    borderWidth: 1.5,
+    height: undefined,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 0,
     ...androidHomeShadow,
+    boxShadow: CONTENT_LAYOUT.cardShadow,
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
@@ -3240,8 +3106,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   quickAccessDoneText: {
-    fontSize: 14,
-    fontWeight: '700',
+    ...TYPOGRAPHY.buttonSmall,
   },
   quickAccessGridList: {
     flexGrow: 0,
@@ -3268,12 +3133,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quickAccessHiddenTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: -0.2,
+    ...TYPOGRAPHY.headline,
   },
   quickAccessHiddenSubtitle: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     marginTop: 2,
   },
   quickAccessHiddenRestoreAllButton: {
@@ -3283,8 +3146,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   quickAccessHiddenRestoreAllText: {
-    fontSize: 13,
-    fontWeight: '700',
+    ...TYPOGRAPHY.buttonSmall,
   },
   quickAccessHiddenGrid: {
     flexDirection: 'row',
@@ -3336,23 +3198,21 @@ const styles = StyleSheet.create({
     ...androidHomeShadow,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...TYPOGRAPHY.headline,
     marginBottom: 4,
     textAlign: 'center',
   },
   liquidGlassCardTitle: {
     color: 'rgba(85, 60, 55, 0.95)',
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   cardDescription: {
-    fontSize: 11,
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
-    lineHeight: 14,
   },
   liquidGlassCardDescription: {
     color: 'rgba(85, 60, 55, 0.7)',
-    fontWeight: '500',
+    fontWeight: '400',
   },
 });

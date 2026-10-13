@@ -2,6 +2,7 @@
 export type DailyLocale = 'de' | 'en' | 'es';
 export const DEFAULT_DAILY_LOCALE: DailyLocale = 'de';
 const de = {
+  'navigation.previousDay': 'Vorheriger Tag', 'navigation.previousWeek': 'Vorherige Woche', 'navigation.previousMonth': 'Vorheriger Monat', 'navigation.nextDay': 'Nächster Tag', 'navigation.nextWeek': 'Nächste Woche', 'navigation.nextMonth': 'Nächster Monat',
   'voice.doctorQuestion': "Arztfrage",
   'voice.doctorQuestionRequired': "Bitte gib eine Frage ein.",
   'voice.importTitle': "Einträge übernehmen",
@@ -44,6 +45,7 @@ const de = {
 export type DailyTranslationKey = keyof typeof de; type Catalog = Record<DailyTranslationKey, string>;
 const en: Catalog = Object.fromEntries(Object.keys(de).map((key) => [key, key])) as Catalog;
 Object.assign(en, {
+  'navigation.previousDay': 'Previous day', 'navigation.previousWeek': 'Previous week', 'navigation.previousMonth': 'Previous month', 'navigation.nextDay': 'Next day', 'navigation.nextWeek': 'Next week', 'navigation.nextMonth': 'Next month',
   'voice.doctorQuestion': "Doctor question",
   'voice.doctorQuestionRequired': "Please enter a question.",
   'voice.importTitle': "Save entries",
@@ -61,6 +63,7 @@ Object.assign(en, {
 });
 const es: Catalog = Object.fromEntries(Object.keys(de).map((key) => [key, key])) as Catalog;
 Object.assign(es, {
+  'navigation.previousDay': 'Día anterior', 'navigation.previousWeek': 'Semana anterior', 'navigation.previousMonth': 'Mes anterior', 'navigation.nextDay': 'Día siguiente', 'navigation.nextWeek': 'Semana siguiente', 'navigation.nextMonth': 'Mes siguiente',
   'voice.doctorQuestion': "Pregunta médica",
   'voice.doctorQuestionRequired': "Introduce una pregunta.",
   'voice.importTitle': "Guardar entradas",

@@ -1,5 +1,6 @@
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import CustomActivityEntryModal from '@/components/CustomActivityEntryModal';
 import ActivityCard from '@/components/ActivityCard';
 import ActivityInputModal from '@/components/ActivityInputModal';
@@ -92,9 +93,19 @@ export function CaretakerTrackingView({ snapshot, tab, locale, dark, foreground,
   };
   return <>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 4 }}>
-      <TouchableOpacity accessibilityLabel={t.previousDay} disabled={selected <= earliest} onPress={() => moveDay(-1)} style={{ padding: 16, opacity: selected <= earliest ? .3 : 1 }}><Text style={{ color: foreground, fontSize: 30 }}>‹</Text></TouchableOpacity>
+      <PeriodNavigationButton direction="previous"
+        accessibilityLabel={t.previousDay}
+        isDark={dark} color={foreground}
+        disabled={selected <= earliest}
+        onPress={() => moveDay(-1)}
+      />
       <Text style={{ flex: 1, textAlign: 'center', color: foreground, fontSize: 16, fontWeight: '600' }}>{new Date(selected).toLocaleDateString(language, { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
-      <TouchableOpacity accessibilityLabel={t.nextDay} disabled={selected >= latest} onPress={() => moveDay(1)} style={{ padding: 16, opacity: selected >= latest ? .3 : 1 }}><Text style={{ color: foreground, fontSize: 30 }}>›</Text></TouchableOpacity>
+      <PeriodNavigationButton direction="next"
+        accessibilityLabel={t.nextDay}
+        isDark={dark} color={foreground}
+        disabled={selected >= latest}
+        onPress={() => moveDay(1)}
+      />
     </View>
     {tab === 'sleep' ? <>
       <View style={{ alignItems: 'center', paddingVertical: 12 }}>

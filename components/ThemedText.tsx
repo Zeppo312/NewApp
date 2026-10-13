@@ -4,11 +4,16 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
+import { TYPOGRAPHY, type TextRole } from '@/constants/Typography';
+
+/** Bestehende Namen bleiben als Aliasse verfügbar. */
+export type ThemedTextType = TextRole | 'default' | 'title' | 'defaultSemiBold' | 'subtitle';
 
 export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
-  type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
+  /** Semantische Textrolle; neue Aufrufer verwenden die Namen aus TYPOGRAPHY. */
+  type?: ThemedTextType;
   /**
    * Wenn true, passt sich die Textfarbe an das benutzerdefinierte Hintergrundbild an.
    * Bei dunklem Hintergrund wird heller Text verwendet und umgekehrt.
@@ -43,11 +48,8 @@ export function ThemedText({
     <Text
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
-        type === 'link' ? [styles.link, { color: linkColor }] : undefined,
+        styles[type],
+        type === 'link' ? { color: linkColor } : undefined,
         style,
       ]}
       {...rest}
@@ -56,27 +58,14 @@ export function ThemedText({
 }
 
 const styles = StyleSheet.create({
+  ...TYPOGRAPHY,
+  // Der bisherige Standard erbt bei verschachteltem Text das Schriftgewicht.
+  // Explizites type="body" verwendet hingegen das vollständige Rollenprofil.
   default: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: TYPOGRAPHY.body.fontSize,
+    lineHeight: TYPOGRAPHY.body.lineHeight,
   },
-  defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    lineHeight: 40, // Erhöhte Zeilenhöhe, um Buchstaben mit Überlängen Platz zu geben
-  },
-  subtitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  link: {
-    lineHeight: 30,
-    fontSize: 16,
-    color: '#0a7ea4',
-  },
+  defaultSemiBold: TYPOGRAPHY.bodyStrong,
+  title: TYPOGRAPHY.display,
+  subtitle: TYPOGRAPHY.sectionTitle,
 });

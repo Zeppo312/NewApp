@@ -1,101 +1,104 @@
-import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
+import { TrackingSyncStatus } from '@/components/TrackingSyncStatus';
+import { ContentCard as GlassCard,ContentCard as LiquidGlassCard } from '@/components/ui/content-card';
+import { FormField,FormSheet } from '@/components/ui/form-sheet';
+import { PeriodTabs } from '@/components/ui/period-tabs';
+import { CONTENT_LAYOUT, METRIC_TEXT, METRIC_TEXT_LARGE, LAYOUT_PAD, PRIMARY, SECTION_GAP_BOTTOM, SECTION_GAP_TOP } from '@/constants/DesignGuide';
+import { TYPOGRAPHY } from '@/constants/Typography';
 import { useSleepOffline } from '@/contexts/SleepOfflineContext';
 import { useTrackingSync } from '@/contexts/TrackingSyncContext';
-import { TrackingSyncStatus } from '@/components/TrackingSyncStatus';
-import { overlayTrackingRows, readTrackingOutbox, trackingScope, queueTrackingUpdate } from '@/lib/trackingOutbox';
 import { localHealthAllowed } from '@/lib/localHealthStorage';
-import { readSnapshot, validRows } from '@/lib/localReadSnapshots';
-import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
+import { readSnapshot,validRows } from '@/lib/localReadSnapshots';
 import { offlineText } from '@/lib/offlineTranslations';
 import { saveErrorMessage } from '@/lib/saveErrorMessage';
+import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
+import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { overlayTrackingRows,queueTrackingUpdate,readTrackingOutbox,trackingScope } from '@/lib/trackingOutbox';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useFocusEffect,useRouter } from 'expo-router';
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  RefreshControl,
-  StatusBar,
-  Alert,
-  Animated,
-  Modal,
-  Platform,
-  Dimensions,
+Alert,
+Animated,
+Dimensions,
+Modal,
+Platform,
+RefreshControl,
+SafeAreaView,
+ScrollView,
+StatusBar,
+StyleSheet,
+Text,
+TouchableOpacity,
+View,
+useWindowDimensions,
 } from 'react-native';
-import { useFocusEffect , useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { isBeforeHistoryCutoff, useFeatureAccess, useHistoryCutoff } from '@/lib/entitlements';
-import { showHistoryLimitAlert } from '@/lib/historyLimit';
-import * as Haptics from 'expo-haptics';
-import * as Linking from 'expo-linking';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import DateTimePicker,{ DateTimePickerEvent } from '@/components/ui/DateTimePicker';
+import { HomeBackground,HomeGlassSurface } from '@/components/ui/home-glass';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { ThemedBackground } from '@/components/ThemedBackground';
-import { BlurView } from 'expo-blur';
+import { isBeforeHistoryCutoff,useFeatureAccess,useHistoryCutoff } from '@/lib/entitlements';
+import { showHistoryLimitAlert } from '@/lib/historyLimit';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import * as Linking from 'expo-linking';
 
-import { SleepEntry, SleepQuality, loadConnectedUsers } from '@/lib/sleepData';
-import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import ActivityCard from '@/components/ActivityCard';
+import Header from '@/components/Header';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import {
-  invalidateCacheAfterAction
+invalidateCacheAfterAction
 } from '@/lib/screenCache';
-import Header from '@/components/Header';
-import ActivityCard from '@/components/ActivityCard';
-import ActivityInputModal from '@/components/ActivityInputModal';
+import { SleepEntry,SleepQuality,loadConnectedUsers } from '@/lib/sleepData';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
 // SplashOverlay Import entfernt - keine Popups
-import { useAuth } from '@/contexts/AuthContext';
-import { useBackend } from '@/contexts/BackendContext';
-import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
-import type { SleepEntry as StoredSleepEntry } from '@/lib/services/SleepEntriesService';
+import NightSleepEditor,{ MiniNightTimeline } from '@/components/NightSleepEditor';
 import { SleepCaptureButton } from '@/components/tracking/SleepCaptureButton';
 import { SleepTimerFace } from '@/components/tracking/SleepTimerFace';
-import { GlassCard, LiquidGlassCard, LAYOUT_PAD, SECTION_GAP_TOP, SECTION_GAP_BOTTOM, RADIUS, PRIMARY, GLASS_BORDER, GLASS_OVERLAY, FONT_SM, FONT_MD, FONT_LG } from '@/constants/DesignGuide';
-import { getBabyInfo } from '@/lib/baby';
+
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
-import { predictNextSleepWindow, updatePersonalizationAfterNap, initializePersonalization, getDailySleepTargetMinutes, type SleepWindowPrediction } from '@/lib/sleep-window';
-import { syncSleepWidget } from '@/lib/sleepWidget';
-import { normalizeBedtimeAnchor } from '@/lib/bedtime';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useBackend } from '@/contexts/BackendContext';
 import { useNotifications } from '@/hooks/useNotifications';
 import { usePartnerNotifications } from '@/hooks/usePartnerNotifications';
-import { sleepActivityService } from '@/lib/sleepActivityService';
-import { parseSafeDate } from '@/lib/safeDate';
-import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
-import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
-import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
-import {
-  DEFAULT_NIGHT_WINDOW_SETTINGS,
-  clockTimeToMinutes,
-  getNightWindowRangeForDate,
-  loadNightWindowSettings,
-  type NightWindowSettings,
-} from '@/lib/nightWindowSettings';
-import NightSleepEditor, { MiniNightTimeline } from '@/components/NightSleepEditor';
-import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
+import { useSleepEntriesService } from '@/hooks/useSleepEntriesService';
 import { useSleepEntriesSync } from '@/hooks/useSleepEntriesSync';
+import { getBabyInfo } from '@/lib/baby';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { normalizeBedtimeAnchor } from '@/lib/bedtime';
 import {
-  getSleepPeriodForEntry,
-  getSleepPeriodForStart,
-  overlapMinutes,
-  type SleepPeriod,
-} from '@/lib/sleepPeriods';
-import {
-  forgetActiveSleepPeriodOverride,
-  loadStoredActiveSleepPeriodOverride,
-  rememberActiveSleepPeriodOverride,
-} from '@/lib/sleepPeriodOverrides';
+DEFAULT_NIGHT_WINDOW_SETTINGS,
+clockTimeToMinutes,
+getNightWindowRangeForDate,
+loadNightWindowSettings,
+type NightWindowSettings,
+} from '@/lib/nightWindowSettings';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
+import { parseSafeDate } from '@/lib/safeDate';
+import type { SleepEntry as StoredSleepEntry } from '@/lib/services/SleepEntriesService';
+import { getDailySleepTargetMinutes,initializePersonalization,predictNextSleepWindow,updatePersonalizationAfterNap,type SleepWindowPrediction } from '@/lib/sleep-window';
+import { sleepActivityService } from '@/lib/sleepActivityService';
+import { findFreshActiveSleepEntry } from '@/lib/sleepEntryGuards';
 import { splitNightSleepSegment } from '@/lib/sleepNightSplit';
-import { DEFAULT_SLEEP_TRACKER_LOCALE, getSleepTrackerLocaleTag, SleepTrackerTranslationKey, translateSleepTrackerText } from '@/lib/sleepTrackerTranslations';
+import {
+forgetActiveSleepPeriodOverride,
+loadStoredActiveSleepPeriodOverride,
+rememberActiveSleepPeriodOverride,
+} from '@/lib/sleepPeriodOverrides';
+import {
+getSleepPeriodForEntry,
+getSleepPeriodForStart,
+overlapMinutes,
+type SleepPeriod,
+} from '@/lib/sleepPeriods';
+import { DEFAULT_SLEEP_TRACKER_LOCALE,SleepTrackerTranslationKey,getSleepTrackerLocaleTag,translateSleepTrackerText } from '@/lib/sleepTrackerTranslations';
+import { syncSleepWidget } from '@/lib/sleepWidget';
+import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
 
 let ACTIVE_SLEEP_TRACKER_LOCALE = DEFAULT_SLEEP_TRACKER_LOCALE;
 let SLEEP_TRACKER_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_SLEEP_TRACKER_LOCALE);
@@ -611,6 +614,10 @@ type CentralTimerProps = {
   textPrimary: string;
   textSecondary: string;
   pulseAnim: Animated.Value;
+  onStart: () => Promise<unknown>;
+  startLabel: string;
+  startHint: string;
+  startDisabled: boolean;
 };
 
 function CentralTimerComponent({
@@ -624,11 +631,17 @@ function CentralTimerComponent({
   textPrimary,
   textSecondary,
   pulseAnim,
+  onStart,
+  startLabel,
+  startHint,
+  startDisabled,
 }: CentralTimerProps) {
   const [currentTimeMs, setCurrentTimeMs] = useState(() => Date.now());
   const currentTime = new Date(currentTimeMs);
-  const ringSize = screenWidth * 0.75;
-  const circleSize = ringSize * 0.8;
+  const { width, fontScale } = useWindowDimensions();
+  const circleSize = fontScale >= 1.3
+    ? Math.min(width - 2 * CONTENT_LAYOUT.edge, 280)
+    : Math.min(width * 0.6, 260);
   const activeStartMs = activeSleepEntry
     ? new Date(activeSleepEntry.start_time).getTime()
     : Number.NaN;
@@ -647,41 +660,42 @@ function CentralTimerComponent({
 
   return (
     <View style={styles.centralTimerContainer}>
-      <Animated.View pointerEvents="none" style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
+      <Animated.View style={[styles.centralContainer, { transform: [{ scale: pulseAnim }] }]}>
         <SleepTimerFace size={circleSize} active={Boolean(activeSleepEntry)} progress={progress} textColor={textPrimary}
+          pending={isStartingSleep || isStoppingSleep}
+          onStart={onStart} startLabel={startLabel} startHint={startHint} startDisabled={startDisabled}
           timeLabel={activeSleepEntry
             ? isStoppingSleep ? t('prediction.stopping') : formatDurationSeconds(elapsedTime)
             : isStartingSleep ? t('prediction.starting') : currentTime.toLocaleTimeString(SLEEP_TRACKER_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}>
-
             {activeSleepEntry && (
-              <Text style={[styles.centralStatus, { color: textPrimary, fontWeight: '700' }]}>
+              <Text style={[styles.centralStatus, fontScale < 1.3 && TYPOGRAPHY.label, { color: textPrimary, fontWeight: '700' }]}>
                 {t('prediction.sleeping')}
               </Text>
             )}
             {activeSleepEntry ? (
-              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+              <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary }]}>
                 {t('prediction.since')} {new Date(activeSleepEntry.start_time).toLocaleTimeString(SLEEP_TRACKER_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}
               </Text>
             ) : predictionLoading ? (
-              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+              <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary }]}>
                 {t('prediction.calculating')}
               </Text>
             ) : sleepPrediction && hasSleepData && isNightSleepPrediction(sleepPrediction) ? (
-              <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
+              <Text style={[styles.centralHintPrimary, fontScale < 1.3 && TYPOGRAPHY.label, { color: textPrimary }]}>
                 {t('prediction.noMoreNaps')}{'\n'}
                 {getBedtimePredictionLabel(sleepPrediction)}
               </Text>
             ) : sleepPrediction && hasSleepData ? (
-              <Text style={[styles.centralHintPrimary, { color: textPrimary }]}>
+              <Text style={[styles.centralHintPrimary, fontScale < 1.3 && TYPOGRAPHY.label, { color: textPrimary }]}>
                 {t('prediction.next')}{'\n'}
                 {formatClockTime(sleepPrediction.earliest)} – {formatClockTime(sleepPrediction.latest)}
               </Text>
             ) : !hasSleepData ? (
-              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500', textAlign: 'center' }]}>
+              <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary, fontWeight: '500', textAlign: 'center' }]}>
                 {t('prediction.learning')}{'\n'}{t('prediction.first')}
               </Text>
             ) : (
-              <Text style={[styles.centralHint, { color: textSecondary, fontWeight: '500' }]}>
+              <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary }]}>
                 {predictionError || t('prediction.ready')}
               </Text>
             )}
@@ -702,6 +716,7 @@ const StatusMetricsBar = ({
   statsPage,
   onPageChange,
 }: StatusMetricsBarProps) => {
+  const { fontScale } = useWindowDimensions();
   // Adaptive Farben für Dark Mode
   const adaptiveColors = useAdaptiveColors();
   const colorScheme = adaptiveColors.effectiveScheme;
@@ -929,9 +944,9 @@ const StatusMetricsBar = ({
         style={styles.statsScroll}
       >
         <View style={[styles.statsPage, { width: screenWidth }]}>
-          <View style={styles.kpiRow}>
+          <View style={[styles.kpiRow, fontScale >= 1.3 && { flexDirection: 'column' }]}>
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor="rgba(142, 78, 198, 0.1)"
               borderColor="rgba(142, 78, 198, 0.25)"
@@ -944,7 +959,7 @@ const StatusMetricsBar = ({
             </GlassCard>
 
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor="rgba(255, 140, 66, 0.1)"
               borderColor="rgba(255, 140, 66, 0.25)"
@@ -957,9 +972,9 @@ const StatusMetricsBar = ({
             </GlassCard>
           </View>
 
-          <View style={styles.kpiRow}>
+          <View style={[styles.kpiRow, fontScale >= 1.3 && { flexDirection: 'column' }]}>
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor="rgba(168, 196, 162, 0.1)"
               borderColor="rgba(168, 196, 162, 0.25)"
@@ -972,7 +987,7 @@ const StatusMetricsBar = ({
             </GlassCard>
 
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor="rgba(255, 155, 155, 0.1)"
               borderColor="rgba(255, 155, 155, 0.25)"
@@ -988,7 +1003,7 @@ const StatusMetricsBar = ({
         </View>
 
         <View style={[styles.statsPage, { width: screenWidth }]}>
-          <View style={styles.kpiRow}>
+          <View style={[styles.kpiRow, fontScale >= 1.3 && { flexDirection: 'column' }]}>
             <GlassCard
               style={[styles.kpiCard, styles.kpiCardWide]}
               intensity={20}
@@ -1033,9 +1048,9 @@ const StatusMetricsBar = ({
             </GlassCard>
           </View>
 
-          <View style={styles.kpiRow}>
+          <View style={[styles.kpiRow, fontScale >= 1.3 && { flexDirection: 'column' }]}>
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor={`${tirednessLevel.color}20`}
               borderColor={`${tirednessLevel.color}40`}
@@ -1050,7 +1065,7 @@ const StatusMetricsBar = ({
             </GlassCard>
 
             <GlassCard
-              style={styles.kpiCard}
+              style={[styles.kpiCard, fontScale >= 1.3 && { width: '100%' }]}
               intensity={20}
               overlayColor="rgba(168, 196, 162, 0.1)"
               borderColor="rgba(168, 196, 162, 0.25)"
@@ -1177,7 +1192,7 @@ const convertSleepToDailyEntry = (
     if (sleepType === 'nacht') return '💤';
     if (sleepType === 'mittag') return '😴';
     if (sleepType === 'tag') return '☀️';
-    
+
     // Fallback basierend auf Qualität
     switch (quality) {
       case 'good': return QUALITY_VISUALS.good.emoji;
@@ -1237,7 +1252,6 @@ const convertSleepToDailyEntry = (
 
 // LiquidGlassCard imported from DesignGuide
 
-
 export default function SleepTrackerScreen() {
   ACTIVE_SLEEP_TRACKER_LOCALE = useLocale().locale;
   SLEEP_TRACKER_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_SLEEP_TRACKER_LOCALE);
@@ -1251,18 +1265,16 @@ export default function SleepTrackerScreen() {
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const modalSubtitleColor = isDark ? Colors.dark.textSecondary : '#7D6B62';
+
   const modalOverlayColor = isDark ? 'rgba(0,0,0,0.58)' : 'rgba(0,0,0,0.35)';
   // An opaque sheet keeps the timeline and tab bar from bleeding through on Android.
-  const modalPanelColor = isDark ? '#1C1C1E' : '#F7F4F0';
-  const modalPanelBorderColor = isDark ? 'rgba(255,255,255,0.08)' : 'transparent';
-  const modalGhostButtonColor = isDark ? '#38383A' : '#EAE5DF';
+
   const modalFieldColor = isDark ? '#2C2C2E' : '#FFFFFF';
   const modalFieldBorderColor = isDark ? '#414144' : '#E8E1DB';
   const modalPickerColor = modalFieldColor;
   const modalQualityDefaultColor = modalFieldColor;
   const modalAccentColor = isDark ? '#A26BFF' : '#8E4EC6';
-  const insets = useSafeAreaInsets();
+
   const router = useRouter();
   const sleepOffline = useSleepOffline();
   const trackingSync = useTrackingSync();
@@ -3003,7 +3015,6 @@ export default function SleepTrackerScreen() {
     }
   };
 
-
   const handleSplitNightSegment = async (params: {
     targetEntry: ClassifiedSleepEntry;
     splitTime: Date;
@@ -3428,7 +3439,6 @@ export default function SleepTrackerScreen() {
     }
   };
 
-
   // Delete entry
   const handleDeleteEntry = async (entryId: string) => {
     if (!ensureWritableInCurrentMode()) return;
@@ -3483,7 +3493,7 @@ export default function SleepTrackerScreen() {
   const formatCompletedDuration = (durationMinutes: number) => {
     const hours = Math.floor(durationMinutes / 60);
     const minutes = durationMinutes % 60;
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m`;
     }
@@ -3777,7 +3787,6 @@ export default function SleepTrackerScreen() {
     return items.sort((a, b) => b.sortTime - a.sortTime);
   }, [nightGroups, regularTimelineEntries]);
 
-
   const jumpToLatestEntry = useCallback(() => {
     if (sleepEntries.length === 0) return;
     const latest = sleepEntries.reduce((latestEntry, entry) => {
@@ -3874,15 +3883,9 @@ export default function SleepTrackerScreen() {
   }, [applyEndPickerValue, endPickerDraft, safeModalEndPickerTime]);
 
   // Top Tabs Component (exakt wie daily_old.tsx)
-  const TopTabs = () => (
-    <View style={styles.topTabsContainer}>
-      {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard key={tab} style={[styles.topTab, visibleTab === tab && styles.activeTopTab]} intensity={22}>
-          <TouchableOpacity
-            style={styles.topTabInner}
-            hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
-            pressRetentionOffset={{ top: 16, bottom: 16, left: 12, right: 12 }}
-            onPress={() => {
+  const TopTabs = () => (<PeriodTabs value={visibleTab} isDark={isDark} monthLocked={isMonthViewLocked}
+    labels={{ day: t('view.day'), week: t('view.week'), month: t('view.month') }}
+    onSelect={(tab) => {
               triggerHaptic();
               if (tab === 'month' && isMonthViewLocked) {
                 showMonthViewLockedAlert();
@@ -3893,18 +3896,17 @@ export default function SleepTrackerScreen() {
               if (tab === 'day') {
                 setSelectedDate(new Date());
               }
-            }}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.topTabText, { color: textSecondary }, visibleTab === tab && styles.activeTopTabText]}>
-              {tab === 'day' ? t('view.day') : tab === 'week' ? t('view.week') : t('view.month')}
-              {tab === 'month' && isMonthViewLocked ? '  🔒' : ''}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
-      ))}
-    </View>
-  );
+            }} />);
+
+  // The clock and capture card use the same start/resume flow.
+  const handleStartSleepFromControl = async () => {
+    if (isStartingSleep || isStoppingSleep || !isLiveStatusLoaded || isReadOnlyPreviewMode || activeSleepEntryRef.current) return;
+    triggerHaptic();
+    if (pausedNightState) return handleResumeNightSleep();
+    const now = new Date();
+    const period = isNightSleepPrediction(sleepPrediction) ? 'night' : getSleepPeriodForStart(now, nightWindowSettings);
+    return handleStartSleep(period);
+  };
 
   // Action Buttons (Home.tsx style)
   const ActionButtons = () => {
@@ -3926,15 +3928,15 @@ export default function SleepTrackerScreen() {
             disabled
             activeOpacity={1}
           >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+            <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, styles.fullWidthCard, { backgroundColor: 'rgba(210, 210, 210, 0.45)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(150, 150, 150, 0.85)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <IconSymbol name="clock.fill" size={28} color="#FFFFFF" />
                 </View>
                 <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.loading')}</Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>{t('timer.wait')}</Text>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>{t('timer.wait')}</Text>
               </View>
-            </BlurView>
+            </GlassCard>
           </TouchableOpacity>
         ) : activeSleepEntry && isActiveNightSleep ? (
           <>
@@ -3950,15 +3952,15 @@ export default function SleepTrackerScreen() {
               }}
               activeOpacity={0.9}
             >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
                 <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(242, 199, 138, 0.55)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(242, 166, 80, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="pause.fill" size={28} color="#FFFFFF" />
                   </View>
                   <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.pause')}</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>{t('timer.pauseHint')}</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>{t('timer.pauseHint')}</Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -3973,7 +3975,7 @@ export default function SleepTrackerScreen() {
               }}
               activeOpacity={0.9}
             >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
                 <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
@@ -3981,11 +3983,11 @@ export default function SleepTrackerScreen() {
                   <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
                     {isStoppingSleep ? t('timer.ending') : t('timer.endNight')}
                   </Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>
                     {loadingLabel || t('timer.chooseQuality')}
                   </Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
           </>
         ) : activeSleepEntry ? (
@@ -4001,7 +4003,7 @@ export default function SleepTrackerScreen() {
             }}
             activeOpacity={0.9}
           >
-            <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+            <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
               <View style={[styles.card, styles.liquidGlassCard, styles.fullWidthCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                 <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                   <IconSymbol name="stop.fill" size={28} color="#FFFFFF" />
@@ -4009,11 +4011,11 @@ export default function SleepTrackerScreen() {
                 <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
                   {isStoppingSleep ? t('timer.sleepEnding') : t('timer.endSleep')}
                 </Text>
-                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>
                   {loadingLabel || t('timer.stop')}
                 </Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
         ) : isNightPaused ? (
           <>
@@ -4029,17 +4031,17 @@ export default function SleepTrackerScreen() {
               }}
               activeOpacity={0.9}
             >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
                 <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(142, 78, 198, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="play.fill" size={28} color="#FFFFFF" />
                   </View>
                   <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.resume')}</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>
                     {loadingLabel || t('timer.resumeNight')}
                   </Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -4054,7 +4056,7 @@ export default function SleepTrackerScreen() {
               }}
               activeOpacity={0.9}
             >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
                 <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="checkmark.circle.fill" size={28} color="#FFFFFF" />
@@ -4062,11 +4064,11 @@ export default function SleepTrackerScreen() {
                   <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
                     {t('timer.finishNight')}
                   </Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>
                     {loadingLabel || t('timer.saveQuality')}
                   </Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
           </>
         ) : (
@@ -4074,13 +4076,7 @@ export default function SleepTrackerScreen() {
             <SleepCaptureButton kind="start" title={t('timer.start')} hint={loadingLabel || t('timer.startHint')}
               textColor={textSecondary} disabled={isActionBlocked}
               style={{ width: GRID_COL_W, marginRight: GRID_GUTTER, marginBottom: 16 }}
-              onPress={() => {
-                if (isActionBlocked) return;
-                triggerHaptic();
-                const now = new Date();
-                const period = isNightSleepPrediction(sleepPrediction) ? 'night' : getSleepPeriodForStart(now, nightWindowSettings);
-                void handleStartSleep(period);
-              }} />
+              onPress={() => { void handleStartSleepFromControl(); }} />
             <SleepCaptureButton kind="manual" title={t('timer.manual')} hint={t('timer.add')}
               textColor={textSecondary} disabled={isActionBlocked} style={{ width: GRID_COL_W, marginBottom: 16 }}
               onPress={() => { if (!isActionBlocked) { triggerHaptic(); openManualSleepModal(); } }} />
@@ -4125,7 +4121,7 @@ export default function SleepTrackerScreen() {
       }
       return days;
     };
-    
+
     const weekDays = getWeekDays(refDate);
     const weekStart = getWeekStart(refDate);
     const weekEnd = getWeekEnd(refDate);
@@ -4193,20 +4189,18 @@ export default function SleepTrackerScreen() {
       })
     );
 
-    
     return (
       <View style={styles.weekViewContainer}>
         {/* Week Navigation - Design Guide konform */}
         <View style={styles.weekNavigationContainer}>
-          <TouchableOpacity
-            style={styles.weekNavButton}
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={t('navigation.previousWeek')}
+            isDark={isDark} color={textSecondary}
             onPress={() => {
               triggerHaptic();
               setWeekOffset(o => o - 1);
             }}
-          >
-            <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>‹</Text>
-          </TouchableOpacity>
+          />
 
           <View style={styles.weekHeaderCenter}>
             <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
@@ -4215,16 +4209,15 @@ export default function SleepTrackerScreen() {
             </Text>
               </View>
 
-          <TouchableOpacity
-            style={[styles.weekNavButton, weekOffset >= 0 && { opacity: 0.4 }]}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={t('navigation.nextWeek')}
+            isDark={isDark} color={textSecondary}
             disabled={weekOffset >= 0}
             onPress={() => {
               triggerHaptic();
               setWeekOffset(o => o + 1);
             }}
-          >
-            <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>›</Text>
-          </TouchableOpacity>
+          />
         </View>
 
         {/* Balkendiagramm - Design Guide konform mit Liquid Glass */}
@@ -4335,7 +4328,7 @@ export default function SleepTrackerScreen() {
       const month = date.getMonth();
       return new Date(year, month + 1, 0).getDate();
     };
-    
+
     const monthStart = getMonthStart(refMonthDate);
     const monthEnd = getMonthEnd(refMonthDate);
     const monthRangeEnd = new Date(monthEnd.getFullYear(), monthEnd.getMonth(), monthEnd.getDate() + 1);
@@ -4356,7 +4349,7 @@ export default function SleepTrackerScreen() {
       const startOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Montag als erster Tag
 
       let currentWeek = [];
-      
+
       // Füge leere Tage hinzu
       for (let i = 0; i < startOffset; i++) {
         currentWeek.push(null);
@@ -4365,7 +4358,7 @@ export default function SleepTrackerScreen() {
       // Füge Tage des Monats hinzu
       for (let day = 1; day <= daysInMonth; day++) {
         currentWeek.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), day));
-        
+
         // Wenn Woche voll (7 Tage)
         if (currentWeek.length === 7) {
           weeks.push(currentWeek);
@@ -4513,15 +4506,14 @@ export default function SleepTrackerScreen() {
       <View style={styles.monthViewContainer}>
         {/* Monats-Navigation - Design Guide konform */}
         <View style={styles.monthNavigationContainer}>
-          <TouchableOpacity
-            style={styles.monthNavButton}
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={t('navigation.previousMonth')}
+            isDark={isDark} color={textSecondary}
             onPress={() => {
               triggerHaptic();
               setMonthOffset(o => o - 1);
             }}
-          >
-            <Text style={[styles.monthNavButtonText, { color: textSecondary }]}>‹</Text>
-          </TouchableOpacity>
+          />
 
           <View style={styles.monthHeaderCenter}>
             <Text style={[styles.monthHeaderTitle, { color: textSecondary }]}>
@@ -4529,16 +4521,15 @@ export default function SleepTrackerScreen() {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={[styles.monthNavButton, monthOffset >= 0 && { opacity: 0.4 }]}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={t('navigation.nextMonth')}
+            isDark={isDark} color={textSecondary}
             disabled={monthOffset >= 0}
             onPress={() => {
               triggerHaptic();
               setMonthOffset(o => o + 1);
             }}
-          >
-            <Text style={[styles.monthNavButtonText, { color: textSecondary }]}>›</Text>
-          </TouchableOpacity>
+          />
         </View>
 
         {/* Kalender-Block mit exakt gleicher Innenbreite wie Week-Chart */}
@@ -4655,19 +4646,16 @@ export default function SleepTrackerScreen() {
     );
   };
 
-
-
-
   const headerSubtitle = isReadOnlyPreviewMode
     ? t('screen.previewSubtitle')
     : t('screen.subtitle');
 
   return (
-    <ThemedBackground style={styles.backgroundImage}>
+    <HomeBackground style={styles.backgroundImage}>
       {!sleepLiveConfirmed && sleepOffline.knownActive && <Text>{offlineText(ACTIVE_SLEEP_TRACKER_LOCALE, 'localTimer')}</Text>}
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-        
+
         <Header 
           title={t('screen.title')}
           subtitle={headerSubtitle}
@@ -4723,15 +4711,14 @@ export default function SleepTrackerScreen() {
             <>
               {/* Day Navigation - gleiche Position/Höhe wie Woche/Monat */}
               <View style={[styles.weekNavigationContainer, styles.dayNavigationContainer]}>
-                <TouchableOpacity
-                  style={styles.weekNavButton}
+                <PeriodNavigationButton direction="previous"
+                  accessibilityLabel={t('navigation.previousDay')}
+                  isDark={isDark} color={textSecondary}
                   onPress={() => {
                     triggerHaptic();
                     goPrevDay();
                   }}
-                >
-                  <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>‹</Text>
-                </TouchableOpacity>
+                />
                 <View style={styles.weekHeaderCenter}>
                   <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
                   <Text style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>
@@ -4743,16 +4730,15 @@ export default function SleepTrackerScreen() {
                     <Text style={[styles.todayEmptyHint, { color: textSecondary }]}>{t('day.empty')}</Text>
                   )}
                 </View>
-                <TouchableOpacity
-                  style={[styles.weekNavButton, nextDisabled && { opacity: 0.4 }]}
+                <PeriodNavigationButton direction="next"
+                  accessibilityLabel={t('navigation.nextDay')}
+                  isDark={isDark} color={textSecondary}
                   disabled={nextDisabled}
                   onPress={() => {
                     triggerHaptic();
                     goNextDay();
                   }}
-                >
-                  <Text style={[styles.weekNavButtonText, { color: textSecondary }]}>›</Text>
-                </TouchableOpacity>
+                />
               </View>
               <TouchableOpacity
                 onPress={() => setShowSleepInfoModal(true)}
@@ -4775,6 +4761,10 @@ export default function SleepTrackerScreen() {
                   textPrimary={textPrimary}
                   textSecondary={textSecondary}
                   pulseAnim={pulseAnim}
+                  onStart={handleStartSleepFromControl}
+                  startLabel={pausedNightState ? t('timer.resume') : t('timer.start')}
+                  startHint={pausedNightState ? t('timer.resumeNight') : t('timer.startHint')}
+                  startDisabled={isStartingSleep || isStoppingSleep || !isLiveStatusLoaded || isReadOnlyPreviewMode}
                 />
               </Animated.View>
 
@@ -5004,15 +4994,15 @@ export default function SleepTrackerScreen() {
               }}
               activeOpacity={0.9}
             >
-              <BlurView intensity={24} tint="light" style={styles.liquidGlassCardBackground}>
+              <GlassCard intensity={24} style={styles.liquidGlassCardBackground}>
                 <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.6)' }]}>
                   <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.6)', shadowColor: 'rgba(255, 255, 255, 0.3)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 4 }]}>
                     <IconSymbol name="plus.circle.fill" size={28} color="#FFFFFF" />
                   </View>
                   <Text style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>{t('timer.manual')}</Text>
-                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '500' }]}>{t('timer.add')}</Text>
+                  <Text style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary }]}>{t('timer.add')}</Text>
                 </View>
-              </BlurView>
+              </GlassCard>
             </TouchableOpacity>
           )}
               </View>
@@ -5021,461 +5011,305 @@ export default function SleepTrackerScreen() {
         </ScrollView>
 
         {/* Sleep Input Modal direkt hier rendern */}
-        <Modal 
-          visible={showInputModal} 
-          transparent={true} 
-          statusBarTranslucent
-          navigationBarTranslucent
-          animationType="slide" 
-          onRequestClose={closeManualSleepModal}
-        >
-          <View style={[styles.modalOverlay, { backgroundColor: modalOverlayColor }]}>
-            {/* Background tap to close */}
-            <TouchableOpacity 
-              style={StyleSheet.absoluteFill} 
-              onPress={() => {
-                triggerHaptic();
-                closeManualSleepModal();
-              }}
-              activeOpacity={1}
-            />
+        <FormSheet
+            visible={showInputModal}
+            isDark={isDark}
+            title={editingEntry ? t('form.edit') : t('form.add')}
+            subtitle={editingEntry ? t('form.adjust') : t('form.create')}
+            onClose={closeManualSleepModal}
+            onCancel={closeManualSleepModal}
+            confirmDisabled={isReadOnlyPreviewMode}
+            onConfirm={() => {
+              triggerHaptic();
+              handleSaveEntry({
+                start_time: safeModalStartTime.toISOString(),
+                end_time: safeModalEndTime?.toISOString() || null,
+                quality: sleepModalData.quality,
+                notes: sleepModalData.notes,
+              });
+            }}
+            overlays={
+              <>
+                <TextInputOverlay
+                  visible={notesOverlayVisible}
+                  label={t('form.notes').replace(/^📝\s*/, '')}
+                  value={notesOverlayValue}
+                  placeholder={t('form.notesPlaceholder')}
+                  multiline
+                  accentColor={modalAccentColor}
+                  onClose={closeNotesEditor}
+                  onSubmit={(next) => saveNotesEditor(next)}
+                />
+              </>
+            }
+          >
+            <View style={{ width: '100%', alignItems: 'center' }}>
+              {/* Zeit Sektion */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.period')}</Text>
 
-            <View
-              style={[
-                styles.modalContent,
-                {
-                  backgroundColor: modalPanelColor,
-                  paddingBottom: Math.max(insets.bottom, 20),
-                  borderTopWidth: isDark ? 1 : 0,
-                  borderTopColor: modalPanelBorderColor,
-                },
-              ]}
-            >
-              {/* Header */}
-              <View style={styles.header}>
-                <TouchableOpacity 
-                  style={[styles.headerButton, { backgroundColor: modalGhostButtonColor }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('common.cancel')}
-                  onPress={() => {
-                    triggerHaptic();
-                    closeManualSleepModal();
-                  }}
-                >
-                  <IconSymbol name="xmark" size={20} color={textSecondary} weight="semibold" />
-                </TouchableOpacity>
+                <View style={styles.timeRow}>
+                  <FormField
+                    isDark={isDark}
+                    onPress={openStartPicker}
+                    label={t('form.start')}
+                    value={safeModalStartTime.toLocaleString(SLEEP_TRACKER_LOCALE_TAG, {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                    })}
+                    style={{ flex: 1 }}
+                  />
 
-                <View style={styles.headerCenter}>
-                  <Text style={[styles.modalTitle, { color: textPrimary }]}>
-                    {editingEntry ? t('form.edit') : t('form.add')}
-                  </Text>
-                  <Text style={[styles.modalSubtitle, { color: modalSubtitleColor }]}>
-                    {editingEntry ? t('form.adjust') : t('form.create')}
-                  </Text>
+                  <FormField
+                    isDark={isDark}
+                    onPress={openEndPicker}
+                    label={t('form.end')}
+                    value={
+                      safeModalEndTime
+                        ? safeModalEndTime.toLocaleString(SLEEP_TRACKER_LOCALE_TAG, {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            day: '2-digit',
+                            month: '2-digit',
+                          })
+                        : t('form.open')
+                    }
+                    style={{ flex: 1 }}
+                  />
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.headerButton, { backgroundColor: modalAccentColor }]}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('common.done')}
-                  onPress={() => {
-                    triggerHaptic();
-                    handleSaveEntry({
-                      start_time: safeModalStartTime.toISOString(),
-                      end_time: safeModalEndTime?.toISOString() || null,
-                      quality: sleepModalData.quality,
-                      notes: sleepModalData.notes
-                    });
-                  }}
-                >
-                  <IconSymbol name="checkmark" size={22} color="#FFFFFF" weight="semibold" />
-                </TouchableOpacity>
-              </View>
-
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                <View style={{width: '100%', alignItems: 'center'}}>
-                    
-                    {/* Zeit Sektion */}
-                    <View style={styles.section}>
-                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.period')}</Text>
-                      
-                      <View style={styles.timeRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.timeButton,
-                            {
-                              backgroundColor: modalFieldColor,
-                              borderColor: modalFieldBorderColor,
-                            },
-                          ]}
-                          onPress={openStartPicker}
-                        >
-                          <Text style={[styles.timeLabel, { color: textSecondary }]}>{t('form.start')}</Text>
-                          <Text style={[styles.timeValue, { color: textPrimary }]}>
-                            {safeModalStartTime.toLocaleString(SLEEP_TRACKER_LOCALE_TAG, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              day: '2-digit',
-                              month: '2-digit'
-                            })}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.timeButton,
-                            {
-                              backgroundColor: modalFieldColor,
-                              borderColor: modalFieldBorderColor,
-                            },
-                          ]}
-                          onPress={openEndPicker}
-                        >
-                          <Text style={[styles.timeLabel, { color: textSecondary }]}>{t('form.end')}</Text>
-                          <Text style={[styles.timeValue, { color: textPrimary }]}>
-                            {safeModalEndTime
-                              ? safeModalEndTime.toLocaleString(SLEEP_TRACKER_LOCALE_TAG, {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  day: '2-digit',
-                                  month: '2-digit'
-                                })
-                              : t('form.open')
-                            }
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Android: DateTimePicker direkt im Modal */}
-                      {Platform.OS !== 'ios' && showStartPicker && (
-                        <View
-                          style={[
-                            styles.datePickerContainer,
-                            {
-                              backgroundColor: modalPickerColor,
-                              borderColor: modalFieldBorderColor,
-                            },
-                          ]}
-                        >
-                          <DateTimePicker
-                            value={safeModalStartTime}
-                            minimumDate={MIN_VALID_MANUAL_DATE}
-                            maximumDate={MAX_VALID_MANUAL_DATE}
-                            mode="datetime"
-                            display="default"
-                            themeVariant={isDark ? 'dark' : 'light'}
-                            accentColor={modalAccentColor}
-                            onChange={(event, date) => {
-                              setShowStartPicker(false);
-                              if (event.type === 'dismissed') return;
-                              const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
-                              applyStartPickerValue(nextStart);
-                            }}
-                            style={styles.dateTimePicker}
-                          />
-                          <View style={styles.datePickerActions}>
-                            <TouchableOpacity
-                              style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
-                              onPress={() => {
-                                triggerHaptic();
-                                setShowStartPicker(false);
-                              }}
-                            >
-                              <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-
-                      {Platform.OS !== 'ios' && showEndPicker && (
-                        <View
-                          style={[
-                            styles.datePickerContainer,
-                            {
-                              backgroundColor: modalPickerColor,
-                              borderColor: modalFieldBorderColor,
-                            },
-                          ]}
-                        >
-                          <DateTimePicker
-                            value={safeModalEndPickerTime}
-                            minimumDate={MIN_VALID_MANUAL_DATE}
-                            maximumDate={MAX_VALID_MANUAL_DATE}
-                            mode="datetime"
-                            display="default"
-                            themeVariant={isDark ? 'dark' : 'light'}
-                            accentColor={modalAccentColor}
-                            onChange={(event, date) => {
-                              setShowEndPicker(false);
-                              if (event.type === 'dismissed') return;
-                              const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
-                              applyEndPickerValue(nextEnd);
-                            }}
-                            style={styles.dateTimePicker}
-                          />
-                          <View style={styles.datePickerActions}>
-                            <TouchableOpacity
-                              style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
-                              onPress={() => {
-                                triggerHaptic();
-                                setShowEndPicker(false);
-                              }}
-                            >
-                              <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-
-                      {Platform.OS === 'ios' && showStartPicker && (
-                        <Modal
-                          visible={showStartPicker}
-                          transparent
-                          animationType="fade"
-                          onRequestClose={() => {
-                            commitStartPickerDraft();
-                            setShowStartPicker(false);
-                          }}
-                        >
-                          <View style={styles.manualPickerOverlay}>
-                            <TouchableOpacity
-                              style={StyleSheet.absoluteFill}
-                              onPress={() => {
-                                commitStartPickerDraft();
-                                setShowStartPicker(false);
-                              }}
-                              activeOpacity={1}
-                            />
-                            <View
-                              style={[
-                                styles.manualPickerCard,
-                                {
-                                  backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
-                                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-                                },
-                              ]}
-                            >
-                              <View style={styles.manualPickerHeader}>
-                                <TouchableOpacity
-                                  onPress={() => setShowStartPicker(false)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Text style={[styles.manualPickerActionText, { color: textSecondary }]}>{t('common.cancel')}</Text>
-                                </TouchableOpacity>
-                                <Text style={[styles.manualPickerTitle, { color: textPrimary }]}>{t('form.start')}</Text>
-                                <TouchableOpacity
-                                  onPress={() => {
-                                    commitStartPickerDraft();
-                                    setShowStartPicker(false);
-                                  }}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Text style={[styles.manualPickerActionText, { color: modalAccentColor }]}>{t('common.done')}</Text>
-                                </TouchableOpacity>
-                              </View>
-                              <DateTimePicker
-                                value={(() => {
-                                  const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
-                                  d.setSeconds(0, 0);
-                                  return d;
-                                })()}
-                                minimumDate={MIN_VALID_MANUAL_DATE}
-                                maximumDate={MAX_VALID_MANUAL_DATE}
-                                mode="datetime"
-                                display="spinner"
-                                locale={SLEEP_TRACKER_LOCALE_TAG}
-                                onChange={(event, d) => {
-                                  if (event.type === 'dismissed') return;
-                                  setStartPickerDraft((prev) =>
-                                    getSafePickerDateFromEvent(event, d, prev)
-                                  );
-                                }}
-                                accentColor={modalAccentColor}
-                                themeVariant={isDark ? 'dark' : 'light'}
-                                style={styles.manualPickerSpinner}
-                              />
-                            </View>
-                          </View>
-                        </Modal>
-                      )}
-
-                      {Platform.OS === 'ios' && showEndPicker && (
-                        <Modal
-                          visible={showEndPicker}
-                          transparent
-                          animationType="fade"
-                          onRequestClose={() => {
-                            commitEndPickerDraft();
-                            setShowEndPicker(false);
-                          }}
-                        >
-                          <View style={styles.manualPickerOverlay}>
-                            <TouchableOpacity
-                              style={StyleSheet.absoluteFill}
-                              onPress={() => {
-                                commitEndPickerDraft();
-                                setShowEndPicker(false);
-                              }}
-                              activeOpacity={1}
-                            />
-                            <View
-                              style={[
-                                styles.manualPickerCard,
-                                {
-                                  backgroundColor: isDark ? 'rgba(24,24,28,0.96)' : 'rgba(255,255,255,0.98)',
-                                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-                                },
-                              ]}
-                            >
-                              <View style={styles.manualPickerHeader}>
-                                <TouchableOpacity
-                                  onPress={() => setShowEndPicker(false)}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Text style={[styles.manualPickerActionText, { color: textSecondary }]}>{t('common.cancel')}</Text>
-                                </TouchableOpacity>
-                                <Text style={[styles.manualPickerTitle, { color: textPrimary }]}>{t('form.end')}</Text>
-                                <TouchableOpacity
-                                  onPress={() => {
-                                    commitEndPickerDraft();
-                                    setShowEndPicker(false);
-                                  }}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Text style={[styles.manualPickerActionText, { color: modalAccentColor }]}>{t('common.done')}</Text>
-                                </TouchableOpacity>
-                              </View>
-                              <DateTimePicker
-                                value={(() => {
-                                  const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
-                                  d.setSeconds(0, 0);
-                                  return d;
-                                })()}
-                                minimumDate={MIN_VALID_MANUAL_DATE}
-                                maximumDate={MAX_VALID_MANUAL_DATE}
-                                mode="datetime"
-                                display="spinner"
-                                locale={SLEEP_TRACKER_LOCALE_TAG}
-                                onChange={(event, d) => {
-                                  if (event.type === 'dismissed') return;
-                                  setEndPickerDraft((prev) =>
-                                    getSafePickerDateFromEvent(event, d, prev)
-                                  );
-                                }}
-                                accentColor={modalAccentColor}
-                                themeVariant={isDark ? 'dark' : 'light'}
-                                style={styles.manualPickerSpinner}
-                              />
-                            </View>
-                          </View>
-                        </Modal>
-                      )}
-                    </View>
-
-
-                    {/* Qualität Sektion */}
-                    <View style={styles.section}>
-                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.quality')}</Text>
-                      <View style={styles.optionsGrid}>
-                        {(['good','medium','bad'] as const).map(q => (
-                          <TouchableOpacity
-                            key={q}
-                            style={[
-                              styles.optionButton,
-                              { 
-                                backgroundColor: sleepModalData.quality === q 
-                                  ? QUALITY_VISUALS[q].color
-                                  : modalQualityDefaultColor,
-                                borderColor: sleepModalData.quality === q ? 'transparent' : modalFieldBorderColor,
-                              }
-                            ]}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: sleepModalData.quality === q }}
-                            onPress={() => {
-                              triggerHaptic();
-                              setSleepModalData(prev => ({ ...prev, quality: q }));
-                            }}
-                          >
-                            <Text style={styles.optionIcon}>
-                              {QUALITY_VISUALS[q].emoji}
-                            </Text>
-                            <Text style={[
-                              styles.optionLabel,
-                              {
-                                color: sleepModalData.quality === q ? '#FFFFFF' : textPrimary
-                              }
-                            ]}>
-                              {t(q === 'good' ? 'quality.good' : q === 'medium' ? 'quality.medium' : 'quality.bad')}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-
-                    {/* Notizen Sektion */}
-                    <View style={styles.section}>
-                      <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.notes')}</Text>
+                {/* Android: DateTimePicker direkt im Modal */}
+                {Platform.OS !== 'ios' && showStartPicker && (
+                  <View
+                    style={[
+                      styles.datePickerContainer,
+                      {
+                        backgroundColor: modalPickerColor,
+                        borderColor: modalFieldBorderColor,
+                      },
+                    ]}
+                  >
+                    <DateTimePicker
+                      value={safeModalStartTime}
+                      minimumDate={MIN_VALID_MANUAL_DATE}
+                      maximumDate={MAX_VALID_MANUAL_DATE}
+                      mode="datetime"
+                      display="default"
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      accentColor={modalAccentColor}
+                      onChange={(event, date) => {
+                        setShowStartPicker(false);
+                        if (event.type === 'dismissed') return;
+                        const nextStart = getSafePickerDateFromEvent(event, date, safeModalStartTime);
+                        applyStartPickerValue(nextStart);
+                      }}
+                      style={styles.dateTimePicker}
+                    />
+                    <View style={styles.datePickerActions}>
                       <TouchableOpacity
-                        style={[
-                          styles.notesInput,
-                          {
-                            backgroundColor: modalFieldColor,
-                            borderColor: modalFieldBorderColor,
-                          },
-                        ]}
-                        activeOpacity={0.9}
+                        style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
                         onPress={() => {
                           triggerHaptic();
-                          openNotesEditor();
+                          setShowStartPicker(false);
                         }}
                       >
-                        <Text
-                          style={[
-                            sleepModalData.notes.trim() ? styles.notesText : styles.notesPlaceholder,
-                            { color: sleepModalData.notes.trim() ? textPrimary : textSecondary }
-                          ]}
-                          numberOfLines={3}
-                        >
-                          {sleepModalData.notes.trim() || t('form.notesPlaceholder')}
-                        </Text>
+                        <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
                       </TouchableOpacity>
                     </View>
+                  </View>
+                )}
 
-                    {/* Delete Button für Bearbeitung */}
-                    {editingEntry && (
-                      <View style={styles.section}>
-                        <TouchableOpacity
-                          style={[styles.deleteButton]}
-                          onPress={() => {
-                            triggerHaptic();
-                            if (editingEntry.id) {
-                              handleDeleteEntry(editingEntry.id);
-                              closeManualSleepModal();
-                            }
-                          }}
-                        >
-                          <Text style={styles.deleteButtonText}>{t('form.delete')}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
+                {Platform.OS !== 'ios' && showEndPicker && (
+                  <View
+                    style={[
+                      styles.datePickerContainer,
+                      {
+                        backgroundColor: modalPickerColor,
+                        borderColor: modalFieldBorderColor,
+                      },
+                    ]}
+                  >
+                    <DateTimePicker
+                      value={safeModalEndPickerTime}
+                      minimumDate={MIN_VALID_MANUAL_DATE}
+                      maximumDate={MAX_VALID_MANUAL_DATE}
+                      mode="datetime"
+                      display="default"
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      accentColor={modalAccentColor}
+                      onChange={(event, date) => {
+                        setShowEndPicker(false);
+                        if (event.type === 'dismissed') return;
+                        const nextEnd = getSafePickerDateFromEvent(event, date, safeModalEndPickerTime);
+                        applyEndPickerValue(nextEnd);
+                      }}
+                      style={styles.dateTimePicker}
+                    />
+                    <View style={styles.datePickerActions}>
+                      <TouchableOpacity
+                        style={[styles.datePickerCancel, { backgroundColor: modalAccentColor }]}
+                        onPress={() => {
+                          triggerHaptic();
+                          setShowEndPicker(false);
+                        }}
+                      >
+                        <Text style={styles.datePickerCancelText}>{t('common.done')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
 
+                {Platform.OS === 'ios' && showStartPicker && (
+                  <FormSheet
+                    visible={showStartPicker}
+                    isDark={isDark}
+                    title={t('form.start')}
+                    onClose={() => setShowStartPicker(false)}
+                    onCancel={() => setShowStartPicker(false)}
+                    confirmLabel={t('common.done')}
+                    onConfirm={() => {
+                      commitStartPickerDraft();
+                      setShowStartPicker(false);
+                    }}
+                    scrollable={false}
+                  >
+                    <DateTimePicker
+                      value={(() => {
+                        const d = sanitizeManualDate(startPickerDraft, safeModalStartTime);
+                        d.setSeconds(0, 0);
+                        return d;
+                      })()}
+                      minimumDate={MIN_VALID_MANUAL_DATE}
+                      maximumDate={MAX_VALID_MANUAL_DATE}
+                      mode="datetime"
+                      display="spinner"
+                      locale={SLEEP_TRACKER_LOCALE_TAG}
+                      onChange={(event, d) => {
+                        if (event.type === 'dismissed') return;
+                        setStartPickerDraft((prev) => getSafePickerDateFromEvent(event, d, prev));
+                      }}
+                      accentColor={modalAccentColor}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      style={styles.manualPickerSpinner}
+                    />
+                  </FormSheet>
+                )}
+
+                {Platform.OS === 'ios' && showEndPicker && (
+                  <FormSheet
+                    visible={showEndPicker}
+                    isDark={isDark}
+                    title={t('form.end')}
+                    onClose={() => setShowEndPicker(false)}
+                    onCancel={() => setShowEndPicker(false)}
+                    confirmLabel={t('common.done')}
+                    onConfirm={() => {
+                      commitEndPickerDraft();
+                      setShowEndPicker(false);
+                    }}
+                    scrollable={false}
+                  >
+                    <DateTimePicker
+                      value={(() => {
+                        const d = sanitizeManualDate(endPickerDraft, safeModalEndPickerTime);
+                        d.setSeconds(0, 0);
+                        return d;
+                      })()}
+                      minimumDate={MIN_VALID_MANUAL_DATE}
+                      maximumDate={MAX_VALID_MANUAL_DATE}
+                      mode="datetime"
+                      display="spinner"
+                      locale={SLEEP_TRACKER_LOCALE_TAG}
+                      onChange={(event, d) => {
+                        if (event.type === 'dismissed') return;
+                        setEndPickerDraft((prev) => getSafePickerDateFromEvent(event, d, prev));
+                      }}
+                      accentColor={modalAccentColor}
+                      themeVariant={isDark ? 'dark' : 'light'}
+                      style={styles.manualPickerSpinner}
+                    />
+                  </FormSheet>
+                )}
+              </View>
+
+              {/* Qualität Sektion */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.quality')}</Text>
+                <View style={styles.optionsGrid}>
+                  {(['good', 'medium', 'bad'] as const).map((q) => (
+                    <TouchableOpacity
+                      key={q}
+                      style={[
+                        styles.optionButton,
+                        {
+                          backgroundColor:
+                            sleepModalData.quality === q
+                              ? QUALITY_VISUALS[q].color
+                              : modalQualityDefaultColor,
+                          borderColor: sleepModalData.quality === q ? 'transparent' : modalFieldBorderColor,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: sleepModalData.quality === q }}
+                      onPress={() => {
+                        triggerHaptic();
+                        setSleepModalData((prev) => ({ ...prev, quality: q }));
+                      }}
+                    >
+                      <Text style={styles.optionIcon}>{QUALITY_VISUALS[q].emoji}</Text>
+                      <Text
+                        style={[
+                          styles.optionLabel,
+                          {
+                            color: sleepModalData.quality === q ? '#FFFFFF' : textPrimary,
+                          },
+                        ]}
+                      >
+                        {t(
+                          q === 'good' ? 'quality.good' : q === 'medium' ? 'quality.medium' : 'quality.bad',
+                        )}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-              </ScrollView>
-	            </View>
-	          </View>
+              </View>
 
-	          <TextInputOverlay
-	            visible={notesOverlayVisible}
-	            label={t('form.notes').replace(/^📝\s*/, '')}
-	            value={notesOverlayValue}
-	            placeholder={t('form.notesPlaceholder')}
-	            multiline
-	            accentColor={modalAccentColor}
-	            onClose={closeNotesEditor}
-	            onSubmit={(next) => saveNotesEditor(next)}
-	          />
+              {/* Notizen Sektion */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, { color: textSecondary }]}>{t('form.notes')}</Text>
+                <FormField
+                  isDark={isDark}
+                  onPress={() => {
+                    triggerHaptic();
+                    openNotesEditor();
+                  }}
+                  value={sleepModalData.notes.trim()}
+                  placeholder={t('form.notesPlaceholder')}
+                  multiline
+                />
+              </View>
 
-	        </Modal>
+              {/* Delete Button für Bearbeitung */}
+              {editingEntry && (
+                <View style={styles.section}>
+                  <TouchableOpacity
+                    style={[styles.deleteButton]}
+                    onPress={() => {
+                      triggerHaptic();
+                      if (editingEntry.id) {
+                        handleDeleteEntry(editingEntry.id);
+                        closeManualSleepModal();
+                      }
+                    }}
+                  >
+                    <Text style={styles.deleteButtonText}>{t('form.delete')}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </FormSheet>
 
         {nightEditorGroup && (
           <NightSleepEditor
@@ -5621,7 +5455,7 @@ export default function SleepTrackerScreen() {
           </View>
         </Animated.View>
       )}
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 
@@ -5642,15 +5476,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   readOnlyPreviewTitle: {
+    ...TYPOGRAPHY.label,
     color: '#FFE2B3',
-    fontSize: 13,
-    fontWeight: '700',
     marginBottom: 2,
   },
   readOnlyPreviewText: {
+    ...TYPOGRAPHY.bodySmall,
     color: 'rgba(255, 240, 220, 0.95)',
-    fontSize: 12,
-    fontWeight: '500',
   },
 
   // Stats Container (Swipeable)
@@ -5691,57 +5523,57 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignSelf: 'center',
-    width: contentWidth,   // exakt gleich wie andere Abschnitte
+    width: '100%',
     marginTop: 6,
     marginBottom: 4,
+    gap: CONTENT_LAYOUT.itemGap,
   },
   kpiCard: {
     width: '48%',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12, // Reduziertes Padding für bessere Balance
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+    paddingVertical: CONTENT_LAYOUT.compactPadding,
+    paddingHorizontal: CONTENT_LAYOUT.compactPadding,
     borderWidth: 1,
     overflow: 'hidden',
-    minHeight: 64,
+    minHeight: 96,
   },
   kpiCardWide: {
     width: '100%', // Vollbreite für spezielle Karten
   },
   kpiColumn: {
     alignSelf: 'center',
-    width: contentWidth,
+    width: '100%',
     marginTop: 6,
     marginBottom: 4,
   },
   kpiCardStack: {
     marginBottom: 8,
   },
-  kpiHeaderRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  kpiHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 3,
+    flexWrap: 'wrap',
   },
-  kpiTitle: { 
-    fontSize: 11, 
-    fontWeight: '600', 
+  kpiTitle: {
+    ...TYPOGRAPHY.label,
     color: '#7D5A50',
     marginLeft: 4,
+    flexShrink: 1,
   },
   kpiValue: {
-    fontSize: 18,
-    fontWeight: '800',
+    ...METRIC_TEXT,
     color: PRIMARY,
     marginTop: 1,
-    letterSpacing: -0.5,
-    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
+    fontVariant: ['tabular-nums'],
   },
   kpiValueCentered: { 
     textAlign: 'center', 
     width: '100%' 
   },
   kpiSub: {
+    ...TYPOGRAPHY.caption,
     marginTop: 2,
-    fontSize: 9,
     color: '#7D5A50',
     textAlign: 'center',
     opacity: 0.8,
@@ -5761,8 +5593,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.65)',
   },
   predictionBadgeText: {
-    fontSize: 9,
-    fontWeight: '600',
+    ...TYPOGRAPHY.caption,
     color: '#7D5A50',
     opacity: 0.8,
   },
@@ -5773,77 +5604,53 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 4,
   },
-  
+
   centralContainer: {
     alignItems: 'center',
     paddingVertical: 8,
     position: 'relative',
   },
   centralStatus: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...TYPOGRAPHY.bodyStrong,
     marginBottom: 2,
     textAlign: 'center',
-    lineHeight: 16,
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
   centralHint: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
-    lineHeight: 16,
-    maxWidth: 200,
+    maxWidth: undefined,
     textAlignVertical: 'center',
     includeFontPadding: false,
     marginTop: 2,
   },
   centralHintPrimary: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodyStrong,
     textAlign: 'center',
-    lineHeight: 18,
     includeFontPadding: false,
   },
   centralHintSecondary: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
-    lineHeight: 16,
     includeFontPadding: false,
     opacity: 0.85,
   },
 
   sectionTitle: {
+    ...TYPOGRAPHY.sectionTitle,
     marginTop: SECTION_GAP_TOP,
     marginBottom: SECTION_GAP_BOTTOM,
     paddingHorizontal: LAYOUT_PAD,
-    fontSize: 15,
-    fontWeight: '700',
     color: '#7D5A50',
-    textAlign: 'center',
+    textAlign: 'left',
     width: '100%',
-    letterSpacing: -0.1,
   },
   sectionTitleTight: {
     marginTop: Math.max(2, SECTION_GAP_TOP - 12),
   },
 
   // Top Tabs (exakt wie daily_old.tsx)
-  topTabsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 6,
-  },
-  topTab: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
-  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
-  activeTopTabText: { color: PRIMARY },
 
   // Cards Grid (from home.tsx)
   cardsGrid: {
@@ -5883,15 +5690,16 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 128,
-    height: 140,
-    borderWidth: 1.5,
+    minHeight: 140,
+    height: undefined,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.6)',
     shadowColor: 'rgba(255, 255, 255, 0.3)',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0,
     shadowRadius: 6,
-    elevation: 5,
+    elevation: 0,
+    boxShadow: CONTENT_LAYOUT.cardShadow,
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
@@ -5905,24 +5713,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...TYPOGRAPHY.headline,
     marginBottom: 4,
     textAlign: 'center',
   },
   liquidGlassCardTitle: {
     color: 'rgba(85, 60, 55, 0.95)',
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   cardDescription: {
-    fontSize: 11,
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
-    lineHeight: 14,
   },
   liquidGlassCardDescription: {
     color: 'rgba(85, 60, 55, 0.7)',
-    fontWeight: '500',
+    fontWeight: '400',
   },
 
   // Next Sleep Window Card (Home.tsx style)
@@ -5939,15 +5745,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   nextSleepType: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...TYPOGRAPHY.headline,
     marginBottom: 4,
   },
   nextSleepTime: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodyStrong,
   },
-
 
   // Glass base styles (from daily_old.tsx)
   glassContainer: {
@@ -6021,15 +5824,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   actionButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...TYPOGRAPHY.button,
     color: '#7D5A50',
   },
 
-
   // Empty State Styles
   emptyState: {
-    padding: 40,
+    padding: CONTENT_LAYOUT.cardPadding,
     alignItems: 'center',
     marginHorizontal: 8,
   },
@@ -6038,14 +5839,13 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: '#A8978E',
     textAlign: 'center',
   },
@@ -6059,9 +5859,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(142, 78, 198, 0.06)',
   },
   nightGroupCardInner: {
-    paddingTop: 24,
-    paddingBottom: 28,
-    paddingHorizontal: 28,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
   },
   nightGroupHeader: {
     flexDirection: 'row',
@@ -6074,38 +5874,32 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   nightGroupTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...TYPOGRAPHY.headline,
     flex: 1,
   },
   nightGroupEditHint: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
   },
   nightGroupBigDuration: {
-    fontSize: 38,
-    fontWeight: '800',
+    ...METRIC_TEXT_LARGE,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
-    letterSpacing: -0.5,
     marginTop: 4,
     marginBottom: 4,
   },
   nightGroupMood: {
-    fontSize: 14,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
     marginTop: 6,
     marginBottom: 8,
-    opacity: 0.7,
+    opacity: 1,
   },
   nightGroupTimeRange: {
-    fontSize: 13.5,
-    fontWeight: '600',
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
     marginBottom: 20,
-    opacity: 0.5,
+    opacity: 1,
   },
   nightGroupDivider: {
     height: StyleSheet.hairlineWidth,
@@ -6130,13 +5924,11 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   nightGroupStatText: {
-    fontSize: 12,
-    fontWeight: '600',
+    ...TYPOGRAPHY.label,
     fontVariant: ['tabular-nums'],
   },
   nightGroupLongestPhase: {
-    fontSize: 11,
-    fontWeight: '500',
+    ...TYPOGRAPHY.caption,
     textAlign: 'center',
     opacity: 0.45,
     marginTop: 6,
@@ -6160,8 +5952,7 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
   },
   nightGroupWakeTime: {
-    fontSize: 11,
-    fontWeight: '500',
+    ...TYPOGRAPHY.caption,
     fontVariant: ['tabular-nums'],
     flex: 1,
   },
@@ -6172,8 +5963,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   nightGroupWakeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
+    ...TYPOGRAPHY.caption,
+    opacity: 1,
   },
 
   sleepInfoIconButton: {
@@ -6277,16 +6068,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   insightTitle: {
-    fontSize: 10,
-    fontWeight: '600',
+    ...TYPOGRAPHY.caption,
     color: '#7D5A50',
     flex: 1,
   },
   insightValue: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...METRIC_TEXT,
     textAlign: 'center',
-    letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
 
@@ -6296,52 +6084,8 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dimming backdrop
   },
-  modalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderCurve: 'continuous',
-    width: '100%',
-    height: '85%',
-    maxHeight: 700,
-    overflow: 'hidden',
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 25,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 22,
-  },
-  headerCenter: {
-    flex: 1,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    // color wird dynamisch gesetzt
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    marginTop: 2,
-    textAlign: 'center',
-    // color wird dynamisch gesetzt
-  },
-  section: {
-    marginBottom: 30,
-    width: '100%',
-    alignItems: 'center',
-  },
+
+  section: { width: '100%', gap: 8, marginBottom: 20 },
   optionsGrid: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -6376,45 +6120,7 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 12,
   },
-  timeButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    borderRadius: 20,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    padding: 15,
-    alignItems: 'center',
-  },
-  timeLabel: {
-    fontSize: 12,
-    // color wird dynamisch gesetzt
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  timeValue: {
-    fontSize: 16,
-    // color wird dynamisch gesetzt
-    fontWeight: 'bold',
-  },
-  notesInput: {
-    width: '100%',
-    minHeight: 80,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    borderRadius: 20,
-    borderCurve: 'continuous',
-    overflow: 'hidden',
-    padding: 15,
-  },
-  notesText: {
-    fontSize: 16,
-    // color wird dynamisch gesetzt
-  },
-  notesPlaceholder: {
-    fontSize: 16,
-    // color wird dynamisch gesetzt
-  },
+
   deleteButton: {
     backgroundColor: '#FF6B6B',
     paddingVertical: 12,
@@ -6429,7 +6135,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  
+
   // DatePicker Styles - im Modal integriert
   datePickerContainer: {
     marginTop: 15,
@@ -6461,34 +6167,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  manualPickerOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  manualPickerCard: {
-    marginHorizontal: 12,
-    marginBottom: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  manualPickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 6,
-  },
+
   manualPickerActionText: {
     fontSize: 16,
     fontWeight: '600',
   },
-  manualPickerTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
+
   manualPickerSpinner: {
     width: '100%',
     height: 220,
@@ -6659,41 +6343,11 @@ const styles = StyleSheet.create({
     marginBottom: 0, // kompakter zum Content
     paddingHorizontal: LAYOUT_PAD, // Navigation braucht eigenen Abstand
   },
-  weekNavButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    padding: 6,                 // Mehr Touch-Komfort
-  },
-  monthNavButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  weekNavButtonText: {
-    fontSize: 24,
-    color: '#8E4EC6',
-    fontWeight: 'bold',
-  },
-  monthNavButtonText: {
-    fontSize: 24,
-    color: '#8E4EC6',
-    fontWeight: 'bold',
-  },
   weekHeaderCenter: {
     flex: 1,
     alignItems: 'center',
     marginHorizontal: 16,
+    minWidth: 0,
   },
   monthHeaderCenter: {
     flex: 1,
@@ -6701,26 +6355,26 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   weekHeaderTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 6,
+    textAlign: 'center',
   },
   monthHeaderTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
     marginBottom: 4,
+    textAlign: 'center',
   },
   weekHeaderSubtitle: {
-    fontSize: 12,
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
+    textAlign: 'center',
   },
   todayEmptyHint: {
+    ...TYPOGRAPHY.bodySmall,
     marginTop: 4,
-    fontSize: 10,
-    fontWeight: '500',
-    opacity: 0.5,
+    opacity: 1,
   },
 
   // Chart Styles (Design Guide konform)
@@ -6735,11 +6389,10 @@ const styles = StyleSheet.create({
       padding: 0,                 // Padding wird durch Container-Abstand geregelt
     },
   chartTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#5D4A40',           // Dunkler für bessere Lesbarkeit auf Glass
+    ...TYPOGRAPHY.headline,
+    color: '#5D4A40',
     textAlign: 'center',
-    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
+    marginBottom: SECTION_GAP_BOTTOM,
     textShadowColor: 'rgba(255, 255, 255, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -6819,10 +6472,9 @@ const styles = StyleSheet.create({
     padding: 24,                // Innenabstand bleibt erhalten
   },
   summaryTitle: {
-    fontSize: 18,               // Größerer Titel
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
-    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
+    marginBottom: SECTION_GAP_BOTTOM,
     textAlign: 'center',
   },
   summaryStats: {
@@ -6838,17 +6490,15 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statValue: {
-    fontSize: 22,               // Größer für bessere Lesbarkeit
-    fontWeight: 'bold',
+    ...METRIC_TEXT,
     color: '#7D5A50',
-    marginBottom: 6,            // Mehr Abstand
-    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
+    marginBottom: 6,
+    fontVariant: ['tabular-nums'],
   },
   statLabel: {
-    fontSize: 13,               // Größer für bessere Lesbarkeit
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
     textAlign: 'center',
-    fontWeight: '500',
   },
 
   // Trend Card (Design Guide konform)
@@ -6864,10 +6514,9 @@ const styles = StyleSheet.create({
     padding: 24,                // Innenabstand bleibt erhalten
   },
   trendTitle: {
-    fontSize: 18,               // Größerer Titel
-    fontWeight: 'bold',
+    ...TYPOGRAPHY.headline,
     color: '#7D5A50',
-    marginBottom: SECTION_GAP_BOTTOM, // Einheitlicher Abstand
+    marginBottom: SECTION_GAP_BOTTOM,
     textAlign: 'center',
   },
   trendContent: {
@@ -6888,9 +6537,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   trendText: {
-    fontSize: 14,
+    ...TYPOGRAPHY.bodySmall,
     color: '#7D5A50',
-    fontWeight: '600',
     flex: 1,
     flexWrap: 'wrap',
   },
@@ -6971,16 +6619,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   highlightLabel: {
-    fontSize: 13,               // Größerer Label-Text
+    ...TYPOGRAPHY.label,
     color: '#7D5A50',
-    fontWeight: '600',
-    marginBottom: 6,            // Mehr Abstand
+    marginBottom: 6,
   },
   highlightValue: {
-    fontSize: 18,               // Größerer Wert
-    fontWeight: 'bold',
+    ...METRIC_TEXT,
     color: '#8E4EC6',
-    fontVariant: ['tabular-nums'], // Gleichbreite Ziffern
+    fontVariant: ['tabular-nums'],
   },
 
 });

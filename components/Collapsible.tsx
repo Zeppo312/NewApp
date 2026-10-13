@@ -40,11 +40,11 @@ export function Collapsible({
             </View>
           )}
           <View style={styles.titleContainer}>
-            <ThemedText style={[styles.title, { color: titleColor }]}>
+            <ThemedText type="headline" style={{ color: titleColor }}>
               {title}
             </ThemedText>
             {subtitle && (
-              <ThemedText style={[styles.subtitle, { color: subtitleColor }]}>
+              <ThemedText type="bodySmall" style={[styles.subtitle, { color: subtitleColor }]}>
                 {subtitle}
               </ThemedText>
             )}
@@ -85,14 +85,8 @@ const styles = StyleSheet.create({
   titleContainer: {
     flex: 1,
   },
-  title: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
   subtitle: {
-    fontSize: 13,
     marginTop: 4,
-    letterSpacing: 0.2,
   },
   content: {
     paddingHorizontal: 14,

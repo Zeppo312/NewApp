@@ -1,5 +1,8 @@
+import { useLocale } from '@/contexts/LocaleContext';
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React from 'react';
-import { View, Text, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, Dimensions } from 'react-native';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { Colors, QualityColors } from '@/constants/Colors';
@@ -74,6 +77,7 @@ const calculateDominantQuality = (date: string, groupedEntries: Record<string, S
 };
 
 export default function CalendarHeatmap({ groupedEntries }: Props) {
+  const { locale } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const isDark = colorScheme === 'dark';
   const textColor = isDark ? Colors.dark.text : '#7D5A50';
@@ -121,16 +125,11 @@ export default function CalendarHeatmap({ groupedEntries }: Props) {
         alignItems: 'center',
         marginBottom: 8 
       }}>
-        <TouchableOpacity
+        <PeriodNavigationButton direction="previous"
+          accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'month')}
+          isDark={isDark} color={textColor}
           onPress={goToPreviousMonth}
-          style={{
-            padding: 8,
-            borderRadius: 15,
-            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(125, 90, 80, 0.1)'
-          }}
-        >
-          <Text style={{ color: textColor, fontWeight: 'bold' }}>◀</Text>
-        </TouchableOpacity>
+        />
 
         <Text style={{
           fontWeight: 'bold',
@@ -141,16 +140,11 @@ export default function CalendarHeatmap({ groupedEntries }: Props) {
           {monthName}
         </Text>
 
-        <TouchableOpacity
+        <PeriodNavigationButton direction="next"
+          accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'month')}
+          isDark={isDark} color={textColor}
           onPress={goToNextMonth}
-          style={{
-            padding: 8,
-            borderRadius: 15,
-            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(125, 90, 80, 0.1)'
-          }}
-        >
-          <Text style={{ color: textColor, fontWeight: 'bold' }}>▶</Text>
-        </TouchableOpacity>
+        />
       </View>
       
       {/* Wochentage-Kopfzeile */}

@@ -96,14 +96,13 @@ function GlassGrain({
   opacity?: number;
   density?: number;
 }) {
+  if (opacity <= 0) return null;
   const dots = Array.from({ length: density }, (_, index) => ({
     x: seededFraction(index, 1) * 100,
     y: seededFraction(index, 2) * 100,
     r: 0.4 + seededFraction(index, 3) * 1.2,
     a: 0.35 + seededFraction(index, 4) * 0.65,
   }));
-
-  if (opacity <= 0) return null;
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -119,6 +118,68 @@ function GlassGrain({
           />
         ))}
       </Svg>
+    </View>
+  );
+}
+
+type MaterialProps = {
+  intensity?: number;
+  tint?: BlurViewProps['tint'];
+  frostColor?: string;
+  toneColor?: string;
+  radius?: number;
+  innerBorderColor?: string;
+  highlightOpacity?: number;
+  highlightStrength?: HighlightStrength;
+  glossOpacity?: number;
+  grainOpacity?: number;
+  shadeOpacity?: number;
+  skipAndroidBlur?: boolean;
+  skipBlur?: boolean;
+  BlurComponent?: React.ComponentType<BlurViewProps>;
+};
+
+/** Reuse the onboarding material behind content that lays out independently. */
+export function GlassMaterial({
+  intensity = 30,
+  tint = 'light',
+  frostColor = TOKENS.frost,
+  toneColor,
+  radius = TOKENS.r,
+  innerBorderColor = 'rgba(255,255,255,0.30)',
+  highlightOpacity = 1,
+  highlightStrength = 'default',
+  glossOpacity = 0.45,
+  grainOpacity = 0.06,
+  shadeOpacity = 1,
+  skipAndroidBlur = false,
+  skipBlur = false,
+  BlurComponent = BlurView,
+}: MaterialProps) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {!skipBlur && !(Platform.OS === 'android' && skipAndroidBlur) && (
+        <BlurComponent blurMethod={Platform.OS === 'android' ? 'none' : undefined}
+          intensity={intensity} tint={tint} style={styles.absoluteFill} />
+      )}
+      <View style={[styles.absoluteFill, { backgroundColor: frostColor }]} />
+      {toneColor ? <View style={[styles.absoluteFill, { backgroundColor: toneColor }]} /> : null}
+      {highlightOpacity > 0 && <GlassHighlights opacity={highlightOpacity} strength={highlightStrength} />}
+      <GlassGrain opacity={grainOpacity} />
+      {shadeOpacity > 0 ? (
+        <LinearGradient pointerEvents="none"
+          colors={[rgbaBlack(0), rgbaBlack(0.04 * shadeOpacity), rgbaBlack(0.12 * shadeOpacity)]}
+          locations={[0, 0.55, 1]} start={{ x: 0.15, y: 0.2 }} end={{ x: 0.92, y: 0.96 }}
+          style={StyleSheet.absoluteFill} />
+      ) : null}
+      {glossOpacity > 0 ? (
+        <LinearGradient pointerEvents="none"
+          colors={[rgba(0.55 * glossOpacity), rgba(0.18 * glossOpacity), rgba(0)]}
+          locations={[0, 0.38, 1]} start={{ x: 0.02, y: 0 }} end={{ x: 0.9, y: 0.85 }}
+          style={StyleSheet.absoluteFill} />
+      ) : null}
+      {innerBorderColor ? <View style={[styles.absoluteFill,
+        { borderRadius: radius, borderWidth: 1, borderColor: innerBorderColor }]} /> : null}
     </View>
   );
 }
@@ -183,49 +244,8 @@ export function GlassCard({
   return (
     <View style={[wrapStyle, style]}>
       <View style={[styles.clip, fill && { flex: 1 }, { borderRadius: radius }]}>
-        {!(Platform.OS === 'android' && skipAndroidBlur) && (
-          <BlurView blurMethod={Platform.OS === 'android' ? 'none' : undefined}
-            intensity={intensity} tint={tint} style={styles.absoluteFill} />
-        )}
-        <View style={[styles.absoluteFill, { backgroundColor: frostColor }]} />
-        {toneColor ? (
-          <View style={[styles.absoluteFill, { backgroundColor: toneColor }]} />
-        ) : null}
-
-        <GlassHighlights opacity={highlightOpacity} strength={highlightStrength} />
-        <GlassGrain opacity={grainOpacity} />
-
-        {shadeOpacity > 0 ? (
-          <LinearGradient
-            pointerEvents="none"
-            colors={[rgbaBlack(0), rgbaBlack(0.04 * shadeOpacity), rgbaBlack(0.12 * shadeOpacity)]}
-            locations={[0, 0.55, 1]}
-            start={{ x: 0.15, y: 0.2 }}
-            end={{ x: 0.92, y: 0.96 }}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-
-        {glossOpacity > 0 ? (
-          <LinearGradient
-            pointerEvents="none"
-            colors={[rgba(0.55 * glossOpacity), rgba(0.18 * glossOpacity), rgba(0)]}
-            locations={[0, 0.38, 1]}
-            start={{ x: 0.02, y: 0.0 }}
-            end={{ x: 0.9, y: 0.85 }}
-            style={StyleSheet.absoluteFill}
-          />
-        ) : null}
-
-        {innerBorderColor ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.absoluteFill,
-              { borderRadius: radius, borderWidth: 1, borderColor: innerBorderColor },
-            ]}
-          />
-        ) : null}
+        <GlassMaterial {...{ intensity, tint, frostColor, toneColor, radius, innerBorderColor,
+          highlightOpacity, highlightStrength, glossOpacity, grainOpacity, shadeOpacity, skipAndroidBlur }} />
 
         <View style={[styles.content, fill && { flex: 1 }, contentStyle]}>{children}</View>
       </View>

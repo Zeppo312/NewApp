@@ -12,6 +12,7 @@ import * as Linking from 'expo-linking';
 import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/ThemedText';
+import { ActionButton } from '@/components/ui/action-button';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
@@ -459,7 +460,7 @@ export default function LoginScreen() {
                   </>
                 )}
                 <View style={styles.formContent}>
-                  <ThemedText type="subtitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
+                  <ThemedText type="dialogTitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                     {isRegistering ? t('login.register') : t('common.login')}
                   </ThemedText>
 
@@ -533,29 +534,13 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
-                  style={[
-                    styles.button,
-                    styles.loginButton,
-                    isLoading && styles.buttonDisabled,
-                  ]}
+                <ActionButton
+                  label={isRegistering ? t('login.register') : t('common.login')}
+                  busyLabel={isRegistering ? t('login.registering') : t('login.signingIn')}
+                  busy={isLoading}
+                  style={styles.loginButton}
                   onPress={handleAuth}
-                  disabled={isLoading}
-                  activeOpacity={0.9}
-                >
-                  {!isAndroid && <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />}
-                  <LinearGradient
-                    colors={['#9DBEBB', 'rgba(157, 190, 187, 0.9)']}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.buttonText}>
-                    {isLoading
-                      ? (isRegistering ? t('login.registering') : t('login.signingIn'))
-                      : (isRegistering ? t('login.register') : t('common.login'))}
-                  </ThemedText>
-                </TouchableOpacity>
+                />
 
                 <TouchableOpacity
                   accessibilityRole="button"
@@ -766,10 +751,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   formTitle: {
-    fontSize: 24,
     marginBottom: 20,
     textAlign: 'center',
-    fontWeight: '700',
     letterSpacing: 0.3,
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },

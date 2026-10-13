@@ -10,6 +10,7 @@ export type NavigationLocale = 'de' | 'en' | 'es';
 export const DEFAULT_NAVIGATION_LOCALE: NavigationLocale = 'de';
 
 const de = {
+  'period.previousDay': 'Vorheriger Tag', 'period.previousWeek': 'Vorherige Woche', 'period.previousMonth': 'Vorheriger Monat', 'period.nextDay': 'Nächster Tag', 'period.nextWeek': 'Nächste Woche', 'period.nextMonth': 'Nächster Monat',
   'tab.development': 'Entwicklungssprünge',
   'tab.baby': 'Mein Baby',
   'tab.checklist': 'Checkliste',
@@ -38,6 +39,7 @@ export type NavigationTranslationKey = keyof typeof de;
 type Catalog = Record<NavigationTranslationKey, string>;
 
 const en: Catalog = {
+  'period.previousDay': 'Previous day', 'period.previousWeek': 'Previous week', 'period.previousMonth': 'Previous month', 'period.nextDay': 'Next day', 'period.nextWeek': 'Next week', 'period.nextMonth': 'Next month',
   'tab.development': 'Development leaps',
   'tab.baby': 'My baby',
   'tab.checklist': 'Checklist',
@@ -63,6 +65,7 @@ const en: Catalog = {
 };
 
 const es: Catalog = {
+  'period.previousDay': 'Día anterior', 'period.previousWeek': 'Semana anterior', 'period.previousMonth': 'Mes anterior', 'period.nextDay': 'Día siguiente', 'period.nextWeek': 'Semana siguiente', 'period.nextMonth': 'Mes siguiente',
   'tab.development': 'Saltos de desarrollo',
   'tab.baby': 'Mi bebé',
   'tab.checklist': 'Lista de control',
@@ -93,3 +96,14 @@ export const translateNavigationText = (
   locale: NavigationLocale,
   key: NavigationTranslationKey,
 ) => NAVIGATION_TRANSLATIONS[locale]?.[key] ?? de[key] ?? key;
+
+const PERIOD_NAVIGATION_KEYS = {
+  previous: { day: 'period.previousDay', week: 'period.previousWeek', month: 'period.previousMonth' },
+  next: { day: 'period.nextDay', week: 'period.nextWeek', month: 'period.nextMonth' },
+} as const;
+
+export const getPeriodNavigationLabel = (
+  locale: NavigationLocale,
+  direction: 'previous' | 'next',
+  period: 'day' | 'week' | 'month',
+) => translateNavigationText(locale, PERIOD_NAVIGATION_KEYS[direction][period]);

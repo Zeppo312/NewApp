@@ -1,20 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
 import DateTimePicker from '@/components/ui/DateTimePicker';
+import { FormSheet } from '@/components/ui/form-sheet';
+import { useEffect, useMemo, useState } from 'react';
+import { Platform, StyleSheet } from 'react-native';
 
-import { Colors } from '@/constants/Colors';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { getSafePickerDate } from '@/lib/safeDate';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { getAppLocaleTag } from '@/lib/localization';
+import { getSafePickerDate } from '@/lib/safeDate';
 
 type PickerVariant = 'calendar' | 'spinner';
 const DEFAULT_MIN_DATE = new Date(2000, 0, 1);
@@ -49,15 +41,17 @@ export default function IOSBottomDatePicker({
   locale,
 }: Props) {
   const { locale: appLocale } = useLocale();
-  const resolvedConfirmLabel = confirmLabel ?? ({ de: 'Fertig', en: 'Done', es: 'Listo' } as const)[appLocale];
-  const resolvedCancelLabel = cancelLabel ?? ({ de: 'Abbrechen', en: 'Cancel', es: 'Cancelar' } as const)[appLocale];
+  const resolvedConfirmLabel =
+    confirmLabel ??
+    ({ de: 'Fertig', en: 'Done', es: 'Listo' } as const)[appLocale];
+  const resolvedCancelLabel =
+    cancelLabel ??
+    ({ de: 'Abbrechen', en: 'Cancel', es: 'Cancelar' } as const)[appLocale];
   const resolvedLocale = locale ?? getAppLocaleTag(appLocale);
   const adaptiveColors = useAdaptiveColors();
-  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
-
-  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
-  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const accent = adaptiveColors.accent;
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' ||
+    adaptiveColors.isDarkBackground;
 
   const sanitizeDateProp = (date?: Date) => {
     if (!date) return undefined;
@@ -68,8 +62,12 @@ export default function IOSBottomDatePicker({
     const safeMin = sanitizeDateProp(min);
     const safeMax = sanitizeDateProp(max);
     const shouldApplyFallbackBounds = mode !== 'time';
-    const fallbackMin = shouldApplyFallbackBounds ? DEFAULT_MIN_DATE : undefined;
-    const fallbackMax = shouldApplyFallbackBounds ? DEFAULT_MAX_DATE : undefined;
+    const fallbackMin = shouldApplyFallbackBounds
+      ? DEFAULT_MIN_DATE
+      : undefined;
+    const fallbackMax = shouldApplyFallbackBounds
+      ? DEFAULT_MAX_DATE
+      : undefined;
     const resolvedMin = safeMin ?? fallbackMin;
     const resolvedMax = safeMax ?? fallbackMax;
 
@@ -90,17 +88,19 @@ export default function IOSBottomDatePicker({
   const safeDateOptions =
     mode === 'time' ? { minYear: 1900 } : normalizedBounds;
   const [draft, setDraft] = useState<Date>(() =>
-    getSafePickerDate(value, new Date(), safeDateOptions)
+    getSafePickerDate(value, new Date(), safeDateOptions),
   );
 
   const safeValueKey = useMemo(() => (value ? value.getTime() : 0), [value]);
   const minKey = useMemo(
-    () => (normalizedBounds.minimumDate ? normalizedBounds.minimumDate.getTime() : 0),
-    [normalizedBounds.minimumDate]
+    () =>
+      normalizedBounds.minimumDate ? normalizedBounds.minimumDate.getTime() : 0,
+    [normalizedBounds.minimumDate],
   );
   const maxKey = useMemo(
-    () => (normalizedBounds.maximumDate ? normalizedBounds.maximumDate.getTime() : 0),
-    [normalizedBounds.maximumDate]
+    () =>
+      normalizedBounds.maximumDate ? normalizedBounds.maximumDate.getTime() : 0,
+    [normalizedBounds.maximumDate],
   );
 
   useEffect(() => {
@@ -118,77 +118,34 @@ export default function IOSBottomDatePicker({
   };
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: isDark ? 'rgba(24,24,28,0.97)' : 'rgba(255,255,255,0.98)',
-              borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
-            },
-          ]}
-        >
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.headerAction, { color: textSecondary }]}>{resolvedCancelLabel}</Text>
-            </TouchableOpacity>
-            <Text style={[styles.title, { color: textPrimary }]}>{title}</Text>
-            <TouchableOpacity onPress={handleConfirm} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.headerAction, { color: accent }]}>{resolvedConfirmLabel}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <DateTimePicker
-            value={getSafePickerDate(draft, new Date(), safeDateOptions)}
-            mode={mode}
-            display={display}
-            locale={resolvedLocale}
-            onChange={(_, date) => {
-              if (!date) return;
-              setDraft(getSafePickerDate(date, draft, safeDateOptions));
-            }}
-            minimumDate={normalizedBounds.minimumDate}
-            maximumDate={normalizedBounds.maximumDate}
-            themeVariant={isDark ? 'dark' : 'light'}
-            style={styles.picker}
-          />
-        </View>
-      </View>
-    </Modal>
+    <FormSheet
+      visible={visible}
+      title={title}
+      isDark={isDark}
+      onClose={onClose}
+      onConfirm={handleConfirm}
+      cancelLabel={resolvedCancelLabel}
+      confirmLabel={resolvedConfirmLabel}
+    >
+      <DateTimePicker
+        value={getSafePickerDate(draft, new Date(), safeDateOptions)}
+        mode={mode}
+        display={display}
+        locale={resolvedLocale}
+        onChange={(_, date) => {
+          if (!date) return;
+          setDraft(getSafePickerDate(date, draft, safeDateOptions));
+        }}
+        minimumDate={normalizedBounds.minimumDate}
+        maximumDate={normalizedBounds.maximumDate}
+        themeVariant={isDark ? 'dark' : 'light'}
+        style={styles.picker}
+      />
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.32)',
-  },
-  sheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    paddingTop: 14,
-    paddingHorizontal: 14,
-    paddingBottom: 18,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  headerAction: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
   picker: {
     width: '100%',
   },

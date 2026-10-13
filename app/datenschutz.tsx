@@ -18,13 +18,13 @@ type BulletItem = string | { label: string; text: string };
 const BulletList = ({ items }: { items: BulletItem[] }) => (
   <View style={styles.list}>
     {items.map((item, index) => (
-      <ThemedText key={`bullet-${index}`} style={styles.listItem}>
+      <ThemedText key={`bullet-${index}`} type="body" style={styles.listItem}>
         {'\u2022 '}
         {typeof item === 'string' ? (
           item
         ) : (
           <>
-            <ThemedText style={styles.bold}>{item.label}</ThemedText>
+            <ThemedText type="bodyStrong">{item.label}</ThemedText>
             {item.text}
           </>
         )}
@@ -35,14 +35,14 @@ const BulletList = ({ items }: { items: BulletItem[] }) => (
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={styles.section}>
-    <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+    <ThemedText type="sectionTitle" style={styles.sectionTitle}>{title}</ThemedText>
     {children}
   </View>
 );
 
 const Subsection = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <View style={styles.subsection}>
-    <ThemedText style={styles.subsectionTitle}>{title}</ThemedText>
+    <ThemedText type="headline" style={styles.subsectionTitle}>{title}</ThemedText>
     {children}
   </View>
 );
@@ -74,10 +74,10 @@ export default function DatenschutzScreen() {
                 { backgroundColor: colorScheme === 'dark' ? theme.cardDark : '#FFF5EE', borderColor: theme.border },
               ]}
             >
-              <ThemedText style={styles.pageTitle}>Datenschutzerklärung</ThemedText>
+              <ThemedText type="pageTitle" style={styles.pageTitle}>Datenschutzerklärung</ThemedText>
 
               <Section title="Präambel">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Mit der folgenden Datenschutzerklärung möchten wir Sie darüber aufklären, welche Arten Ihrer
                   personenbezogenen Daten (nachfolgend auch kurz als „Daten“ bezeichnet) wir zu welchen Zwecken und in
                   welchem Umfang verarbeiten. Die Datenschutzerklärung gilt für alle von uns durchgeführten
@@ -85,8 +85,8 @@ export default function DatenschutzScreen() {
                   insbesondere auf unseren Webseiten, in mobilen Applikationen sowie innerhalb externer Onlinepräsenzen,
                   wie z. B. unserer Social-Media-Profile (nachfolgend zusammenfassend bezeichnet als „Onlineangebot“).
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>Die verwendeten Begriffe sind nicht geschlechtsspezifisch.</ThemedText>
-                <ThemedText style={styles.paragraph}>Stand: 11. September 2026</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Die verwendeten Begriffe sind nicht geschlechtsspezifisch.</ThemedText>
+                <ThemedText type="bodySmall" style={styles.paragraph}>Stand: 11. September 2026</ThemedText>
               </Section>
 
               <Section title="Inhaltsübersicht">
@@ -115,16 +115,16 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Verantwortlicher">
-                <ThemedText style={styles.paragraph}>Laura-Michelle Zeppenfeld</ThemedText>
-                <ThemedText style={styles.paragraph}>Tilburger Str. 31</ThemedText>
-                <ThemedText style={styles.paragraph}>28259, Bremen, Deutschland</ThemedText>
-                <ThemedText style={styles.paragraph}>E-Mail-Adresse: support@lottibaby.de</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Laura-Michelle Zeppenfeld</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Tilburger Str. 31</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>28259, Bremen, Deutschland</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>E-Mail-Adresse: support@lottibaby.de</ThemedText>
               </Section>
 
               {appPrivacySections.de.map((section) => (
                 <Section key={section.title} title={section.title}>
                   {section.paragraphs.map((paragraph, index) => (
-                    <ThemedText key={index} selectable style={styles.paragraph}>
+                    <ThemedText key={index} selectable type="body" style={styles.paragraph}>
                       {paragraph}
                     </ThemedText>
                   ))}
@@ -132,7 +132,7 @@ export default function DatenschutzScreen() {
               ))}
 
               <Section title="Übersicht der Verarbeitungen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die nachfolgende Übersicht fasst die Arten der verarbeiteten Daten und die Zwecke ihrer Verarbeitung
                   zusammen und verweist auf die betroffenen Personen.
                 </ThemedText>
@@ -171,7 +171,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Maßgebliche Rechtsgrundlagen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Maßgebliche Rechtsgrundlagen nach der DSGVO: Im Folgenden erhalten Sie eine Übersicht der
                   Rechtsgrundlagen der DSGVO, auf deren Basis wir personenbezogene Daten verarbeiten. Bitte nehmen Sie
                   zur Kenntnis, dass neben den Regelungen der DSGVO nationale Datenschutzvorgaben in Ihrem bzw. unserem
@@ -196,7 +196,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Nationale Datenschutzregelungen in Deutschland: Zusätzlich zu den Datenschutzregelungen der DSGVO
                   gelten nationale Regelungen zum Datenschutz in Deutschland. Hierzu gehört insbesondere das Gesetz zum
                   Schutz vor Missbrauch personenbezogener Daten bei der Datenverarbeitung (Bundesdatenschutzgesetz –
@@ -209,14 +209,14 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Sicherheitsmaßnahmen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wir treffen nach Maßgabe der gesetzlichen Vorgaben unter Berücksichtigung des Stands der Technik, der
                   Implementierungskosten und der Art, des Umfangs, der Umstände und der Zwecke der Verarbeitung sowie der
                   unterschiedlichen Eintrittswahrscheinlichkeiten und des Ausmaßes der Bedrohung der Rechte und
                   Freiheiten natürlicher Personen geeignete technische und organisatorische Maßnahmen, um ein dem Risiko
                   angemessenes Schutzniveau zu gewährleisten.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Zu den Maßnahmen gehören insbesondere die Sicherung der Vertraulichkeit, Integrität und Verfügbarkeit
                   von Daten durch Kontrolle des physischen und elektronischen Zugangs zu den Daten als auch des sie
                   betreffenden Zugriffs, der Eingabe, der Weitergabe, der Sicherung der Verfügbarkeit und ihrer Trennung.
@@ -226,7 +226,7 @@ export default function DatenschutzScreen() {
                   sowie Verfahren entsprechend dem Prinzip des Datenschutzes, durch Technikgestaltung und durch
                   datenschutzfreundliche Voreinstellungen.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Sicherung von Online-Verbindungen durch TLS-/SSL-Verschlüsselungstechnologie (HTTPS): Um die Daten der
                   Nutzer, die über unsere Online-Dienste übertragen werden, vor unerlaubten Zugriffen zu schützen, setzen
                   wir auf die TLS-/SSL-Verschlüsselungstechnologie. Secure Sockets Layer (SSL) und Transport Layer
@@ -241,7 +241,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Übermittlung von personenbezogenen Daten">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Im Rahmen unserer Verarbeitung von personenbezogenen Daten kommt es vor, dass diese an andere Stellen,
                   Unternehmen, rechtlich selbstständige Organisationseinheiten oder Personen übermittelt beziehungsweise
                   ihnen gegenüber offengelegt werden. Zu den Empfängern dieser Daten können z. B. mit IT-Aufgaben
@@ -253,7 +253,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Internationale Datentransfers">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Empfänger und möglichen Verarbeitungen außerhalb der EU/des EWR sind in den vorstehenden
                   App-Abschnitten erläutert. Maßgeblich sind die für den jeweiligen Empfänger tatsächlich geltenden
                   Übermittlungsgrundlagen und Garantien. Informationen und eine Kopie der eingesetzten Garantien
@@ -262,29 +262,29 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Allgemeine Informationen zur Datenspeicherung und Löschung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wir löschen personenbezogene Daten, die wir verarbeiten, gemäß den gesetzlichen Bestimmungen, sobald
                   die zugrundeliegenden Einwilligungen widerrufen werden oder keine weiteren rechtlichen Grundlagen für
                   die Verarbeitung bestehen. Dies betrifft Fälle, in denen der ursprüngliche Verarbeitungszweck entfällt
                   oder die Daten nicht mehr benötigt werden. Ausnahmen von dieser Regelung bestehen, wenn gesetzliche
                   Pflichten oder besondere Interessen eine längere Aufbewahrung oder Archivierung der Daten erfordern.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Insbesondere müssen Daten, die aus handels- oder steuerrechtlichen Gründen aufbewahrt werden müssen
                   oder deren Speicherung notwendig ist zur Rechtsverfolgung oder zum Schutz der Rechte anderer
                   natürlicher oder juristischer Personen, entsprechend archiviert werden.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Unsere Datenschutzhinweise enthalten zusätzliche Informationen zur Aufbewahrung und Löschung von
                   Daten, die speziell für bestimmte Verarbeitungsprozesse gelten.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Bei mehreren Angaben zur Aufbewahrungsdauer oder Löschungsfristen eines Datums, ist stets die längste
                   Frist maßgeblich. Daten, die nicht mehr für den ursprünglich vorgesehenen Zweck, sondern aufgrund
                   gesetzlicher Vorgaben oder anderer Gründe aufbewahrt werden, verarbeiten wir ausschließlich zu den
                   Gründen, die ihre Aufbewahrung rechtfertigen.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Aufbewahrung und Löschung von Daten: Die folgenden allgemeinen Fristen gelten für die Aufbewahrung und
                   Archivierung nach deutschem Recht:
                 </ThemedText>
@@ -298,7 +298,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Fristbeginn mit Ablauf des Jahres: Beginnt eine Frist nicht ausdrücklich zu einem bestimmten Datum und
                   beträgt sie mindestens ein Jahr, so startet sie automatisch am Ende des Kalenderjahres, in dem das
                   fristauslösende Ereignis eingetreten ist. Im Fall laufender Vertragsverhältnisse, in deren Rahmen Daten
@@ -308,7 +308,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Rechte der betroffenen Personen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Rechte der betroffenen Personen aus der DSGVO: Ihnen stehen als Betroffene nach der DSGVO verschiedene
                   Rechte zu, die sich insbesondere aus Art. 15 bis 21 DSGVO ergeben:
                 </ThemedText>
@@ -348,7 +348,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Bereitstellung des Onlineangebots und Webhosting">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wir verarbeiten die Daten der Nutzer, um ihnen unsere Online-Dienste zur Verfügung stellen zu können. Zu
                   diesem Zweck verarbeiten wir die IP-Adresse des Nutzers, die notwendig ist, um die Inhalte und
                   Funktionen unserer Online-Dienste an den Browser oder das Endgerät der Nutzer zu übermitteln.
@@ -379,7 +379,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
 
                 <BulletList
                   items={[
@@ -396,7 +396,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Einsatz von Cookies">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Unter dem Begriff „Cookies“ werden Funktionen, die Informationen auf Endgeräten der Nutzer speichern und
                   aus ihnen auslesen, verstanden. Cookies können ferner in Bezug auf unterschiedliche Anliegen Einsatz
                   finden, etwa zu Zwecken der Funktionsfähigkeit, der Sicherheit und des Komforts von Onlineangeboten
@@ -408,13 +408,13 @@ export default function DatenschutzScreen() {
                   Funktionalität und Sicherheit unseres Onlineangebots. Die Einwilligung kann jederzeit widerrufen werden.
                   Wir informieren klar über deren Umfang und welche Cookies genutzt werden.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Hinweise zu datenschutzrechtlichen Rechtsgrundlagen: Ob wir personenbezogene Daten mithilfe von Cookies
                   verarbeiten, hängt von einer Einwilligung ab. Liegt eine Einwilligung vor, dient sie als Rechtsgrundlage.
                   Ohne Einwilligung stützen wir uns auf unsere berechtigten Interessen, die vorstehend in diesem Abschnitt
                   und im Kontext der jeweiligen Dienste und Verfahren erläutert sind.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Speicherdauer: Im Hinblick auf die Speicherdauer werden die folgenden Arten von Cookies unterschieden:
                 </ThemedText>
 
@@ -431,7 +431,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Allgemeine Hinweise zum Widerruf und Widerspruch (Opt-out): Nutzer können die von ihnen abgegebenen
                   Einwilligungen jederzeit widerrufen und zudem einen Widerspruch gegen die Verarbeitung entsprechend den
                   gesetzlichen Vorgaben, auch mittels der Privatsphäre-Einstellungen ihres Browsers, erklären.
@@ -454,7 +454,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
 
                 <BulletList
                   items={[
@@ -467,13 +467,13 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Registrierung, Anmeldung und Nutzerkonto">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Nutzer können ein Nutzerkonto anlegen. Im Rahmen der Registrierung werden den Nutzern die erforderlichen
                   Pflichtangaben mitgeteilt und zu Zwecken der Bereitstellung des Nutzerkontos auf Grundlage vertraglicher
                   Pflichterfüllung verarbeitet. Zu den verarbeiteten Daten gehören insbesondere die Login-Informationen
                   (Nutzername, Passwort sowie eine E-Mail-Adresse).
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Im Rahmen der Inanspruchnahme unserer Registrierungs- und Anmeldefunktionen sowie der Nutzung des
                   Nutzerkontos speichern wir die IP-Adresse und den Zeitpunkt der jeweiligen Nutzerhandlung. Die
                   Speicherung erfolgt auf Grundlage unserer berechtigten Interessen als auch jener der Nutzer an einem
@@ -481,7 +481,7 @@ export default function DatenschutzScreen() {
                   grundsätzlich nicht, es sei denn, sie ist zur Verfolgung unserer Ansprüche erforderlich oder es besteht
                   eine gesetzliche Verpflichtung hierzu.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Nutzer können über Vorgänge, die für deren Nutzerkonto relevant sind, wie z. B. technische
                   Änderungen, per E-Mail informiert werden.
                 </ThemedText>
@@ -511,7 +511,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
 
                 <BulletList
                   items={[
@@ -532,7 +532,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Single-Sign-On-Anmeldung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Als „Single-Sign-On“ oder „Single-Sign-On-Anmeldung bzw. -Authentifizierung“ werden Verfahren
                   bezeichnet, die es Nutzern erlauben, sich mit Hilfe eines Nutzerkontos bei einem Anbieter von
                   Single-Sign-On-Verfahren (z. B. einem sozialen Netzwerk), auch bei unserem Onlineangebot, anzumelden.
@@ -541,7 +541,7 @@ export default function DatenschutzScreen() {
                   Onlineformular eingeben, bzw. schon bei dem Single-Sign-On-Anbieter angemeldet sind und die
                   Single-Sign-On-Anmeldung via Schaltfläche bestätigen.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Authentifizierung erfolgt direkt bei dem jeweiligen Single-Sign-On-Anbieter. Im Rahmen einer
                   solchen Authentifizierung erhalten wir eine Nutzer-ID mit der Information, dass der Nutzer unter dieser
                   Nutzer-ID beim jeweiligen Single-Sign-On-Anbieter eingeloggt ist und eine für uns für andere Zwecke
@@ -553,19 +553,19 @@ export default function DatenschutzScreen() {
                   E-Mail-Adresse und der Benutzername. Das im Rahmen des Single-Sign-On-Verfahrens eingegebene Passwort
                   bei dem Single-Sign-On-Anbieter ist für uns weder einsehbar, noch wird es von uns gespeichert.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Nutzer werden gebeten, zu beachten, dass deren bei uns gespeicherte Angaben automatisch mit ihrem
                   Nutzerkonto beim Single-Sign-On-Anbieter abgeglichen werden können, dies jedoch nicht immer möglich ist
                   oder tatsächlich erfolgt. Ändern sich z. B. die E-Mail-Adressen der Nutzer, müssen sie diese manuell in
                   ihrem Nutzerkonto bei uns ändern.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Die Single-Sign-On-Anmeldung können wir, sofern mit den Nutzern vereinbart, im Rahmen der oder vor der
                   Vertragserfüllung einsetzen, soweit die Nutzer darum gebeten wurden, im Rahmen einer Einwilligung
                   verarbeiten und setzen sie ansonsten auf Grundlage der berechtigten Interessen unsererseits und der
                   Interessen der Nutzer an einem effektiven und sicheren Anmeldesystem ein.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Sollten Nutzer sich einmal entscheiden, die Verknüpfung ihres Nutzerkontos beim Single-Sign-On-Anbieter
                   nicht mehr für das Single-Sign-On-Verfahren nutzen zu wollen, müssen sie diese Verbindung innerhalb
                   ihres Nutzerkontos beim Single-Sign-On-Anbieter aufheben. Möchten Nutzer deren Daten bei uns löschen,
@@ -597,7 +597,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
 
                 <BulletList
                   items={[
@@ -610,7 +610,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Blogs und Publikationsmedien">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wir nutzen Blogs oder vergleichbare Mittel der Onlinekommunikation und Publikation (nachfolgend
                   „Publikationsmedium“). Die Daten der Leser werden für die Zwecke des Publikationsmediums nur insoweit
                   verarbeitet, als es für dessen Darstellung und die Kommunikation zwischen Autoren und Lesern oder aus
@@ -645,14 +645,14 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Moderation von Community-Inhalten">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Damit wir anstößige Inhalte und missbräuchliches Verhalten unterbinden können, verarbeiten wir
                   Meldungen und Blockierungen, die Nutzerinnen und Nutzer in der App auslösen. Gespeichert werden dabei
                   die gemeldete Inhaltsart und -kennung, eine Kopie des gemeldeten Inhalts zum Zeitpunkt der Meldung,
                   der Meldegrund, eine optionale Beschreibung sowie die Kennungen der meldenden und der gemeldeten
                   Person. Blockierungen speichern wir als Beziehung zwischen zwei Nutzerkennungen.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Ein automatischer Wortfilter prüft Beiträge und Nachrichten beim Absenden; Treffer können abgewiesen
                   oder zur manuellen Prüfung vorgemerkt werden. Meldungen prüfen wir innerhalb von 24 Stunden.
                 </ThemedText>
@@ -684,7 +684,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Kontakt- und Anfrageverwaltung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Bei der Kontaktaufnahme mit uns (z. B. per Post, Kontaktformular, E-Mail, Telefon oder via soziale
                   Medien) sowie im Rahmen bestehender Nutzer- und Geschäftsbeziehungen werden die Angaben der
                   anfragenden Personen verarbeitet, soweit dies zur Beantwortung der Kontaktanfragen und etwaiger
@@ -716,7 +716,7 @@ export default function DatenschutzScreen() {
                   ]}
                 />
 
-                <ThemedText style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
+                <ThemedText type="body" style={styles.paragraph}>Weitere Hinweise zu Verarbeitungsprozessen, Verfahren und Diensten:</ThemedText>
 
                 <BulletList
                   items={[
@@ -729,13 +729,13 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Änderung und Aktualisierung">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Wir bitten Sie, sich regelmäßig über den Inhalt unserer Datenschutzerklärung zu informieren. Wir passen
                   die Datenschutzerklärung an, sobald die Änderungen der von uns durchgeführten Datenverarbeitungen dies
                   erforderlich machen. Wir informieren Sie, sobald durch die Änderungen eine Mitwirkungshandlung
                   Ihrerseits (z. B. Einwilligung) oder eine sonstige individuelle Benachrichtigung erforderlich wird.
                 </ThemedText>
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   Sofern wir in dieser Datenschutzerklärung Adressen und Kontaktinformationen von Unternehmen und
                   Organisationen angeben, bitten wir zu beachten, dass die Adressen sich über die Zeit ändern können und
                   bitten die Angaben vor Kontaktaufnahme zu prüfen.
@@ -743,7 +743,7 @@ export default function DatenschutzScreen() {
               </Section>
 
               <Section title="Begriffsdefinitionen">
-                <ThemedText style={styles.paragraph}>
+                <ThemedText type="body" style={styles.paragraph}>
                   In diesem Abschnitt erhalten Sie eine Übersicht über die in dieser Datenschutzerklärung verwendeten
                   Begrifflichkeiten. Soweit die Begrifflichkeiten gesetzlich definiert sind, gelten deren gesetzliche
                   Definitionen. Die nachfolgenden Erläuterungen sollen dagegen vor allem dem Verständnis dienen.
@@ -791,7 +791,7 @@ export default function DatenschutzScreen() {
                 />
               </Section>
 
-              <ThemedText style={styles.seal}>
+              <ThemedText type="caption" style={styles.seal}>
                 Erstellt mit kostenlosem Datenschutz-Generator.de von Dr. Thomas Schwenke
                 (https://datenschutz-generator.de/)
               </ThemedText>
@@ -825,8 +825,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   pageTitle: {
-    fontSize: 20,
-    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 14,
   },
@@ -834,8 +832,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: 8,
   },
   subsection: {
@@ -843,13 +839,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   subsectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
     marginBottom: 6,
   },
   paragraph: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 8,
   },
   list: {
@@ -857,16 +849,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   listItem: {
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 6,
   },
-  bold: {
-    fontWeight: '700',
-  },
   seal: {
-    fontSize: 12,
-    lineHeight: 18,
     opacity: 0.7,
     textAlign: 'center',
     marginTop: 8,

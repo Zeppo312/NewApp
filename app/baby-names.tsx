@@ -1,26 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, TextInput, SafeAreaView, StatusBar, FlatList, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { ThemedText } from '@/components/ThemedText';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Stack } from 'expo-router';
-import { ThemedBackground } from '@/components/ThemedBackground';
-import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import Header from '@/components/Header';
-import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { supabase } from '@/lib/supabase';
+import { ThemedBackground } from '@/components/ThemedBackground';
+import { ThemedText } from '@/components/ThemedText';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { FormField,FormSheet,FormTextInput } from '@/components/ui/form-sheet';
+import { Colors } from '@/constants/Colors';
+import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,LAYOUT_PAD,LiquidGlassCard } from '@/constants/DesignGuide';
+import { TYPOGRAPHY } from '@/constants/Typography';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useLocale } from '@/contexts/LocaleContext';
-import { isUserAdmin } from '@/lib/supabase/recommendations';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import {
-  getLocalizedFallbackBabyNames,
-  translateBabyNamesText,
-  type BabyNamesTranslationKey,
+getLocalizedFallbackBabyNames,
+translateBabyNamesText,
+type BabyNamesTranslationKey,
 } from '@/lib/babyNamesTranslations';
+import { supabase } from '@/lib/supabase';
+import { isUserAdmin } from '@/lib/supabase/recommendations';
+import { Stack } from 'expo-router';
+import { useEffect,useRef,useState } from 'react';
+import { ActivityIndicator,Alert,FlatList,Keyboard,SafeAreaView,ScrollView,StatusBar,StyleSheet,TextInput,TouchableOpacity,TouchableWithoutFeedback,View } from 'react-native';
 
 // Kategorien für die Filterung
 const CATEGORIES = [
@@ -80,8 +81,7 @@ export default function BabyNamesScreen() {
   const cardBorderColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)';
   const actionButtonBackground = isDark ? 'rgba(10,10,12,0.6)' : 'rgba(255,255,255,0.9)';
   const modalAccent = isDark ? adaptiveColors.accent : BABY_LILA;
-  const modalInputBackground = isDark ? 'rgba(10,10,12,0.62)' : 'rgba(255,255,255,0.96)';
-  const modalInputBorderColor = isDark ? 'rgba(255,255,255,0.24)' : 'rgba(142,78,198,0.25)';
+
   const { user } = useAuth();
   const { isReadOnlyPreviewMode } = useBabyStatus();
   const headerSubtitle = isReadOnlyPreviewMode
@@ -380,34 +380,8 @@ export default function BabyNamesScreen() {
     closeFocusEditor();
   };
 
-  const renderInlineField = (
-    value: string,
-    placeholder: string,
-    onPress: () => void,
-    multiline = false
-  ) => (
-    <TouchableOpacity
-      style={[
-        styles.modalInput,
-        multiline && styles.modalInputMultiline,
-        { backgroundColor: modalInputBackground, borderColor: modalInputBorderColor },
-        isReadOnlyPreviewMode && styles.actionDisabled,
-      ]}
-      onPress={isReadOnlyPreviewMode ? undefined : onPress}
-      disabled={isReadOnlyPreviewMode}
-      activeOpacity={0.9}
-    >
-      <ThemedText
-        style={[
-          value ? styles.modalInputText : styles.modalInputPlaceholder,
-          { color: value ? inputTextColor : inputPlaceholderColor },
-        ]}
-        numberOfLines={multiline ? 3 : 1}
-      >
-        {value || placeholder}
-      </ThemedText>
-    </TouchableOpacity>
-  );
+  const renderInlineField = (value: string, placeholder: string, onPress: () => void, multiline = false) =>
+   <FormField isDark={isDark} value={value} placeholder={placeholder} onPress={onPress} multiline={multiline} disabled={isReadOnlyPreviewMode} />;
 
   const parseSqlLiteral = (raw: string) => {
     const trimmed = raw.trim();
@@ -1301,280 +1275,218 @@ export default function BabyNamesScreen() {
             </TouchableOpacity>
           )}
 
-          <Modal
-            visible={showCreateModal}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setShowCreateModal(false)}
-          >
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.dailyModalWrapper}
+          <FormSheet
+              visible={showCreateModal}
+              isDark={isDark}
+              title={editingNameId ? t('admin.editTitle') : t('admin.addTitle')}
+              onClose={() => setShowCreateModal(false)}
+              onCancel={() => setShowCreateModal(false)}
+              busy={isCreatingName}
+              confirmDisabled={isReadOnlyPreviewMode}
+              onConfirm={handleCreateName}
+              scrollable={false}
             >
-              <View style={styles.dailyModalOverlay}>
-                <TouchableWithoutFeedback
-                  onPress={() => {
-                    setShowCreateModal(false);
-                    Keyboard.dismiss();
-                  }}
-                >
-                  <View style={StyleSheet.absoluteFill} />
-                </TouchableWithoutFeedback>
-
-                <BlurView
+              <View style={styles.adminModeToggle}>
+                <TouchableOpacity
                   style={[
-                    styles.dailyModalContent,
+                    styles.adminModeButton,
                     {
-                      backgroundColor: isDark ? 'rgba(12,12,16,0.78)' : 'rgba(142,78,198,0.08)',
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
                       borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
                     },
+                    createMode === 'single' && styles.adminModeButtonActive,
+                    createMode === 'single' && {
+                      backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
+                      borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
+                    },
+                    isReadOnlyPreviewMode && styles.actionDisabled,
                   ]}
-                  tint={isDark ? "dark" : "extraLight"}
-                  intensity={82}
+                  onPress={() => {
+                    setCreateMode('single');
+                    setBulkError(null);
+                    setBulkErrorIndex(null);
+                  }}
+                  disabled={isReadOnlyPreviewMode}
                 >
-                  <View style={styles.modalHeaderRow}>
-                    <View style={styles.headerLeft}>
-                      <TouchableOpacity
-                        onPress={() => setShowCreateModal(false)}
-                        style={[styles.headerCircleButton, { backgroundColor: actionButtonBackground }]}
-                      >
-                        <IconSymbol name="xmark" size={18} color={modalAccent} />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.headerCenter}>
-                      <ThemedText style={[styles.modalTitle, { color: modalAccent }]}>
-                        {editingNameId ? t('admin.editTitle') : t('admin.addTitle')}
-                      </ThemedText>
-                    </View>
-                    <View style={styles.headerRight}>
-                      <TouchableOpacity
-                        style={[styles.headerCircleButton, { backgroundColor: modalAccent }, (isCreatingName || isReadOnlyPreviewMode) && styles.actionDisabled]}
-                        onPress={handleCreateName}
-                        disabled={isCreatingName || isReadOnlyPreviewMode}
-                      >
-                        {isCreatingName ? (
-                          <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                          <IconSymbol name="checkmark" size={18} color="#FFFFFF" />
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  <View style={styles.adminModeToggle}>
-                    <TouchableOpacity
-                      style={[
-                        styles.adminModeButton,
-                        {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
-                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
-                        },
-                        createMode === 'single' && styles.adminModeButtonActive,
-                        createMode === 'single' && {
-                          backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
-                          borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
-                        },
-                        isReadOnlyPreviewMode && styles.actionDisabled,
-                      ]}
-                      onPress={() => {
-                        setCreateMode('single');
-                        setBulkError(null);
-                        setBulkErrorIndex(null);
-                      }}
-                      disabled={isReadOnlyPreviewMode}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.adminModeButtonText,
-                          { color: textSecondary },
-                          createMode === 'single' && styles.adminModeButtonTextActive,
-                          createMode === 'single' && { color: modalAccent },
-                        ]}
-                      >
-                        {t('admin.single')}
-                      </ThemedText>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.adminModeButton,
-                        {
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
-                          borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
-                        },
-                        createMode === 'bulk' && styles.adminModeButtonActive,
-                        createMode === 'bulk' && {
-                          backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
-                          borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
-                        },
-                        editingNameId && styles.adminModeButtonDisabled,
-                        isReadOnlyPreviewMode && styles.actionDisabled,
-                      ]}
-                      onPress={() => {
-                        if (editingNameId) return;
-                        setCreateMode('bulk');
-                        setBulkError(null);
-                        setBulkErrorIndex(null);
-                      }}
-                      disabled={Boolean(editingNameId) || isReadOnlyPreviewMode}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.adminModeButtonText,
-                          { color: textSecondary },
-                          createMode === 'bulk' && styles.adminModeButtonTextActive,
-                          createMode === 'bulk' && { color: modalAccent },
-                        ]}
-                      >
-                        {t('admin.bulk')}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  </View>
-
-                  {createMode === 'single' ? (
-                    <ScrollView
-                      showsVerticalScrollIndicator={false}
-                      keyboardShouldPersistTaps="handled"
-                      contentContainerStyle={{ paddingBottom: 12 }}
-                    >
-                      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                        <View>
-                          <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.name')}</ThemedText>
-                            {renderInlineField(
-                              newName,
-                              t('admin.namePlaceholder'),
-                              () =>
-                                openFocusEditor(
-                                  {
-                                    mode: 'single',
-                                    field: 'name',
-                                    label: t('field.name'),
-                                    placeholder: t('admin.namePlaceholder'),
-                                  },
-                                  newName
-                                )
-                            )}
-                          </View>
-
-                          <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.meaning')}</ThemedText>
-                            {renderInlineField(
-                              persistedMeaning,
-                              t('admin.meaningPlaceholder'),
-                              () =>
-                                openFocusEditor(
-                                  {
-                                    mode: 'single',
-                                    field: 'meaning',
-                                    label: t('field.meaning'),
-                                    placeholder: t('admin.meaningPlaceholder'),
-                                    multiline: true,
-                                  },
-                                  persistedMeaning
-                                ),
-                              true
-                            )}
-                          </View>
-
-                          <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>{t('field.origin')}</ThemedText>
-                            {renderInlineField(
-                              persistedOrigin,
-                              t('admin.originPlaceholder'),
-                              () =>
-                                openFocusEditor(
-                                  {
-                                    mode: 'single',
-                                    field: 'origin',
-                                    label: t('field.origin'),
-                                    placeholder: t('admin.originPlaceholder'),
-                                  },
-                                  persistedOrigin
-                                )
-                            )}
-                          </View>
-                        </View>
-                      </TouchableWithoutFeedback>
-                    </ScrollView>
-                  ) : (
-                    <FlatList
-                      ref={bulkListRef}
-                      data={bulkEntries}
-                      renderItem={renderBulkEntryItem}
-                      keyExtractor={(item) => item.localId}
-                      keyboardShouldPersistTaps="handled"
-                      showsVerticalScrollIndicator={false}
-                      contentContainerStyle={{ paddingBottom: 12 }}
-                      onScrollToIndexFailed={({ index, averageItemLength }) => {
-                        bulkListRef.current?.scrollToOffset({
-                          offset: averageItemLength * index,
-                          animated: true,
-                        });
-                      }}
-                      ListHeaderComponent={
-                        <View>
-                          <View style={styles.modalField}>
-                            <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
-                              {t('admin.sql')}
-                            </ThemedText>
-                            <TextInput
-                              style={[
-                                styles.modalInput,
-                                styles.bulkSqlInput,
-                                {
-                                  color: inputTextColor,
-                                  backgroundColor: modalInputBackground,
-                                  borderColor: modalInputBorderColor,
-                                },
-                              ]}
-                              value={bulkSql}
-                              onChangeText={(text) => {
-                                setBulkSql(text);
-                                setBulkEntries([]);
-                                setBulkError(null);
-                                setBulkErrorIndex(null);
-                                setBulkSqlSnapshot(null);
-                              }}
-                              placeholder="insert into public.baby_names (id, name, meaning, origin, gender, created_at) values ..."
-                              placeholderTextColor={inputPlaceholderColor}
-                              multiline
-                              textAlignVertical="top"
-                              editable={!isReadOnlyPreviewMode}
-                            />
-                          </View>
-                          <View style={styles.bulkActionsRow}>
-                            <TouchableOpacity
-                              style={[
-                                styles.bulkActionButton,
-                                {
-                                  backgroundColor: isDark ? 'rgba(233,201,182,0.24)' : 'rgba(142,78,198,0.18)',
-                                  borderColor: isDark ? 'rgba(233,201,182,0.5)' : 'rgba(142,78,198,0.35)',
-                                },
-                                isReadOnlyPreviewMode && styles.actionDisabled,
-                              ]}
-                              onPress={handleParseBulkSql}
-                              disabled={isReadOnlyPreviewMode}
-                            >
-                              <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>{t('admin.validateSql')}</ThemedText>
-                            </TouchableOpacity>
-                          </View>
-                          {bulkError && (
-                            <ThemedText style={styles.bulkErrorText}>{bulkError}</ThemedText>
-                          )}
-                          {bulkEntries.length > 0 && (
-                            <ThemedText style={[styles.bulkHintText, { color: textSecondary }]}>
-                              {t('admin.bulkHint')}
-                            </ThemedText>
-                          )}
-                        </View>
-                      }
-                      ListFooterComponent={<View style={{ height: 8 }} />}
-                    />
-                  )}
-                </BlurView>
+                  <ThemedText
+                    style={[
+                      styles.adminModeButtonText,
+                      { color: textSecondary },
+                      createMode === 'single' && styles.adminModeButtonTextActive,
+                      createMode === 'single' && { color: modalAccent },
+                    ]}
+                  >
+                    {t('admin.single')}
+                  </ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.adminModeButton,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.9)',
+                      borderColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(142,78,198,0.2)',
+                    },
+                    createMode === 'bulk' && styles.adminModeButtonActive,
+                    createMode === 'bulk' && {
+                      backgroundColor: isDark ? 'rgba(233,201,182,0.28)' : 'rgba(142,78,198,0.18)',
+                      borderColor: isDark ? 'rgba(233,201,182,0.55)' : 'rgba(142,78,198,0.5)',
+                    },
+                    editingNameId && styles.adminModeButtonDisabled,
+                    isReadOnlyPreviewMode && styles.actionDisabled,
+                  ]}
+                  onPress={() => {
+                    if (editingNameId) return;
+                    setCreateMode('bulk');
+                    setBulkError(null);
+                    setBulkErrorIndex(null);
+                  }}
+                  disabled={Boolean(editingNameId) || isReadOnlyPreviewMode}
+                >
+                  <ThemedText
+                    style={[
+                      styles.adminModeButtonText,
+                      { color: textSecondary },
+                      createMode === 'bulk' && styles.adminModeButtonTextActive,
+                      createMode === 'bulk' && { color: modalAccent },
+                    ]}
+                  >
+                    {t('admin.bulk')}
+                  </ThemedText>
+                </TouchableOpacity>
               </View>
-            </KeyboardAvoidingView>
-          </Modal>
+
+              {createMode === 'single' ? (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingBottom: 12 }}
+                >
+                  <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                    <View>
+                      <View style={styles.modalField}>
+                        <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
+                          {t('field.name')}
+                        </ThemedText>
+                        {renderInlineField(newName, t('admin.namePlaceholder'), () =>
+                          openFocusEditor(
+                            {
+                              mode: 'single',
+                              field: 'name',
+                              label: t('field.name'),
+                              placeholder: t('admin.namePlaceholder'),
+                            },
+                            newName,
+                          ),
+                        )}
+                      </View>
+
+                      <View style={styles.modalField}>
+                        <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
+                          {t('field.meaning')}
+                        </ThemedText>
+                        {renderInlineField(
+                          persistedMeaning,
+                          t('admin.meaningPlaceholder'),
+                          () =>
+                            openFocusEditor(
+                              {
+                                mode: 'single',
+                                field: 'meaning',
+                                label: t('field.meaning'),
+                                placeholder: t('admin.meaningPlaceholder'),
+                                multiline: true,
+                              },
+                              persistedMeaning,
+                            ),
+                          true,
+                        )}
+                      </View>
+
+                      <View style={styles.modalField}>
+                        <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
+                          {t('field.origin')}
+                        </ThemedText>
+                        {renderInlineField(persistedOrigin, t('admin.originPlaceholder'), () =>
+                          openFocusEditor(
+                            {
+                              mode: 'single',
+                              field: 'origin',
+                              label: t('field.origin'),
+                              placeholder: t('admin.originPlaceholder'),
+                            },
+                            persistedOrigin,
+                          ),
+                        )}
+                      </View>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </ScrollView>
+              ) : (
+                <FlatList
+                  ref={bulkListRef}
+                  data={bulkEntries}
+                  renderItem={renderBulkEntryItem}
+                  keyExtractor={(item) => item.localId}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 12 }}
+                  onScrollToIndexFailed={({ index, averageItemLength }) => {
+                    bulkListRef.current?.scrollToOffset({
+                      offset: averageItemLength * index,
+                      animated: true,
+                    });
+                  }}
+                  ListHeaderComponent={
+                    <View>
+                      <View style={styles.modalField}>
+                        <ThemedText style={[styles.modalLabel, { color: modalAccent }]}>
+                          {t('admin.sql')}
+                        </ThemedText>
+                        <FormTextInput
+                          isDark={isDark}
+                          value={bulkSql}
+                          onChangeText={(text) => {
+                            setBulkSql(text);
+                            setBulkEntries([]);
+                            setBulkError(null);
+                            setBulkErrorIndex(null);
+                            setBulkSqlSnapshot(null);
+                          }}
+                          placeholder="insert into public.baby_names (id, name, meaning, origin, gender, created_at) values ..."
+                          multiline
+                          editable={!isReadOnlyPreviewMode}
+                        />
+                      </View>
+                      <View style={styles.bulkActionsRow}>
+                        <TouchableOpacity
+                          style={[
+                            styles.bulkActionButton,
+                            {
+                              backgroundColor: isDark ? 'rgba(233,201,182,0.24)' : 'rgba(142,78,198,0.18)',
+                              borderColor: isDark ? 'rgba(233,201,182,0.5)' : 'rgba(142,78,198,0.35)',
+                            },
+                            isReadOnlyPreviewMode && styles.actionDisabled,
+                          ]}
+                          onPress={handleParseBulkSql}
+                          disabled={isReadOnlyPreviewMode}
+                        >
+                          <ThemedText style={[styles.bulkActionButtonText, { color: modalAccent }]}>
+                            {t('admin.validateSql')}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                      {bulkError && <ThemedText style={styles.bulkErrorText}>{bulkError}</ThemedText>}
+                      {bulkEntries.length > 0 && (
+                        <ThemedText style={[styles.bulkHintText, { color: textSecondary }]}>
+                          {t('admin.bulkHint')}
+                        </ThemedText>
+                      )}
+                    </View>
+                  }
+                  ListFooterComponent={<View style={{ height: 8 }} />}
+                />
+              )}
+            </FormSheet>
 
           <TextInputOverlay
             visible={!!focusConfig}
@@ -1790,51 +1702,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
-  dailyModalWrapper: {
-    flex: 1,
-  },
-  dailyModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  dailyModalContent: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    width: '100%',
-    maxHeight: '78%',
-    overflow: 'hidden',
-    padding: 20,
-    paddingBottom: 28,
-    backgroundColor: 'rgba(142,78,198,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(142,78,198,0.2)',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  headerLeft: { flex: 1, alignItems: 'flex-start' },
-  headerCenter: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headerRight: { flex: 1, alignItems: 'flex-end' },
-  headerCircleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
+
   modalSubtitle: {
     fontSize: 13,
     color: BABY_LILA,
@@ -1845,35 +1713,9 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
   },
-  modalField: {
-    marginBottom: 14,
-  },
-  modalLabel: {
-    fontSize: 14,
-    marginBottom: 6,
-    fontWeight: '600',
-  },
-  modalInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(142,78,198,0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    fontSize: 16,
-  },
-  modalInputMultiline: {
-    minHeight: 90,
-    paddingVertical: 12,
-  },
-  modalInputText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalInputPlaceholder: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
+  modalField: { gap: 8, marginBottom: 20 },
+  modalLabel: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
+
   adminModeToggle: {
     flexDirection: 'row',
     gap: 8,
@@ -1903,9 +1745,7 @@ const styles = StyleSheet.create({
   adminModeButtonTextActive: {
     color: BABY_LILA,
   },
-  bulkSqlInput: {
-    minHeight: 140,
-  },
+
   bulkActionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',

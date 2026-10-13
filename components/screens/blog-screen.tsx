@@ -338,7 +338,7 @@ export default function BlogScreen() {
           ) : null}
           <View style={styles.cardBodyBlock}>
             <View style={styles.cardHeaderRow}>
-              <ThemedText type="subtitle" style={[styles.cardTitle, { color: primaryTextOnCommunity }]}>
+              <ThemedText type="sectionTitle" style={[styles.cardTitle, { color: primaryTextOnCommunity }]}>
                 {item.title}
               </ThemedText>
               <View style={[styles.metaPill, { backgroundColor: isDarkMode ? '#3D3330' : '#FFE2CF' }]}>
@@ -532,7 +532,7 @@ export default function BlogScreen() {
                     },
                   ]}
                 >
-                <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>{t('blog.newPublication')}</ThemedText>
+                <ThemedText type="dialogTitle" style={{ color: primaryTextOnCommunity }}>{t('blog.newPublication')}</ThemedText>
                 <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>{t('blog.publishedAs', { name: currentUserName })}</ThemedText>
 
               <TextInput
@@ -671,7 +671,7 @@ export default function BlogScreen() {
                       },
                     ]}
                   >
-                    <ThemedText type="subtitle" style={[styles.modalTitle, { color: primaryTextOnCommunity }]}>{t('blog.draftsTitle')}</ThemedText>
+                    <ThemedText type="dialogTitle" style={{ color: primaryTextOnCommunity }}>{t('blog.draftsTitle')}</ThemedText>
                     <ThemedText style={[styles.modalSubtitle, { color: theme.textTertiary }]}>{t('blog.draftsSubtitle')}</ThemedText>
 
                     {drafts.length > 0 ? (
@@ -958,8 +958,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: '700',
     flex: 1,
   },
   adminOverlay: {
@@ -1045,10 +1043,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
   },
   modalSubtitle: {
     marginTop: 4,

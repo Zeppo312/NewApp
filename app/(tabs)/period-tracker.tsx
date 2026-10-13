@@ -1,3 +1,5 @@
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -1676,15 +1678,19 @@ export default function PeriodTrackerScreen() {
             </View>
 
             <View style={styles.heroDateRow}>
-              <TouchableOpacity style={styles.heroNavButton} onPress={() => changeSelectedDate(-1)}>
-                <IconSymbol name="chevron.left" size={18} color={textPrimary} />
-              </TouchableOpacity>
+              <PeriodNavigationButton direction="previous"
+                accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'day')}
+                isDark={isDark} color={textPrimary}
+                onPress={() => changeSelectedDate(-1)}
+              />
 
               <Text style={[styles.heroDateLabel, { color: textSecondary }]}>{selectedDateLabel}</Text>
 
-              <TouchableOpacity style={styles.heroNavButton} onPress={() => changeSelectedDate(1)}>
-                <IconSymbol name="chevron.right" size={18} color={textPrimary} />
-              </TouchableOpacity>
+              <PeriodNavigationButton direction="next"
+                accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'day')}
+                isDark={isDark} color={textPrimary}
+                onPress={() => changeSelectedDate(1)}
+              />
             </View>
 
             <WeekCalendarStrip
@@ -2688,14 +2694,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
     marginBottom: 8,
-  },
-  heroNavButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.10)',
   },
   heroDateLabel: {
     fontSize: IS_COMPACT_SCREEN ? 15 : 16,

@@ -1,25 +1,29 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { ActionButton } from '@/components/ui/action-button';
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@/components/ui/DateTimePicker';
+import {
+  FormField,
+  FormSection,
+  FormSheet,
+  FormTextInput,
+} from '@/components/ui/form-sheet';
+import { FormColors } from '@/constants/Colors';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  KeyboardAvoidingView,
-  Modal,
   Platform,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlassSheetSurface } from '@/components/ui/glass-sheet-surface';
 
-import { Colors } from '@/constants/Colors';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useLocale } from '@/contexts/LocaleContext';
-import { CustomActivityType } from '@/lib/customActivities';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { DailyEntry } from '@/lib/baby';
+import { CustomActivityType } from '@/lib/customActivities';
 import { getDailyLocaleTag, translateDailyText } from '@/lib/dailyTranslations';
 
 export type CustomActivityEntryPayload = {
@@ -31,13 +35,19 @@ export type CustomActivityEntryPayload = {
 
 type Props = {
   visible: boolean;
-  definition: Pick<CustomActivityType, 'name' | 'emoji' | 'color' | 'tracking_mode' | 'unit' | 'default_quantity'> | null;
+  definition: Pick<
+    CustomActivityType,
+    'name' | 'emoji' | 'color' | 'tracking_mode' | 'unit' | 'default_quantity'
+  > | null;
   useExactDate?: boolean;
   startTimerByDefault?: boolean;
   date: Date;
   initialData?: DailyEntry | null;
   onClose: () => void;
-  onSave: (payload: CustomActivityEntryPayload, options: { startTimer: boolean }) => Promise<boolean>;
+  onSave: (
+    payload: CustomActivityEntryPayload,
+    options: { startTimer: boolean },
+  ) => Promise<boolean>;
   onDelete?: () => void;
 };
 
@@ -64,15 +74,19 @@ export default function CustomActivityEntryModal({
   startTimerByDefault = false,
 }: Props) {
   const { locale } = useLocale();
-  const insets = useSafeAreaInsets();
-  const t = (key: Parameters<typeof translateDailyText>[1]) => translateDailyText(locale, key);
+
+  const t = (key: Parameters<typeof translateDailyText>[1]) =>
+    translateDailyText(locale, key);
   const localeTag = getDailyLocaleTag(locale);
   const adaptiveColors = useAdaptiveColors();
-  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
-  const textPrimary = isDark ? Colors.dark.textPrimary : '#342824';
-  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const fieldBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)';
-  const borderColor = isDark ? 'rgba(255,255,255,0.13)' : 'rgba(125,90,80,0.14)';
+  const isDark =
+    adaptiveColors.effectiveScheme === 'dark' ||
+    adaptiveColors.isDarkBackground;
+  const {
+    secondary: textSecondary,
+    field: fieldBackground,
+    border: borderColor,
+  } = FormColors[isDark ? 'dark' : 'light'];
 
   const [startTime, setStartTime] = useState(new Date());
   const [quantity, setQuantity] = useState('');
@@ -87,12 +101,22 @@ export default function CustomActivityEntryModal({
     if (!visible || !definition) return;
     const initialStart = initialData?.start_time
       ? new Date(initialData.start_time)
-      : useExactDate ? new Date(date) : combineDayAndClock(date, new Date());
-    const start = Number.isFinite(initialStart.getTime()) ? initialStart : combineDayAndClock(date, new Date());
-    const initialEnd = initialData?.end_time ? new Date(initialData.end_time) : null;
-    const duration = initialEnd && Number.isFinite(initialEnd.getTime())
-      ? Math.max(1, Math.round((initialEnd.getTime() - start.getTime()) / 60000))
-      : 15;
+      : useExactDate
+        ? new Date(date)
+        : combineDayAndClock(date, new Date());
+    const start = Number.isFinite(initialStart.getTime())
+      ? initialStart
+      : combineDayAndClock(date, new Date());
+    const initialEnd = initialData?.end_time
+      ? new Date(initialData.end_time)
+      : null;
+    const duration =
+      initialEnd && Number.isFinite(initialEnd.getTime())
+        ? Math.max(
+            1,
+            Math.round((initialEnd.getTime() - start.getTime()) / 60000),
+          )
+        : 15;
 
     setStartTime(start);
     setPickerDraft(start);
@@ -105,13 +129,27 @@ export default function CustomActivityEntryModal({
     );
     setDurationMinutes(String(duration));
     setNotes(initialData?.notes ?? '');
-    setStartTimer(definition.tracking_mode === 'duration' && (initialData?.id ? !initialData.end_time : startTimerByDefault));
+    setStartTimer(
+      definition.tracking_mode === 'duration' &&
+        (initialData?.id ? !initialData.end_time : startTimerByDefault),
+    );
     setPickerVisible(false);
     setBusy(false);
-  }, [date, definition, initialData, visible, useExactDate, startTimerByDefault]);
+  }, [
+    date,
+    definition,
+    initialData,
+    visible,
+    useExactDate,
+    startTimerByDefault,
+  ]);
 
   const formattedTime = useMemo(
-    () => startTime.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' }),
+    () =>
+      startTime.toLocaleTimeString(localeTag, {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
     [localeTag, startTime],
   );
 
@@ -144,7 +182,9 @@ export default function CustomActivityEntryModal({
           Alert.alert(t('common.notice'), t('custom.invalidDuration'));
           return;
         }
-        endTime = new Date(startTime.getTime() + Math.round(parsedDuration * 60000));
+        endTime = new Date(
+          startTime.getTime() + Math.round(parsedDuration * 60000),
+        );
       }
     }
 
@@ -168,197 +208,225 @@ export default function CustomActivityEntryModal({
   if (!definition) return null;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={[styles.overlay, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom, 12), paddingLeft: Math.max(insets.left, 10), paddingRight: Math.max(insets.right, 10), backgroundColor: isDark ? 'rgba(5,5,8,0.72)' : 'rgba(35,25,20,0.32)' }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <GlassSheetSurface isDark={isDark} style={styles.panel}>
-          <View style={[styles.handle, { backgroundColor: borderColor }]} />
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            <View style={styles.header}>
-              <Text allowFontScaling={false} style={styles.headerEmoji}>{definition.emoji}</Text>
-              <Text style={[styles.title, { color: textPrimary }]}>{definition.name}</Text>
-              <Text style={[styles.subtitle, { color: textSecondary }]}>
-                {initialData?.id ? t('custom.editEntry') : t('custom.newEntry')}
+    <FormSheet
+      visible={visible}
+      isDark={isDark}
+      title={definition.name}
+      subtitle={initialData?.id ? t('custom.editEntry') : t('custom.newEntry')}
+      onClose={onClose}
+      onCancel={onClose}
+      cancelLabel={t('common.cancel')}
+      confirmLabel={startTimer ? t('custom.startTimer') : undefined}
+      busy={busy}
+      onConfirm={handleSave}
+    >
+      <FormSection isDark={isDark} label={t('custom.occurredAt')}>
+        <FormField
+          isDark={isDark}
+          onPress={() => {
+            setPickerDraft(startTime);
+            setPickerVisible(true);
+          }}
+          value={`${startTime.toLocaleDateString(localeTag, { weekday: 'short', day: '2-digit', month: '2-digit' })} · ${formattedTime}`}
+        />
+      </FormSection>
+
+      {pickerVisible ? (
+        <View
+          style={[
+            styles.pickerCard,
+            { backgroundColor: fieldBackground, borderColor },
+          ]}
+        >
+          <DateTimePicker
+            value={pickerDraft}
+            mode="time"
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={(event, value) => {
+              if (value) setPickerDraft(value);
+              commitPicker(event, value);
+            }}
+          />
+          {Platform.OS === 'ios' ? (
+            <ActionButton
+              label={t('common.done')}
+              size="compact"
+              isDark={isDark}
+              style={styles.pickerDone}
+              onPress={() => {
+                commitPicker(undefined, pickerDraft);
+                setPickerVisible(false);
+              }}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      {definition.tracking_mode === 'quantity' ? (
+        <>
+          <FormSection isDark={isDark} label={t('custom.amount')}>
+            <View style={styles.quantityField}>
+              <FormTextInput
+                isDark={isDark}
+                style={{ flex: 1 }}
+                value={quantity}
+                onChangeText={setQuantity}
+                keyboardType="decimal-pad"
+                inputMode="decimal"
+                placeholder="0"
+              />
+              <Text style={[styles.unit, { color: textSecondary }]}>
+                {definition.unit}
               </Text>
             </View>
+          </FormSection>
+        </>
+      ) : null}
 
-            <Text style={[styles.label, { color: textPrimary }]}>{t('custom.occurredAt')}</Text>
-            <TouchableOpacity
-              style={[styles.timeButton, { backgroundColor: fieldBackground, borderColor }]}
-              onPress={() => {
-                setPickerDraft(startTime);
-                setPickerVisible(true);
-              }}
-            >
-              <Text style={[styles.timeDay, { color: textSecondary }]}>
-                {startTime.toLocaleDateString(localeTag, { weekday: 'short', day: '2-digit', month: '2-digit' })}
-              </Text>
-              <Text style={[styles.timeValue, { color: isDark ? textPrimary : definition.color }]}>{formattedTime}</Text>
-            </TouchableOpacity>
-
-            {pickerVisible ? (
-              <View style={[styles.pickerCard, { backgroundColor: fieldBackground, borderColor }]}>
-                <DateTimePicker
-                  value={pickerDraft}
-                  mode="time"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, value) => {
-                    if (value) setPickerDraft(value);
-                    commitPicker(event, value);
-                  }}
-                />
-                {Platform.OS === 'ios' ? (
-                  <TouchableOpacity
-                    style={[styles.pickerDone, { backgroundColor: definition.color }]}
-                    onPress={() => {
-                      commitPicker(undefined, pickerDraft);
-                      setPickerVisible(false);
-                    }}
-                  >
-                    <Text style={styles.pickerDoneText}>{t('common.done')}</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            ) : null}
-
-            {definition.tracking_mode === 'quantity' ? (
-              <>
-                <Text style={[styles.label, { color: textPrimary }]}>{t('custom.amount')}</Text>
-                <View style={[styles.quantityField, { backgroundColor: fieldBackground, borderColor }]}>
-                  <TextInput
-                    value={quantity}
-                    onChangeText={setQuantity}
+      {definition.tracking_mode === 'duration' ? (
+        <>
+          {!initialData?.id ? (
+            <View style={styles.timerChoiceRow}>
+              <TouchableOpacity
+                style={[
+                  styles.timerChoice,
+                  {
+                    backgroundColor: !startTimer
+                      ? definition.color
+                      : fieldBackground,
+                    borderColor: !startTimer ? definition.color : borderColor,
+                  },
+                ]}
+                onPress={() => setStartTimer(false)}
+              >
+                <Text
+                  style={[
+                    styles.timerChoiceText,
+                    { color: !startTimer ? '#FFFFFF' : textSecondary },
+                  ]}
+                >
+                  {t('custom.enterDuration')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.timerChoice,
+                  {
+                    backgroundColor: startTimer
+                      ? definition.color
+                      : fieldBackground,
+                    borderColor: startTimer ? definition.color : borderColor,
+                  },
+                ]}
+                onPress={() => setStartTimer(true)}
+              >
+                <Text
+                  style={[
+                    styles.timerChoiceText,
+                    { color: startTimer ? '#FFFFFF' : textSecondary },
+                  ]}
+                >
+                  {t('custom.startTimer')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {!startTimer ? (
+            <>
+              <FormSection isDark={isDark} label={t('custom.durationMinutes')}>
+                <View
+                  style={[
+                    styles.quantityField,
+                    {
+                      backgroundColor: 'transparent',
+                      borderWidth: 0,
+                      padding: 0,
+                    },
+                  ]}
+                >
+                  <FormTextInput
+                    isDark={isDark}
+                    style={{ flex: 1 }}
+                    value={durationMinutes}
+                    onChangeText={setDurationMinutes}
                     keyboardType="decimal-pad"
                     inputMode="decimal"
-                    placeholder="0"
-                    placeholderTextColor={textSecondary}
-                    style={[styles.quantityInput, { color: textPrimary }]}
+                    placeholder="15"
                   />
-                  <Text style={[styles.unit, { color: textSecondary }]}>{definition.unit}</Text>
+                  <Text style={[styles.unit, { color: textSecondary }]}>
+                    {t('card.minutesShort')}
+                  </Text>
                 </View>
-              </>
-            ) : null}
+              </FormSection>
+            </>
+          ) : (
+            <Text style={[styles.timerHint, { color: textSecondary }]}>
+              {t('custom.timerHint')}
+            </Text>
+          )}
+        </>
+      ) : null}
 
-            {definition.tracking_mode === 'duration' ? (
-              <>
-                {!initialData?.id ? (
-                  <View style={styles.timerChoiceRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.timerChoice,
-                        { backgroundColor: !startTimer ? definition.color : fieldBackground, borderColor: !startTimer ? definition.color : borderColor },
-                      ]}
-                      onPress={() => setStartTimer(false)}
-                    >
-                      <Text style={[styles.timerChoiceText, { color: !startTimer ? '#FFFFFF' : textSecondary }]}>
-                        {t('custom.enterDuration')}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.timerChoice,
-                        { backgroundColor: startTimer ? definition.color : fieldBackground, borderColor: startTimer ? definition.color : borderColor },
-                      ]}
-                      onPress={() => setStartTimer(true)}
-                    >
-                      <Text style={[styles.timerChoiceText, { color: startTimer ? '#FFFFFF' : textSecondary }]}>
-                        {t('custom.startTimer')}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-                {!startTimer ? (
-                  <>
-                    <Text style={[styles.label, { color: textPrimary }]}>{t('custom.durationMinutes')}</Text>
-                    <View style={[styles.quantityField, { backgroundColor: fieldBackground, borderColor }]}>
-                      <TextInput
-                        value={durationMinutes}
-                        onChangeText={setDurationMinutes}
-                        keyboardType="decimal-pad"
-                        inputMode="decimal"
-                        placeholder="15"
-                        placeholderTextColor={textSecondary}
-                        style={[styles.quantityInput, { color: textPrimary }]}
-                      />
-                      <Text style={[styles.unit, { color: textSecondary }]}>{t('card.minutesShort')}</Text>
-                    </View>
-                  </>
-                ) : (
-                  <Text style={[styles.timerHint, { color: textSecondary }]}>{t('custom.timerHint')}</Text>
-                )}
-              </>
-            ) : null}
+      <FormSection isDark={isDark} label={t('input.notes')}>
+        <FormTextInput
+          isDark={isDark}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          maxLength={500}
+          placeholder={t('custom.notesPlaceholder')}
+        />
+      </FormSection>
 
-            <Text style={[styles.label, { color: textPrimary }]}>{t('input.notes')}</Text>
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              maxLength={500}
-              placeholder={t('custom.notesPlaceholder')}
-              placeholderTextColor={textSecondary}
-              style={[styles.notes, { color: textPrimary, backgroundColor: fieldBackground, borderColor }]}
-            />
-
-            {initialData?.id && onDelete ? (
-              <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-                <Text style={styles.deleteText}>{t('input.deleteEntry')}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </ScrollView>
-
-          <View style={[styles.bottomBar, { borderTopColor: borderColor }]}>
-            <TouchableOpacity style={[styles.cancelButton, { borderColor }]} onPress={onClose} disabled={busy}>
-              <Text style={[styles.cancelText, { color: textSecondary }]}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.saveButton, { backgroundColor: definition.color }, busy && styles.disabled]}
-              onPress={handleSave}
-              disabled={busy}
-            >
-              <Text style={styles.saveText}>
-                {startTimer ? t('custom.startTimer') : t('custom.saveEntry')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </GlassSheetSurface>
-      </KeyboardAvoidingView>
-    </Modal>
+      {initialData?.id && onDelete ? (
+        <ActionButton
+          variant="destructive"
+          label={t('input.deleteEntry')}
+          isDark={isDark}
+          onPress={onDelete}
+        />
+      ) : null}
+    </FormSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 10 },
-  panel: { maxHeight: '100%', flexShrink: 1 },
-  handle: { width: 44, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 9 },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 18, gap: 14 },
-  header: { alignItems: 'center', marginBottom: 4 },
-  headerEmoji: { fontSize: 38 },
-  title: { fontSize: 21, fontWeight: '700', marginTop: 4 },
-  subtitle: { fontSize: 13, fontWeight: '700', marginTop: 3 },
-  label: { fontSize: 14, fontWeight: '600', marginTop: 8 },
-  timeButton: { minHeight: 72, borderRadius: 22, borderWidth: 1, paddingHorizontal: 16, justifyContent: 'center' },
-  timeDay: { fontSize: 12, fontWeight: '700' },
-  timeValue: { fontSize: 25, fontWeight: '700', marginTop: 2, fontVariant: ['tabular-nums'] },
+  label: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
+
   pickerCard: { borderRadius: 22, borderWidth: 1, padding: 8 },
-  pickerDone: { alignSelf: 'flex-end', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 8 },
-  pickerDoneText: { color: '#FFFFFF', fontWeight: '600' },
-  quantityField: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 22, borderWidth: 1, paddingHorizontal: 14 },
-  quantityInput: { flex: 1, minWidth: 0, fontSize: 22, fontWeight: '600', paddingVertical: 10 },
+  pickerDone: { alignSelf: 'flex-end' },
+  quantityField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  quantityInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 22,
+    fontWeight: '600',
+    paddingVertical: 10,
+  },
   unit: { flexShrink: 1, fontSize: 16, fontWeight: '600', paddingLeft: 10 },
   timerChoiceRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  timerChoice: { flex: 1, minHeight: 48, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  timerChoice: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
   timerChoiceText: { fontSize: 13, fontWeight: '600', textAlign: 'center' },
   timerHint: { fontSize: 13, lineHeight: 19, paddingVertical: 8 },
-  notes: { minHeight: 92, borderRadius: 22, borderWidth: 1, padding: 14, textAlignVertical: 'top', fontSize: 15 },
-  deleteButton: { alignItems: 'center', paddingVertical: 13 },
-  deleteText: { color: '#E25555', fontSize: 14, fontWeight: '600' },
-  bottomBar: { flexShrink: 0, flexDirection: 'row', gap: 12, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 18 },
-  cancelButton: { flex: 1, minHeight: 50, borderRadius: 22, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  cancelText: { fontSize: 15, fontWeight: '600' },
-  saveButton: { flex: 1.4, minHeight: 50, borderRadius: 22, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  saveText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center' },
-  disabled: { opacity: 0.55 },
+  notes: {
+    minHeight: 92,
+    borderRadius: 22,
+    borderWidth: 1,
+    padding: 14,
+    textAlignVertical: 'top',
+    fontSize: 15,
+  },
 });

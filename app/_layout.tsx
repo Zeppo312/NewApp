@@ -33,6 +33,7 @@ import { DataConsentProvider } from '@/contexts/DataConsentContext';
 import { DataConsentBoundary } from '@/components/privacy/DataConsentBoundary';
 import { BabyStatusProvider, useBabyStatus } from '@/contexts/BabyStatusContext';
 import { ActiveBabyProvider, useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { BabySwitchTransitionProvider } from '@/contexts/BabySwitchTransitionContext';
 import { ThemeProvider as AppThemeProvider } from '@/contexts/ThemeContext';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { BackendProvider, useBackend } from '@/contexts/BackendContext';
@@ -1027,7 +1028,7 @@ export default Sentry.wrap(function RootLayout() {
                     <ActiveBabyProvider>
                       <BabyStatusProvider>
                         <OnboardingStatusProvider>
-                          <TrackingSyncProvider><SleepOfflineProvider><RootLayoutNav /></SleepOfflineProvider></TrackingSyncProvider>
+                          <TrackingSyncProvider><SleepOfflineProvider><BabySwitchTransitionProvider><RootLayoutNav /></BabySwitchTransitionProvider></SleepOfflineProvider></TrackingSyncProvider>
                         </OnboardingStatusProvider>
                       </BabyStatusProvider>
                     </ActiveBabyProvider>

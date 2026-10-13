@@ -1,43 +1,47 @@
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
+import { FormField,FormSheet } from '@/components/ui/form-sheet';
+import { TYPOGRAPHY } from '@/constants/Typography';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
-import { useLocale } from '@/contexts/LocaleContext';
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, ScrollView, Alert, View, StatusBar, SafeAreaView, ActivityIndicator, AppState, Platform, RefreshControl, Dimensions, Animated, Text, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
-import { ThemedText } from '@/components/ThemedText';
+import Header from '@/components/Header';
+import { ProgressCircle } from '@/components/ProgressCircle';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { ThemedText } from '@/components/ThemedText';
+import DateTimePicker from '@/components/ui/DateTimePicker';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import VerticalContractionTimeline from '@/components/VerticalContractionTimeline';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,GlassCard,LAYOUT_PAD,LiquidGlassCard,PRIMARY,RADIUS,SECTION_GAP_BOTTOM,SECTION_GAP_TOP,TIMELINE_INSET } from '@/constants/DesignGuide';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
-import { saveContraction, getContractions, deleteContraction, updateContraction, syncAllExistingContractions, getLinkedUsersWithDetails } from '@/lib/supabase';
-import * as Notifications from '@/lib/notifications';
-import * as Device from 'expo-device';
-import { 
-  startContractionTimer, 
-  stopContractionTimer, 
-  getContractionTimerState, 
-  setupNotifications,
-  setupDynamicIsland,
-  formatTime as formatBackgroundTime
-} from '@/lib/background-tasks';
-import Header from '@/components/Header';
+import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import {
-  ContractionTranslationKey,
-  DEFAULT_CONTRACTION_LOCALE,
-  getContractionLocaleTag,
-  translateContractionText,
+formatTime as formatBackgroundTime,
+getContractionTimerState,
+setupDynamicIsland,
+setupNotifications,
+startContractionTimer,
+stopContractionTimer
+} from '@/lib/background-tasks';
+import {
+ContractionTranslationKey,
+DEFAULT_CONTRACTION_LOCALE,
+getContractionLocaleTag,
+translateContractionText,
 } from '@/lib/contractionTranslations';
+import * as Notifications from '@/lib/notifications';
+import { deleteContraction,getContractions,getLinkedUsersWithDetails,saveContraction,syncAllExistingContractions,updateContraction } from '@/lib/supabase';
+import { BlurView } from 'expo-blur';
+import * as Device from 'expo-device';
+import { useRouter } from 'expo-router';
+import { useEffect,useMemo,useRef,useState } from 'react';
+import { ActivityIndicator,Alert,Animated,AppState,Dimensions,Platform,RefreshControl,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TouchableOpacity,View } from 'react-native';
 
 let ACTIVE_CONTRACTION_LOCALE = DEFAULT_CONTRACTION_LOCALE;
 let CONTRACTION_LOCALE_TAG = getContractionLocaleTag(ACTIVE_CONTRACTION_LOCALE);
 const t = (key: ContractionTranslationKey) => translateContractionText(ACTIVE_CONTRACTION_LOCALE, key);
-import { GlassCard, LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, TIMELINE_INSET, LAYOUT_PAD, RADIUS, SECTION_GAP_BOTTOM, SECTION_GAP_TOP, PRIMARY } from '@/constants/DesignGuide';
-import { BlurView } from 'expo-blur';
-import { IconSymbol } from '@/components/ui/IconSymbol';
-import { ProgressCircle } from '@/components/ProgressCircle';
-import DateTimePicker from '@/components/ui/DateTimePicker';
 
 type Contraction = {
   id: string;
@@ -270,18 +274,18 @@ export default function HomeScreen() {
     const initBackgroundServices = async () => {
       try {
         await setupNotifications();
-        
+
         if (Platform.OS === 'ios') {
           await setupDynamicIsland();
         }
-        
+
         // Check if timer is already running in background
         const timerState = await getContractionTimerState();
         if (timerState.isRunning) {
           // Resume timer
           setTimerRunning(true);
           setElapsedTime(timerState.elapsedTime);
-          
+
           // Create a current contraction object
           const startTimeDate = new Date(timerState.startTime);
           setCurrentContraction({
@@ -297,9 +301,9 @@ export default function HomeScreen() {
         console.error('Failed to initialize contraction background services:', error);
       }
     };
-    
+
     initBackgroundServices();
-    
+
     // Setup notification response handler
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       if (response.actionIdentifier === 'stop') {
@@ -309,7 +313,7 @@ export default function HomeScreen() {
         stopContraction();
       }
     });
-    
+
     return () => {
       subscription.remove();
     };
@@ -355,7 +359,7 @@ export default function HomeScreen() {
     setCurrentContraction(newContraction);
     setTimerRunning(true);
     setElapsedTime(0);
-    
+
     // Start background timer
     try {
       await startContractionTimer();
@@ -507,10 +511,10 @@ export default function HomeScreen() {
             }
           }
         };
-        
+
         updateTimerFromBackground();
       }
-      
+
       appState.current = nextAppState;
     });
 
@@ -522,7 +526,7 @@ export default function HomeScreen() {
   // Timer effect - only for UI updates when app is in foreground
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
-    
+
     if (timerRunning) {
       intervalId = setInterval(async () => {
         if (Platform.OS === 'ios' && Device.isDevice) {
@@ -538,7 +542,7 @@ export default function HomeScreen() {
           setElapsedTime(prev => prev + 1);
         }
       }, 1000);
-      
+
       timerRef.current = intervalId;
     } else if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -1024,21 +1028,21 @@ export default function HomeScreen() {
 
   const RangeNavigation = () => (
     <View style={styles.weekNavigationContainer}>
-      <TouchableOpacity style={styles.weekNavButton} onPress={() => changeRange('prev')} activeOpacity={0.85}>
-        <ThemedText style={styles.weekNavButtonText}>‹</ThemedText>
-      </TouchableOpacity>
+      <PeriodNavigationButton direction="previous"
+        accessibilityLabel={getPeriodNavigationLabel(ACTIVE_CONTRACTION_LOCALE, 'previous', selectedTab)}
+        isDark={isDark} color={textSecondary}
+        onPress={() => changeRange('prev')}
+      />
       <View style={styles.weekHeaderCenter}>
         <ThemedText style={[styles.weekHeaderTitle, { color: textSecondary }]}>{rangeTitle}</ThemedText>
         <ThemedText style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>{rangeSubtitle}</ThemedText>
       </View>
-      <TouchableOpacity
-        style={[styles.weekNavButton, nextRangeDisabled && { opacity: 0.4 }]}
-        onPress={() => changeRange('next')}
+      <PeriodNavigationButton direction="next"
+        accessibilityLabel={getPeriodNavigationLabel(ACTIVE_CONTRACTION_LOCALE, 'next', selectedTab)}
+        isDark={isDark} color={textSecondary}
         disabled={nextRangeDisabled}
-        activeOpacity={0.85}
-      >
-        <ThemedText style={styles.weekNavButtonText}>›</ThemedText>
-      </TouchableOpacity>
+        onPress={() => changeRange('next')}
+      />
     </View>
   );
 
@@ -1146,7 +1150,7 @@ export default function HomeScreen() {
     <ThemedBackground style={styles.background}>
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        
+
         <Header 
           title={t('screen.title')}
           subtitle={headerSubtitle}
@@ -1182,7 +1186,7 @@ export default function HomeScreen() {
               <ThemedText style={styles.syncingText}>{t('sync.active')}</ThemedText>
             </View>
           )}
-          
+
           <View style={styles.container}>
             {TopTabs()}
             {StatusMetricsBar()}
@@ -1271,7 +1275,7 @@ export default function HomeScreen() {
             <View style={styles.historySection}>
               <View style={[styles.historyHeader, styles.fullWidthCard] }>
                 <ThemedText
-                  type="subtitle"
+                  type="sectionTitle"
                   style={styles.historyTitle}
                   lightColor="#5C4033"
                   darkColor="#F2E6DD"
@@ -1323,153 +1327,133 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
         {manualModalVisible && (
-          <Modal
-            visible={manualModalVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={closeManualModal}
-          >
-            <View style={styles.manualModalOverlay}>
-              <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeManualModal} />
-              <BlurView intensity={80} tint="extraLight" style={styles.manualModalCard}>
-                <View
-                  pointerEvents="none"
-                  style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(248,245,241,0.94)' }]}
-                />
-                <View style={styles.manualHeader}>
-                  <TouchableOpacity style={styles.manualHeaderButton} onPress={closeManualModal}>
-                    <Text style={styles.manualHeaderButtonText}>✕</Text>
-                  </TouchableOpacity>
-                  <View style={styles.manualHeaderCenter}>
-                    <Text style={styles.manualTitle}>{t('manual.title')}</Text>
-                    <Text style={styles.manualSubtitle}>{t('manual.subtitle')}</Text>
+          <FormSheet
+              visible={manualModalVisible}
+              isDark={isDark}
+              title={t('manual.title')}
+              subtitle={t('manual.subtitle')}
+              onClose={closeManualModal}
+              onCancel={closeManualModal}
+              confirmDisabled={isReadOnlyPreviewMode}
+              onConfirm={handleManualSave}
+            >
+              <View style={styles.manualContent}>
+                <View style={styles.manualSection}>
+                  <Text style={styles.manualSectionTitle}>{t('manual.period')}</Text>
+                  <View style={styles.manualTimeRow}>
+                    <FormField
+                      isDark={isDark}
+                      onPress={() => setShowManualStartPicker(true)}
+                      label={t('manual.start')}
+                      value={safeManualStartTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}
+                      style={{ flex: 1 }}
+                    />
+                    <FormField
+                      isDark={isDark}
+                      onPress={() => setShowManualEndPicker(true)}
+                      label={t('manual.end')}
+                      value={safeManualEndTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}
+                      style={{ flex: 1 }}
+                    />
                   </View>
-                  <TouchableOpacity style={[styles.manualHeaderButton, styles.manualSaveButton]} onPress={handleManualSave}>
-                    <Text style={styles.manualSaveButtonText}>✓</Text>
-                  </TouchableOpacity>
+
+                  {showManualStartPicker && (
+                    <View style={styles.manualPickerContainer}>
+                      <DateTimePicker
+                        value={safeManualStartTime}
+                        mode="datetime"
+                        display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                        onChange={(_, date) => {
+                          if (Platform.OS === 'android') setShowManualStartPicker(false);
+                          if (date) {
+                            setManualStartTime(date);
+                            if (safeManualEndTime <= date) {
+                              setManualEndTime(new Date(date.getTime() + 60 * 1000));
+                            }
+                          }
+                        }}
+                        style={styles.manualPicker}
+                      />
+                      <TouchableOpacity
+                        style={styles.manualPickerDone}
+                        onPress={() => setShowManualStartPicker(false)}
+                      >
+                        <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {showManualEndPicker && (
+                    <View style={styles.manualPickerContainer}>
+                      <DateTimePicker
+                        value={safeManualEndTime}
+                        mode="datetime"
+                        display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                        onChange={(_, date) => {
+                          if (Platform.OS === 'android') setShowManualEndPicker(false);
+                          if (date) {
+                            if (date <= safeManualStartTime) {
+                              Alert.alert(t('common.notice'), t('alert.endAfterStart'));
+                            } else {
+                              setManualEndTime(date);
+                            }
+                          }
+                        }}
+                        style={styles.manualPicker}
+                      />
+                      <TouchableOpacity
+                        style={styles.manualPickerDone}
+                        onPress={() => setShowManualEndPicker(false)}
+                      >
+                        <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
 
-                <ScrollView style={styles.manualScroll} showsVerticalScrollIndicator={false}>
-                  <View style={styles.manualContent}>
-                    <View style={styles.manualSection}>
-                      <Text style={styles.manualSectionTitle}>{t('manual.period')}</Text>
-                      <View style={styles.manualTimeRow}>
-                        <TouchableOpacity
-                          style={styles.manualTimeButton}
-                          onPress={() => setShowManualStartPicker(true)}
+                <View style={styles.manualSection}>
+                  <Text style={styles.manualSectionTitle}>{t('manual.intensity')}</Text>
+                  <View style={styles.manualIntensityRow}>
+                    {(['schwach', 'mittel', 'stark'] as const).map((level) => (
+                      <TouchableOpacity
+                        key={level}
+                        style={[
+                          styles.intensityPill,
+                          manualIntensity === level && {
+                            backgroundColor: INTENSITY_STYLES[level].background,
+                            borderColor: INTENSITY_STYLES[level].border,
+                          },
+                        ]}
+                        onPress={() => setManualIntensity(level)}
+                      >
+                        <Text
+                          style={[
+                            styles.intensityPillText,
+                            manualIntensity === level && { color: INTENSITY_STYLES[level].text },
+                          ]}
                         >
-                          <Text style={styles.manualTimeLabel}>{t('manual.start')}</Text>
-                          <Text style={styles.manualTimeValue}>
-                            {safeManualStartTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              day: '2-digit',
-                              month: '2-digit',
-                            })}
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.manualTimeButton}
-                          onPress={() => setShowManualEndPicker(true)}
-                        >
-                          <Text style={styles.manualTimeLabel}>{t('manual.end')}</Text>
-                          <Text style={styles.manualTimeValue}>
-                            {safeManualEndTime.toLocaleString(CONTRACTION_LOCALE_TAG, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              day: '2-digit',
-                              month: '2-digit',
-                            })}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {showManualStartPicker && (
-                        <View style={styles.manualPickerContainer}>
-                          <DateTimePicker
-                            value={safeManualStartTime}
-                            mode="datetime"
-                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                            onChange={(_, date) => {
-                              if (Platform.OS === 'android') setShowManualStartPicker(false);
-                              if (date) {
-                                setManualStartTime(date);
-                                if (safeManualEndTime <= date) {
-                                  setManualEndTime(new Date(date.getTime() + 60 * 1000));
-                                }
-                              }
-                            }}
-                            style={styles.manualPicker}
-                          />
-                          <TouchableOpacity
-                            style={styles.manualPickerDone}
-                            onPress={() => setShowManualStartPicker(false)}
-                          >
-                            <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-
-                      {showManualEndPicker && (
-                        <View style={styles.manualPickerContainer}>
-                          <DateTimePicker
-                            value={safeManualEndTime}
-                            mode="datetime"
-                            display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                            onChange={(_, date) => {
-                              if (Platform.OS === 'android') setShowManualEndPicker(false);
-                              if (date) {
-                                if (date <= safeManualStartTime) {
-                                  Alert.alert(t('common.notice'), t('alert.endAfterStart'));
-                                } else {
-                                  setManualEndTime(date);
-                                }
-                              }
-                            }}
-                            style={styles.manualPicker}
-                          />
-                          <TouchableOpacity
-                            style={styles.manualPickerDone}
-                            onPress={() => setShowManualEndPicker(false)}
-                          >
-                            <Text style={styles.manualPickerDoneText}>{t('common.done')}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      )}
-                    </View>
-
-                    <View style={styles.manualSection}>
-                      <Text style={styles.manualSectionTitle}>{t('manual.intensity')}</Text>
-                      <View style={styles.manualIntensityRow}>
-                        {(['schwach', 'mittel', 'stark'] as const).map(level => (
-                          <TouchableOpacity
-                            key={level}
-                            style={[
-                              styles.intensityPill,
-                              manualIntensity === level && {
-                                backgroundColor: INTENSITY_STYLES[level].background,
-                                borderColor: INTENSITY_STYLES[level].border,
-                              },
-                            ]}
-                            onPress={() => setManualIntensity(level)}
-                          >
-                            <Text
-                              style={[
-                                styles.intensityPillText,
-                                manualIntensity === level && { color: INTENSITY_STYLES[level].text },
-                              ]}
-                            >
-                              {level === 'schwach' ? t('intensity.weak') : level === 'mittel' ? t('intensity.medium') : t('intensity.strong')}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
+                          {level === 'schwach'
+                            ? t('intensity.weak')
+                            : level === 'mittel'
+                              ? t('intensity.medium')
+                              : t('intensity.strong')}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                </ScrollView>
-              </BlurView>
-            </View>
-          </Modal>
+                </View>
+              </View>
+            </FormSheet>
         )}
       </SafeAreaView>
     </ThemedBackground>
@@ -1620,22 +1604,6 @@ const styles = StyleSheet.create({
     marginTop: SECTION_GAP_TOP,
     marginBottom: SECTION_GAP_BOTTOM,
     paddingHorizontal: LAYOUT_PAD,
-  },
-  weekNavButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    padding: 6,
-  },
-  weekNavButtonText: {
-    fontSize: 24,
-    color: '#8E4EC6',
-    fontWeight: 'bold',
   },
   weekHeaderCenter: {
     flex: 1,
@@ -1891,8 +1859,6 @@ const styles = StyleSheet.create({
   },
   historyTitle: {
     marginBottom: 20, // More margin
-    fontSize: 24, // Larger title
-    fontWeight: '600',
   },
   emptyState: {
     padding: 30, // More padding
@@ -2038,104 +2004,16 @@ const styles = StyleSheet.create({
   syncingText: {
     marginLeft: 10,
   },
-  manualModalOverlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  manualModalCard: {
-    backgroundColor: 'rgba(248,245,241,0.94)',
-    width: '100%',
-    borderRadius: 28,
-    overflow: 'hidden',
-  },
-  manualHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    paddingBottom: 12,
-  },
-  manualHeaderButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  manualHeaderButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  manualHeaderCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  manualTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  manualSubtitle: {
-    fontSize: 12,
-    color: '#7D5A50',
-    opacity: 0.8,
-  },
-  manualSaveButton: {
-    backgroundColor: '#8E4EC6',
-  },
-  manualSaveButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  manualScroll: {
-    maxHeight: screenHeight * 0.6,
-  },
-  manualContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  manualSection: {
-    marginBottom: 20,
-  },
-  manualSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#7D5A50',
-    marginBottom: 10,
-  },
+
+  manualContent: { gap: 20 },
+  manualSection: { gap: 8 },
+  manualSectionTitle: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
   manualTimeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
   },
-  manualTimeButton: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  manualTimeLabel: {
-    fontSize: 11,
-    color: '#7D5A50',
-    marginBottom: 4,
-  },
-  manualTimeValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
+
   manualPickerContainer: {
     marginTop: 12,
     borderRadius: 16,

@@ -4,7 +4,7 @@ import { Text, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BabySwitcherButton from '../../components/BabySwitcherButton';
 import { ActiveBabyProvider, useActiveBaby } from '../../contexts/ActiveBabyContext';
-import { listBabies, createBaby, syncBabiesForLinkedUsers } from '../baby';
+import { listBabies, createBaby, readSavedBabies, syncBabiesForLinkedUsers } from '../baby';
 import { supabase } from '../supabase';
 
 let mockUser: { id: string } | null = { id: 'user' };
@@ -13,11 +13,17 @@ jest.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser })
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
 jest.mock('@/contexts/BabyStatusContext', () => ({ useBabyStatus: () => ({ isBabyBorn: false, temporaryViewMode: null, setTemporaryViewMode: jest.fn() }) }));
 jest.mock('@/hooks/useColorScheme', () => ({ useColorScheme: () => 'light' }));
+jest.mock('@/hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light' }) }));
 jest.mock('@/components/CachedImage', () => ({ CachedImage: () => null }));
 jest.mock('@/components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
 jest.mock('@/components/ThemedText', () => ({ ThemedText: jest.requireActual('react-native').Text }));
 jest.mock('expo-image-picker', () => ({}));
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
+jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 47, bottom: 34, left: 0, right: 0 }) }));
+jest.mock('react-native-reanimated', () => ({ __esModule: true, default: { View: jest.requireActual('react-native').View, createAnimatedComponent: (component: unknown) => component }, useReducedMotion: () => false }));
+jest.mock('@/hooks/useAvatarModalMotion', () => ({ useAvatarModalMotion: ({ open, onClosed }: { open: boolean; onClosed: () => void }) => ({ presented: open, isClosing: false, triggerRef: { current: null }, panelRef: { current: null }, panelStyle: {}, contentStyle: {}, materialStyle: {}, shapeProps: {}, backdropStyle: {}, dismiss: async () => { onClosed(); return true; }, onPanelLayout: () => {}, onShow: () => {} }) }));
+jest.mock('@/contexts/BabySwitchTransitionContext', () => ({ useBabySwitchTransition: () => ({ isSwitching: false, runSwitch: async (change: () => Promise<void>) => { await change(); return true; } }) }));
+jest.mock('expo-blur', () => ({ BlurView: jest.requireActual('react-native').View }));
 jest.mock('../baby', () => ({
   readSavedBabies: jest.fn(async () => null), listBabies: jest.fn(), createBaby: jest.fn(), syncBabiesForLinkedUsers: jest.fn() }));
 jest.mock('../supabase', () => ({ supabase: { from: jest.fn() } }));
@@ -25,6 +31,7 @@ jest.mock('../supabase', () => ({ supabase: { from: jest.fn() } }));
 const levi = { id: 'levi', name: 'Levi', birth_date: '2024-01-01' };
 const pregnancy = { id: 'pregnancy', name: 'Schwangerschaft', birth_date: null };
 const full = { data: [levi, pregnancy], error: null };
+const saved = { schemaVersion: 1 as const, scope: { backendHost: 'fixture.supabase.co', userId: 'user' }, dataset: 'baby-list', data: full.data, verifiedAt: '2026-10-12T08:00:00Z' };
 const transient = { data: null, error: new Error('Network request failed'), retryable: true };
 const permanent = { data: null, error: { code: '42501', message: 'permission denied' }, retryable: false };
 let current!: ReturnType<typeof useActiveBaby>;
@@ -41,7 +48,7 @@ function deferred<T>() {
 describe('child selector refresh', () => {
   let tree: ReactTestRenderer;
   const list = jest.mocked(listBabies);
-  const labels = () => tree.root.findAllByType(Text).map((node) => node.props.children);
+  const labels = () => tree.root.findAllByType(Text).filter((node) => !node.props.accessibilityElementsHidden).map((node) => node.props.children);
   const mount = async () => { await act(async () => { tree = create(<Screen />); }); };
   const open = async () => { await act(async () => { tree.update(<Screen open />); }); };
 
@@ -50,6 +57,7 @@ describe('child selector refresh', () => {
     jest.clearAllMocks();
     list.mockReset();
     list.mockResolvedValue(full);
+    jest.mocked(readSavedBabies).mockReset().mockResolvedValue(null);
     mockUser = { id: 'user' };
     await AsyncStorage.clear();
     await AsyncStorage.setItem('active_baby_id:user', 'pregnancy');
@@ -57,6 +65,46 @@ describe('child selector refresh', () => {
   afterEach(() => {
     act(() => tree?.unmount());
     jest.useRealTimers();
+  });
+
+  it('keeps the displayed list unchanged while a saved snapshot is refreshed', async () => {
+    await mount();
+    await open();
+    const before = labels();
+    await act(async () => { tree.update(<Screen />); });
+    const pending = deferred<typeof full>();
+    jest.mocked(readSavedBabies).mockResolvedValueOnce(saved);
+    list.mockReturnValueOnce(pending.promise);
+    await open();
+    expect(current.savedListAt).toBe(saved.verifiedAt);
+    expect(labels()).toEqual(before);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(labels()).toEqual(before);
+    await act(async () => { pending.resolve(full); });
+    expect(labels()).toEqual(before);
+  });
+
+  it('reveals a slow initial load without mounting another text row and resets on reopening', async () => {
+    const pending = deferred<typeof full>();
+    list.mockReturnValueOnce(pending.promise);
+    await act(async () => { tree = create(<Screen open />); });
+    const textCount = tree.root.findAllByType(Text).length;
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    expect(labels()).not.toContain('Keine Kinder gefunden.');
+    await act(async () => { await jest.advanceTimersByTimeAsync(499); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(labels()).toContain('Kinder werden aktualisiert …');
+    expect(tree.root.findAllByType(Text)).toHaveLength(textCount);
+    await act(async () => { tree.update(<Screen />); });
+    await open();
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { await jest.advanceTimersByTimeAsync(499); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { pending.resolve(full); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(labels()).toContain('Levi');
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
   });
 
   it('loads freshly on opening and adds a missing pregnancy without losing existing Levi', async () => {
@@ -67,7 +115,11 @@ describe('child selector refresh', () => {
     await open();
     expect(list.mock.calls.map(([force]) => force)).toEqual([false, true]);
     expect(labels()).toContain('Levi');
-    expect(labels()).toContain('Kinder werden aktualisiert …');
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { await jest.advanceTimersByTimeAsync(499); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
     expect(current.isReady).toBe(true);
     await act(async () => { pending.resolve(full); });
     expect(labels()).toContain('Schwangerschaft');
@@ -86,12 +138,14 @@ describe('child selector refresh', () => {
     await act(async () => { await jest.advanceTimersByTimeAsync(500); });
     expect(list).toHaveBeenCalledTimes(3);
     expect(current.loadError).toBeNull();
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
     expect(labels()).not.toContain('Erneut versuchen');
     expect(await AsyncStorage.getItem('active_baby_id:user')).toBe('pregnancy');
   });
 
   it('offers manual retry beside the retained list only after both retries fail', async () => {
     await mount();
+    jest.mocked(readSavedBabies).mockResolvedValueOnce(saved);
     list.mockResolvedValue(transient);
     await open();
     await act(async () => { await jest.advanceTimersByTimeAsync(500); });
@@ -101,6 +155,7 @@ describe('child selector refresh', () => {
     expect(labels()).toContain('Levi');
     expect(labels()).toContain('Schwangerschaft');
     expect(labels()).toContain('Kinder konnten nicht aktualisiert werden.');
+    expect(labels().some((label) => typeof label === 'string' && label.startsWith('Gespeicherter Stand:'))).toBe(true);
     expect(labels()).not.toContain('Keine Kinder gefunden.');
     expect(current.activeBabyId).toBe('pregnancy');
     expect(createBaby).not.toHaveBeenCalled();
@@ -118,13 +173,20 @@ describe('child selector refresh', () => {
     const pending = deferred<typeof full>();
     list.mockReturnValueOnce(pending.promise);
     await open();
+    await act(async () => { await jest.advanceTimersByTimeAsync(500); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
     let a!: Promise<void>;
     let b!: Promise<void>;
     await act(async () => { a = current.refreshBabies(); b = current.refreshBabies(); tree.update(<Screen />); });
     await open();
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
+    await act(async () => { await jest.advanceTimersByTimeAsync(499); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
     expect(list).toHaveBeenCalledTimes(2);
     await act(async () => { pending.resolve(full); await Promise.all([a, b]); });
     expect(current.isLoading).toBe(false);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(labels()).not.toContain('Kinder werden aktualisiert …');
   });
 
   it('preserves a deliberate child switch during refresh', async () => {

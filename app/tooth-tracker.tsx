@@ -1,52 +1,50 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from 'react-native';
-import Svg, { Defs, Ellipse, G, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
-import { Stack } from 'expo-router';
-import DateTimePicker from '@/components/ui/DateTimePicker';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedBackground } from '@/components/ThemedBackground';
 import Header from '@/components/Header';
-import TextInputOverlay from '@/components/modals/TextInputOverlay';
 import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
+import TextInputOverlay from '@/components/modals/TextInputOverlay';
+import { ThemedBackground } from '@/components/ThemedBackground';
+import { ThemedText } from '@/components/ThemedText';
+import DateTimePicker from '@/components/ui/DateTimePicker';
+import { FormField,FormSheet } from '@/components/ui/form-sheet';
 import { Colors } from '@/constants/Colors';
-import { GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, LiquidGlassCard, PRIMARY, RADIUS } from '@/constants/DesignGuide';
-import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,LAYOUT_PAD,LiquidGlassCard,PRIMARY,RADIUS } from '@/constants/DesignGuide';
+import { TYPOGRAPHY } from '@/constants/Typography';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { parseSafeDate } from '@/lib/safeDate';
 import {
-  BABY_TEETH,
-  BABY_TEETH_MAP,
-  deleteToothEntry,
-  getToothEntries,
-  saveToothEntry,
-  ToothEntry,
-  ToothPosition,
-  ToothSymptom,
-  updateToothEntry,
+BABY_TEETH,
+deleteToothEntry,
+getToothEntries,
+saveToothEntry,
+ToothEntry,
+ToothPosition,
+ToothSymptom,
+updateToothEntry
 } from '@/lib/toothData';
 import {
-  getLocalizedBabyTeeth,
-  getToothSymptomOptions,
-  translateToothTrackerText,
-  type ToothTrackerTranslationKey,
+getLocalizedBabyTeeth,
+getToothSymptomOptions,
+translateToothTrackerText,
+type ToothTrackerTranslationKey,
 } from '@/lib/toothTrackerTranslations';
+import { Stack } from 'expo-router';
+import { useCallback,useEffect,useMemo,useState } from 'react';
+import {
+ActivityIndicator,
+Alert,
+Platform,
+SafeAreaView,
+ScrollView,
+StatusBar,
+StyleSheet,
+TouchableOpacity,
+View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg,{ Defs,Ellipse,G,Path,Stop,LinearGradient as SvgLinearGradient } from 'react-native-svg';
 
 type ToothDef = {
   key: ToothPosition;
@@ -826,267 +824,209 @@ export default function ToothTrackerScreen() {
         </SafeAreaView>
       </ThemedBackground>
 
-      <Modal
-        visible={editorVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeEditor}
-      >
-        <View style={[styles.modalOverlay, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.38)' }]}>
-          <TouchableWithoutFeedback onPress={closeEditor}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-
-          <BlurView
-            intensity={88}
-            tint={isDark ? 'dark' : 'extraLight'}
-            style={[
-              styles.modalContent,
-              {
-                backgroundColor: isDark ? 'rgba(10,10,12,0.88)' : 'rgba(255,255,255,0.92)',
-                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.72)',
-                paddingBottom: Math.max(22, insets.bottom + 8),
-              },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                onPress={closeEditor}
-                style={[styles.headerButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)' }]}
-                disabled={isSaving}
-              >
-                <ThemedText style={[styles.closeButtonLabel, { color: textSecondary }]}>✕</ThemedText>
-              </TouchableOpacity>
-
-              <View style={styles.headerCenter}>
-                <ThemedText style={[styles.modalTitle, { color: textPrimary }]}>
-                  {editorMode === 'edit' ? t('editor.edit') : t('editor.add')}
-                </ThemedText>
-                <ThemedText style={[styles.modalSubtitle, { color: textSecondary }]}>
-                  {editorMode === 'edit' ? t('editor.editSubtitle') : t('editor.addSubtitle')}
-                </ThemedText>
+      <FormSheet
+          visible={editorVisible}
+          isDark={isDark}
+          title={editorMode === 'edit' ? t('editor.edit') : t('editor.add')}
+          subtitle={editorMode === 'edit' ? t('editor.editSubtitle') : t('editor.addSubtitle')}
+          onClose={closeEditor}
+          onCancel={closeEditor}
+          busy={isSaving}
+          confirmDisabled={isReadOnlyPreviewMode || !selectedTooth}
+          onConfirm={handleSave}
+          overlays={
+            <>
+              <TextInputOverlay
+                visible={notesEditorVisible}
+                label={t('editor.notes')}
+                value={formNotes}
+                placeholder={t('editor.notesPlaceholder')}
+                multiline
+                accentColor={PRIMARY}
+                onClose={() => setNotesEditorVisible(false)}
+                onSubmit={(next) => {
+                  setFormNotes(next);
+                  setNotesEditorVisible(false);
+                }}
+              />
+            </>
+          }
+        >
+          {selectedTooth && (
+            <View style={styles.selectedToothHero}>
+              <View style={[styles.selectedToothHeroIcon, { backgroundColor: `${PRIMARY}14` }]}>
+                <ThemedText style={styles.selectedToothHeroIconText}>🦷</ThemedText>
               </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.headerButton,
-                  styles.saveHeaderButton,
-                  (isSaving || isReadOnlyPreviewMode) && styles.saveHeaderButtonDisabled,
-                ]}
-                onPress={handleSave}
-                disabled={isSaving || isReadOnlyPreviewMode}
-              >
-                {isSaving ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <ThemedText style={styles.saveHeaderButtonText}>✓</ThemedText>
-                )}
-              </TouchableOpacity>
+              <ThemedText style={[styles.selectedToothHeroLabel, { color: textPrimary }]}>
+                {localizedTeethMap.get(selectedTooth)?.label ?? selectedTooth}
+              </ThemedText>
             </View>
+          )}
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
-              {selectedTooth && (
-                <View style={styles.selectedToothHero}>
-                  <View style={[styles.selectedToothHeroIcon, { backgroundColor: `${PRIMARY}14` }]}>
-                    <ThemedText style={styles.selectedToothHeroIconText}>🦷</ThemedText>
-                  </View>
-                  <ThemedText style={[styles.selectedToothHeroLabel, { color: textPrimary }]}>
-                    {localizedTeethMap.get(selectedTooth)?.label ?? selectedTooth}
-                  </ThemedText>
-                </View>
-              )}
-
-              {editorMode === 'create' && showToothPicker && (
-                <View style={styles.modalSection}>
-                  <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.chooseTooth')}</ThemedText>
-                  <View style={styles.toothChipWrap}>
-                    {availableTeeth.map((tooth) => {
-                      const active = selectedTooth === tooth.key;
-                      return (
-                        <TouchableOpacity
-                          key={tooth.key}
-                          style={[
-                            styles.toothChip,
-                            {
-                              backgroundColor: active
-                                ? PRIMARY
-                                : isDark
-                                  ? 'rgba(255,255,255,0.09)'
-                                  : 'rgba(255,255,255,0.75)',
-                              borderColor: active
-                                ? PRIMARY
-                                : isDark
-                                  ? 'rgba(255,255,255,0.18)'
-                                  : 'rgba(0,0,0,0.07)',
-                            },
-                          ]}
-                          onPress={() => setSelectedTooth(tooth.key)}
-                          activeOpacity={0.9}
-                        >
-                          <ThemedText style={[styles.toothChipLabel, { color: active ? '#FFF' : textPrimary }]} numberOfLines={2}>
-                            {tooth.label}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.date')}</ThemedText>
-                <View
-                  style={[
-                    styles.dateContainer,
-                    {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.76)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.06)',
-                    },
-                  ]}
-                >
-                  <TouchableOpacity style={styles.dateHeader} onPress={() => setShowDatePicker((prev) => !prev)}>
-                    <ThemedText style={[styles.dateValue, { color: textPrimary }]}>{formatDateLabel(toDateOnly(formDate), localeTag)}</ThemedText>
-                    <View style={[styles.calendarPill, { backgroundColor: `${PRIMARY}18` }]}>
-                      <ThemedText style={[styles.calendarPillIcon, { color: PRIMARY }]}>📅</ThemedText>
-                    </View>
-                  </TouchableOpacity>
-
-                  {showDatePicker && Platform.OS !== 'ios' && (
-                    <View style={styles.datePickerWrap}>
-                      <DateTimePicker
-                        value={formDate}
-                        mode="date"
-                        display="default"
-                        minimumDate={MIN_VALID_TOOTH_DATE}
-                        maximumDate={new Date()}
-                        themeVariant={isDark ? 'dark' : 'light'}
-                        accentColor={PRIMARY}
-                        onChange={(event, date) => {
-                          if (date) {
-                            setFormDate(normalizeEditorDate(date));
-                          }
-
-                          if (Platform.OS !== 'ios') {
-                            setShowDatePicker(false);
-                          } else if (event?.type === 'dismissed') {
-                            setShowDatePicker(false);
-                          }
-                        }}
-                      />
-                    </View>
-                  )}
-                  {Platform.OS === 'ios' && (
-                    <IOSBottomDatePicker
-                      visible={showDatePicker}
-                      title={t('editor.chooseDate')}
-                      value={formDate}
-                      mode="date"
-                      minimumDate={MIN_VALID_TOOTH_DATE}
-                      maximumDate={new Date()}
-                      onClose={() => setShowDatePicker(false)}
-                      onConfirm={(date) => {
-                        setFormDate(normalizeEditorDate(date));
-                        setShowDatePicker(false);
-                      }}
-                      initialVariant="calendar"
-                    />
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.symptoms')}</ThemedText>
-                <View style={styles.symptomWrap}>
-                  {symptomOptions.map((option) => {
-                    const active = formSymptoms.includes(option.key);
-                    return (
-                      <TouchableOpacity
-                        key={option.key}
-                        style={[
-                          styles.symptomChip,
-                          {
-                            backgroundColor: active
-                              ? `${PRIMARY}15`
-                              : isDark
-                                ? 'rgba(255,255,255,0.09)'
-                                : 'rgba(255,255,255,0.78)',
-                            borderColor: active
-                              ? PRIMARY
-                              : isDark
-                                ? 'rgba(255,255,255,0.18)'
-                                : 'rgba(0,0,0,0.07)',
-                          },
-                        ]}
-                        onPress={() => toggleSymptom(option.key)}
+          {editorMode === 'create' && showToothPicker && (
+            <View style={styles.modalSection}>
+              <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>
+                {t('editor.chooseTooth')}
+              </ThemedText>
+              <View style={styles.toothChipWrap}>
+                {availableTeeth.map((tooth) => {
+                  const active = selectedTooth === tooth.key;
+                  return (
+                    <TouchableOpacity
+                      key={tooth.key}
+                      style={[
+                        styles.toothChip,
+                        {
+                          backgroundColor: active
+                            ? PRIMARY
+                            : isDark
+                              ? 'rgba(255,255,255,0.09)'
+                              : 'rgba(255,255,255,0.75)',
+                          borderColor: active
+                            ? PRIMARY
+                            : isDark
+                              ? 'rgba(255,255,255,0.18)'
+                              : 'rgba(0,0,0,0.07)',
+                        },
+                      ]}
+                      onPress={() => setSelectedTooth(tooth.key)}
+                      activeOpacity={0.9}
+                    >
+                      <ThemedText
+                        style={[styles.toothChipLabel, { color: active ? '#FFF' : textPrimary }]}
+                        numberOfLines={2}
                       >
-                        <ThemedText style={[styles.symptomLabel, { color: active ? PRIMARY : textPrimary }]}>
-                          {option.label}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                        {tooth.label}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+            </View>
+          )}
 
-              <View style={styles.modalSection}>
-                <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>{t('editor.notes')}</ThemedText>
-                <TouchableOpacity
-                  style={[
-                    styles.notesInput,
-                    styles.notesInputTouchable,
-                    {
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.78)',
-                      borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.07)',
-                    },
-                  ]}
-                  activeOpacity={0.9}
-                  onPress={() => setNotesEditorVisible(true)}
-                >
-                  <ThemedText
+          <View style={styles.modalSection}>
+            <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>
+              {t('editor.date')}
+            </ThemedText>
+            <View
+              style={[
+                styles.dateContainer,
+                {
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.76)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.06)',
+                },
+              ]}
+            >
+              <FormField
+                isDark={isDark}
+                onPress={() => setShowDatePicker((prev) => !prev)}
+                value={formatDateLabel(toDateOnly(formDate), localeTag)}
+              />
+
+              {showDatePicker && Platform.OS !== 'ios' && (
+                <View style={styles.datePickerWrap}>
+                  <DateTimePicker
+                    value={formDate}
+                    mode="date"
+                    display="default"
+                    minimumDate={MIN_VALID_TOOTH_DATE}
+                    maximumDate={new Date()}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                    accentColor={PRIMARY}
+                    onChange={(event, date) => {
+                      if (date) {
+                        setFormDate(normalizeEditorDate(date));
+                      }
+
+                      if (Platform.OS !== 'ios') {
+                        setShowDatePicker(false);
+                      } else if (event?.type === 'dismissed') {
+                        setShowDatePicker(false);
+                      }
+                    }}
+                  />
+                </View>
+              )}
+              {Platform.OS === 'ios' && (
+                <IOSBottomDatePicker
+                  visible={showDatePicker}
+                  title={t('editor.chooseDate')}
+                  value={formDate}
+                  mode="date"
+                  minimumDate={MIN_VALID_TOOTH_DATE}
+                  maximumDate={new Date()}
+                  onClose={() => setShowDatePicker(false)}
+                  onConfirm={(date) => {
+                    setFormDate(normalizeEditorDate(date));
+                    setShowDatePicker(false);
+                  }}
+                  initialVariant="calendar"
+                />
+              )}
+            </View>
+          </View>
+
+          <View style={styles.modalSection}>
+            <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>
+              {t('editor.symptoms')}
+            </ThemedText>
+            <View style={styles.symptomWrap}>
+              {symptomOptions.map((option) => {
+                const active = formSymptoms.includes(option.key);
+                return (
+                  <TouchableOpacity
+                    key={option.key}
                     style={[
-                      formNotes.trim() ? styles.notesInputValue : styles.notesInputPlaceholder,
+                      styles.symptomChip,
                       {
-                        color: formNotes.trim()
-                          ? textPrimary
+                        backgroundColor: active
+                          ? `${PRIMARY}15`
                           : isDark
-                            ? 'rgba(255,255,255,0.45)'
-                            : 'rgba(90,70,60,0.45)',
+                            ? 'rgba(255,255,255,0.09)'
+                            : 'rgba(255,255,255,0.78)',
+                        borderColor: active
+                          ? PRIMARY
+                          : isDark
+                            ? 'rgba(255,255,255,0.18)'
+                            : 'rgba(0,0,0,0.07)',
                       },
                     ]}
-                    numberOfLines={4}
+                    onPress={() => toggleSymptom(option.key)}
                   >
-                    {formNotes.trim() || t('editor.notesPlaceholder')}
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
+                    <ThemedText style={[styles.symptomLabel, { color: active ? PRIMARY : textPrimary }]}>
+                      {option.label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
-              {editorMode === 'edit' && (
-                <TouchableOpacity
-                  style={styles.deleteActionButton}
-                  onPress={handleDelete}
-                  disabled={isSaving}
-                  activeOpacity={0.85}
-                >
-                  <ThemedText style={styles.deleteActionButtonText}>{t('editor.delete')}</ThemedText>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-            <TextInputOverlay
-              visible={notesEditorVisible}
-              label={t('editor.notes')}
-              value={formNotes}
+          <View style={styles.modalSection}>
+            <ThemedText style={[styles.modalSectionLabel, { color: textPrimary }]}>
+              {t('editor.notes')}
+            </ThemedText>
+            <FormField
+              isDark={isDark}
+              onPress={() => setNotesEditorVisible(true)}
+              value={formNotes.trim()}
               placeholder={t('editor.notesPlaceholder')}
               multiline
-              accentColor={PRIMARY}
-              onClose={() => setNotesEditorVisible(false)}
-              onSubmit={(next) => {
-                setFormNotes(next);
-                setNotesEditorVisible(false);
-              }}
             />
-          </BlurView>
-        </View>
-      </Modal>
+          </View>
+
+          {editorMode === 'edit' && (
+            <TouchableOpacity
+              style={styles.deleteActionButton}
+              onPress={handleDelete}
+              disabled={isSaving}
+              activeOpacity={0.85}
+            >
+              <ThemedText style={styles.deleteActionButtonText}>{t('editor.delete')}</ThemedText>
+            </TouchableOpacity>
+          )}
+        </FormSheet>
     </>
   );
 }
@@ -1279,71 +1219,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    width: '100%',
-    height: '85%',
-    maxHeight: 700,
-    minHeight: 560,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    borderTopWidth: 1,
-    overflow: 'hidden',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 22,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  closeButtonLabel: {
-    fontSize: 20,
-    fontWeight: '500',
-  },
-  saveHeaderButton: {
-    backgroundColor: PRIMARY,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  saveHeaderButtonDisabled: {
-    opacity: 0.72,
-  },
-  saveHeaderButtonText: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  modalScrollContent: {
-    paddingBottom: 18,
-  },
   selectedToothHero: {
     marginTop: 2,
     marginBottom: 14,
@@ -1371,18 +1246,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 24,
   },
-  modalSection: {
-    marginBottom: 20,
-    width: '100%',
-    alignItems: 'center',
-  },
-  modalSectionLabel: {
-    width: '96%',
-    textAlign: 'left',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
+  modalSection: { gap: 8 },
+  modalSectionLabel: { ...TYPOGRAPHY.label, alignSelf: 'flex-start' },
   toothChipWrap: {
     width: '100%',
     flexDirection: 'row',
@@ -1401,33 +1266,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
   },
-  dateContainer: {
-    width: '100%',
-    borderWidth: 1,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  dateHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-  },
-  dateValue: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  calendarPill: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarPillIcon: {
-    fontSize: 15,
-  },
+  dateContainer: { width: '100%' },
+
   datePickerWrap: {
     paddingHorizontal: 4,
     paddingBottom: 2,
@@ -1448,30 +1288,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  notesInput: {
-    width: '100%',
-    minHeight: 110,
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  notesInputTouchable: {
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-  },
-  notesInputValue: {
-    fontSize: 14,
-    lineHeight: 20,
-    width: '100%',
-  },
-  notesInputPlaceholder: {
-    fontSize: 14,
-    lineHeight: 20,
-    width: '100%',
-  },
+
   deleteActionButton: {
     width: '100%',
     marginTop: 2,

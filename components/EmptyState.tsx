@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Image } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -16,7 +16,6 @@ const EmptyState: React.FC<EmptyStateProps> = ({
   message = 'Noch nichts eingetragen für heute – los geht\'s!'
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
   const iconColor = colorScheme === 'dark' ? Colors.dark.text : '#7D5A50';
 
   // Wähle das passende Icon basierend auf dem Typ
@@ -45,7 +44,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         {getIcon()}
       </View>
       
-      <ThemedText style={styles.message}>
+      <ThemedText type="body" style={styles.message}>
         {message}
       </ThemedText>
     </ThemedView>
@@ -72,24 +71,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   message: {
-    fontSize: 16,
-    fontWeight: '500',
     textAlign: 'center',
     marginBottom: 16,
-    lineHeight: 22,
-  },
-  hintContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(125, 90, 80, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  hint: {
-    fontSize: 14,
-    marginLeft: 6,
-    // color wird dynamisch gesetzt
   },
 });
 

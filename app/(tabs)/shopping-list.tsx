@@ -24,10 +24,13 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Swipeable } from 'react-native-gesture-handler';
 
 import Header from '@/components/Header';
+import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { ThemedText } from '@/components/ThemedText';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useBottomTabOverflow } from '@/components/ui/TabBarBackground';
+import { ActionButton } from '@/components/ui/action-button';
+import { FormSection, FormSheet, FormTextInput } from '@/components/ui/form-sheet';
 import {
   LiquidGlassCard,
   PRIMARY,
@@ -318,7 +321,7 @@ function ShoppingListScreenContent() {
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [isInventorySearchVisible, setIsInventorySearchVisible] = useState(false);
   const [collapsedInventoryCategories, setCollapsedInventoryCategories] = useState<string[]>([]);
-  const [isAddShoppingExpanded, setIsAddShoppingExpanded] = useState(false);
+  const [isAddShoppingVisible, setIsAddShoppingVisible] = useState(false);
   const [isPurchasedExpanded, setIsPurchasedExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [shoppingItems, setShoppingItems] = useState<ShoppingListItem[]>([]);
@@ -326,8 +329,8 @@ function ShoppingListScreenContent() {
   const [productInfo, setProductInfo] = useState<ProductInfoState | null>(null);
 
   const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('other');
   const [isAddingItem, setIsAddingItem] = useState(false);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const newItemInputRef = useRef<TextInput>(null);
   const searchInputRef = useRef<TextInput>(null);
   const unknownNameInputRef = useRef<TextInput>(null);
@@ -397,18 +400,6 @@ function ShoppingListScreenContent() {
 
   const [unknownName, setUnknownName] = useState('');
   const [unknownCategory, setUnknownCategory] = useState('diapers');
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSubscription = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
 
   const loadState = useCallback(async () => {
     const { data, error } = await fetchShoppingState();
@@ -549,7 +540,7 @@ function ShoppingListScreenContent() {
     setIsAddingItem(true);
     const { data, error } = await upsertShoppingItem({
       title,
-      category: selectedCategory === 'all' ? 'other' : selectedCategory,
+      category: newItemCategory,
     });
     setIsAddingItem(false);
     if (error || !data) {
@@ -557,10 +548,11 @@ function ShoppingListScreenContent() {
       return;
     }
     setNewItemTitle('');
+    Keyboard.dismiss();
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsAddShoppingExpanded(false);
+    setIsAddShoppingVisible(false);
     setShoppingItems((items) => [data, ...items]);
-  }, [isAddingItem, newItemTitle, selectedCategory]);
+  }, [isAddingItem, newItemTitle, newItemCategory]);
 
   const handleTogglePurchased = useCallback(
     async (item: ShoppingListItem) => {
@@ -993,15 +985,17 @@ function ShoppingListScreenContent() {
   }, []);
 
   const openAddShopping = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setIsFiltersExpanded(false);
     setSearchQuery('');
-    setIsAddShoppingExpanded(true);
-  }, []);
+    if (!newItemTitle.trim()) {
+      setNewItemCategory(selectedCategory === 'all' ? 'other' : selectedCategory);
+    }
+    setIsAddShoppingVisible(true);
+  }, [newItemTitle, selectedCategory]);
 
   const closeAddShopping = useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsAddShoppingExpanded(false);
+    Keyboard.dismiss();
+    setIsAddShoppingVisible(false);
   }, []);
 
   const openItems = filteredShoppingItems.filter((item) => !item.is_purchased);
@@ -1174,158 +1168,45 @@ function ShoppingListScreenContent() {
     );
   };
 
-  const renderShoppingBottomDock = () => (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'position' : undefined}
-      style={styles.shoppingBottomDock}
+  const renderShoppingViewToggle = () => (
+    <View
+      style={styles.shoppingViewToggle}
+      accessibilityRole="radiogroup"
+      accessibilityLabel={t('shopping.viewAccessibility')}
     >
-      <View
+      <TouchableOpacity
         style={[
-          styles.shoppingBottomDockSurface,
-          isDark && styles.shoppingBottomDockSurfaceDark,
-          {
-            paddingBottom: isKeyboardVisible
-              ? 4
-              : 4 + insets.bottom + bottomTabOverflow,
-          },
+          styles.shoppingViewOption,
+          shoppingViewMode === 'list' && styles.shoppingViewOptionActive,
         ]}
+        onPress={() => selectShoppingViewMode('list')}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: shoppingViewMode === 'list' }}
+        accessibilityLabel={t('shopping.listView')}
       >
-        {isAddShoppingExpanded ? (
-          <LiquidGlassCard
-            style={styles.card}
-            intensity={16}
-            overlayColor="rgba(255,255,255,0.32)"
-            borderColor="rgba(125,90,80,0.08)"
-          >
-            <View style={styles.cardInner}>
-              <View style={styles.addHeaderRow}>
-                <ThemedText style={styles.sectionTitle}>{t('shopping.item')}</ThemedText>
-                <TouchableOpacity
-                  style={styles.closeInlineButton}
-                  onPress={closeAddShopping}
-                  accessibilityLabel={t('shopping.closeInput')}
-                >
-                  <IconSymbol name="xmark" size={18} color="rgba(125,90,80,0.65)" />
-                </TouchableOpacity>
-              </View>
-              {shoppingSuggestions.length > 0 ? (
-                <View style={styles.shoppingSuggestions}>
-                  <ThemedText style={styles.shoppingMeta}>
-                    {t('shopping.suggestions')}
-                  </ThemedText>
-                  <ScrollView style={{ maxHeight: 176 }} keyboardShouldPersistTaps="handled">
-                    {shoppingSuggestions.map((item) => (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={styles.shoppingSuggestion}
-                        onPress={() => handleAddShoppingItem(item.title)}
-                        disabled={isAddingItem}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('shopping.useSuggestion', { title: item.title })}
-                      >
-                        <IconSymbol name="clock" size={16} color={primaryForeground} />
-                        <ThemedText
-                          numberOfLines={1}
-                          style={[styles.shoppingTitle, { flex: 1 }, isDark && styles.shoppingTitleDark]}
-                        >
-                          {item.title}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              ) : null}
-              <View style={styles.addRow}>
-                <TextInput
-                  ref={newItemInputRef}
-                  style={styles.addInput}
-                  placeholder={t('shopping.newPlaceholder')}
-                  placeholderTextColor="rgba(125,90,80,0.5)"
-                  value={newItemTitle}
-                  onChangeText={setNewItemTitle}
-                  onSubmitEditing={() => handleAddShoppingItem()}
-                  returnKeyType="done"
-                  autoFocus
-                />
-                <TouchableOpacity
-                  style={[styles.addButton, isDark && styles.addButtonDark]}
-                  onPress={() => handleAddShoppingItem()}
-                  disabled={isAddingItem}
-                  accessibilityLabel={t('shopping.addAccessibility')}
-                >
-                  <IconSymbol name="plus" size={20} color={primaryForeground} />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.addButton, isDark && styles.addButtonDark]}
-                  onPress={async () => {
-                    if (!cameraPermission?.granted) {
-                      const response = await requestCameraPermission();
-                      if (!response.granted) return;
-                    }
-                    setPurchaseScanVisible(true);
-                  }}
-                  accessibilityLabel={t('shopping.scanAccessibility')}
-                >
-                  <IconSymbol name="barcode.viewfinder" size={20} color={primaryForeground} />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </LiquidGlassCard>
-        ) : (
-          <View style={styles.inventoryActionsRow}>
-            <TouchableOpacity
-              style={[styles.primaryButton, styles.addInventoryButtonCompact]}
-              onPress={openAddShopping}
-              accessibilityRole="button"
-              accessibilityLabel={t('shopping.openAddAccessibility')}
-            >
-              <IconSymbol name="plus" size={15} color="#FFFFFF" />
-              <ThemedText style={[styles.primaryButtonText, styles.addInventoryButtonCompactText]}>
-                {t('shopping.create')}
-              </ThemedText>
-            </TouchableOpacity>
-            <View
-              style={styles.shoppingViewToggle}
-              accessibilityRole="radiogroup"
-              accessibilityLabel={t('shopping.viewAccessibility')}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.shoppingViewOption,
-                  shoppingViewMode === 'list' && styles.shoppingViewOptionActive,
-                ]}
-                onPress={() => selectShoppingViewMode('list')}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: shoppingViewMode === 'list' }}
-                accessibilityLabel={t('shopping.listView')}
-              >
-                <IconSymbol
-                  name="list.bullet"
-                  size={18}
-                  color={shoppingViewMode === 'list' ? '#FFFFFF' : PRIMARY}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.shoppingViewOption,
-                  shoppingViewMode === 'tiles' && styles.shoppingViewOptionActive,
-                ]}
-                onPress={() => selectShoppingViewMode('tiles')}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: shoppingViewMode === 'tiles' }}
-                accessibilityLabel={t('shopping.tileView')}
-              >
-                <IconSymbol
-                  name="square.grid.2x2.fill"
-                  size={18}
-                  color={shoppingViewMode === 'tiles' ? '#FFFFFF' : PRIMARY}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+        <IconSymbol
+          name="list.bullet"
+          size={18}
+          color={shoppingViewMode === 'list' ? '#FFFFFF' : PRIMARY}
+        />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[
+          styles.shoppingViewOption,
+          shoppingViewMode === 'tiles' && styles.shoppingViewOptionActive,
+        ]}
+        onPress={() => selectShoppingViewMode('tiles')}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: shoppingViewMode === 'tiles' }}
+        accessibilityLabel={t('shopping.tileView')}
+      >
+        <IconSymbol
+          name="square.grid.2x2.fill"
+          size={18}
+          color={shoppingViewMode === 'tiles' ? '#FFFFFF' : PRIMARY}
+        />
+      </TouchableOpacity>
+    </View>
   );
 
   const renderShoppingRow = (item: ShoppingListItem) => {
@@ -1974,7 +1855,12 @@ function ShoppingListScreenContent() {
         ) : (
           <ScrollView
             style={styles.scrollView}
-            contentContainerStyle={styles.contentContainer}
+            contentContainerStyle={[
+              styles.contentContainer,
+              section === 'shopping' && {
+                paddingBottom: insets.bottom + bottomTabOverflow + 88,
+              },
+            ]}
             contentInsetAdjustmentBehavior="automatic"
           >
             {section === 'shopping' ? (
@@ -1993,6 +1879,7 @@ function ShoppingListScreenContent() {
                       })}
                     </ThemedText>
                   </View>
+                  {renderShoppingViewToggle()}
                 </View>
 
                 {openItems.length === 0 ? (
@@ -2118,7 +2005,144 @@ function ShoppingListScreenContent() {
           </ScrollView>
         )}
 
-        {!isLoading && section === 'shopping' ? renderShoppingBottomDock() : null}
+        {!isLoading && section === 'shopping' && !isAddShoppingVisible ? (
+          <FloatingAddButton
+            onPress={openAddShopping}
+            accessibilityLabel={t('shopping.openAddAccessibility')}
+            bottomInset={insets.bottom + bottomTabOverflow + 16}
+          />
+        ) : null}
+
+        <FormSheet
+          visible={isAddShoppingVisible}
+          title={t('shopping.create')}
+          isDark={isDark}
+          onClose={closeAddShopping}
+          onConfirm={() => handleAddShoppingItem()}
+          confirmLabel={t('common.save')}
+          cancelLabel={t('common.cancel')}
+          confirmDisabled={!newItemTitle.trim()}
+          busy={isAddingItem}
+          overlays={
+            <Modal visible={purchaseScanVisible} animationType="slide" onRequestClose={() => setPurchaseScanVisible(false)}>
+              <View style={styles.purchaseScanContainer}>
+                <CameraView
+                  style={styles.camera}
+                  facing="back"
+                  autofocus="on"
+                  enableTorch={torchEnabled}
+                  zoom={activeZoomStep.zoom}
+                  selectedLens={Platform.OS === 'ios' ? activeZoomStep.lens : undefined}
+                  onAvailableLensesChanged={({ lenses }) => setAvailableLenses(lenses)}
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'itf14', 'code128'],
+                  }}
+                  onBarcodeScanned={handlePurchaseScan}
+                />
+                <View style={styles.scannerOverlay} pointerEvents="box-none">
+                  {/* Vollbild-Modal ohne SafeArea: unter Dynamic Island/Notch rücken. */}
+                  {renderZoomRow(insets.top + 12)}
+                  <View style={styles.scannerFrame} pointerEvents="none" />
+                  <ThemedText style={styles.scannerHint}>
+                    {isResolvingScan
+                      ? t('scan.searchingItem')
+                      : t('scan.purchaseHint')}
+                  </ThemedText>
+                  <TouchableOpacity
+                    style={[styles.purchaseScanClose, { bottom: insets.bottom + 28 }]}
+                    onPress={() => setPurchaseScanVisible(false)}
+                  >
+                    <ThemedText style={styles.purchaseScanCloseText}>{t('common.done')}</ThemedText>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+          }
+        >
+          <FormSection isDark={isDark} label={t('common.name')}>
+            <FormTextInput
+              ref={newItemInputRef}
+              isDark={isDark}
+              placeholder={t('shopping.newPlaceholder')}
+              accessibilityLabel={t('common.name')}
+              value={newItemTitle}
+              onChangeText={setNewItemTitle}
+              onSubmitEditing={() => handleAddShoppingItem()}
+              editable={!isAddingItem}
+              returnKeyType="done"
+              autoFocus
+            />
+          </FormSection>
+          <FormSection isDark={isDark} label={t('category.label')}>
+            <View style={styles.shoppingCategoryChoices}>
+              {CATEGORY_IDS.map((categoryId) => {
+                const isActive = newItemCategory === categoryId;
+                const label = categoryLabel(categoryId);
+                return (
+                  <TouchableOpacity
+                    key={categoryId}
+                    style={[
+                      styles.filterChip,
+                      isDark && styles.filterChipDark,
+                      isActive && styles.filterChipActive,
+                      isActive && isDark && styles.filterChipActiveDark,
+                    ]}
+                    onPress={() => setNewItemCategory(categoryId)}
+                    disabled={isAddingItem}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive, disabled: isAddingItem }}
+                    accessibilityLabel={t('category.accessibility', { category: label })}
+                  >
+                    <ThemedText
+                      type="label"
+                      style={[
+                        styles.filterChipText,
+                        isDark && styles.filterChipTextDark,
+                        isActive && styles.filterChipTextActive,
+                        isActive && isDark && styles.filterChipTextActiveDark,
+                      ]}
+                    >
+                      {label}
+                    </ThemedText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </FormSection>
+          {shoppingSuggestions.length > 0 ? (
+            <FormSection isDark={isDark} label={t('shopping.suggestions')}>
+              {shoppingSuggestions.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.shoppingSuggestion}
+                  onPress={() => handleAddShoppingItem(item.title)}
+                  disabled={isAddingItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shopping.useSuggestion', { title: item.title })}
+                >
+                  <IconSymbol name="clock" size={16} color={primaryForeground} />
+                  <ThemedText type="bodyStrong" style={{ flex: 1 }}>
+                    {item.title}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </FormSection>
+          ) : null}
+          <ActionButton
+            label={t('shopping.scanAccessibility')}
+            variant="secondary"
+            isDark={isDark}
+            disabled={isAddingItem}
+            onPress={async () => {
+              Keyboard.dismiss();
+              if (!cameraPermission?.granted) {
+                const response = await requestCameraPermission();
+                if (!response.granted) return;
+              }
+              setPurchaseScanVisible(true);
+            }}
+          />
+        </FormSheet>
 
         {/* Scan-Ergebnis-Sheet */}
         <Modal visible={scanSheet !== null} transparent animationType="slide">
@@ -2404,41 +2428,6 @@ function ShoppingListScreenContent() {
           </View>
         </Modal>
 
-        {/* Einkauf per Barcode abhaken */}
-        <Modal visible={purchaseScanVisible} animationType="slide" onRequestClose={() => setPurchaseScanVisible(false)}>
-          <View style={styles.purchaseScanContainer}>
-            <CameraView
-              style={styles.camera}
-              facing="back"
-              autofocus="on"
-              enableTorch={torchEnabled}
-              zoom={activeZoomStep.zoom}
-              selectedLens={Platform.OS === 'ios' ? activeZoomStep.lens : undefined}
-              onAvailableLensesChanged={({ lenses }) => setAvailableLenses(lenses)}
-              barcodeScannerSettings={{
-                barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'itf14', 'code128'],
-              }}
-              onBarcodeScanned={handlePurchaseScan}
-            />
-            <View style={styles.scannerOverlay} pointerEvents="box-none">
-              {/* Vollbild-Modal ohne SafeArea: unter Dynamic Island/Notch rücken. */}
-              {renderZoomRow(insets.top + 12)}
-              <View style={styles.scannerFrame} pointerEvents="none" />
-              <ThemedText style={styles.scannerHint}>
-                {isResolvingScan
-                  ? t('scan.searchingItem')
-                  : t('scan.purchaseHint')}
-              </ThemedText>
-              <TouchableOpacity
-                style={[styles.purchaseScanClose, { bottom: insets.bottom + 28 }]}
-                onPress={() => setPurchaseScanVisible(false)}
-              >
-                <ThemedText style={styles.purchaseScanCloseText}>{t('common.done')}</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
         {/* Barcode für bestehenden Vorrat hinterlegen */}
         <Modal
           visible={inventoryBarcodeScanVisible}
@@ -2484,20 +2473,6 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   scrollView: { flex: 1 },
   contentContainer: { paddingHorizontal: 12, paddingBottom: 96, gap: 12 },
-  shoppingBottomDock: { flexShrink: 0 },
-  shoppingBottomDockSurface: {
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-    backgroundColor: 'rgba(250,245,244,0.94)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(125,90,80,0.08)',
-  },
-  shoppingBottomDockSurfaceDark: {
-    backgroundColor: 'rgba(20,16,34,0.94)',
-    borderTopColor: 'rgba(255,255,255,0.12)',
-  },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   segmentRow: {
     flexDirection: 'row',
@@ -2528,46 +2503,8 @@ const styles = StyleSheet.create({
   cardInner: { padding: 16, gap: 10 },
   sectionTitle: { fontSize: 16, fontWeight: '700' },
   helperText: { fontSize: 14, opacity: 0.75 },
-  addHeaderRow: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  addRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  shoppingSuggestions: { marginBottom: 10, gap: 4 },
   shoppingSuggestion: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
-  addInput: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    backgroundColor: 'rgba(255,255,255,0.55)',
-    fontSize: 15,
-  },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(142,78,198,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(142,78,198,0.18)',
-  },
-  addButtonDark: {
-    backgroundColor: 'rgba(74,38,100,0.48)',
-    borderColor: 'rgba(233,213,255,0.42)',
-  },
-  closeInlineButton: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.34)',
-  },
+  shoppingCategoryChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   searchRow: {
     height: 44,
     flexDirection: 'row',

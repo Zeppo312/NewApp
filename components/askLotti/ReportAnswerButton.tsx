@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useLocale } from '@/contexts/LocaleContext';
@@ -8,6 +8,7 @@ import { ASK_LOTTI_REPORT_REASONS, canReportLottiMessage, MAX_REPORT_DETAILS_LEN
 import { translateAskLotti } from '@/lib/askLotti/translations';
 import type { ReportReason } from '@/lib/moderation';
 import { translateModerationText } from '@/lib/moderationTranslations';
+import { ActionButton } from '@/components/ui/action-button';
 
 export function ReportAnswerButton({ message, conversationId, isDark }: {
   message: StoredChatMessage;
@@ -77,16 +78,17 @@ export function ReportAnswerButton({ message, conversationId, isDark }: {
                   placeholder={mt('report.detailsPlaceholder')} placeholderTextColor={isDark ? '#B4A7BE' : '#786779'}
                   style={[styles.input, { color, borderColor }]} />
                 {failed ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={[styles.copy, { color: isDark ? '#FFB4AB' : '#A12626' }]}>{mt('report.failedMessage')}</Text> : null}
-                <Pressable accessibilityRole="button" accessibilityState={{ disabled: !reason || sending, busy: sending }}
-                  disabled={!reason || sending} onPress={() => void submit()}
-                  style={[styles.submit, { backgroundColor: isDark ? '#7453BC' : accent, opacity: !reason || sending ? 0.5 : 1 }]}>
-                  {sending ? <ActivityIndicator color="#FFFFFF" /> : null}
-                  <Text style={styles.submitText}>{t(sending ? 'reportSending' : 'reportSubmit')}</Text>
-                </Pressable>
+                <ActionButton
+                  label={t('reportSubmit')}
+                  busyLabel={t('reportSending')}
+                  disabled={!reason}
+                  busy={sending}
+                  isDark={isDark}
+                  onPress={() => void submit()}
+                />
               </>}
-              <Pressable accessibilityRole="button" disabled={sending} onPress={close} style={styles.close}>
-                <Text style={{ color: accent }}>{mt(reported ? 'common.close' : 'common.cancel')}</Text>
-              </Pressable>
+              <ActionButton variant="ghost" label={mt(reported ? 'common.close' : 'common.cancel')}
+                disabled={sending} isDark={isDark} onPress={close} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -105,7 +107,4 @@ const styles = StyleSheet.create({
   preview: { padding: 12, borderWidth: 1, borderRadius: 12, lineHeight: 21 },
   reason: { minHeight: 48, borderWidth: 1, borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: { minHeight: 88, borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 16 },
-  submit: { minHeight: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 10, padding: 12 },
-  submitText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
-  close: { minHeight: 48, alignItems: 'center', justifyContent: 'center' },
 });
