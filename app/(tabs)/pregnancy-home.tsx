@@ -28,7 +28,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Canvas, RoundedRect, LinearGradient as SkiaLinearGradient, RadialGradient, Circle, vec } from '@shopify/react-native-skia';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 import VoiceLogModal from '@/components/VoiceLogModal';
 import PremiumHighlights, { type PremiumHighlightItem } from '@/components/PremiumHighlights';
@@ -50,84 +49,6 @@ let ACTIVE_PREGNANCY_HOME_LOCALE = DEFAULT_PREGNANCY_HOME_LOCALE;
 let PREGNANCY_HOME_LOCALE_TAG = getPregnancyHomeLocaleTag(ACTIVE_PREGNANCY_HOME_LOCALE);
 const t = (key: PregnancyHomeTranslationKey, params?: Record<string, string | number>) =>
   translatePregnancyHomeText(ACTIVE_PREGNANCY_HOME_LOCALE, key, params);
-
-function GlassLensOverlay({ radius = 20 }: { radius?: number }) {
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const width = layout.width;
-  const height = layout.height;
-  const minDim = Math.min(width, height);
-  const maxDim = Math.max(width, height);
-  const lensRadius = Math.min(radius, minDim / 2);
-  const strokeRadius = Math.max(0, lensRadius - 1);
-
-  return (
-    <View
-      pointerEvents="none"
-      style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}
-      onLayout={(event) => {
-        const { width, height } = event.nativeEvent.layout;
-        if (width !== layout.width || height !== layout.height) {
-          setLayout({ width, height });
-        }
-      }}
-    >
-      {width > 0 && height > 0 ? (
-        <Canvas style={{ width, height }}>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <SkiaLinearGradient
-              start={vec(0, 0)}
-              end={vec(width, height)}
-              colors={[
-                'rgba(255, 255, 255, 0.45)',
-                'rgba(94, 61, 179, 0.08)',
-                'rgba(255, 255, 255, 0.18)',
-              ]}
-              positions={[0, 0.6, 1]}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.2, height * 0.15)}
-              r={maxDim * 0.9}
-              colors={['rgba(255, 255, 255, 0.55)', 'rgba(255, 255, 255, 0)']}
-            />
-          </RoundedRect>
-          <RoundedRect x={0} y={0} width={width} height={height} r={lensRadius}>
-            <RadialGradient
-              c={vec(width * 0.85, height * 0.85)}
-              r={maxDim * 0.8}
-              colors={['rgba(94, 61, 179, 0)', 'rgba(94, 61, 179, 0.18)']}
-            />
-          </RoundedRect>
-          <RoundedRect
-            x={0.5}
-            y={0.5}
-            width={width - 1}
-            height={height - 1}
-            r={strokeRadius}
-            style="stroke"
-            strokeWidth={1}
-            color="rgba(255, 255, 255, 0.6)"
-          />
-          <Circle cx={width * 0.22} cy={height * 0.28} r={minDim * 0.18}>
-            <RadialGradient
-              c={vec(width * 0.22, height * 0.28)}
-              r={minDim * 0.18}
-              colors={['rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-          <Circle cx={width * 0.72} cy={height * 0.18} r={minDim * 0.1}>
-            <RadialGradient
-              c={vec(width * 0.72, height * 0.18)}
-              r={minDim * 0.1}
-              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0)']}
-            />
-          </Circle>
-        </Canvas>
-      ) : null}
-    </View>
-  );
-}
 
 function TipHighlightDots() {
   const dotOne = React.useState(() => new Animated.Value(0))[0];
@@ -1423,7 +1344,6 @@ export default function PregnancyHomeScreen() {
                     onPress={openBirthPreparationOverview}
                     activeOpacity={0.9}
                   >
-                    <GlassLensOverlay radius={20} />
                     <TipHighlightDots />
                     <View style={styles.tipCardRow}>
                       <View style={styles.tipIconWrap}>

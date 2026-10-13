@@ -52,7 +52,7 @@ Die Versionsangaben beziehen sich auf [package.json](package.json); App-Version 
 | Sprache | TypeScript 6 |
 | Backend | Supabase: Auth, Postgres, Realtime, Storage und Edge Functions |
 | Abonnements | RevenueCat mit `react-native-purchases` |
-| Oberfläche | Reanimated, Skia und eigene UI-Komponenten |
+| Oberfläche | Reanimated und eigene UI-Komponenten |
 | Native Erweiterungen | Expo Config Plugins, Swift-Module und WidgetKit-Targets |
 | Fehlerberichte | Sentry |
 | Prüfung | ESLint, TypeScript und Jest mit `jest-expo` |
