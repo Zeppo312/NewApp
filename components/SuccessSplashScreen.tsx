@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Animated, Easing, Modal } from 'react-native';
 
 interface SuccessSplashScreenProps {
@@ -8,7 +8,7 @@ interface SuccessSplashScreenProps {
 }
 
 const SuccessSplashScreen: React.FC<SuccessSplashScreenProps> = ({ visible, onFinish, backgroundColor }) => {
-  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = React.useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     if (visible) {

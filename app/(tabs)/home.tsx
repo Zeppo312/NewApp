@@ -1,79 +1,1192 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Platform, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { TYPOGRAPHY } from '@/constants/Typography';
+import { CONTENT_LAYOUT, METRIC_TEXT, METRIC_TEXT_LARGE } from '@/constants/DesignGuide';
+import { useSleepOffline } from '@/contexts/SleepOfflineContext';
+import { saveErrorMessage } from '@/lib/saveErrorMessage';
+import { pendingSleepOverlay } from '@/lib/sleepOfflineActions';
+import { homeSleepMinutes, validHomeSleepRows } from '@/lib/homeSleepTotals';
+import { SLEEP_OFFLINE_ENABLED, readSleepSyncSnapshot } from '@/lib/sleepSyncContract';
+import { AppState } from 'react-native';
+import { type ActivitySaveOutcome } from '@/lib/activityDrafts';
+import { backendHost, localDateKey, localScopeKey, readSnapshot, writeSnapshot, validRows, readSnapshotRevision, invalidateReadSnapshots } from '@/lib/localReadSnapshots';
+import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStorage';
+import { boundedRead } from '@/lib/boundedRead';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocale } from '@/contexts/LocaleContext';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePathname, useRouter , useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { ThemedBackground } from '@/components/ThemedBackground';
+import { HomeBackground, androidHomeShadow } from '@/components/ui/home-glass';
+import { HomeCarouselDots, HomeOverviewHeading } from '@/components/ui/home-overview';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { ContentCard } from '@/components/ui/content-card';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { TablerIcon } from '@/components/ui/TablerIcon';
-import { getBabyInfo, getDiaryEntries, getCurrentPhase, getPhaseProgress, getMilestonesByPhase, getDailyEntries } from '@/lib/baby';
-import { supabase } from '@/lib/supabase';
-import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useActiveBaby } from '@/contexts/ActiveBabyContext';
+import { supabase, addBabyCareEntry, getBabyCareEntriesForDate } from '@/lib/supabase';
+import { useAdvisorAccess } from '@/lib/advisor/access';
+import { useVoiceLogAccess } from '@/lib/voiceLog/access';
+import { useVoiceLogSavedListener } from '@/lib/voiceLog/floatingButton';
+import { useAskLottiAccess } from '@/lib/askLotti/access';
+import VoiceLogModal from '@/components/VoiceLogModal';
+import PremiumHighlights, {
+  type PremiumHighlightItem,
+} from '@/components/PremiumHighlights';
 import ActivityInputModal from '@/components/ActivityInputModal';
+import NightWakePrompt from '@/components/NightWakePrompt';
+import { useNightWakePrompt } from '@/hooks/useNightWakePrompt';
 import SleepQuickAddModal, { SleepQuickEntry } from '@/components/SleepQuickAddModal';
+import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { LottiWeekCard } from '@/components/LottiWeekCard';
+import { LottiWeekRing } from '@/components/LottiWeekRing';
+import { getLocalProfileName } from '@/lib/localProfile';
+import { buildFeedingOverview } from '@/lib/feedingOverview';
+import { loadAllVisibleSleepEntries } from '@/lib/sleepSharing';
+import type { SleepEntry } from '@/lib/sleepData';
+import { getDailySleepTargetMinutes } from '@/lib/sleep-window';
+import { cancelBabyReminderNotification } from '@/lib/babyReminderNotifications';
+import { cancelLocalFeedingReminders } from '@/lib/feedingReminderNotifications';
+import { shouldCancelStaleReminderAfterManualEntry } from '@/lib/reminderCancellationGuards';
+import { emitLottiMoment } from '@/lib/lottiMomentEvents';
+import BaseSortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
+import {
+  DEFAULT_HOME_LOCALE,
+  getHomeLocaleTag,
+  HomeTranslationKey,
+  translateHomeText,
+} from '@/lib/homeTranslations';
+import { useFontScale, useLineLimit, useTileGridMetrics } from '@/lib/fontScaling';
 
-// Tägliche Tipps für Mamas
-const dailyTips = [
-  "Nimm dir heute 10 Minuten nur für dich – eine kleine Auszeit kann Wunder wirken!",
-  "Trinke ausreichend Wasser – besonders wichtig für dich und dein Baby.",
-  "Ein kurzer Spaziergang an der frischen Luft kann deine Stimmung heben.",
-  "Bitte um Hilfe, wenn du sie brauchst – du musst nicht alles alleine schaffen.",
-  "Genieße die kleinen Momente mit deinem Baby – sie wachsen so schnell.",
-  "Schlaf, wann immer dein Baby schläft – Ruhe ist wichtig für dich.",
-  "Lass die Hausarbeit auch mal liegen – dein Wohlbefinden hat Vorrang.",
-  "Feiere jeden kleinen Fortschritt – sowohl deinen als auch den deines Babys.",
-  "Vertraue deinem Instinkt – du kennst dein Baby am besten.",
-  "Vergiss nicht zu essen – deine Energie ist wichtig für dich und dein Baby."
+let ACTIVE_HOME_LOCALE = DEFAULT_HOME_LOCALE;
+let HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
+const LOTTI_SLEEPING_GIF = require('@/assets/images/lotti-sleeping.gif');
+
+function formatHoursCompact(minutes: number): string {
+  const safe = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safe / 60);
+  const mins = safe % 60;
+  if (hours === 0) return `${mins} min`;
+  if (mins === 0) return `${hours} h`;
+  return `${hours} h ${mins}`;
+}
+const t = (key: HomeTranslationKey, params?: Record<string, string | number>) =>
+  translateHomeText(ACTIVE_HOME_LOCALE, key, params);
+
+type HomeActiveTimer = {
+  entryId?: string | null;
+  source: 'sleep' | 'daily';
+  start: number;
+  route: '/(tabs)/sleep-tracker' | '/(tabs)/daily_old';
+  label: string;
+  title: string;
+  hint: string;
+  iconName: string;
+  accentColor: string;
+  accentBackground: string;
+};
+
+type HomeQuickAccessCardId =
+  | 'recipe-generator'
+  | 'shopping-list'
+  | 'baby'
+  | 'planner'
+  | 'daily'
+  | 'selfcare'
+  | 'babyweather'
+  | 'recommendations'
+  | 'weight-tracker'
+  | 'size-tracker'
+  | 'tooth-tracker'
+  | 'period-tracker'
+  | 'milestones';
+
+type HomeQuickAccessCardConfig = {
+  id: HomeQuickAccessCardId;
+  title: string;
+  description: string;
+  iconName: string;
+  destination: any;
+  cardBackgroundColor: string;
+  iconBackgroundColor: string;
+  blurIntensity?: number;
+};
+
+type HomeQuickAccessCardDefinition = Omit<HomeQuickAccessCardConfig, 'title' | 'description'> & {
+  titleKey: HomeTranslationKey;
+  descriptionKey: HomeTranslationKey;
+};
+
+const HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX = 'home_quick_access_order';
+const HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX = 'home_quick_access_hidden';
+
+// Nicht-KI-Kacheln bleiben in allen Tarifen sichtbar; die Zielseiten prüfen den Zugriff.
+const HOME_QUICK_ACCESS_CARD_DEFINITIONS: HomeQuickAccessCardDefinition[] = [
+  {
+    id: 'recipe-generator',
+    titleKey: 'card.recipes.title',
+    descriptionKey: 'card.recipes.description',
+    iconName: 'fork.knife',
+    destination: '/recipe-generator',
+    cardBackgroundColor: 'rgba(168, 196, 193, 0.6)',
+    iconBackgroundColor: 'rgba(168, 196, 193, 0.9)',
+  },
+  {
+    id: 'shopping-list',
+    titleKey: 'card.shopping.title',
+    descriptionKey: 'card.shopping.description',
+    iconName: 'cart',
+    destination: {
+      pathname: '/shopping-list',
+      params: { returnTo: 'home' },
+    },
+    cardBackgroundColor: 'rgba(210, 235, 215, 0.6)',
+    iconBackgroundColor: 'rgba(140, 200, 150, 0.9)',
+  },
+  {
+    id: 'baby',
+    titleKey: 'card.baby.title',
+    descriptionKey: 'card.baby.description',
+    iconName: 'person.fill',
+    destination: '/(tabs)/baby',
+    cardBackgroundColor: 'rgba(255, 190, 190, 0.6)',
+    iconBackgroundColor: 'rgba(255, 140, 160, 0.9)',
+  },
+  {
+    id: 'planner',
+    titleKey: 'card.planner.title',
+    descriptionKey: 'card.planner.description',
+    iconName: 'calendar',
+    destination: '/planner',
+    cardBackgroundColor: 'rgba(220, 200, 255, 0.6)',
+    iconBackgroundColor: 'rgba(200, 130, 220, 0.9)',
+  },
+  {
+    id: 'daily',
+    titleKey: 'card.daily.title',
+    descriptionKey: 'card.daily.description',
+    iconName: 'list.bullet',
+    destination: '/(tabs)/daily_old',
+    cardBackgroundColor: 'rgba(255, 215, 180, 0.6)',
+    iconBackgroundColor: 'rgba(255, 180, 130, 0.9)',
+  },
+  {
+    id: 'selfcare',
+    titleKey: 'card.selfcare.title',
+    descriptionKey: 'card.selfcare.description',
+    iconName: 'heart.fill',
+    destination: '/(tabs)/selfcare',
+    cardBackgroundColor: 'rgba(255, 210, 230, 0.6)',
+    iconBackgroundColor: 'rgba(255, 160, 180, 0.9)',
+  },
+  {
+    id: 'babyweather',
+    titleKey: 'card.weather.title',
+    descriptionKey: 'card.weather.description',
+    iconName: 'cloud.sun.fill',
+    destination: '/(tabs)/babyweather',
+    cardBackgroundColor: 'rgba(200, 225, 255, 0.6)',
+    iconBackgroundColor: 'rgba(140, 190, 255, 0.9)',
+    blurIntensity: 16,
+  },
+  {
+    id: 'recommendations',
+    titleKey: 'card.shop.title',
+    descriptionKey: 'card.shop.description',
+    iconName: 'bag.fill',
+    destination: '/prints-shop',
+    cardBackgroundColor: 'rgba(255, 235, 200, 0.6)',
+    iconBackgroundColor: 'rgba(255, 200, 120, 0.9)',
+  },
+  {
+    id: 'weight-tracker',
+    titleKey: 'card.weight.title',
+    descriptionKey: 'card.weight.description',
+    iconName: 'chart.line.uptrend.xyaxis',
+    destination: '/(tabs)/weight-tracker',
+    cardBackgroundColor: 'rgba(200, 240, 200, 0.6)',
+    iconBackgroundColor: 'rgba(130, 210, 130, 0.9)',
+  },
+  {
+    id: 'size-tracker',
+    titleKey: 'card.size.title',
+    descriptionKey: 'card.size.description',
+    iconName: 'ruler',
+    destination: '/(tabs)/size-tracker',
+    cardBackgroundColor: 'rgba(200, 230, 240, 0.6)',
+    iconBackgroundColor: 'rgba(130, 180, 210, 0.9)',
+  },
+  {
+    id: 'tooth-tracker',
+    titleKey: 'card.teeth.title',
+    descriptionKey: 'card.teeth.description',
+    iconName: 'mouth.fill',
+    destination: '/tooth-tracker',
+    cardBackgroundColor: 'rgba(200, 220, 255, 0.6)',
+    iconBackgroundColor: 'rgba(150, 180, 240, 0.9)',
+  },
+  // Period-Tracker-Kachel vorerst ausgeblendet (Screen bleibt erhalten).
+  {
+    id: 'milestones',
+    titleKey: 'card.milestones.title',
+    descriptionKey: 'card.milestones.description',
+    iconName: 'flag.fill',
+    destination: '/milestones',
+    cardBackgroundColor: 'rgba(255, 228, 195, 0.6)',
+    iconBackgroundColor: 'rgba(255, 190, 130, 0.9)',
+  },
 ];
 
-export default function HomeScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  const { user } = useAuth();
-  const { isBabyBorn } = useBabyStatus();
-  const router = useRouter();
+const HOME_QUICK_ACCESS_ORDER = HOME_QUICK_ACCESS_CARD_DEFINITIONS.map(({ id }) => id);
 
-  const [babyInfo, setBabyInfo] = useState<any>(null);
-  const [diaryEntries, setDiaryEntries] = useState<any[]>([]);
+const normalizeHomeQuickAccessOrder = (value: unknown): HomeQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [...HOME_QUICK_ACCESS_ORDER];
+
+  const seen = new Set<HomeQuickAccessCardId>();
+  const normalized: HomeQuickAccessCardId[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    if (!HOME_QUICK_ACCESS_ORDER.includes(entry as HomeQuickAccessCardId)) continue;
+    if (seen.has(entry as HomeQuickAccessCardId)) continue;
+    seen.add(entry as HomeQuickAccessCardId);
+    normalized.push(entry as HomeQuickAccessCardId);
+  }
+
+  for (const id of HOME_QUICK_ACCESS_ORDER) {
+    if (!seen.has(id)) {
+      normalized.push(id);
+    }
+  }
+
+  return normalized;
+};
+
+const buildHomeQuickAccessOrderStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${HOME_QUICK_ACCESS_ORDER_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const buildHomeQuickAccessHiddenStorageKey = (userId?: string | null, babyId?: string | null) =>
+  `${HOME_QUICK_ACCESS_HIDDEN_STORAGE_PREFIX}:${userId ?? 'anonymous'}:${babyId ?? 'default'}`;
+
+const normalizeHomeQuickAccessHidden = (value: unknown): HomeQuickAccessCardId[] => {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<HomeQuickAccessCardId>();
+  const normalized = value
+    .filter((entry): entry is HomeQuickAccessCardId => {
+      return typeof entry === 'string' && HOME_QUICK_ACCESS_ORDER.includes(entry as HomeQuickAccessCardId);
+    })
+    .filter((entry) => {
+      if (seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    })
+    .sort((left, right) => HOME_QUICK_ACCESS_ORDER.indexOf(left) - HOME_QUICK_ACCESS_ORDER.indexOf(right));
+
+  return normalized.slice(0, Math.max(0, HOME_QUICK_ACCESS_ORDER.length - 1));
+};
+
+type SortableQuickAccessGridProps = {
+  items: HomeQuickAccessCardConfig[];
+  order: HomeQuickAccessCardId[];
+  isEditing: boolean;
+  onPressItem: (item: HomeQuickAccessCardConfig) => void;
+  onRequestEditMode: () => void;
+  onOrderChange: (order: HomeQuickAccessCardId[]) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
+  renderTile: (params: { item: HomeQuickAccessCardConfig; isEditing: boolean; isActive: boolean }) => React.ReactNode;
+  scrollConfig?: {
+    metricsRef: React.MutableRefObject<SortableTileGridScrollMetrics>;
+    scrollToOffset: (offsetY: number) => void;
+    slowEdgeThreshold?: number;
+    fastEdgeThreshold?: number;
+    slowSpeed?: number;
+    fastSpeed?: number;
+  };
+  style?: StyleProp<ViewStyle>;
+};
+
+function SortableQuickAccessGrid({
+  items,
+  order,
+  isEditing,
+  onPressItem,
+  onRequestEditMode,
+  onOrderChange,
+  onDragStateChange,
+  renderTile,
+  scrollConfig,
+  style,
+}: SortableQuickAccessGridProps) {
+  const orderedItems = useMemo(
+    () =>
+      order
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is HomeQuickAccessCardConfig => !!item),
+    [items, order],
+  );
+
+  return (
+    <BaseSortableTileGrid
+      items={orderedItems}
+      isEditing={isEditing}
+      onPressItem={onPressItem}
+      onRequestEditMode={onRequestEditMode}
+      onOrderChange={(nextItems) => onOrderChange(nextItems.map(({ id }) => id))}
+      onDragStateChange={onDragStateChange}
+      renderTile={renderTile}
+      scrollConfig={scrollConfig}
+      style={style}
+    />
+  );
+}
+
+function formatDurationSeconds(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  return [hours, minutes, seconds]
+    .map((value, index) => (index === 0 ? String(value) : String(value).padStart(2, '0')))
+    .join(':');
+}
+
+function buildSleepHomeTimer(entries: SleepEntry[] | undefined): HomeActiveTimer | null {
+  if (!entries?.length) {
+    return null;
+  }
+
+  const activeSleepEntry = entries.find((entry) => {
+    const startMs = new Date(entry.start_time).getTime();
+    return !entry.end_time && Number.isFinite(startMs);
+  });
+
+  if (!activeSleepEntry) {
+    return null;
+  }
+
+  const start = new Date(activeSleepEntry.start_time).getTime();
+  if (!Number.isFinite(start)) {
+    return null;
+  }
+
+  return {
+    source: 'sleep',
+    entryId: activeSleepEntry.id,
+    start,
+    route: '/(tabs)/sleep-tracker',
+    label: t('timer.sleep.label'),
+    title: t('timer.sleep.title'),
+    hint: t('timer.sleep.hint'),
+    iconName: 'moon.fill',
+    accentColor: '#4FA9FF',
+    accentBackground: 'rgba(79, 169, 255, 0.18)',
+  };
+}
+
+function buildDailyHomeTimer(entry: {
+  id?: string | null;
+  feeding_type?: string | null;
+  start_time?: string | null;
+} | null): HomeActiveTimer | null {
+  if (!entry?.start_time) {
+    return null;
+  }
+
+  const start = new Date(entry.start_time).getTime();
+  if (!Number.isFinite(start)) {
+    return null;
+  }
+
+  const feedingType = typeof entry.feeding_type === 'string' ? entry.feeding_type : null;
+  const config =
+    feedingType === 'BREAST'
+      ? { title: t('timer.breast'), iconName: 'heart.fill', accentColor: '#FF8EB0', accentBackground: 'rgba(255, 142, 176, 0.18)' }
+      : feedingType === 'BOTTLE'
+      ? { title: t('timer.bottle'), iconName: 'drop.fill', accentColor: '#F2A65A', accentBackground: 'rgba(242, 166, 90, 0.18)' }
+      : feedingType === 'SOLIDS'
+      ? { title: t('timer.solids'), iconName: 'fork.knife', accentColor: '#A274FF', accentBackground: 'rgba(162, 116, 255, 0.18)' }
+      : feedingType === 'PUMP'
+      ? { title: t('timer.pump'), iconName: 'drop.circle.fill', accentColor: '#76C7C0', accentBackground: 'rgba(118, 199, 192, 0.18)' }
+      : feedingType === 'WATER'
+      ? { title: t('timer.water'), iconName: 'drop.fill', accentColor: '#5BB6E6', accentBackground: 'rgba(91, 182, 230, 0.18)' }
+      : null;
+
+  if (!config) {
+    return null;
+  }
+
+  return {
+    source: 'daily',
+    entryId: entry.id,
+    start,
+    route: '/(tabs)/daily_old',
+    label: t('timer.daily.label'),
+    title: config.title,
+    hint: t('timer.daily.hint'),
+    iconName: config.iconName,
+    accentColor: config.accentColor,
+    accentBackground: config.accentBackground,
+  };
+}
+
+function pickLatestHomeTimer(...timers: (HomeActiveTimer | null)[]): HomeActiveTimer | null {
+  return timers
+    .filter((timer): timer is HomeActiveTimer => timer !== null)
+    .sort((a, b) => b.start - a.start)[0] ?? null;
+}
+
+
+
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex.replace('#', '');
+  const full =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((char) => char + char)
+          .join('')
+      : normalized;
+  const value = Number.parseInt(full, 16);
+
+  if (!Number.isFinite(value)) {
+    return `rgba(255, 255, 255, ${alpha})`;
+  }
+
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+type ActiveTimerCardProps = {
+  timer: HomeActiveTimer;
+  elapsedSeconds: number;
+  sinceLabel: string;
+  isDark: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  onPress: () => void;
+};
+
+function ActiveTimerCard({
+  timer,
+  elapsedSeconds,
+  sinceLabel,
+  isDark,
+  textPrimary,
+  textSecondary,
+  onPress,
+}: ActiveTimerCardProps) {
+  const pulse = useState(() => new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1600,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1600,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const accent = timer.accentColor;
+  const formatted = formatDurationSeconds(elapsedSeconds);
+  const lastColon = formatted.lastIndexOf(':');
+  const mainTime = lastColon >= 0 ? formatted.slice(0, lastColon) : formatted;
+  const secondsPart = lastColon >= 0 ? formatted.slice(lastColon + 1) : null;
+
+  const haloStyle = {
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.9] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.35] }) }],
+  };
+  const liveDotStyle = {
+    opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }),
+    transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1.15] }) }],
+  };
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.activeTimerCard,
+        {
+          backgroundColor: isDark ? 'rgba(10, 8, 26, 0.55)' : 'rgba(255, 255, 255, 0.55)',
+          borderColor: hexToRgba(accent, isDark ? 0.35 : 0.28),
+          shadowColor: accent,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.9}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={[hexToRgba(accent, isDark ? 0.28 : 0.2), hexToRgba(accent, 0.06), 'rgba(0, 0, 0, 0)']}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.activeTimerGradient}
+      />
+
+      <View style={styles.activeTimerHeader}>
+        <View style={styles.activeTimerIconStack}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.activeTimerIconHalo, { backgroundColor: hexToRgba(accent, 0.22) }, haloStyle]}
+          />
+          <View
+            style={[
+              styles.activeTimerIconWrap,
+              { backgroundColor: hexToRgba(accent, isDark ? 0.22 : 0.16), borderColor: hexToRgba(accent, 0.45) },
+            ]}
+          >
+            <IconSymbol name={timer.iconName as any} size={18} color={accent} />
+          </View>
+        </View>
+
+        <View style={styles.activeTimerContent}>
+          <View style={styles.activeTimerLabelRow}>
+            <Animated.View style={[styles.activeTimerLiveDot, { backgroundColor: accent }, liveDotStyle]} />
+            <ThemedText adaptive={false} style={[styles.activeTimerLabel, { color: accent }]}>
+              {timer.label.toUpperCase()}
+            </ThemedText>
+          </View>
+          <ThemedText adaptive={false} style={[styles.activeTimerTitle, { color: textPrimary }]}>
+            {timer.title}
+          </ThemedText>
+        </View>
+
+        <View style={[styles.activeTimerChevron, { backgroundColor: hexToRgba(accent, isDark ? 0.16 : 0.12) }]}>
+          <IconSymbol name="chevron.right" size={14} color={accent} />
+        </View>
+      </View>
+
+      <View style={styles.activeTimerStatsRow}>
+        <View style={styles.activeTimerElapsedRow}>
+          <ThemedText adaptive={false} style={[styles.activeTimerElapsed, { color: textPrimary }]}>
+            {mainTime}
+          </ThemedText>
+          {secondsPart ? (
+            <ThemedText adaptive={false} style={[styles.activeTimerElapsedSeconds, { color: hexToRgba(accent, 0.95) }]}>
+              {`:${secondsPart}`}
+            </ThemedText>
+          ) : null}
+        </View>
+
+        <View
+          style={[
+            styles.activeTimerSincePill,
+            {
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+              borderColor: hexToRgba(accent, 0.22),
+            },
+          ]}
+        >
+          <ThemedText adaptive={false} style={[styles.activeTimerSince, { color: textSecondary }]}>
+            {sinceLabel}
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={[styles.activeTimerTrack, { backgroundColor: hexToRgba(accent, 0.14) }]}>
+        <Animated.View
+          style={[
+            styles.activeTimerTrackFill,
+            {
+              backgroundColor: accent,
+              opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.9] }),
+              transform: [
+                { scaleX: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
+              ],
+            },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const SLEEP_CARD_STARS: { left: number; top: number; size: number; delay: number }[] = [
+  { left: 0.06, top: 0.12, size: 4, delay: 0 },
+  { left: 0.3, top: 0.8, size: 3, delay: 900 },
+  { left: 0.46, top: 0.16, size: 3.5, delay: 1600 },
+  { left: 0.58, top: 0.9, size: 3, delay: 400 },
+  { left: 0.7, top: 0.08, size: 4, delay: 2200 },
+  { left: 0.93, top: 0.42, size: 3, delay: 1200 },
+  { left: 0.88, top: 0.86, size: 3.5, delay: 2800 },
+];
+
+function TwinkleStar({ left, top, size, delay, color }: { left: number; top: number; size: number; delay: number; color: string }) {
+  const twinkle = useState(() => new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(twinkle, { toValue: 1, duration: 1800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(twinkle, { toValue: 0, duration: 2200, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [twinkle, delay]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: `${left * 100}%`,
+        top: `${top * 100}%`,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity: twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.95] }),
+        transform: [{ scale: twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.3] }) }],
+      }}
+    />
+  );
+}
+
+type SleepTimerCardProps = {
+  elapsedSeconds: number;
+  sinceLabel: string;
+  babyName: string | null;
+  todayMinutes: number;
+  targetMinutes: number;
+  isDark: boolean;
+  onPress: () => void;
+};
+
+function SleepTimerCard({ elapsedSeconds, sinceLabel, babyName, todayMinutes, targetMinutes, isDark, onPress }: SleepTimerCardProps) {
+  const breath = useState(() => new Animated.Value(0))[0];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breath, { toValue: 1, duration: 3800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(breath, { toValue: 0, duration: 3800, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [breath]);
+
+  const formatted = formatDurationSeconds(elapsedSeconds);
+  const lastColon = formatted.lastIndexOf(':');
+  const mainTime = lastColon >= 0 ? formatted.slice(0, lastColon) : formatted;
+  const secondsPart = lastColon >= 0 ? formatted.slice(lastColon + 1) : null;
+
+  const trimmedName = babyName?.trim() ?? '';
+  const title = trimmedName ? t('timer.sleep.titleNamed', { name: trimmedName }) : t('timer.sleep.title');
+  const progress = targetMinutes > 0 ? Math.min(1, Math.max(0, todayMinutes / targetMinutes)) : 0;
+  const progressLabel = t('timer.sleep.progress', {
+    done: formatHoursCompact(todayMinutes),
+    target: formatHoursCompact(targetMinutes),
+  });
+
+  const gradient = (isDark ? ['#171C3B', '#252651', '#1B1F42'] : ['#E6ECFF', '#EFE9FF', '#E4EDFF']) as [string, string, string];
+  const border = isDark ? 'rgba(157, 176, 255, 0.35)' : 'rgba(120, 140, 230, 0.32)';
+  const textMain = isDark ? '#F3F1FF' : '#3A3766';
+  const textSoft = isDark ? 'rgba(220, 222, 255, 0.72)' : 'rgba(78, 76, 120, 0.8)';
+  const labelColor = isDark ? '#B9C4FF' : '#5E63C9';
+  const starColor = isDark ? '#F7DC9B' : '#F0B94B';
+  const glow = isDark ? 'rgba(250, 220, 150, 0.14)' : 'rgba(255, 214, 140, 0.2)';
+  const pillBg = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.55)';
+
+  const lottiStyle = {
+    transform: [{ translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }],
+  };
+  const glowStyle = {
+    opacity: breath.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
+    transform: [{ scale: breath.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] }) }],
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.sleepCard, { borderColor: border, shadowColor: isDark ? '#0B0E2A' : '#7C86D6' }]}
+      onPress={onPress}
+      activeOpacity={0.9}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${formatted}, ${sinceLabel}, ${progressLabel}`}
+      accessibilityHint={t('timer.sleep.hint')}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={gradient}
+        locations={[0, 0.55, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.activeTimerGradient}
+      />
+      {SLEEP_CARD_STARS.map((star, index) => (
+        <TwinkleStar key={index} {...star} color={starColor} />
+      ))}
+
+      <View style={styles.sleepCardBody}>
+        <View style={styles.sleepCardText}>
+          <View style={styles.activeTimerLabelRow}>
+            <IconSymbol name="moon.fill" size={11} color={labelColor} />
+            <ThemedText adaptive={false} style={[styles.activeTimerLabel, { color: labelColor }]}>
+              {t('timer.sleep.label').toUpperCase()}
+            </ThemedText>
+          </View>
+          <ThemedText adaptive={false} style={[styles.sleepCardTitle, { color: textMain }]} numberOfLines={2}>
+            {title}
+          </ThemedText>
+          <ThemedText adaptive={false} style={[styles.sleepCardSubtitle, { color: textSoft }]} numberOfLines={1}>
+            {t('timer.sleep.subtitle')}
+          </ThemedText>
+
+          <View style={styles.sleepCardElapsedRow}>
+            <ThemedText adaptive={false} style={[styles.sleepCardElapsed, { color: textMain }]}>
+              {mainTime}
+            </ThemedText>
+            {secondsPart ? (
+              <ThemedText adaptive={false} style={[styles.sleepCardElapsedSeconds, { color: labelColor }]}>
+                {`:${secondsPart}`}
+              </ThemedText>
+            ) : null}
+          </View>
+
+        </View>
+
+        <View style={styles.sleepCardLottiWrap}>
+          <Animated.View pointerEvents="none" style={[styles.sleepCardGlow, { backgroundColor: glow }, glowStyle]} />
+          <Animated.Image source={LOTTI_SLEEPING_GIF} style={[styles.sleepCardLotti, lottiStyle]} resizeMode="contain" />
+        </View>
+      </View>
+
+      <View style={styles.sleepCardFooter}>
+        <View style={styles.sleepCardFooterRow}>
+          <ThemedText adaptive={false} style={[styles.sleepCardFooterText, { color: textSoft }]} numberOfLines={1}>
+            {progressLabel}
+          </ThemedText>
+          <ThemedText adaptive={false} style={[styles.sleepCardFooterText, { color: textSoft }]}>
+            {sinceLabel}
+          </ThemedText>
+        </View>
+        <View style={[styles.sleepCardTrack, { backgroundColor: pillBg, borderColor: border }]}>
+          <View style={[styles.sleepCardTrackFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: labelColor }]} />
+        </View>
+      </View>
+
+      <View style={[styles.sleepCardChevron, { backgroundColor: pillBg, borderColor: border }]}>
+        <IconSymbol name="chevron.right" size={12} color={labelColor} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+export default function HomeScreen() {
+  const { locale } = useLocale();
+  ACTIVE_HOME_LOCALE = locale;
+  HOME_LOCALE_TAG = getHomeLocaleTag(ACTIVE_HOME_LOCALE);
+  // Verwende useAdaptiveColors für korrekte Farben basierend auf Hintergrundbild
+  const adaptiveColors = useAdaptiveColors();
+  const colorScheme = adaptiveColors.effectiveScheme;
+  const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark' || adaptiveColors.isDarkBackground;
+
+  // Dark Mode angepasste Farben
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassCardBg = 'transparent';
+  const sleepOffline = useSleepOffline();
+  const homePendingRef = useRef(sleepOffline.actions); homePendingRef.current = sleepOffline.actions;
+  const { user } = useAuth();
+  const userId = user?.id;
+  const { activeBabyId, activeBaby, isReady: isActiveBabyReady } = useActiveBaby();
+  const { isBabyBorn } = useBabyStatus();
+  const pathname = usePathname();
+  const router = useRouter();
+  // Premium-Funktionen bleiben ohne Zugriff als gesperrte Vorschau sichtbar.
+  const advisorAccess = useAdvisorAccess();
+  // Sprach-Logging: gleiches Premium-Gating.
+  const voiceLogAccess = useVoiceLogAccess();
+  const askLottiAccess = useAskLottiAccess();
+  const [showVoiceLogModal, setShowVoiceLogModal] = useState(false);
+  const DEFAULT_OVERVIEW_HEIGHT = 230;
+  const OVERVIEW_ROTATION_INTERVAL_MS = 20000;
+  const OVERVIEW_ROTATION_PAUSE_MS = 12000;
+
   const [dailyEntries, setDailyEntries] = useState<any[]>([]);
-  const [currentPhase, setCurrentPhase] = useState<any>(null);
-  const [phaseProgress, setPhaseProgress] = useState<any>(null);
-  const [milestones, setMilestones] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dailyTip, setDailyTip] = useState("");
   const [userName, setUserName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [showInputModal, setShowInputModal] = useState(false);
   const [selectedActivityType, setSelectedActivityType] = useState<'feeding' | 'diaper' | 'other'>('feeding');
   const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
-  const [todaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [confirmedTodaySleepMinutes, setTodaySleepMinutes] = useState(0);
+  const [homeSleepRows, setHomeSleepRows] = useState<{scope:string;entries:SleepEntry[]} | null>(null);
+  const [activeHomeTimer, setActiveHomeTimer] = useState<HomeActiveTimer | null>(null);
+  const [activeHomeTimerNow, setActiveHomeTimerNow] = useState(() => Date.now());
   const [showSleepModal, setShowSleepModal] = useState(false);
   const [sleepModalStart, setSleepModalStart] = useState(new Date());
+  const [overviewCarouselWidth, setOverviewCarouselWidth] = useState(0);
+  const [overviewIndex, setOverviewIndex] = useState(0);
+  const [overviewSummaryHeight, setOverviewSummaryHeight] = useState<number | null>(null);
+  const [quickAccessOrder, setQuickAccessOrder] = useState<HomeQuickAccessCardId[]>([...HOME_QUICK_ACCESS_ORDER]);
+  const [hiddenQuickAccessIds, setHiddenQuickAccessIds] = useState<HomeQuickAccessCardId[]>([]);
+  const [isQuickAccessEditMode, setIsQuickAccessEditMode] = useState(false);
+  const [isQuickAccessDragging, setIsQuickAccessDragging] = useState(false);
+  // Kachelmaße wachsen mit der Systemschriftgröße mit, damit Titel und
+  // Beschreibung bei großer Schrift nicht abgeschnitten werden.
+  const layoutFontScale = useFontScale();
+  // Enge Zeilen-Layouts (Text + Button nebeneinander) brechen bei großer
+  // Schrift auseinander — ab ~130 % stapeln wir sie stattdessen.
+  const isStackedLayout = layoutFontScale >= 1.3;
+  const twoLineLimit = useLineLimit(2);
+  const tileMetrics = useTileGridMetrics();
+  const { width: windowWidth } = useWindowDimensions();
+  const safeAreaInsets = useSafeAreaInsets();
+  const isCompactAndroid = Platform.OS === 'android' && windowWidth < 400;
+  const scaledCardSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  const scaledHiddenTileSizing = useMemo(
+    () => ({
+      minHeight: tileMetrics.itemHeight,
+      height: tileMetrics.itemHeight,
+    }),
+    [tileMetrics.itemHeight],
+  );
+  // Versteckte Kacheln liegen in einem einfachen Wrap-Grid — bei einer Spalte
+  // muss der Wrapper auf volle Breite gehen.
+  const hiddenTileWrapperSizing = useMemo(
+    () => (tileMetrics.isSingleColumn ? { width: '100%' as const } : null),
+    [tileMetrics.isSingleColumn],
+  );
+  const mainScrollRef = useRef<ScrollView>(null);
+  const quickAccessScrollMetricsRef = useRef<SortableTileGridScrollMetrics>({
+    offsetY: 0,
+    viewportHeight: 0,
+    contentHeight: 0,
+  });
+  const overviewScrollRef = useRef<ScrollView>(null);
+  const overviewIndexRef = useRef(0);
+  const overviewRotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const overviewRotationPauseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isAutoScrollingRef = useRef(false);
+  const quickAccessOrderStorageKey = useMemo(
+    () => buildHomeQuickAccessOrderStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickAccessHiddenStorageKey = useMemo(
+    () => buildHomeQuickAccessHiddenStorageKey(user?.id, activeBabyId),
+    [activeBabyId, user?.id],
+  );
+  const quickAccessCardById = useMemo(
+    () =>
+      new Map(
+        HOME_QUICK_ACCESS_CARD_DEFINITIONS.map(({ titleKey, descriptionKey, ...card }) => [
+          card.id,
+          {
+            ...card,
+            title: translateHomeText(locale, titleKey),
+            description: translateHomeText(locale, descriptionKey),
+          },
+        ] as const),
+      ),
+    [locale],
+  );
+  const hiddenQuickAccessIdSet = useMemo(() => new Set(hiddenQuickAccessIds), [hiddenQuickAccessIds]);
+  const orderedQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter(
+          (card): card is HomeQuickAccessCardConfig =>
+            !!card &&
+            !hiddenQuickAccessIdSet.has(card.id),
+        ),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
+  const hiddenQuickAccessCards = useMemo(
+    () =>
+      quickAccessOrder
+        .map((id) => quickAccessCardById.get(id))
+        .filter(
+          (card): card is HomeQuickAccessCardConfig =>
+            !!card &&
+            hiddenQuickAccessIdSet.has(card.id),
+        ),
+    [hiddenQuickAccessIdSet, quickAccessCardById, quickAccessOrder],
+  );
+
+  const triggerHaptic = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  };
+
+  const handleNavigate = (destination: any) => {
+    triggerHaptic();
+    router.push(destination);
+  };
+
+  const openQuickAccessEditor = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setIsQuickAccessEditMode(true);
+  }, []);
+
+  const closeQuickAccessEditor = useCallback(() => {
+    setIsQuickAccessDragging(false);
+    setIsQuickAccessEditMode(false);
+  }, []);
+
+  const persistQuickAccessHiddenIds = useCallback(
+    async (nextHiddenIds: HomeQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizeHomeQuickAccessHidden(nextHiddenIds);
+
+        if (normalized.length === 0) {
+          await AsyncStorage.removeItem(quickAccessHiddenStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessHiddenStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Home: failed to save hidden quick access tiles', error);
+      }
+    },
+    [quickAccessHiddenStorageKey],
+  );
+
+  const mergeVisibleOrderIntoQuickAccessOrder = useCallback(
+    (nextVisibleOrder: HomeQuickAccessCardId[]) => {
+      const hiddenIds = new Set(hiddenQuickAccessIds);
+      const visibleQueue = [...nextVisibleOrder];
+      const nextOrder: HomeQuickAccessCardId[] = [];
+
+      for (const id of quickAccessOrder) {
+        if (hiddenIds.has(id)) {
+          nextOrder.push(id);
+          continue;
+        }
+
+        const nextVisibleId = visibleQueue.shift();
+        if (nextVisibleId) {
+          nextOrder.push(nextVisibleId);
+        }
+      }
+
+      nextOrder.push(...visibleQueue);
+      return normalizeHomeQuickAccessOrder(nextOrder);
+    },
+    [hiddenQuickAccessIds, quickAccessOrder],
+  );
+
+  const handleHideQuickAccessCard = useCallback(
+    (itemId: HomeQuickAccessCardId) => {
+      if (orderedQuickAccessCards.length <= 1) {
+        Alert.alert(t('common.notice'), t('alert.keepTile'));
+        return;
+      }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = normalizeHomeQuickAccessHidden([...currentHiddenIds, itemId]);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [orderedQuickAccessCards.length, persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreQuickAccessCard = useCallback(
+    (itemId: HomeQuickAccessCardId) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      setHiddenQuickAccessIds((currentHiddenIds) => {
+        const nextHiddenIds = currentHiddenIds.filter((hiddenId) => hiddenId !== itemId);
+        void persistQuickAccessHiddenIds(nextHiddenIds);
+        return nextHiddenIds;
+      });
+    },
+    [persistQuickAccessHiddenIds],
+  );
+
+  const handleRestoreAllQuickAccessCards = useCallback(() => {
+    if (!hiddenQuickAccessIds.length) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setHiddenQuickAccessIds([]);
+    void persistQuickAccessHiddenIds([]);
+  }, [hiddenQuickAccessIds.length, persistQuickAccessHiddenIds]);
+
+  const loadLocalProfileName = useCallback(async () => {
+    if (!userId) {
+      setUserName('');
+      return;
+    }
+    const localProfile = await getLocalProfileName(userId);
+    const nextName = localProfile?.firstName || localProfile?.lastName || '';
+    setUserName(nextName);
+  }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLocalProfileName();
+    }, [loadLocalProfileName])
+  );
 
   useEffect(() => {
-    if (user) {
-      loadData();
-      // Wähle einen zufälligen Tipp für den Tag
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
-    } else {
-      setIsLoading(false);
+    overviewIndexRef.current = overviewIndex;
+  }, [overviewIndex]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    (async () => {
+      try {
+        const [storedOrder, storedHiddenIds] = await Promise.all([
+          AsyncStorage.getItem(quickAccessOrderStorageKey),
+          AsyncStorage.getItem(quickAccessHiddenStorageKey),
+        ]);
+        if (!isActive) return;
+
+        setQuickAccessOrder(
+          storedOrder ? normalizeHomeQuickAccessOrder(JSON.parse(storedOrder)) : [...HOME_QUICK_ACCESS_ORDER],
+        );
+        setHiddenQuickAccessIds(
+          storedHiddenIds ? normalizeHomeQuickAccessHidden(JSON.parse(storedHiddenIds)) : [],
+        );
+      } catch (error) {
+        console.error('Home: failed to load quick access order or hidden tiles', error);
+        if (isActive) {
+          setQuickAccessOrder([...HOME_QUICK_ACCESS_ORDER]);
+          setHiddenQuickAccessIds([]);
+        }
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
+  }, [quickAccessHiddenStorageKey, quickAccessOrderStorageKey]);
+
+  const persistQuickAccessOrder = useCallback(
+    async (nextOrder: HomeQuickAccessCardId[]) => {
+      try {
+        const normalized = normalizeHomeQuickAccessOrder(nextOrder);
+
+        if (normalized.every((id, index) => id === HOME_QUICK_ACCESS_ORDER[index])) {
+          await AsyncStorage.removeItem(quickAccessOrderStorageKey);
+          return;
+        }
+
+        await AsyncStorage.setItem(quickAccessOrderStorageKey, JSON.stringify(normalized));
+      } catch (error) {
+        console.error('Home: failed to save quick access order', error);
+      }
+    },
+    [quickAccessOrderStorageKey],
+  );
+
+  const handleReorderQuickAccess = useCallback(
+    (nextVisibleOrder: HomeQuickAccessCardId[]) => {
+      const normalized = mergeVisibleOrderIntoQuickAccessOrder(nextVisibleOrder);
+      setQuickAccessOrder(normalized);
+      void persistQuickAccessOrder(normalized);
+    },
+    [mergeVisibleOrderIntoQuickAccessOrder, persistQuickAccessOrder],
+  );
+
+  const stopOverviewRotation = useCallback(() => {
+    if (overviewRotationIntervalRef.current) {
+      clearInterval(overviewRotationIntervalRef.current);
+      overviewRotationIntervalRef.current = null;
     }
-  }, [user]);
+  }, []);
+
+  const startOverviewRotation = useCallback(() => {
+    if (!overviewCarouselWidth) return;
+    stopOverviewRotation();
+
+    const slideCount = 2;
+    if (slideCount <= 1) return;
+
+    overviewRotationIntervalRef.current = setInterval(() => {
+      const nextIndex = (overviewIndexRef.current + 1) % slideCount;
+      overviewIndexRef.current = nextIndex;
+      setOverviewIndex(nextIndex);
+      isAutoScrollingRef.current = true;
+      overviewScrollRef.current?.scrollTo({
+        x: nextIndex * overviewCarouselWidth,
+        animated: true,
+      });
+    }, OVERVIEW_ROTATION_INTERVAL_MS);
+  }, [overviewCarouselWidth, OVERVIEW_ROTATION_INTERVAL_MS, stopOverviewRotation]);
+
+  const scheduleOverviewRotationResume = useCallback(() => {
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+    }
+    overviewRotationPauseTimeoutRef.current = setTimeout(() => {
+      startOverviewRotation();
+    }, OVERVIEW_ROTATION_PAUSE_MS);
+  }, [OVERVIEW_ROTATION_PAUSE_MS, startOverviewRotation]);
+
+  useEffect(() => {
+    startOverviewRotation();
+    return () => {
+      stopOverviewRotation();
+      if (overviewRotationPauseTimeoutRef.current) {
+        clearTimeout(overviewRotationPauseTimeoutRef.current);
+        overviewRotationPauseTimeoutRef.current = null;
+      }
+    };
+  }, [startOverviewRotation, stopOverviewRotation]);
+
+  const handleOverviewScrollBeginDrag = () => {
+    isAutoScrollingRef.current = false;
+    stopOverviewRotation();
+    if (overviewRotationPauseTimeoutRef.current) {
+      clearTimeout(overviewRotationPauseTimeoutRef.current);
+      overviewRotationPauseTimeoutRef.current = null;
+    }
+  };
+
+  const handleOverviewScrollEndDrag = () => {
+    scheduleOverviewRotationResume();
+  };
+
+  useEffect(() => {
+    const syncNow = () => setActiveHomeTimerNow(Date.now());
+    const interval = setInterval(syncNow, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Funktion für Pull-to-Refresh
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      if (!isActiveBabyReady) {
+        return;
+      }
       // Lade die Daten neu
-      await loadData();
-      // Wähle einen neuen zufälligen Tipp
-      const randomTip = dailyTips[Math.floor(Math.random() * dailyTips.length)];
-      setDailyTip(randomTip);
+      await loadData({ isRefreshing: true });
     } catch (error) {
       console.error('Error during refresh:', error);
     } finally {
@@ -81,77 +1194,100 @@ export default function HomeScreen() {
     }
   };
 
-  const loadData = async () => {
-    try {
-      if (!refreshing) {
-        setIsLoading(true);
-      }
+  const homeDateKey = localDateKey(new Date(activeHomeTimerNow));
+  const homeScopeKey = `${user?.id}:${activeBabyId}:${homeDateKey}`;
+  const todaySleepMinutes = homeSleepRows?.scope === homeScopeKey
+    ? homeSleepMinutes(pendingSleepOverlay(homeSleepRows.entries, sleepOffline.actions),new Date(activeHomeTimerNow),new Date(activeHomeTimerNow)) : confirmedTodaySleepMinutes;
+  const homeScopeRef = useRef(homeScopeKey);
+  homeScopeRef.current = homeScopeKey;
+  const homeFlight = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const [readStates, setReadStates] = useState<Record<string, { verifiedAt?: string; failed?: boolean; loading?: boolean }>>({});
+  const timerParts = useRef<{ sleep: HomeActiveTimer | null; care: HomeActiveTimer | null }>({ sleep: null, care: null });
+  useEffect(() => {
+    setDailyEntries([]); setTodaySleepMinutes(0); setActiveHomeTimer(null); setReadStates({});
+    setHomeSleepRows(null);
+    timerParts.current = { sleep: null, care: null };
+  }, [homeScopeKey]);
 
-      // Benutzernamen laden
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name')
-        .eq('id', user?.id)
-        .single();
-
-      if (profileError) {
-        console.error('Error loading user profile:', profileError);
-      } else if (profileData && profileData.first_name) {
-        setUserName(profileData.first_name);
-      }
-
-      // Baby-Informationen laden
-      const { data: babyData } = await getBabyInfo();
-      setBabyInfo(babyData);
-
-      // Tagebucheinträge laden (nur die neuesten 5)
-      const { data: diaryData } = await getDiaryEntries();
-      if (diaryData) {
-        setDiaryEntries(diaryData.slice(0, 5));
-      }
-
-      // Alltags-Einträge für heute laden
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      const { data: dailyData, error: dailyError } = await supabase
-        .from('baby_care_entries')
-        .select('*')
-        .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
-        .order('start_time', { ascending: false });
-
-      if (!dailyError && dailyData) {
-        setDailyEntries(dailyData);
-      }
-
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
-
-      // Aktuelle Entwicklungsphase laden
-      const { data: phaseData } = await getCurrentPhase();
-      if (phaseData) {
-        setCurrentPhase(phaseData);
-
-        // Fortschritt für die aktuelle Phase berechnen
-        const { progress, completedCount, totalCount } = await getPhaseProgress(phaseData.phase_id);
-        setPhaseProgress({ progress, completedCount, totalCount });
-
-        // Meilensteine für die aktuelle Phase laden
-        const { data: milestonesData } = await getMilestonesByPhase(phaseData.phase_id);
-        if (milestonesData) {
-          setMilestones(milestonesData);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load home data:', err);
-    } finally {
+  function loadData(_options?: { isRefreshing?: boolean }): Promise<void> {
+    const key = homeScopeKey;
+    if (homeFlight.current?.key === key) return homeFlight.current.promise;
+    const generation = localHealthGeneration(); const readRevision = readSnapshotRevision();
+    const scope = { backendHost: backendHost(), userId: user?.id ?? '', babyId: activeBabyId, localDateKey: homeDateKey };
+    const current = () => homeScopeRef.current === key && readRevision === readSnapshotRevision() && localHealthAllowed(scope.userId, generation);
+    const task = (async () => {
+      if (!current()) return;
+      const today = new Date(); const start = new Date(today); start.setHours(0, 0, 0, 0);
+      const end = new Date(today); end.setHours(23, 59, 59, 999);
+      const [care, sleep, sleepRows] = await Promise.all([
+        readSnapshot(scope, 'home-care', validRows),
+        readSnapshot(scope, 'home-sleep', (v): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0),
+        readSnapshot(scope, 'home-sleep-rows', validHomeSleepRows),
+      ]);
+      if (!current()) return;
+      if (care) setDailyEntries(care.data);
+      if (sleep) setTodaySleepMinutes(sleep.data);
+      if (sleepRows && (!sleep || sleepRows.verifiedAt===sleep.verifiedAt)) setHomeSleepRows({scope:key,entries:sleepRows.data});
+      else if (sleep) setHomeSleepRows(null);
+      setReadStates(previous => ({ ...previous,
+        care: { verifiedAt: care?.verifiedAt ?? previous.care?.verifiedAt, loading: true },
+        sleep: { verifiedAt: sleep?.verifiedAt ?? previous.sleep?.verifiedAt, loading: true },
+        timer: { ...previous.timer, loading: true },
+      }));
       setIsLoading(false);
-    }
-  };
+      const mark = (dataset: string, verifiedAt?: string) => {
+        if (current()) setReadStates(previous => ({ ...previous, [dataset]: { verifiedAt: verifiedAt ?? previous[dataset]?.verifiedAt, failed: !verifiedAt } }));
+      };
+      await Promise.allSettled([
+        (async () => {
+          try {
+            const data = await boundedRead(localScopeKey(scope) + ':home-care', async signal => {
+              const result = await getBabyCareEntriesForDate(today, activeBabyId ?? undefined, signal);
+              if (result.error) throw result.error; return result.data ?? [];
+            });
+            if (!current()) return;
+            const at = new Date().toISOString(); setDailyEntries(data); mark('care', at);
+            await writeSnapshot(scope, 'home-care', data.map(({id,entry_type,start_time,end_time,feeding_type,feeding_volume_ml,feeding_side,diaper_type}) => ({id,entry_type,start_time,end_time,feeding_type,feeding_volume_ml,feeding_side,diaper_type})), at, generation, readRevision).catch(() => {});
+          } catch { mark('care'); }
+        })(),
+        (async () => {
+          try {
+            const result = await boundedRead(localScopeKey(scope) + ':home-sleep', signal => fetchTodaySleepMinutes(start, end, signal));
+            if (!current()) return;
+            const at = new Date().toISOString(); setTodaySleepMinutes(result.totalMinutes); timerParts.current.sleep = result.activeSleepTimer; mark('sleep', at);
+            if (result.serverEntries) setHomeSleepRows({scope:key,entries:result.serverEntries});
+            await writeSnapshot(scope, 'home-sleep', result.totalMinutes, at, generation, readRevision).catch(() => {});
+            if (result.serverEntries) await writeSnapshot(scope,'home-sleep-rows',result.serverEntries.map(({id,baby_id,start_time,end_time,duration_minutes})=>({id,baby_id,start_time,end_time,duration_minutes})),at,generation,readRevision).catch(()=>{});
+            return true;
+          } catch { mark('sleep'); return false; }
+        })().then(async sleepConfirmed => {
+          try {
+            const timer = await boundedRead(localScopeKey(scope) + ':home-timer', signal => loadActiveDailyTimer(signal));
+            if (!current()) return;
+            timerParts.current.care = timer;
+            if (sleepConfirmed) { setActiveHomeTimer(pickLatestHomeTimer(timerParts.current.sleep, timer)); mark('timer', new Date().toISOString()); }
+            else mark('timer');
+          } catch { mark('timer'); }
+        }),
+      ]);
+    })().finally(() => { if (homeFlight.current?.promise === task) homeFlight.current = null; if (current()) setIsLoading(false); else if (homeScopeRef.current === key && localHealthAllowed(scope.userId, generation) && readRevision !== readSnapshotRevision()) void loadData(); });
+    homeFlight.current = { key, promise: task }; return task;
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user || !isActiveBabyReady) {
+        return;
+      }
+
+      void loadData();
+    }, [user, activeBabyId, isActiveBabyReady, homeDateKey])
+  );
+
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void loadData(); });
+    return () => listener.remove();
+  }, [homeScopeKey]);
 
   // Formatiere das aktuelle Datum
   const formatDate = () => {
@@ -161,12 +1297,7 @@ export default function HomeScreen() {
       month: 'long',
       day: 'numeric'
     };
-    return new Date().toLocaleDateString('de-DE', options);
-  };
-
-  // Berechne die Anzahl der heutigen Mahlzeiten
-  const getTodayFeedings = () => {
-    return dailyEntries.filter(entry => entry.entry_type === 'feeding').length;
+    return new Date().toLocaleDateString(HOME_LOCALE_TAG, options);
   };
 
   // Berechne die Anzahl der heutigen Windelwechsel
@@ -184,144 +1315,224 @@ export default function HomeScreen() {
     return `${mins}m`;
   };
 
-  // Berechne die Anzahl der heutigen Einträge (für Referenz, wird nicht mehr angezeigt)
-  const getTodayEntries = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return diaryEntries.filter(entry => {
-      const entryDate = new Date(entry.entry_date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    }).length;
-  };
-
-  // Berechne die Anzahl der heute erreichten Meilensteine (für Referenz, wird nicht mehr angezeigt)
-  const getTodayMilestones = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return milestones.filter(milestone => {
-      if (!milestone.completion_date) return false;
-      const completionDate = new Date(milestone.completion_date);
-      completionDate.setHours(0, 0, 0, 0);
-      return completionDate.getTime() === today.getTime();
-    }).length;
-  };
-
   // Handle stat item press
   const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
     if (type === 'sleep') {
-      setSleepModalStart(new Date());
-      setShowSleepModal(true);
+      handleNavigate('/(tabs)/sleep-tracker');
       return;
     }
-    setSelectedActivityType(type);
-    setSelectedSubType(null);
-    setShowInputModal(true);
+    handleNavigate({
+      pathname: '/(tabs)/daily_old',
+      params: { quickAction: type },
+    });
   };
 
   // Load only daily entries (for quick refresh after adding entries)
-  const loadDailyEntriesOnly = async () => {
+  useEffect(() => {
+    const ids = new Set(sleepOffline.actions.filter(action => !['confirmed','discarded'].includes(action.state)).map(action => action.originalEntryId));
+    setActiveHomeTimer(current => current?.entryId && ids.has(current.entryId) ? null : current);
+    if (sleepOffline.actions.some(action => ['confirmed','discarded'].includes(action.state))) void loadData();
+  }, [sleepOffline.actions]);
+
+  const loadDailyEntriesOnly = () => loadData({ isRefreshing: true });
+
+  const loadActiveDailyTimer = async (signal?: AbortSignal): Promise<HomeActiveTimer | null> => {
+    if (!activeBabyId) {
+      return null;
+    }
+
     try {
-      const today = new Date();
-      const startOfDay = new Date(today);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(today);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      console.log('Loading daily entries for date:', today.toISOString());
-
-      // Direct query to baby_care_entries table to ensure fresh data
-      const { data: dailyData, error } = await supabase
+      const query = supabase
         .from('baby_care_entries')
-        .select('*')
-        .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .eq('user_id', user?.id)
-        .order('start_time', { ascending: false });
+        .select('id,feeding_type,start_time')
+        .eq('baby_id', activeBabyId)
+        .eq('entry_type', 'feeding')
+        .is('end_time', null)
+        .order('start_time', { ascending: false })
+        .limit(10);
+      const { data, error } = await (signal ? query.abortSignal(signal) : query);
 
       if (error) {
-        console.error('Error loading daily entries:', error);
-        return;
+        console.error('Error loading active daily timer for home:', error);
+        throw error;
       }
 
-      if (dailyData) {
-        console.log('Loaded daily entries:', dailyData.length, 'entries');
-        setDailyEntries(dailyData);
-      }
+      const openEntries = Array.isArray(data) ? data : [];
+      const activeDailyEntry =
+        openEntries.find((entry) => buildDailyHomeTimer(entry) !== null) ?? null;
 
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
-    } catch (err) {
-      console.error('Failed to load daily entries:', err);
+      return buildDailyHomeTimer(activeDailyEntry);
+    } catch (error) {
+      console.error('Failed to resolve active daily timer for home:', error);
+      throw error;
     }
   };
 
-  const fetchTodaySleepMinutes = async (startOfDay: Date, endOfDay: Date) => {
+  const fetchTodaySleepMinutes = async (
+    startOfDay: Date,
+    endOfDay: Date,
+    signal?: AbortSignal
+  ): Promise<{ totalMinutes: number; activeSleepTimer: HomeActiveTimer | null; serverEntries?: SleepEntry[] }> => {
     try {
       if (!user?.id) {
-        setTodaySleepMinutes(0);
-        return;
+        return { totalMinutes: 0, activeSleepTimer: null };
       }
 
-      const startIso = startOfDay.toISOString();
-      const endIso = endOfDay.toISOString();
-      const overlapFilter = [
-        `and(start_time.lte.${endIso},end_time.is.null)`,
-        `and(start_time.lte.${endIso},end_time.gte.${startIso})`
-      ].join(',');
-
-      const { data, error } = await supabase
-        .from('sleep_entries')
-        .select('start_time,end_time')
-        .eq('user_id', user.id)
-        .or(overlapFilter);
-
-      if (error || !data) {
-        console.error('Error loading sleep entries for today:', error);
-        setTodaySleepMinutes(0);
-        return;
+      const result = SLEEP_OFFLINE_ENABLED && activeBabyId ? await readSleepSyncSnapshot(user.id,activeBabyId,null,signal) : null;
+      const { success, entries:rawEntries, error } = result ? {success:result.status==='available',entries:result.status==='available'?result.entries:null,error:result.status}
+        : await loadAllVisibleSleepEntries(activeBabyId ?? undefined, signal);
+      if (!success || !rawEntries) {
+        console.error('Error loading visible sleep entries for today:', error);
+        throw new Error(error ?? 'Sleep read failed');
       }
+      const entries:SleepEntry[] = rawEntries.map(entry=>({...entry,duration_minutes:entry.duration_minutes??undefined,notes:entry.notes??undefined,quality:entry.quality??undefined}));
 
-      const totalMinutes = data.reduce((sum, entry) => {
-        const entryStart = new Date(entry.start_time);
-        const rawEnd = entry.end_time ? new Date(entry.end_time) : new Date();
-        const clampedStart = entryStart < startOfDay ? startOfDay : entryStart;
-        const clampedEnd = rawEnd > endOfDay ? endOfDay : rawEnd;
-        const diff = clampedEnd.getTime() - clampedStart.getTime();
+      const now = new Date();
+      const visibleEntries = pendingSleepOverlay(entries, homePendingRef.current);
+      const activeSleepTimer = buildSleepHomeTimer(visibleEntries);
+      const intervals = entries
+        .map((entry) => {
+          const entryStart = new Date(entry.start_time);
+          const entryEnd = entry.end_time ? new Date(entry.end_time) : now;
+          const isValid = Number.isFinite(entryStart.getTime()) && Number.isFinite(entryEnd.getTime()) && entryEnd > entryStart;
+          const overlapsToday = entryStart <= endOfDay && entryEnd >= startOfDay;
+
+          if (!isValid || !overlapsToday) {
+            return null;
+          }
+
+          // Für die Home-Kachel den vollständigen Schlafblock zählen (ab Startzeit),
+          // sobald er den heutigen Tag berührt.
+          return { start: entryStart, end: entryEnd };
+        })
+        .filter((interval): interval is { start: Date; end: Date } => interval !== null)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      const mergedIntervals = intervals.reduce<{ start: Date; end: Date }[]>((acc, interval) => {
+        const last = acc[acc.length - 1];
+        if (!last || interval.start.getTime() > last.end.getTime()) {
+          acc.push(interval);
+          return acc;
+        }
+
+        if (interval.end.getTime() > last.end.getTime()) {
+          last.end = interval.end;
+        }
+        return acc;
+      }, []);
+
+      const totalMinutes = mergedIntervals.reduce((sum, interval) => {
+        const diff = interval.end.getTime() - interval.start.getTime();
         return diff > 0 ? sum + Math.round(diff / 60000) : sum;
       }, 0);
 
-      setTodaySleepMinutes(totalMinutes);
+      return { totalMinutes, activeSleepTimer, serverEntries:entries.filter(entry=>new Date(entry.start_time)<=endOfDay&&(!entry.end_time||new Date(entry.end_time)>=startOfDay)) };
     } catch (error) {
       console.error('Failed to calculate today sleep minutes:', error);
-      setTodaySleepMinutes(0);
+      throw error;
     }
   };
 
   // Handle save entry from modal
-  const handleSaveEntry = async (payload: any) => {
-    console.log('handleSaveEntry - Received payload:', JSON.stringify(payload, null, 2));
-    console.log('handleSaveEntry - selectedActivityType:', selectedActivityType);
-    console.log('handleSaveEntry - selectedSubType:', selectedSubType);
+  const {
+    promptVisible: nightWakePromptVisible,
+    promptCandidate: nightWakeCandidate,
+    promptFeedingStart: nightWakeFeedingStart,
+    promptBusy: nightWakeBusy,
+    maybeOfferNightWake,
+    pickWake: pickNightWake,
+    truncateNight,
+    dismissNightWakePrompt,
+  } = useNightWakePrompt({
+    userId: user?.id,
+    babyId: activeBabyId,
+    onAfterSplit: () => loadDailyEntriesOnly(),
+  });
 
-    // Close modal
-    setShowInputModal(false);
-    setSelectedActivityType('feeding');
-    setSelectedSubType(null);
+  const handleSaveEntry = async (payload: any, options?: { draftManaged?: boolean }): Promise<ActivitySaveOutcome> => {
+    console.log('Home care save requested');
+    const entryType =
+      payload?.entry_type === 'feeding' || payload?.entry_type === 'diaper'
+        ? payload.entry_type
+        : selectedActivityType;
 
+    if (entryType !== 'feeding' && entryType !== 'diaper') {
+      Alert.alert(t('common.error'), t('alert.unknownEntry'));
+      return { status: 'rejected' };
+    }
+
+    const { data, error, saveStatus } = await addBabyCareEntry({
+      entry_type: entryType,
+      start_time: payload.start_time,
+      end_time: payload.end_time ?? null,
+      notes: payload.notes ?? null,
+      feeding_type: payload.feeding_type ?? null,
+      feeding_volume_ml: payload.feeding_volume_ml ?? null,
+      feeding_side: payload.feeding_side ?? null,
+      diaper_type: payload.diaper_type ?? null,
+      diaper_fever_measured: payload.diaper_fever_measured ?? null,
+      diaper_temperature_c: payload.diaper_temperature_c ?? null,
+      diaper_suppository_given: payload.diaper_suppository_given ?? null,
+      diaper_suppository_dose_mg: payload.diaper_suppository_dose_mg ?? null,
+    }, activeBabyId ?? undefined, {
+      expectedUserId: user?.id, expectedLocalGeneration: localHealthGeneration(),
+      diaperInventoryItemId: payload.diaper_inventory_item_id ?? null,
+      bottleInventoryItemId: payload.bottle_inventory_item_id ?? null,
+    });
+
+    if (error || !data?.id) {
+      console.error('Error saving baby care entry:', error);
+      Alert.alert(t('common.error'), saveErrorMessage(error, ACTIVE_HOME_LOCALE, t('alert.entrySaveFailed')));
+      return { status: saveStatus === 'rejected' ? 'rejected' : 'confirmation_unknown', error };
+    }
+
+    if (
+      entryType === 'feeding' &&
+      shouldCancelStaleReminderAfterManualEntry({
+        startTime: payload.start_time,
+        endTime: payload.end_time ?? null,
+      })
+    ) {
+      try {
+        await cancelLocalFeedingReminders();
+        if (user?.id && activeBabyId) {
+          await cancelBabyReminderNotification({
+            userId: user.id,
+            babyId: activeBabyId,
+            reminderType: 'feeding',
+          });
+        }
+      } catch (reminderError) {
+        console.error('Failed to cancel stale feeding reminders after home entry:', reminderError);
+      }
+    }
+
+    if (!options?.draftManaged) { setShowInputModal(false); setSelectedActivityType('feeding'); setSelectedSubType(null); }
+
+    const outcome: ActivitySaveOutcome = data?.id ? { status: 'confirmed', entryId: data.id } : { status: 'confirmation_unknown' };
+    if (user?.id) await invalidateReadSnapshots(user.id, activeBabyId ?? undefined, ['home-care','daily-care']).catch(() => {});
     // Quick reload of daily entries to show the new entry immediately
     await loadDailyEntriesOnly();
+
+    if (entryType === 'feeding' && payload.start_time) {
+      void maybeOfferNightWake({
+        startTime: payload.start_time,
+        endTime: payload.end_time ?? null,
+        feedingType: payload.feeding_type ?? null,
+      });
+    }
+    return outcome;
   };
 
   const handleSaveSleepQuickEntry = async (entry: SleepQuickEntry) => {
     if (!user?.id) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um Schlaf zu speichern.');
+      Alert.alert(t('common.notice'), t('alert.signInForSleep'));
       return;
     }
     try {
       const payload = {
         user_id: user.id,
+        baby_id: activeBabyId ?? null,
         start_time: entry.start.toISOString(),
         end_time: entry.end ? entry.end.toISOString() : null,
         quality: entry.quality,
@@ -332,10 +1543,11 @@ export default function HomeScreen() {
       const { error } = await supabase.from('sleep_entries').insert(payload);
       if (error) {
         console.error('Error saving sleep entry:', error);
-        Alert.alert('Fehler', 'Schlaf konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), saveErrorMessage(error, ACTIVE_HOME_LOCALE, t('alert.sleepSaveFailed')));
         return;
       }
 
+      emitLottiMoment('sleep');
       setShowSleepModal(false);
 
       const today = new Date();
@@ -343,335 +1555,782 @@ export default function HomeScreen() {
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(today);
       endOfDay.setHours(23, 59, 59, 999);
-      await fetchTodaySleepMinutes(startOfDay, endOfDay);
+      await loadData({ isRefreshing: true });
     } catch (err) {
       console.error('Failed to save sleep entry:', err);
-      Alert.alert('Fehler', 'Schlafeintrag konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), saveErrorMessage(err, ACTIVE_HOME_LOCALE, t('alert.sleepEntrySaveFailed')));
     }
   };
 
+  // Nach dem Sprach-Logging alles neu laden, was betroffen sein kann
+  // (Alltag-Einträge und die Schlafminuten der Home-Kachel).
+  const handleVoiceLogSaved = async () => { await loadDailyEntriesOnly(); };
+  // Einträge über den schwebenden Sprach-Button (globales Modal) nachladen.
+  useVoiceLogSavedListener(() => {
+    void handleVoiceLogSaved();
+  });
+
+  const handleFocusRecommendation = () => {
+    triggerHaptic();
+    router.push('/prints-shop' as any);
+  };
   // Rendere den Begrüßungsbereich
   const renderGreetingSection = () => {
-    // Verwende den Benutzernamen aus der profiles-Tabelle
-    const displayName = userName || 'Mama';
+    const metadataFirstName =
+      typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name : '';
+    const metadataFullName =
+      typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : '';
+    const displayName = userName || metadataFirstName || metadataFullName || t('greeting.fallbackName');
+    const activeTimerElapsedSeconds = activeHomeTimer
+      ? Math.max(0, Math.floor((activeHomeTimerNow - activeHomeTimer.start) / 1000))
+      : 0;
 
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView 
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-          style={styles.liquidGlassBackground}
+      <View style={[styles.liquidGlassWrapper, styles.greetingCardWrapper]}>
+        <ContentCard
+          style={[styles.liquidGlassBackground, styles.greetingGlassBackground]}
         >
-          <ThemedView style={[styles.greetingContainer, styles.liquidGlassContainer]} 
-                     lightColor="rgba(255, 255, 255, 0.04)" 
-                     darkColor="rgba(255, 255, 255, 0.02)">
+          <ThemedView
+            style={[styles.greetingContainer, styles.liquidGlassContainer, styles.greetingGlassContainer, isCompactAndroid && styles.greetingContainerCompact, { backgroundColor: glassCardBg }]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0)']}
+              locations={[0, 0.45, 1]}
+              start={{ x: 0.15, y: 0.0 }}
+              end={{ x: 0.85, y: 1.0 }}
+              style={styles.greetingGloss}
+            />
+
             <View style={styles.greetingHeader}>
-              <View>
-                <ThemedText style={[styles.greeting, styles.liquidGlassText, { color: '#6B4C3B' }]}>
-                  Hallo {displayName}!
+              <View style={styles.greetingTextBlock}>
+                <ThemedText adaptive={false} style={[styles.greeting, styles.liquidGlassText, { color: textPrimary }]}>
+                  {t('greeting.hello', { name: displayName })}
                 </ThemedText>
-                <ThemedText style={[styles.dateText, styles.liquidGlassSecondaryText, { color: '#6B4C3B' }]}>
+                <ThemedText adaptive={false} style={[styles.dateText, styles.liquidGlassSecondaryText, { color: textPrimary }]}>
                   {formatDate()}
                 </ThemedText>
               </View>
 
-              {babyInfo?.photo_url && (
-                <View style={styles.profileImageWrapper}>
-                                     <Image
-                     source={{ uri: babyInfo.photo_url }}
-                     style={styles.profileImage}
-                   />
-                </View>
-              )}
-
-              {!babyInfo?.photo_url && (
-                <View style={[styles.profileImage, styles.profilePlaceholder, styles.liquidGlassProfilePlaceholder]}>
-                  <IconSymbol name="person.fill" size={30} color="#FFFFFF" />
-                </View>
-              )}
+              <View style={styles.profileBadge}>
+                <LottiWeekRing contentSize={68} inset={4} ringStroke={4.5}>
+                  <BabySwitcherButton size={68} showSwitchHint />
+                </LottiWeekRing>
+              </View>
             </View>
 
-            <View style={styles.tipContainerWrapper}>
-              <BlurView 
-                intensity={14} 
-                tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-                style={styles.tipContainerBlur}
-              >
-                <ThemedView style={[styles.tipContainer, styles.liquidGlassTipContainer]} 
-                           lightColor="rgba(168, 196, 193, 0.45)" 
-                           darkColor="rgba(168, 196, 193, 0.45)">
-                  <IconSymbol name="lightbulb.fill" size={20} color={Colors.light.success} />
-                  <ThemedText style={[styles.tipText, styles.liquidGlassTipText, { color: '#6B4C3B' }]}>
-                    {dailyTip}
-                  </ThemedText>
-                </ThemedView>
-              </BlurView>
-            </View>
+            {activeHomeTimer?.source === 'sleep' ? (
+              <SleepTimerCard
+                elapsedSeconds={activeTimerElapsedSeconds}
+                sinceLabel={t('timer.since', {
+                  time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                })}
+                babyName={activeBaby?.name ?? null}
+                todayMinutes={todaySleepMinutes}
+                targetMinutes={getDailySleepTargetMinutes(activeBaby?.birth_date)}
+                isDark={isDark}
+                onPress={() => handleNavigate(activeHomeTimer.route)}
+              />
+            ) : activeHomeTimer ? (
+              <ActiveTimerCard
+                timer={activeHomeTimer}
+                elapsedSeconds={activeTimerElapsedSeconds}
+                sinceLabel={t('timer.since', {
+                  time: new Date(activeHomeTimer.start).toLocaleTimeString(HOME_LOCALE_TAG, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                })}
+                isDark={isDark}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                onPress={() => handleNavigate(activeHomeTimer.route)}
+              />
+            ) : (
+              <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
+            )}
           </ThemedView>
-        </BlurView>
+        </ContentCard>
+
       </View>
     );
   };
 
   // Rendere die Tagesübersicht
-  const renderDailySummary = () => {
-    const todayFeedings = getTodayFeedings();
+  const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const summaryTextColor = isDark ? Colors.dark.textPrimary : textSecondary;
+    const summaryValueColor = isDark ? Colors.dark.textPrimary : '#5E3DB3';
+    const feedingOverview = buildFeedingOverview(dailyEntries);
+    const hasBottleFeedings = feedingOverview.bottleCount > 0;
+    const hasBreastFeedings = feedingOverview.breastCount > 0;
+    const hasSolidFeedings = feedingOverview.solidsCount > 0;
+    const hasPumpEntries = feedingOverview.pumpCount > 0;
+    const hasWaterEntries = feedingOverview.waterCount > 0;
+
+    let feedingStatValue = `${feedingOverview.totalBottleMl}`;
+    let feedingStatUnit: 'ml' | 'times' = 'ml';
+    let todayFeedingsPrimaryDetail = t('summary.noMeal');
+    let todayFeedingsSecondaryDetail: string | null = null;
+
+    if (feedingOverview.totalFeedingCount > 0) {
+      if (hasBottleFeedings) {
+        todayFeedingsPrimaryDetail = t('summary.bottle', { count: feedingOverview.bottleCount });
+        todayFeedingsSecondaryDetail = [
+          hasBreastFeedings ? t('summary.breast', { count: feedingOverview.breastCount }) : null,
+          hasSolidFeedings ? t('summary.solids', { count: feedingOverview.solidsCount }) : null,
+          hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+          hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
+        ]
+          .filter(Boolean)
+          .join(' • ') || null;
+      } else if (hasBreastFeedings || hasSolidFeedings) {
+        const useBreastAsPrimary =
+          hasBreastFeedings && (!hasSolidFeedings || feedingOverview.breastCount >= feedingOverview.solidsCount);
+
+        feedingStatUnit = 'times';
+        if (useBreastAsPrimary) {
+          feedingStatValue = `${feedingOverview.breastCount}`;
+          todayFeedingsPrimaryDetail = t('summary.breastOnly');
+          todayFeedingsSecondaryDetail = [
+            hasSolidFeedings ? t('summary.solids', { count: feedingOverview.solidsCount }) : null,
+            hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+            hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
+        } else {
+          feedingStatValue = `${feedingOverview.solidsCount}`;
+          todayFeedingsPrimaryDetail = t('summary.solidsOnly');
+          todayFeedingsSecondaryDetail = [
+            hasBreastFeedings ? t('summary.breast', { count: feedingOverview.breastCount }) : null,
+            hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+            hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
+          ]
+            .filter(Boolean)
+            .join(' • ') || null;
+        }
+      }
+    } else if (hasPumpEntries || hasWaterEntries) {
+      todayFeedingsSecondaryDetail = [
+        hasPumpEntries ? t('summary.pump', { count: feedingOverview.pumpCount }) : null,
+        hasWaterEntries ? t('summary.water', { count: feedingOverview.waterCount }) : null,
+      ]
+        .filter(Boolean)
+        .join(' • ') || null;
+    }
     const todayDiaperChanges = getTodayDiaperChanges();
 
     return (
-      <View style={styles.liquidGlassWrapper}>
-        <BlurView 
-          intensity={22} 
-          tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-          style={styles.liquidGlassBackground}
+      <TouchableOpacity
+        onPress={() => handleNavigate('/(tabs)/daily_old')}
+        activeOpacity={0.9}
+        style={[styles.liquidGlassWrapper, wrapperStyle]}
+        onLayout={(event) => {
+          const nextHeight = Math.round(event.nativeEvent.layout.height);
+          if (nextHeight && nextHeight !== overviewSummaryHeight) {
+            setOverviewSummaryHeight(nextHeight);
+          }
+        }}
+      >
+        <ContentCard style={styles.liquidGlassBackground}
         >
-          <ThemedView style={[styles.summaryContainer, styles.liquidGlassContainer]} 
-                      lightColor="rgba(255, 255, 255, 0.04)" 
-                      darkColor="rgba(255, 255, 255, 0.02)">
-            <View style={styles.sectionTitleContainer}>
-              <ThemedText style={[styles.sectionTitle, styles.liquidGlassText, { color: '#6B4C3B', fontSize: 22 }]}> 
-                Dein Tag im Überblick
-              </ThemedText>
-              <TouchableOpacity
-                style={styles.liquidGlassChevron}
-                onPress={() => router.push('/(tabs)/daily_old')}
-                activeOpacity={0.8}
-              >
-                <IconSymbol name="chevron.right" size={20} color="#6B4C3B" />
-              </TouchableOpacity>
-            </View>
+          <ThemedView
+            style={[styles.summaryContainer, styles.liquidGlassContainer, isCompactAndroid && styles.summaryContainerCompact, { backgroundColor: glassCardBg }]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            <HomeOverviewHeading color={summaryTextColor}>
+              {t('summary.title')}
+            </HomeOverviewHeading>
 
-            <View style={styles.statsContainer}>
+            <View style={[styles.statsContainer, isStackedLayout ? styles.statsContainerStacked : null]}>
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, {
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
                   backgroundColor: 'rgba(94, 61, 179, 0.13)',
                   borderColor: 'rgba(94, 61, 179, 0.35)'
                 }]}
-                onPress={() => handleStatPress('feeding')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('feeding');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>🍼</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>🍼</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: '#5E3DB3',
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>{todayFeedings}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Essen</ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: summaryValueColor,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>
+                    {readStates.care?.verifiedAt ? feedingStatValue : '—'}
+                    <Text style={styles.feedingMlUnit}>{readStates.care?.verifiedAt ? (feedingStatUnit === 'ml' ? ' ml' : '×') : ''}</Text>
+                  </ThemedText>
+                </View>
+                <View style={styles.feedingDetailsWrap}>
+                  <ThemedText
+                    adaptive={false}
+                    numberOfLines={3}
+                    ellipsizeMode="tail"
+                    style={[styles.feedingDetailPrimary, { color: summaryTextColor }]}
+                  >
+                    {readStates.care?.verifiedAt ? todayFeedingsPrimaryDetail : ''}
+                  </ThemedText>
+                  {todayFeedingsSecondaryDetail ? (
+                    <ThemedText
+                      adaptive={false}
+                      numberOfLines={2}
+                      ellipsizeMode="tail"
+                      style={[styles.feedingDetailSecondary, { color: summaryTextColor }]}
+                    >
+                      {todayFeedingsSecondaryDetail}
+                    </ThemedText>
+                  ) : null}
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, {
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
                   backgroundColor: 'rgba(94, 61, 179, 0.08)',
                   borderColor: 'rgba(94, 61, 179, 0.22)'
                 }]}
-                onPress={() => handleStatPress('diaper')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('diaper');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>💩</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>💩</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, {
-                  color: '#5E3DB3',
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>{todayDiaperChanges}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Windeln</ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: summaryValueColor,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>{readStates.care?.verifiedAt ? todayDiaperChanges : '—'}</ThemedText>
+                </View>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: summaryTextColor, opacity: isDark ? 1 : 0.9 }]}>{t('summary.diapers')}</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.statItem, styles.liquidGlassStatItem, { 
-                  backgroundColor: 'rgba(94, 61, 179, 0.05)', 
-                  borderColor: 'rgba(94, 61, 179, 0.15)' 
+                style={[styles.statItem, styles.liquidGlassStatItem, isStackedLayout ? styles.statItemStacked : null, {
+                  backgroundColor: 'rgba(94, 61, 179, 0.05)',
+                  borderColor: 'rgba(94, 61, 179, 0.15)'
                 }]}
-                onPress={() => handleStatPress('sleep')}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  handleStatPress('sleep');
+                }}
               >
                 <View style={styles.liquidGlassStatIcon}>
-                  <Text style={styles.statEmoji}>💤</Text>
+                  <Text style={styles.statEmoji} allowFontScaling={false}>💤</Text>
                 </View>
-                <ThemedText style={[styles.statValue, styles.liquidGlassStatValue, { 
-                  color: '#5E3DB3',
-                  textShadowColor: 'rgba(255, 255, 255, 0.8)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                }]}>{formatMinutes(todaySleepMinutes)}</ThemedText>
-                <ThemedText style={[styles.statLabel, styles.liquidGlassStatLabel, { color: '#7D5A50' }]}>Schlaf</ThemedText>
+                <View style={styles.statValueContainer}>
+                  <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
+                    color: summaryValueColor,
+                    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+                    textShadowOffset: { width: 0, height: 1 },
+                    textShadowRadius: 2,
+                  }]}>{readStates.sleep?.verifiedAt ? formatMinutes(todaySleepMinutes) : '—'}</ThemedText>
+                </View>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: summaryTextColor, opacity: isDark ? 1 : 0.9 }]}>{t('summary.sleep')}</ThemedText>
               </TouchableOpacity>
             </View>
           </ThemedView>
-        </BlurView>
+        </ContentCard>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderRecommendationCard = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const cardHeightStyle = {
+      height: overviewSummaryHeight ?? DEFAULT_OVERVIEW_HEIGHT,
+    };
+    const buttonLabel = t('shop.button');
+    const showShopCard = true;
+
+    return (
+      <View style={[styles.liquidGlassWrapper, wrapperStyle, cardHeightStyle]}>
+        <ContentCard style={[styles.liquidGlassBackground, cardHeightStyle]}
+        >
+          <ThemedView
+            style={[
+              styles.liquidGlassContainer,
+              styles.recommendationContainer,
+              cardHeightStyle,
+              { backgroundColor: glassCardBg },
+            ]}
+            lightColor="rgba(255, 255, 255, 0.04)"
+            darkColor="rgba(255, 255, 255, 0.02)"
+          >
+            {showShopCard ? (
+              <View style={styles.recommendationCard}>
+                <TouchableOpacity
+                  style={styles.recommendationInnerCard}
+                  onPress={handleFocusRecommendation}
+                  activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shop.accessibility')}
+                >
+                  <Image
+                    source={require('../../assets/images/lotti-baby-shop-hero.png')}
+                    style={[StyleSheet.absoluteFill, styles.recommendationImage]}
+                    resizeMode="cover"
+                  />
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={[
+                      'rgba(32, 19, 13, 0.02)',
+                      'rgba(32, 19, 13, 0.16)',
+                      'rgba(32, 19, 13, 0.88)',
+                    ]}
+                    locations={[0, 0.38, 1]}
+                    style={StyleSheet.absoluteFill}
+                  />
+                  <View style={styles.recommendationContentPane}>
+                    <ThemedText adaptive={false} style={styles.recommendationEyebrow}>
+                      {t('shop.eyebrow')}
+                    </ThemedText>
+                    <View
+                      style={[
+                        styles.recommendationFooter,
+                        isStackedLayout ? styles.recommendationFooterStacked : null,
+                      ]}
+                    >
+                      <View style={styles.recommendationTextWrap}>
+                        <ThemedText adaptive={false} style={styles.recommendationTitle}>
+                          {t('shop.title')}
+                        </ThemedText>
+                        <ThemedText adaptive={false} style={styles.recommendationDescription} numberOfLines={twoLineLimit}>
+                          {t('shop.description')}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.recommendationButton}>
+                        <ThemedText adaptive={false} style={styles.recommendationButtonText} numberOfLines={1}>
+                          {buttonLabel}
+                        </ThemedText>
+                        <IconSymbol name="chevron.right" size={14} color="#5E3DB3" />
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.recommendationEmptyWrapper}>
+                <View style={styles.sectionTitleContainer}>
+                  <ThemedText adaptive={false} style={[styles.sectionTitle, styles.liquidGlassText, { color: textPrimary }]}>
+                    {t('shop.eyebrow')}
+                  </ThemedText>
+                  <View style={[styles.liquidGlassChevron, styles.recommendationHeaderSpacer]} />
+                </View>
+                <View style={styles.recommendationEmpty}>
+                  <IconSymbol name="bag.fill" size={20} color={textSecondary} />
+                  <ThemedText adaptive={false} style={[styles.recommendationEmptyText, { color: textSecondary }]}>
+                    {t('shop.empty')}
+                  </ThemedText>
+                </View>
+              </View>
+            )}
+          </ThemedView>
+        </ContentCard>
       </View>
     );
   };
 
-  // Rendere die Schnellzugriff-Karten
-  const renderQuickAccessCards = () => {
+  const renderOverviewSection = () => (
+    <View
+      style={styles.overviewCarouselWrapper}
+      onLayout={(event) => {
+        const nextWidth = event.nativeEvent.layout.width;
+        if (nextWidth && nextWidth !== overviewCarouselWidth) {
+          setOverviewCarouselWidth(nextWidth);
+        }
+      }}
+    >
+      <ScrollView
+        ref={overviewScrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.overviewCarousel}
+        decelerationRate="fast"
+        onScrollBeginDrag={handleOverviewScrollBeginDrag}
+        onScrollEndDrag={handleOverviewScrollEndDrag}
+        onMomentumScrollEnd={(event) => {
+          if (!overviewCarouselWidth) return;
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / overviewCarouselWidth);
+          overviewIndexRef.current = nextIndex;
+          setOverviewIndex(nextIndex);
+          if (isAutoScrollingRef.current) {
+            isAutoScrollingRef.current = false;
+            return;
+          }
+          scheduleOverviewRotationResume();
+        }}
+        scrollEventThrottle={16}
+      >
+        {[
+          <React.Fragment key="daily-summary">{renderDailySummary(styles.carouselCardWrapper)}</React.Fragment>,
+          <React.Fragment key="recommendation">{renderRecommendationCard(styles.carouselCardWrapper)}</React.Fragment>,
+        ].map(
+          (slide, index) => (
+            <View
+              key={`overview-slide-${index}`}
+              style={[
+                styles.overviewSlide,
+                overviewCarouselWidth ? { width: overviewCarouselWidth } : null,
+              ]}
+            >
+              {slide}
+            </View>
+          )
+        )}
+      </ScrollView>
+      <HomeCarouselDots count={2} index={overviewIndex} dark={isDark} />
+    </View>
+  );
+
+  const renderPremiumSection = () => {
+    const items: PremiumHighlightItem[] = [];
+    if (advisorAccess !== null) {
+      items.push({
+        key: 'advisor',
+        locked: advisorAccess !== true,
+        emoji: '🌿',
+        title: t('premium.advisor'),
+        subtitle: t('premium.advisorDescription'),
+        onPress: () => handleNavigate('/lottis-fuersorge'),
+      });
+    }
+    if (voiceLogAccess !== null) {
+      items.push({
+        key: 'voice-log',
+        locked: voiceLogAccess !== true,
+        emoji: '🎙️',
+        title: t('premium.voice'),
+        subtitle: t('premium.voiceDescription'),
+        onPress: () => setShowVoiceLogModal(true),
+      });
+    }
+    if (askLottiAccess !== null) {
+      items.push({
+        key: 'ask-lotti',
+        locked: askLottiAccess !== true,
+        emoji: '✨',
+        title: t('premium.askLotti'),
+        subtitle: t('premium.askLottiDescription'),
+        onPress: () => handleNavigate('/frag-lotti'),
+      });
+    }
     return (
-      <View style={styles.cardsSection}>
-           <ThemedText style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: '#7D5A50', fontSize: 22 }]}> 
-          Schnellzugriff
+      <PremiumHighlights
+        items={items}
+        onUnlock={() => router.push('/paywall?origin=lock_premium')}
+      />
+    );
+  };
+
+  const renderQuickAccessCard = (
+    item: HomeQuickAccessCardConfig,
+    options?: { isEditing?: boolean; isActive?: boolean }
+  ) => {
+    const isEditing = options?.isEditing ?? false;
+    const canHideCard = isEditing && orderedQuickAccessCards.length > 1;
+
+    return (
+      <View
+        style={[
+          styles.liquidGlassCardWrapper,
+          isEditing ? styles.quickAccessEditorCardWrapper : null,
+          options?.isActive ? styles.quickAccessEditorCardWrapperActive : null,
+        ]}
+      >
+        <ContentCard overlayColor={item.cardBackgroundColor}
+          style={styles.liquidGlassCardBackground}
+        >
+          <View
+            style={[
+              styles.card,
+              styles.liquidGlassCard,
+              scaledCardSizing,
+              {
+                backgroundColor: 'transparent',
+                borderWidth: 0,
+                boxShadow: 'none',
+              },
+              isEditing ? styles.quickAccessEditorCard : null,
+            ]}
+          >
+            {canHideCard ? (
+              <TouchableOpacity
+                style={styles.quickAccessHideBadge}
+                onPress={() => handleHideQuickAccessCard(item.id)}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={t('quick.hideAccessibility', { title: item.title })}
+              >
+                <IconSymbol name="eye.slash" size={14} color="#FFFFFF" />
+              </TouchableOpacity>
+            ) : null}
+            {isEditing ? (
+              <View style={styles.quickAccessDragBadge}>
+                <IconSymbol name="line.3.horizontal" size={14} color="#FFFFFF" />
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.iconContainer,
+                {
+                  backgroundColor: item.iconBackgroundColor,
+                  borderRadius: 30,
+                  padding: 8,
+                  marginBottom: 10,
+                  borderWidth: 2,
+                  borderColor: 'rgba(255, 255, 255, 0.4)',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 4,
+                  ...androidHomeShadow,
+                },
+              ]}
+            >
+              <IconSymbol name={item.iconName} size={28} color="#FFFFFF" />
+            </View>
+            <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+              {item.title}
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '400' }]}>
+              {item.description}
+            </ThemedText>
+          </View>
+        </ContentCard>
+      </View>
+    );
+  };
+
+  const renderHiddenQuickAccessSection = () => {
+    if (!isQuickAccessEditMode || !hiddenQuickAccessCards.length) {
+      return null;
+    }
+
+    return (
+      <View style={styles.quickAccessHiddenSection}>
+        <View style={styles.quickAccessHiddenHeader}>
+          <View style={styles.quickAccessHiddenHeaderText}>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenTitle, { color: textSecondary }]}>
+              {t('quick.hiddenTitle')}
+            </ThemedText>
+            <ThemedText adaptive={false} style={[styles.quickAccessHiddenSubtitle, { color: textSecondary }]}>
+              {hiddenQuickAccessCards.length === 1
+                ? t('quick.hidden.one')
+                : t('quick.hidden.other', { count: hiddenQuickAccessCards.length })}
+            </ThemedText>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessHiddenRestoreAllButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={handleRestoreAllQuickAccessCards}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessHiddenRestoreAllText, { color: textPrimary }]}>{t('quick.restoreAll')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          {t('quick.restoreHint')}
         </ThemedText>
 
-        <View style={styles.cardsGrid}>
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/feeding-stats' as any)}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
+        <View style={styles.quickAccessHiddenGrid}>
+          {hiddenQuickAccessCards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={[styles.quickAccessHiddenTileWrapper, hiddenTileWrapperSizing]}
+              activeOpacity={0.86}
+              onPress={() => handleRestoreQuickAccessCard(card.id)}
             >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(168, 196, 193, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(168, 196, 193, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="cup.and.saucer.fill" size={28} color="#FFFFFF" />
+              <ContentCard overlayColor={card.cardBackgroundColor}
+                style={styles.liquidGlassCardBackground}
+              >
+                <View
+                  style={[
+                    styles.card,
+                    styles.quickAccessHiddenTileCard,
+                    scaledHiddenTileSizing,
+                    {
+                      backgroundColor: 'transparent',
+                      borderWidth: 0,
+                      boxShadow: 'none',
+                    },
+                  ]}
+                >
+                  <View style={styles.quickAccessRestoreBadge}>
+                    <IconSymbol name="arrow.uturn.left" size={14} color="#FFFFFF" />
+                  </View>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      {
+                        backgroundColor: card.iconBackgroundColor,
+                        borderRadius: 26,
+                        padding: 8,
+                        marginBottom: 10,
+                        borderWidth: 2,
+                        borderColor: 'rgba(255, 255, 255, 0.35)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.3,
+                        shadowRadius: 4,
+                        elevation: 4,
+                        ...androidHomeShadow,
+                      },
+                    ]}
+                  >
+                    <IconSymbol name={card.iconName} size={24} color="#FFFFFF" />
+                  </View>
+                  <ThemedText adaptive={false} style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: textSecondary, fontWeight: '700' }]}>
+                    {card.title}
+                  </ThemedText>
+                  <ThemedText adaptive={false} style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: textSecondary, fontWeight: '400' }]}>
+                    {t('quick.restore')}
+                  </ThemedText>
                 </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mahlzeiten</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Statistiken ansehen</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/baby')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 190, 190, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 140, 160, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="person.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mein Baby</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Alle Infos & Entwicklungen</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/planner')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(220, 200, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(200, 130, 220, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="calendar" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Planer</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Tagesplan & To‑dos</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/daily_old')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 215, 180, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 180, 130, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="list.bullet" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Unser Tag</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Tagesaktivitäten verwalten</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/selfcare')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={24} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(255, 210, 230, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(255, 160, 180, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="heart.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Mama Selfcare</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Nimm dir Zeit für dich</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.liquidGlassCardWrapper}
-            onPress={() => router.push('/(tabs)/babyweather')}
-            activeOpacity={0.9}
-          >
-            <BlurView 
-              intensity={16} 
-              tint={colorScheme === 'dark' ? 'dark' : 'light'} 
-              style={styles.liquidGlassCardBackground}
-            >
-              <View style={[styles.card, styles.liquidGlassCard, { backgroundColor: 'rgba(200, 225, 255, 0.6)', borderColor: 'rgba(255, 255, 255, 0.35)' }]}>
-                <View style={[styles.iconContainer, { backgroundColor: 'rgba(140, 190, 255, 0.9)', borderRadius: 30, padding: 8, marginBottom: 10, borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 }]}>
-                  <IconSymbol name="cloud.sun.fill" size={28} color="#FFFFFF" />
-                </View>
-                <ThemedText style={[styles.cardTitle, styles.liquidGlassCardTitle, { color: '#7D5A50', fontWeight: '700' }]}>Babywetter</ThemedText>
-                <ThemedText style={[styles.cardDescription, styles.liquidGlassCardDescription, { color: '#7D5A50', fontWeight: '500' }]}>Aktuelle Wetterinfos</ThemedText>
-              </View>
-            </BlurView>
-          </TouchableOpacity>
+              </ContentCard>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
     );
   };
 
+  const renderQuickAccessCards = () => (
+    <View style={styles.cardsSection}>
+      <ThemedText adaptive={false} style={[styles.cardsSectionTitle, styles.liquidGlassText, { color: textSecondary }]}>
+        {t('quick.title')}
+      </ThemedText>
+
+      {isQuickAccessEditMode ? (
+        <View style={styles.quickAccessEditBar}>
+          <TouchableOpacity
+            style={[
+              styles.quickAccessDoneButton,
+              {
+                backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.55)',
+                borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.8)',
+              },
+            ]}
+            onPress={closeQuickAccessEditor}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.quickAccessDoneText, { color: textPrimary }]}>{t('quick.done')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      <SortableQuickAccessGrid
+        items={orderedQuickAccessCards}
+        order={orderedQuickAccessCards.map(({ id }) => id)}
+        isEditing={isQuickAccessEditMode}
+        onPressItem={(item) => handleNavigate(item.destination)}
+        onRequestEditMode={openQuickAccessEditor}
+        onOrderChange={handleReorderQuickAccess}
+        onDragStateChange={setIsQuickAccessDragging}
+        scrollConfig={{
+          metricsRef: quickAccessScrollMetricsRef,
+          scrollToOffset: (offsetY) => {
+            quickAccessScrollMetricsRef.current.offsetY = offsetY;
+            mainScrollRef.current?.scrollTo({ y: offsetY, animated: false });
+          },
+          slowEdgeThreshold: 150,
+          fastEdgeThreshold: 52,
+          slowSpeed: 1.4,
+          fastSpeed: 9,
+        }}
+        renderTile={({ item, isEditing, isActive }) =>
+          renderQuickAccessCard(item, { isEditing, isActive })
+        }
+        style={styles.quickAccessGridList}
+      />
+      <ThemedText adaptive={false} style={[styles.quickAccessHint, { color: textSecondary }]}>
+        {isQuickAccessEditMode
+          ? t('quick.editHint')
+          : t('quick.longPressHint')}
+      </ThemedText>
+      {isQuickAccessEditMode && hiddenQuickAccessCards.length > 0 ? (
+        <ThemedText adaptive={false} style={[styles.quickAccessHiddenHint, { color: textSecondary }]}>
+          {t('quick.hiddenHint')}
+        </ThemedText>
+      ) : null}
+      {renderHiddenQuickAccessSection()}
+    </View>
+  );
+
+  // Route-Guard in _layout.tsx handles mode-based redirects centrally.
+  // An inline redirect here fires before isLoading settles and breaks
+  // navigation flows like "Kind anlegen" (which temporarily sets
+  // isBabyBorn=false while navigating to the baby-edit screen).
+
   return (
-    <ThemedBackground style={styles.backgroundImage}>
-      <SafeAreaView style={styles.container}>
+    <HomeBackground style={styles.backgroundImage}>
+      <SafeAreaView style={[styles.container, Platform.OS === 'android' && { paddingTop: safeAreaInsets.top }]}>
       <StatusBar hidden={true} />
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.accent} />
-            <ThemedText style={styles.loadingText}>Lade deine persönliche Übersicht...</ThemedText>
+            <ThemedText style={styles.loadingText}>{t('loading.title')}</ThemedText>
           </View>
         ) : (
           <ScrollView 
-            style={styles.scrollView} 
-            contentContainerStyle={styles.contentContainer}
+          ref={mainScrollRef}
+          style={styles.scrollView} 
+          contentContainerStyle={[styles.contentContainer, isCompactAndroid && styles.contentContainerCompact]}
+          scrollEnabled={!isQuickAccessDragging}
+          onLayout={(event) => {
+            quickAccessScrollMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+          }}
+            onContentSizeChange={(_, height) => {
+              quickAccessScrollMetricsRef.current.contentHeight = height;
+            }}
+            onScroll={(event) => {
+              quickAccessScrollMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
                 colors={['#7D5A50']}
                 tintColor={theme.text}
-                title="Aktualisiere..."
+                title={t('loading.refresh')}
                 titleColor={theme.text}
               />
             }
           >
             {renderGreetingSection()}
-            {renderDailySummary()}
+            {renderOverviewSection()}
+            {renderPremiumSection()}
             {renderQuickAccessCards()}
           </ScrollView>
         )}
 
         <ActivityInputModal
+          draftEnabled
           visible={showInputModal}
           activityType={selectedActivityType}
           initialSubType={selectedSubType}
@@ -689,8 +2348,26 @@ export default function HomeScreen() {
           onClose={() => setShowSleepModal(false)}
           onSave={handleSaveSleepQuickEntry}
         />
+        <VoiceLogModal
+          visible={showVoiceLogModal}
+          userId={user?.id}
+          babyId={activeBabyId}
+          onClose={() => setShowVoiceLogModal(false)}
+          onSaved={() => {
+            void handleVoiceLogSaved();
+          }}
+        />
+        <NightWakePrompt
+          visible={nightWakePromptVisible}
+          candidate={nightWakeCandidate}
+          feedingStart={nightWakeFeedingStart}
+          busy={nightWakeBusy}
+          onPickWake={pickNightWake}
+          onTruncate={truncateNight}
+          onDismiss={dismissNightWakePrompt}
+        />
       </SafeAreaView>
-    </ThemedBackground>
+    </HomeBackground>
   );
 }
 
@@ -707,8 +2384,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
+    padding: CONTENT_LAYOUT.edge,
     paddingBottom: 40,
+  },
+  contentContainerCompact: {
+    paddingHorizontal: CONTENT_LAYOUT.edge,
+  },
+  greetingContainerCompact: {
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
+  },
+  greetingCompact: {
+    fontSize: 26,
+    lineHeight: 32,
+    includeFontPadding: false,
+  },
+  dateTextCompact: {
+    fontSize: 16,
+    lineHeight: 22,
+    includeFontPadding: false,
+  },
+  summaryContainerCompact: {
+    padding: CONTENT_LAYOUT.cardPadding,
   },
   loadingContainer: {
     flex: 1,
@@ -716,117 +2414,416 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
+    ...TYPOGRAPHY.body,
     marginTop: 10,
-    fontSize: 16,
   },
 
   // Liquid Glass styles - Core Components
   liquidGlassWrapper: {
     position: 'relative',
-    marginBottom: 16,
+    marginBottom: CONTENT_LAYOUT.sectionGap,
     borderRadius: 22,
     overflow: 'hidden',
+  },
+  greetingCardWrapper: {
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+    overflow: 'hidden',
+  },
+  greetingGlassBackground: {
+    borderRadius: CONTENT_LAYOUT.cardRadius,
+  },
+  greetingGlassContainer: {
+    borderRadius: CONTENT_LAYOUT.cardRadius,
   },
   liquidGlassBackground: {
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.35)', // stärkerer Frostglas-Effekt
   },
   liquidGlassContainer: {
     borderRadius: 22,
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 0,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0,
     shadowRadius: 14,
-    elevation: 8,
+    elevation: 0,
+    ...androidHomeShadow,
+    boxShadow: 'none',
   },
 
   // Begrüßungsbereich - Liquid Glass Design
   greetingContainer: {
-    paddingTop: 32,
-    paddingHorizontal: 24,
-    paddingBottom: 28,
+    paddingTop: CONTENT_LAYOUT.cardPadding,
+    paddingHorizontal: CONTENT_LAYOUT.cardPadding,
+    paddingBottom: CONTENT_LAYOUT.cardPadding,
     backgroundColor: 'transparent',
+    position: 'relative',
   },
   greetingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 16,
+  },
+  greetingTextBlock: {
+    // Ohne flex drängt der Gruß bei großer Schrift das Profilbild aus der Karte.
+    flex: 1,
+    minWidth: 0,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 6,
-    letterSpacing: -0.5,
+    ...TYPOGRAPHY.display,
+    marginBottom: 4,
   },
   dateText: {
-    fontSize: 16,
+    ...TYPOGRAPHY.bodySmall,
     opacity: 0.8,
-    fontWeight: '500',
   },
-  profileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  profileImageWrapper: {
-    borderRadius: 32,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  profilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    justifyContent: 'center',
+  profileBadge: {
+    flexShrink: 0,
+    width: 68,
+    height: 68,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(125, 90, 80, 0.6)',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  liquidGlassProfilePlaceholder: {
-    backgroundColor: 'rgba(125, 90, 80, 0.8)',
-    borderColor: 'rgba(125, 90, 80, 0.6)',
+  greetingGloss: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 30,
   },
 
-  // Tip Container - Enhanced Liquid Glass
-  tipContainerWrapper: {
-    marginTop: 12,
-    borderRadius: 18,
+  activeTimerCard: {
+    marginTop: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
     overflow: 'hidden',
-    backgroundColor: 'rgba(168, 196, 193, 0.45)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    elevation: 5,
+    ...androidHomeShadow,
   },
-  tipContainerBlur: {
-    borderRadius: 18,
-    overflow: 'hidden',
+  activeTimerGradient: {
+    // Kein absoluteFillObject — in RN 0.86 entfernt (zur Laufzeit undefined).
+    ...StyleSheet.absoluteFill,
   },
-  tipContainer: {
+  activeTimerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  liquidGlassTipContainer: {
-    borderRadius: 18,
+  activeTimerIconStack: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tipText: {
-    fontSize: 14,
-    marginLeft: 12,
+  activeTimerIconHalo: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  activeTimerIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTimerContent: {
     flex: 1,
-    lineHeight: 20,
-    fontWeight: '500',
+    marginLeft: 12,
+    marginRight: 12,
   },
-  liquidGlassTipText: {
-    color: 'rgba(255, 255, 255, 0.95)',
+  activeTimerLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  activeTimerLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activeTimerLabel: {
+    ...TYPOGRAPHY.caption,
+  },
+  activeTimerTitle: {
+    ...TYPOGRAPHY.headline,
+  },
+  activeTimerChevron: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeTimerStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    gap: 12,
+  },
+  activeTimerElapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  activeTimerElapsed: {
+    ...METRIC_TEXT_LARGE,
+    fontVariant: ['tabular-nums'],
+  },
+  activeTimerElapsedSeconds: {
+    ...TYPOGRAPHY.bodyStrong,
+    marginLeft: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  activeTimerSincePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  activeTimerSince: {
+    ...TYPOGRAPHY.bodySmall,
+    textAlign: 'right',
+  },
+  activeTimerTrack: {
+    marginTop: 12,
+    height: 3,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  activeTimerTrackFill: {
+    height: 3,
+    borderRadius: 2,
+    width: '100%',
+  },
+  sleepCard: {
+    marginTop: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingLeft: 14,
+    paddingRight: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 5,
+    ...androidHomeShadow,
+  },
+  sleepCardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sleepCardText: {
+    flex: 1,
+    marginRight: 8,
+  },
+  sleepCardTitle: {
+    ...TYPOGRAPHY.headline,
+    marginTop: 1,
+  },
+  sleepCardSubtitle: {
+    ...TYPOGRAPHY.bodySmall,
+    marginTop: 0,
+  },
+  sleepCardElapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginTop: 6,
+  },
+  sleepCardElapsed: {
+    ...METRIC_TEXT_LARGE,
+    fontVariant: ['tabular-nums'],
+  },
+  sleepCardElapsedSeconds: {
+    ...TYPOGRAPHY.bodyStrong,
+    marginLeft: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  sleepCardFooter: {
+    marginTop: 8,
+  },
+  sleepCardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 5,
+  },
+  sleepCardFooterText: {
+    ...TYPOGRAPHY.caption,
+  },
+  sleepCardTrack: {
+    height: 5,
+    borderRadius: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  sleepCardTrackFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  sleepCardLottiWrap: {
+    width: 92,
+    height: 82,
+    marginTop: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sleepCardGlow: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  sleepCardLotti: {
+    width: 92,
+    height: 82,
+  },
+  sleepCardChevron: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Overview Carousel
+  overviewCarouselWrapper: {
+    marginBottom: 16,
+  },
+  overviewCarousel: {
+    width: '100%',
+  },
+  overviewSlide: {
+    width: '100%',
+  },
+  carouselCardWrapper: {
+    marginBottom: 0,
+    width: '100%',
+  },
+  // Recommendation Card
+  recommendationContainer: {
+    flex: 1,
+    padding: 12,
+  },
+  recommendationCard: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  recommendationInnerCard: {
+    flex: 1,
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#6B4C3B',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+  },
+  recommendationImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  recommendationContentPane: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  recommendationEyebrow: {
+    ...TYPOGRAPHY.caption,
+    color: 'rgba(255, 255, 255, 0.84)',
+    textTransform: 'uppercase',
+    marginBottom: 3,
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  recommendationFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  recommendationFooterStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  recommendationTextWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  recommendationTitle: {
+    ...TYPOGRAPHY.sectionTitle,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.45)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  recommendationDescription: {
+    ...TYPOGRAPHY.bodySmall,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  recommendationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    paddingLeft: 14,
+    paddingRight: 11,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  recommendationButtonText: {
+    ...TYPOGRAPHY.buttonSmall,
+    color: '#5E3DB3',
+  },
+  recommendationEmptyWrapper: {
+    flex: 1,
+  },
+  recommendationHeaderSpacer: {
+    opacity: 0,
+  },
+  recommendationEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  recommendationEmptyText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: '#7D5A50',
+    marginTop: 8,
+    textAlign: 'center',
   },
 
   // Tagesübersicht - Liquid Glass Design
@@ -841,30 +2838,43 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
+    ...TYPOGRAPHY.sectionTitle,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   statsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    alignItems: 'stretch',
+    width: '100%',
+  },
+  statsContainerStacked: {
+    flexDirection: 'column',
+    gap: 10,
+  },
+  statItemStacked: {
+    width: '100%',
+    minWidth: '100%',
+    maxWidth: '100%',
   },
   statItem: {
     alignItems: 'center',
-    flex: 1,
+    width: '31.4%',
+    minWidth: '31.4%',
+    maxWidth: '31.4%',
+    flexGrow: 0,
+    flexShrink: 0,
     paddingVertical: 16,
 
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: '800',
+    ...METRIC_TEXT,
     marginVertical: 4,
-    letterSpacing: -1,
   },
   statLabel: {
-    fontSize: 13,
+    ...TYPOGRAPHY.label,
     textAlign: 'center',
-    fontWeight: '600',
     opacity: 0.9,
   },
 
@@ -875,68 +2885,108 @@ const styles = StyleSheet.create({
   },
   liquidGlassSecondaryText: {
     color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
+    fontWeight: '400',
   },
 
   // Stats with Liquid Glass Enhancement
   liquidGlassStatItem: {
     backgroundColor: 'rgba(255, 255, 255, 0.34)',
-    borderRadius: 16,
-    padding: 8,
-    marginHorizontal: 4,
-    borderWidth: 1.5,
+    borderRadius: CONTENT_LAYOUT.innerRadius,
+    padding: CONTENT_LAYOUT.itemGap,
+    marginHorizontal: 0,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0,
     shadowRadius: 10,
-    elevation: 5,
+    elevation: 0,
+    ...androidHomeShadow,
     minHeight: 66,
     justifyContent: 'center',
     alignItems: 'center',
+    boxShadow: 'none',
   },
   liquidGlassStatIcon: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 32,
-    padding: 14,
+    padding: Platform.OS === 'android' ? 6 : 14,
     marginBottom: 6,
     alignSelf: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 0,
+    ...androidHomeShadow,
     width: 64,
     height: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.9)',
+    boxShadow: 'none',
   },
   statEmoji: {
     fontSize: 32,
-    lineHeight: 34,
     textAlign: 'center',
+    ...Platform.select({
+      android: {
+        width: '100%',
+        includeFontPadding: true,
+      },
+      default: {
+        lineHeight: 34,
+      },
+    }),
   },
   liquidGlassStatValue: {
+    ...METRIC_TEXT,
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 24,
-    fontWeight: '900',
     textAlign: 'center',
-    letterSpacing: -1,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
     marginTop: 2,
     marginBottom: 2,
-    lineHeight: 26,
+  },
+  statValueContainer: {
+    minHeight: 56,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedingMlUnit: {
+    ...TYPOGRAPHY.label,
   },
   liquidGlassStatLabel: {
+    ...TYPOGRAPHY.label,
     color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 12,
-    fontWeight: '600',
     textAlign: 'center',
     marginTop: 4,
+  },
+  feedingDetailsWrap: {
+    alignItems: 'center',
+    marginTop: 4,
+    minHeight: 30,
+    width: '100%',
+    minWidth: 0,
+  },
+  feedingDetailPrimary: {
+    ...TYPOGRAPHY.caption,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '100%',
+    flexShrink: 1,
+  },
+  feedingDetailSecondary: {
+    ...TYPOGRAPHY.caption,
+    marginTop: 2,
+    opacity: 0.9,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '100%',
+    flexShrink: 1,
   },
   liquidGlassChevron: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -949,6 +2999,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
 
   // Quick Access Cards Section
@@ -956,12 +3007,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   cardsSectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 16,
-    textAlign: 'center',
+    ...TYPOGRAPHY.sectionTitle,
+    marginBottom: 8,
+    textAlign: 'left',
     color: '#6B4C3B',
-    letterSpacing: -0.3,
+  },
+  quickAccessHint: {
+    ...TYPOGRAPHY.bodySmall,
+    textAlign: 'left',
+    marginBottom: 16,
+  },
+  quickAccessHiddenHint: {
+    ...TYPOGRAPHY.caption,
+    textAlign: 'center',
+    marginBottom: 12,
   },
   cardsGrid: {
     flexDirection: 'row',
@@ -969,11 +3028,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'stretch',
   },
+  quickAccessGridItem: {
+    width: '48%',
+    marginBottom: 14,
+  },
 
   // Liquid Glass Cards
   liquidGlassCardWrapper: {
-    width: '48%',
-    marginBottom: 14,
+    width: '100%',
     borderRadius: 22,
     overflow: 'hidden',
   },
@@ -983,21 +3045,139 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 22,
-    padding: 16,
+    padding: CONTENT_LAYOUT.compactPadding,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 128,
-    height: 140,
-    borderWidth: 1.5,
+    height: undefined,
+    borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 0,
+    ...androidHomeShadow,
+    boxShadow: CONTENT_LAYOUT.cardShadow,
   },
   liquidGlassCard: {
     backgroundColor: 'transparent',
+  },
+  quickAccessEditorCardWrapper: {
+    marginBottom: 0,
+  },
+  quickAccessEditorCardWrapperActive: {
+    opacity: 0.92,
+  },
+  quickAccessEditorCard: {
+    minHeight: 132,
+  },
+  quickAccessHideBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessDragBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(107, 76, 59, 0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditBar: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  quickAccessDoneButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  quickAccessDoneText: {
+    ...TYPOGRAPHY.buttonSmall,
+  },
+  quickAccessGridList: {
+    flexGrow: 0,
+  },
+  quickAccessGridListContent: {
+    paddingBottom: 12,
+  },
+  quickAccessHiddenSection: {
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  quickAccessHiddenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  quickAccessHiddenHeaderText: {
+    flex: 1,
+  },
+  quickAccessHiddenTitle: {
+    ...TYPOGRAPHY.headline,
+  },
+  quickAccessHiddenSubtitle: {
+    ...TYPOGRAPHY.bodySmall,
+    marginTop: 2,
+  },
+  quickAccessHiddenRestoreAllButton: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  quickAccessHiddenRestoreAllText: {
+    ...TYPOGRAPHY.buttonSmall,
+  },
+  quickAccessHiddenGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickAccessHiddenTileWrapper: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  quickAccessHiddenTileCard: {
+    minHeight: 118,
+    height: 118,
+    paddingVertical: 14,
+    opacity: 0.92,
+  },
+  quickAccessRestoreBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(94, 61, 179, 0.44)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  quickAccessEditorRow: {
+    justifyContent: 'space-between',
   },
   iconContainer: {
     width: 54,
@@ -1016,25 +3196,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    ...androidHomeShadow,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    ...TYPOGRAPHY.headline,
     marginBottom: 4,
     textAlign: 'center',
   },
   liquidGlassCardTitle: {
     color: 'rgba(85, 60, 55, 0.95)',
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   cardDescription: {
-    fontSize: 11,
+    ...TYPOGRAPHY.bodySmall,
     textAlign: 'center',
-    lineHeight: 14,
   },
   liquidGlassCardDescription: {
     color: 'rgba(85, 60, 55, 0.7)',
-    fontWeight: '500',
+    fontWeight: '400',
   },
 });

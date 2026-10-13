@@ -1,0 +1,9 @@
+nr,dateiname_geplant,status,bildtext,locale,breite_ziel,hoehe_ziel,build,aufnahmezeit,testkonto_kuerzel,sha256
+01,01-tagesuebersicht.png,OFFEN_NACH_SCHRITT_5,Euer Tag auf einen Blick,de-DE,1080,1920,,,,
+02,02-schlaf.png,OFFEN_NACH_SCHRITT_5,Schlafzeiten festhalten,de-DE,1080,1920,,,,
+03,03-mahlzeiten.png,OFFEN_NACH_SCHRITT_5,Mahlzeiten im Blick,de-DE,1080,1920,,,,
+04,04-planer.png,OFFEN_NACH_SCHRITT_5,Gemeinsam vorausplanen,de-DE,1080,1920,,,,
+05,05-schwangerschaft.png,OFFEN_NACH_SCHRITT_5,Deine Schwangerschaft begleiten,de-DE,1080,1920,,,,
+06,06-meilensteine.png,OFFEN_NACH_SCHRITT_5,Kleine Momente bewahren,de-DE,1080,1920,,,,
+07,07-familie.png,OFFEN_NACH_SCHRITT_5,Betreuung gemeinsam organisieren,de-DE,1080,1920,,,,
+08,08-frag-lotti.png,OFFEN_NACH_SCHRITT_5,Fragen zu deinen Einträgen,de-DE,1080,1920,,,,

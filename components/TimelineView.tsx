@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, type RefreshControlProps } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -10,7 +10,7 @@ import { DailyEntry } from '@/lib/baby';
 interface TimelineViewProps {
   entries: DailyEntry[];
   onDeleteEntry: (id: string) => void;
-  refreshControl?: React.ReactElement;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 }
 
 const TimelineView: React.FC<TimelineViewProps> = ({ entries, onDeleteEntry, refreshControl }) => {

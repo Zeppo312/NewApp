@@ -1,8 +1,12 @@
+import { useLocale } from '@/contexts/LocaleContext';
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React from 'react';
-import { View, Text, Dimensions, TouchableOpacity } from 'react-native';
+import { View, Text, Dimensions } from 'react-native';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { QualityColors } from '@/constants/Colors';
+import { Colors, QualityColors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 type SleepQuality = 'good' | 'medium' | 'bad' | null;
 
@@ -62,7 +66,7 @@ const calculateDominantQuality = (date: string, groupedEntries: Record<string, S
   let dominantQuality: SleepQuality = 'good';
   let maxDuration = 0;
 
-  (Object.keys(durationByQuality) as Array<'good' | 'medium' | 'bad' | 'null'>).forEach(quality => {
+  (Object.keys(durationByQuality) as ('good' | 'medium' | 'bad' | 'null')[]).forEach(quality => {
     if (quality !== 'null' && durationByQuality[quality] > maxDuration) {
       maxDuration = durationByQuality[quality];
       dominantQuality = quality as SleepQuality;
@@ -73,9 +77,15 @@ const calculateDominantQuality = (date: string, groupedEntries: Record<string, S
 };
 
 export default function CalendarHeatmap({ groupedEntries }: Props) {
+  const { locale } = useLocale();
+  const colorScheme = useColorScheme() ?? 'light';
+  const isDark = colorScheme === 'dark';
+  const textColor = isDark ? Colors.dark.text : '#7D5A50';
+  const borderColor = isDark ? Colors.dark.border : '#7D5A50';
+
   // State für den angezeigten Monat
   const [currentDate, setCurrentDate] = React.useState(new Date());
-  
+
   const monthName = format(currentDate, 'MMMM yyyy', { locale: de });
   
   // Navigation zum vorherigen Monat
@@ -115,43 +125,33 @@ export default function CalendarHeatmap({ groupedEntries }: Props) {
         alignItems: 'center',
         marginBottom: 8 
       }}>
-        <TouchableOpacity 
+        <PeriodNavigationButton direction="previous"
+          accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'month')}
+          isDark={isDark} color={textColor}
           onPress={goToPreviousMonth}
-          style={{ 
-            padding: 8,
-            borderRadius: 15,
-            backgroundColor: 'rgba(125, 90, 80, 0.1)'
-          }}
-        >
-          <Text style={{ color: '#7D5A50', fontWeight: 'bold' }}>◀</Text>
-        </TouchableOpacity>
-        
-        <Text style={{ 
-          fontWeight: 'bold', 
+        />
+
+        <Text style={{
+          fontWeight: 'bold',
           textAlign: 'center',
-          color: '#7D5A50',
+          color: textColor,
           fontSize: 16
         }}>
           {monthName}
         </Text>
-        
-        <TouchableOpacity 
+
+        <PeriodNavigationButton direction="next"
+          accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'month')}
+          isDark={isDark} color={textColor}
           onPress={goToNextMonth}
-          style={{ 
-            padding: 8,
-            borderRadius: 15,
-            backgroundColor: 'rgba(125, 90, 80, 0.1)'
-          }}
-        >
-          <Text style={{ color: '#7D5A50', fontWeight: 'bold' }}>▶</Text>
-        </TouchableOpacity>
+        />
       </View>
       
       {/* Wochentage-Kopfzeile */}
       <View style={{ flexDirection: 'row' }}>
         {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
           <View key={day} style={{width: '14.28%', alignItems: 'center', padding: 5}}>
-            <Text style={{fontWeight: 'bold', color: '#7D5A50'}}>{day}</Text>
+            <Text style={{fontWeight: 'bold', color: textColor}}>{day}</Text>
           </View>
         ))}
       </View>
@@ -186,22 +186,22 @@ export default function CalendarHeatmap({ groupedEntries }: Props) {
                              currentDate.getFullYear() === today.getFullYear();
           
           return (
-            <View 
+            <View
               key={`day-${day}`}
               style={{
-                width: '14.28%', 
-                aspectRatio: 1, 
+                width: '14.28%',
+                aspectRatio: 1,
                 margin: 0,
                 justifyContent: 'center',
                 alignItems: 'center',
                 borderWidth: isCurrentDay ? 1 : 0,
-                borderColor: '#7D5A50',
+                borderColor: borderColor,
                 borderRadius: 20
               }}
             >
               <Text style={{
-                fontSize: 12, 
-                color: '#7D5A50',
+                fontSize: 12,
+                color: textColor,
                 fontWeight: isCurrentDay ? 'bold' : 'normal'
               }}>
                 {day}
@@ -222,15 +222,15 @@ export default function CalendarHeatmap({ groupedEntries }: Props) {
       <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginTop: 15 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ width: 12, height: 12, backgroundColor: getQualityColor('good'), marginRight: 5 }} />
-          <Text style={{ color: '#7D5A50' }}>Gut</Text>
+          <Text style={{ color: textColor }}>Gut</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ width: 12, height: 12, backgroundColor: getQualityColor('medium'), marginRight: 5 }} />
-          <Text style={{ color: '#7D5A50' }}>Mittel</Text>
+          <Text style={{ color: textColor }}>Mittel</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ width: 12, height: 12, backgroundColor: getQualityColor('bad'), marginRight: 5 }} />
-          <Text style={{ color: '#7D5A50' }}>Schlecht</Text>
+          <Text style={{ color: textColor }}>Schlecht</Text>
         </View>
       </View>
     </View>

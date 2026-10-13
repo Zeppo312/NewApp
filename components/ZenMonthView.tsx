@@ -1,3 +1,6 @@
+import { useLocale } from '@/contexts/LocaleContext';
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated, Dimensions, ScrollView } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -13,8 +16,12 @@ interface ZenMonthViewProps {
 }
 
 const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect }) => {
+  const { locale } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const selectedBgColor = isDark ? Colors.dark.accent : '#7D5A50';
+  const containerBgColor = isDark ? Colors.dark.cardLight : 'rgba(255, 255, 255, 0.95)';
   const [isExpanded, setIsExpanded] = useState(true); // Standardmäßig aufgeklappt
   const [monthDays, setMonthDays] = useState<(Date | null)[]>([]);
   const [entries, setEntries] = useState<DailyEntry[]>([]);
@@ -177,8 +184,8 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
         style={[
           styles.dayCell,
           !_isCurrentMonth && styles.otherMonthCell,
-          _isToday && styles.todayCell,
-          _isSelected && styles.selectedCell,
+          _isToday && [styles.todayCell, isDark && { backgroundColor: 'rgba(255, 255, 255, 0.1)' }],
+          _isSelected && [styles.selectedCell, { backgroundColor: selectedBgColor }],
         ]}
         onPress={() => onDateSelect(date)}
       >
@@ -218,7 +225,7 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
   const weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
   return (
-    <Animated.View style={[styles.container, { height: drawerHeight }]}>
+    <Animated.View style={[styles.container, { height: drawerHeight, backgroundColor: containerBgColor }]}>
       <TouchableOpacity
         style={styles.header}
         onPress={() => setIsExpanded(!isExpanded)}
@@ -242,23 +249,21 @@ const ZenMonthView: React.FC<ZenMonthViewProps> = ({ selectedDate, onDateSelect 
       {isExpanded && (
         <ScrollView style={styles.content}>
           <View style={styles.monthNavigation}>
-            <TouchableOpacity
-              style={styles.navButton}
+            <PeriodNavigationButton direction="previous"
+              accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'month')}
+              isDark={isDark} color={theme.text}
               onPress={goToPreviousMonth}
-            >
-              <IconSymbol name="chevron.left" size={20} color={theme.text} />
-            </TouchableOpacity>
+            />
 
             <ThemedText style={styles.monthYearTextLarge}>
               {formatMonthYear(selectedDate)}
             </ThemedText>
 
-            <TouchableOpacity
-              style={styles.navButton}
+            <PeriodNavigationButton direction="next"
+              accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'month')}
+              isDark={isDark} color={theme.text}
               onPress={goToNextMonth}
-            >
-              <IconSymbol name="chevron.right" size={20} color={theme.text} />
-            </TouchableOpacity>
+            />
           </View>
 
           <View style={styles.calendar}>
@@ -391,11 +396,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
-  navButton: {
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(125, 90, 80, 0.1)',
-  },
   monthYearTextLarge: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   selectedCell: {
-    backgroundColor: '#7D5A50',
+    // backgroundColor wird dynamisch gesetzt
     borderRadius: 5,
   },
   dayText: {

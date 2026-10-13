@@ -41,9 +41,9 @@ export const DebugPanel: React.FC = () => {
 
   // Expose to global for easy access
   useEffect(() => {
-    (global as any).addDebugLog = addDebugLog;
+    (globalThis as any).addDebugLog = addDebugLog;
     return () => {
-      delete (global as any).addDebugLog;
+      delete (globalThis as any).addDebugLog;
     };
   }, []);
 

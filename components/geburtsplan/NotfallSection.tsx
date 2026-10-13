@@ -6,18 +6,24 @@ import { CheckboxOption } from './CheckboxOption';
 import { RadioOption } from './RadioOption';
 import { TextInputField } from './TextInputField';
 import { Notfall } from '@/types/geburtsplan';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getBirthPlanOptions, localizeBirthPlanOptionValue, translateBirthPlanText } from '@/lib/birthPlanTranslations';
 
 interface NotfallSectionProps {
   data: Notfall;
   onChange: (data: Notfall) => void;
   containerStyle?: StyleProp<ViewStyle>;
+  readOnly?: boolean;
 }
 
-export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, containerStyle }) => {
+export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, containerStyle, readOnly = false }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateBirthPlanText>[1]) => translateBirthPlanText(locale, key);
   // Begleitperson im OP
-  const begleitpersonOptions = ['Ja', 'Nein', 'wenn möglich'];
+  const begleitpersonOptions = getBirthPlanOptions(locale, 'yesNoIfPossible').map(({ label }) => label);
   
   const selectBegleitperson = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       begleitpersonImOP: option,
@@ -26,6 +32,7 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
 
   // Bonding im OP
   const toggleBondingImOP = () => {
+    if (readOnly) return;
     onChange({
       ...data,
       bondingImOP: !data.bondingImOP,
@@ -33,9 +40,10 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
   };
 
   // Fotoerlaubnis
-  const fotoerlaubnisOptions = ['Ja', 'Nein', 'nur nach Absprache'];
+  const fotoerlaubnisOptions = getBirthPlanOptions(locale, 'yesNoByAgreement').map(({ label }) => label);
   
   const selectFotoerlaubnis = (option: string) => {
+    if (readOnly) return;
     onChange({
       ...data,
       fotoerlaubnis: option,
@@ -43,44 +51,51 @@ export const NotfallSection: React.FC<NotfallSectionProps> = ({ data, onChange, 
   };
 
   return (
-    <GeburtsplanSection title="5. Für den Notfall / Kaiserschnitt" containerStyle={containerStyle}>
-      <OptionGroup label="Begleitperson im OP">
+    <GeburtsplanSection title={t('section.emergency')} containerStyle={containerStyle}>
+      <OptionGroup label={t('emergency.companion')}>
         {begleitpersonOptions.map((option) => (
           <RadioOption
             key={option}
             label={option}
-            selected={data.begleitpersonImOP === option}
+            selected={localizeBirthPlanOptionValue(locale, data.begleitpersonImOP) === option}
             onSelect={() => selectBegleitperson(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
-      <OptionGroup label="Bonding im OP">
+      <OptionGroup label={t('emergency.bonding')}>
         <CheckboxOption
-          label="Möglichst früh"
+          label={t('emergency.bondingEarly')}
           checked={data.bondingImOP}
           onToggle={toggleBondingImOP}
+          disabled={readOnly}
         />
       </OptionGroup>
 
-      <OptionGroup label="Fotoerlaubnis">
+      <OptionGroup label={t('emergency.photos')}>
         {fotoerlaubnisOptions.map((option) => (
           <RadioOption
             key={option}
             label={option}
-            selected={data.fotoerlaubnis === option}
+            selected={localizeBirthPlanOptionValue(locale, data.fotoerlaubnis) === option}
             onSelect={() => selectFotoerlaubnis(option)}
+            disabled={readOnly}
           />
         ))}
       </OptionGroup>
 
       <TextInputField
-        label="Sonstige Wünsche für den Notfall"
+        label={t('emergency.other')}
         value={data.sonstigeWuensche}
-        onChangeText={(text) => onChange({ ...data, sonstigeWuensche: text })}
+        onChangeText={(text) => {
+          if (readOnly) return;
+          onChange({ ...data, sonstigeWuensche: text });
+        }}
         multiline
         numberOfLines={3}
-        placeholder="Hier kannst du weitere Wünsche für den Notfall eintragen..."
+        placeholder={t('emergency.otherPlaceholder')}
+        readOnly={readOnly}
       />
     </GeburtsplanSection>
   );

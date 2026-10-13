@@ -1,0 +1,190 @@
+[
+  {
+    "path": "android/app/src/main/AndroidManifest.xml",
+    "status": "source",
+    "permissions": [
+      {
+        "name": "android.permission.ACCESS_COARSE_LOCATION"
+      },
+      {
+        "name": "android.permission.ACCESS_FINE_LOCATION"
+      },
+      {
+        "name": "android.permission.CAMERA"
+      },
+      {
+        "name": "android.permission.FOREGROUND_SERVICE"
+      },
+      {
+        "name": "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      },
+      {
+        "name": "android.permission.INTERNET"
+      },
+      {
+        "name": "android.permission.MODIFY_AUDIO_SETTINGS"
+      },
+      {
+        "name": "android.permission.READ_CALENDAR"
+      },
+      {
+        "name": "android.permission.READ_EXTERNAL_STORAGE",
+        "maxSdkVersion": "32",
+        "{http://schemas.android.com/tools}replace": "android:maxSdkVersion"
+      },
+      {
+        "name": "android.permission.RECEIVE_BOOT_COMPLETED"
+      },
+      {
+        "name": "android.permission.RECORD_AUDIO"
+      },
+      {
+        "name": "android.permission.VIBRATE"
+      },
+      {
+        "name": "android.permission.WAKE_LOCK"
+      },
+      {
+        "name": "android.permission.WRITE_CALENDAR"
+      },
+      {
+        "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+        "maxSdkVersion": "32",
+        "{http://schemas.android.com/tools}replace": "android:maxSdkVersion"
+      }
+    ]
+  },
+  {
+    "path": "android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
+    "status": "debug_intermediate_not_final_release",
+    "permissions": [
+      {
+        "name": "android.permission.SYSTEM_ALERT_WINDOW"
+      },
+      {
+        "name": "android.permission.ACCESS_COARSE_LOCATION"
+      },
+      {
+        "name": "android.permission.ACCESS_FINE_LOCATION"
+      },
+      {
+        "name": "android.permission.CAMERA"
+      },
+      {
+        "name": "android.permission.FOREGROUND_SERVICE"
+      },
+      {
+        "name": "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      },
+      {
+        "name": "android.permission.INTERNET"
+      },
+      {
+        "name": "android.permission.MODIFY_AUDIO_SETTINGS"
+      },
+      {
+        "name": "android.permission.READ_CALENDAR"
+      },
+      {
+        "maxSdkVersion": "32",
+        "name": "android.permission.READ_EXTERNAL_STORAGE"
+      },
+      {
+        "name": "android.permission.RECEIVE_BOOT_COMPLETED"
+      },
+      {
+        "name": "android.permission.RECORD_AUDIO"
+      },
+      {
+        "name": "android.permission.VIBRATE"
+      },
+      {
+        "name": "android.permission.WAKE_LOCK"
+      },
+      {
+        "name": "android.permission.WRITE_CALENDAR"
+      },
+      {
+        "name": "android.permission.WRITE_EXTERNAL_STORAGE"
+      },
+      {
+        "name": "android.permission.ACCESS_NETWORK_STATE"
+      },
+      {
+        "name": "android.permission.ACCESS_WIFI_STATE"
+      },
+      {
+        "name": "android.permission.CHANGE_NETWORK_STATE"
+      },
+      {
+        "name": "android.permission.CHANGE_WIFI_MULTICAST_STATE"
+      },
+      {
+        "name": "android.permission.POST_NOTIFICATIONS"
+      },
+      {
+        "name": "android.permission.ACTIVITY_RECOGNITION"
+      },
+      {
+        "name": "com.android.vending.BILLING"
+      },
+      {
+        "name": "com.google.android.c2dm.permission.RECEIVE"
+      },
+      {
+        "name": "com.LottiBaby.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+      },
+      {
+        "name": "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
+      },
+      {
+        "name": "com.sec.android.provider.badge.permission.READ"
+      },
+      {
+        "name": "com.sec.android.provider.badge.permission.WRITE"
+      },
+      {
+        "name": "com.htc.launcher.permission.READ_SETTINGS"
+      },
+      {
+        "name": "com.htc.launcher.permission.UPDATE_SHORTCUT"
+      },
+      {
+        "name": "com.sonyericsson.home.permission.BROADCAST_BADGE"
+      },
+      {
+        "name": "com.sonymobile.home.permission.PROVIDER_INSERT_BADGE"
+      },
+      {
+        "name": "com.anddoes.launcher.permission.UPDATE_COUNT"
+      },
+      {
+        "name": "com.majeur.launcher.permission.UPDATE_BADGE"
+      },
+      {
+        "name": "com.huawei.android.launcher.permission.CHANGE_BADGE"
+      },
+      {
+        "name": "com.huawei.android.launcher.permission.READ_SETTINGS"
+      },
+      {
+        "name": "com.huawei.android.launcher.permission.WRITE_SETTINGS"
+      },
+      {
+        "name": "android.permission.READ_APP_BADGE"
+      },
+      {
+        "name": "com.oppo.launcher.permission.READ_SETTINGS"
+      },
+      {
+        "name": "com.oppo.launcher.permission.WRITE_SETTINGS"
+      },
+      {
+        "name": "me.everything.badger.permission.BADGE_COUNT_READ"
+      },
+      {
+        "name": "me.everything.badger.permission.BADGE_COUNT_WRITE"
+      }
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="430" height="932" viewBox="0 0 430 932">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff8f0"/><stop offset="1" stop-color="#f4dfd4"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#7d5a50" flood-opacity=".14"/></filter></defs>
+  <rect width="430" height="932" fill="url(#bg)"/><circle cx="-15" cy="160" r="108" fill="#e1d0f2" opacity=".42"/>
+  <text x="215" y="50" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#7d5a50">09:41</text>
+  <text x="28" y="105" font-family="Arial, sans-serif" font-size="27" font-weight="700" fill="#5c4033">Hallo, Mia</text>
+  <text x="28" y="130" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Euer gemeinsamer Überblick</text>
+  <rect x="20" y="158" width="390" height="104" rx="25" fill="#e0efeb" fill-opacity=".9" stroke="#fff" filter="url(#shadow)"/>
+  <circle cx="59" cy="209" r="19" fill="#a8c4c1"/><path d="M50 209l6 6 12-14" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="92" y="202" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#5c4033">Alles auf dem gleichen Stand</text>
+  <text x="92" y="227" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Mia &amp; Jonas sehen dieselben Updates.</text>
+  <text x="20" y="310" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#5c4033">Heute</text>
+  <rect x="20" y="332" width="187" height="156" rx="24" fill="#fff" fill-opacity=".78" stroke="#fff" filter="url(#shadow)"/><text x="46" y="371" font-family="Arial, sans-serif" font-size="27">☾</text><text x="46" y="408" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Schlaf</text><text x="46" y="447" font-family="Arial, sans-serif" font-size="29" font-weight="700" fill="#5c4033">3 h 42</text><text x="46" y="469" font-family="Arial, sans-serif" font-size="11" fill="#8e4ec6">von Jonas aktualisiert</text>
+  <rect x="223" y="332" width="187" height="156" rx="24" fill="#fff" fill-opacity=".78" stroke="#fff" filter="url(#shadow)"/><text x="249" y="371" font-family="Arial, sans-serif" font-size="27">◒</text><text x="249" y="408" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Fütterung</text><text x="249" y="447" font-family="Arial, sans-serif" font-size="29" font-weight="700" fill="#5c4033">12:20</text><text x="249" y="469" font-family="Arial, sans-serif" font-size="11" fill="#8e4ec6">von dir aktualisiert</text>
+  <rect x="20" y="512" width="390" height="160" rx="25" fill="#fff" fill-opacity=".75" stroke="#fff" filter="url(#shadow)"/>
+  <text x="46" y="553" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#5c4033">Nächster Termin</text><text x="46" y="584" font-family="Arial, sans-serif" font-size="21" font-weight="700" fill="#5c4033">U4 · Dienstag, 10:30</text><text x="46" y="612" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Kinderarztpraxis am Park</text>
+  <rect x="46" y="630" width="151" height="26" rx="13" fill="#eee1f8"/><text x="121" y="648" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#8e4ec6">für beide sichtbar</text>
+  <rect x="20" y="718" width="390" height="85" rx="25" fill="#8e4ec6"/><text x="215" y="755" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="white" opacity=".85">Lotti Baby verbindet euch</text><text x="215" y="783" text-anchor="middle" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="white">Ein Baby. Ein Überblick.</text>
+</svg>

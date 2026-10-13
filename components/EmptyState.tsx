@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Image } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
@@ -11,26 +11,26 @@ interface EmptyStateProps {
   message?: string;
 }
 
-const EmptyState: React.FC<EmptyStateProps> = ({ 
+const EmptyState: React.FC<EmptyStateProps> = ({
   type = 'day',
   message = 'Noch nichts eingetragen für heute – los geht\'s!'
 }) => {
   const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  
+  const iconColor = colorScheme === 'dark' ? Colors.dark.text : '#7D5A50';
+
   // Wähle das passende Icon basierend auf dem Typ
   const getIcon = () => {
     switch (type) {
       case 'day':
-        return <IconSymbol name="moon.stars.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="moon.stars.fill" size={40} color={iconColor} />;
       case 'timeline':
-        return <IconSymbol name="clock.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="clock.fill" size={40} color={iconColor} />;
       case 'week':
-        return <IconSymbol name="calendar" size={40} color="#7D5A50" />;
+        return <IconSymbol name="calendar" size={40} color={iconColor} />;
       case 'month':
-        return <IconSymbol name="calendar.badge.plus" size={40} color="#7D5A50" />;
+        return <IconSymbol name="calendar.badge.plus" size={40} color={iconColor} />;
       default:
-        return <IconSymbol name="moon.stars.fill" size={40} color="#7D5A50" />;
+        return <IconSymbol name="moon.stars.fill" size={40} color={iconColor} />;
     }
   };
   
@@ -44,16 +44,9 @@ const EmptyState: React.FC<EmptyStateProps> = ({
         {getIcon()}
       </View>
       
-      <ThemedText style={styles.message}>
+      <ThemedText type="body" style={styles.message}>
         {message}
       </ThemedText>
-      
-      <View style={styles.hintContainer}>
-        <IconSymbol name="arrow.down" size={20} color="#7D5A50" />
-        <ThemedText style={styles.hint}>
-          Tippe auf + um einen Eintrag zu erstellen
-        </ThemedText>
-      </View>
     </ThemedView>
   );
 };
@@ -78,24 +71,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(125, 90, 80, 0.1)',
   },
   message: {
-    fontSize: 16,
-    fontWeight: '500',
     textAlign: 'center',
     marginBottom: 16,
-    lineHeight: 22,
-  },
-  hintContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(125, 90, 80, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  hint: {
-    fontSize: 14,
-    marginLeft: 6,
-    color: '#7D5A50',
   },
 });
 

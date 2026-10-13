@@ -1,0 +1,67 @@
+const de = {
+  queuedEntry: 'Lokal gespeichert · Abgleich ausstehend',
+  trackingLogout: '{count} ausstehende Einträge werden beim Abmelden auf diesem Gerät verworfen. Bitte synchronisiere sie vorher, wenn du sie behalten möchtest.',
+  trackingLogoutTitle: 'Ausstehende Einträge',
+  readSaved: 'Deine zuletzt geladenen Daten bleiben sichtbar.',
+  readUnavailable: 'Deine Daten konnten gerade nicht geladen werden. Bitte versuche es später erneut.',
+  saveConnectionLost: 'Die Speicherung konnte nicht bestätigt werden. Bitte prüfe den Verlauf, sobald du wieder online bist, bevor du erneut speicherst.',
+  applyCorrection: 'Korrigierte Stoppzeit sichern',
+  care: 'Pflegeeinträge', sleep: 'Schlafminuten', timer: 'Timer', pregnancy: 'Name und Termin',
+  accessLost: 'Ein ausstehender Schlaf-Stopp konnte wegen geändertem Zugriff nicht abgeglichen werden. Die betroffenen lokalen Daten wurden entfernt.',
+  nativeReview: 'Bitte den aktuellen Schlaf hier prüfen und stoppen.',
+  takeQuality: 'Auch meine Bewertung übernehmen', takeNotes: 'Auch meine Notiz übernehmen',
+  qualityGood: 'Gut', qualityMedium: 'Mittel', qualityBad: 'Schlecht',
+  asOf: 'Gespeicherter Stand: {time}',
+  updating: 'Wird aktualisiert …', saved: 'Gespeicherter Stand: {time}. Aktualisierung derzeit nicht möglich.',
+  missing: 'Für diesen Tag noch keine Daten auf diesem Gerät.', retry: 'Erneut versuchen',
+  draft: 'Entwurf auf diesem Gerät gespeichert. Noch nicht im Verlauf.',
+  deviceOnly: 'Nur auf diesem Gerät; wird beim Abmelden oder Widerruf gelöscht.',
+  resume: 'Fortsetzen', discard: 'Verwerfen', restore: 'Gespeicherter Entwurf',
+  storageError: 'Die Sicherung auf diesem Gerät ist fehlgeschlagen. Deine Eingaben bleiben hier erhalten.',
+  corrupt: 'Der gespeicherte Entwurf ist nicht lesbar. Bitte bewusst verwerfen.',
+  onlineAnyway: 'Trotzdem online speichern', unsafe: 'Der Entwurf übersteht einen Neustart derzeit nicht sicher.',
+  unknown: 'Speicherung konnte nicht bestätigt werden. Bitte den Verlauf prüfen.',
+  checkHistory: 'Verlauf prüfen', alreadyInHistory: 'Bereits im Verlauf – Entwurf entfernen',
+  notInHistory: 'Nach Prüfung nicht vorhanden – erneut speichern', inventoryCheck: 'Vorratsauswahl erneut prüfen.',
+  pending: 'Auf diesem Gerät um {time} gestoppt. Noch nicht mit dem Partner abgeglichen.',
+  stopExplain: 'Der Stopp wird bei Verbindung abgeglichen. Unter einer Minute wird dieser Schlaf verworfen. Die Bewertung gilt für dieses Segment.',
+  stop: 'Auf diesem Gerät stoppen', sync: 'Jetzt abgleichen', inspect: 'Ausstehenden Stopp prüfen',
+  askAlways: 'Vor Übertragung prüfen', conflict: 'Unterschiedliche Schlafstände', own: 'Mein Offline-Stopp', shared: 'Gemeinsamer Stand',
+  takeOwn: 'Meine Stoppzeit übernehmen', keepShared: 'Gemeinsamen Stand beibehalten', later: 'Später entscheiden',
+  active: 'Noch aktiv', unavailable: 'Nicht mehr verfügbar', newActive: 'Zusätzlicher aktiver Schlaf',
+  applied: 'Offline-Stopp um {time} übernommen. Gemeinsam gespeichert.',
+  agreed: 'Deine Stoppzeit um {time} ist bereits im gemeinsamen Stand.',
+  shortDiscarded: 'Der Schlaf unter einer Minute wurde gemeinsam verworfen.',
+  sharedKept: 'Gemeinsamen Schlafstand beibehalten.',
+  blocked: 'Abgleich derzeit gesperrt. Bitte Verbindung und Zugriff prüfen.',
+  gate: 'Offline-Stopp ist für diesen Server noch nicht sicher verfügbar.',
+  correct: 'Stoppzeit korrigieren', logout: '{count} ausstehende Schlaf-Stopps werden beim Abmelden auf diesem Gerät verworfen.',
+  logoutDiscard: 'Abmelden und verwerfen', back: 'Zurück', details: 'Beginn, Notiz, Bewertung oder Schlafstruktur haben sich geändert.',
+  localTimer: 'Letzter bekannter Schlafstand. Gemeinsamer Status nicht aktuell bestätigt.',
+};
+type Key = keyof typeof de;
+const en: Record<Key, string> = {
+  queuedEntry: 'Saved locally · Sync pending',
+  trackingLogout: 'Signing out discards {count} pending entries on this device. Sync them first if you want to keep them.',
+  trackingLogoutTitle: 'Pending entries',
+  readSaved: 'Your last loaded data is still shown.',
+  readUnavailable: 'Your data could not be loaded right now. Please try again later.',
+  saveConnectionLost: 'Saving could not be confirmed. Please check the timeline when you are back online before saving again.',
+  applyCorrection: 'Save corrected stop time',
+  accessLost:'A pending sleep stop could not be reconciled because access changed. The affected local data was removed.',nativeReview:'Review and stop the current sleep here.',takeQuality:'Also use my rating',takeNotes:'Also use my note',qualityGood:'Good',qualityMedium:'Fair',qualityBad:'Poor',asOf:'Saved as of {time}',agreed:'Your stop time at {time} is already in the shared state.',shortDiscarded:'The sleep under one minute was discarded in the shared state.',sharedKept:'Shared sleep state kept.',care:'Care entries',sleep:'Sleep minutes',timer:'Timer',pregnancy:'Name and due date',updating:'Updating …',saved:'Saved as of {time}. Unable to refresh right now.',missing:'No data for this day on this device yet.',retry:'Try again',draft:'Draft saved on this device. Not in the timeline yet.',deviceOnly:'Only on this device; removed on sign-out or withdrawal.',resume:'Continue',discard:'Discard',restore:'Saved draft',storageError:'Could not save on this device. Your input is kept here.',corrupt:'The saved draft cannot be read. Please explicitly discard it.',onlineAnyway:'Save online anyway',unsafe:'The draft may not survive a restart right now.',unknown:'Saving could not be confirmed. Please check the timeline.',checkHistory:'Check timeline',alreadyInHistory:'Already in timeline – remove draft',notInHistory:'Checked and absent – allow saving again',inventoryCheck:'Please check the inventory selection again.',pending:'Stopped on this device at {time}. Not reconciled with your partner yet.',stopExplain:'This stop will be reconciled when connected. Sleeps under one minute are discarded. The rating applies to this segment.',stop:'Stop on this device',sync:'Reconcile now',inspect:'Review pending stop',askAlways:'Review before sending',conflict:'Different sleep states',own:'My offline stop',shared:'Shared state',takeOwn:'Use my stop time',keepShared:'Keep shared state',later:'Decide later',active:'Still active',unavailable:'No longer available',newActive:'Additional active sleep',applied:'Offline stop at {time} accepted. Saved together.',blocked:'Reconciliation is blocked. Check connection and access.',gate:'Offline stopping is not safely available on this server yet.',correct:'Correct stop time',logout:'Signing out discards {count} pending sleep stops on this device.',logoutDiscard:'Sign out and discard',back:'Back',details:'Start, notes, rating or sleep structure changed.',localTimer:'Last known sleep state. Shared status is not currently confirmed.',
+};
+const es: Record<Key, string> = {
+  queuedEntry: 'Guardado localmente · Sincronización pendiente',
+  trackingLogout: 'Al cerrar sesión se descartan {count} entradas pendientes en este dispositivo. Sincronízalas antes para conservarlas.',
+  trackingLogoutTitle: 'Entradas pendientes',
+  readSaved: 'Sigues viendo los últimos datos cargados.',
+  readUnavailable: 'No se pudieron cargar tus datos ahora. Inténtalo de nuevo más tarde.',
+  saveConnectionLost: 'No se pudo confirmar el guardado. Revisa el historial cuando vuelvas a tener conexión antes de guardar de nuevo.',
+  applyCorrection: 'Guardar hora de parada corregida',
+  accessLost:'No se pudo conciliar una parada pendiente porque cambió el acceso. Se eliminaron los datos locales afectados.',nativeReview:'Revisa y detén el sueño actual aquí.',takeQuality:'Usar también mi valoración',takeNotes:'Usar también mi nota',qualityGood:'Buena',qualityMedium:'Media',qualityBad:'Mala',asOf:'Estado guardado: {time}',agreed:'Tu hora de parada a las {time} ya está en el estado compartido.',shortDiscarded:'Se descartó el sueño de menos de un minuto en el estado compartido.',sharedKept:'Se mantuvo el estado compartido.',care:'Cuidados',sleep:'Minutos de sueño',timer:'Temporizador',pregnancy:'Nombre y fecha prevista',updating:'Actualizando …',saved:'Estado guardado: {time}. No se puede actualizar ahora.',missing:'Aún no hay datos de este día en este dispositivo.',retry:'Reintentar',draft:'Borrador guardado en este dispositivo. Aún no está en el historial.',deviceOnly:'Solo en este dispositivo; se elimina al cerrar sesión o retirar el consentimiento.',resume:'Continuar',discard:'Descartar',restore:'Borrador guardado',storageError:'No se pudo guardar en este dispositivo. Tus datos siguen aquí.',corrupt:'No se puede leer el borrador guardado. Descártalo conscientemente.',onlineAnyway:'Guardar en línea de todos modos',unsafe:'Ahora no se garantiza conservar el borrador tras reiniciar.',unknown:'No se pudo confirmar el guardado. Revisa el historial.',checkHistory:'Revisar historial',alreadyInHistory:'Ya está en el historial – eliminar borrador',notInHistory:'Revisado y ausente – volver a guardar',inventoryCheck:'Revisa de nuevo el inventario elegido.',pending:'Detenido en este dispositivo a las {time}. Aún no se ha conciliado con tu pareja.',stopExplain:'Se conciliará al tener conexión. Los sueños de menos de un minuto se descartan. La valoración corresponde a este segmento.',stop:'Detener en este dispositivo',sync:'Conciliar ahora',inspect:'Revisar parada pendiente',askAlways:'Revisar antes de enviar',conflict:'Estados de sueño diferentes',own:'Mi parada sin conexión',shared:'Estado compartido',takeOwn:'Usar mi hora de parada',keepShared:'Mantener estado compartido',later:'Decidir después',active:'Sigue activo',unavailable:'Ya no disponible',newActive:'Otro sueño activo',applied:'Parada a las {time} aceptada. Guardada para ambos.',blocked:'Conciliación bloqueada. Revisa conexión y acceso.',gate:'La parada sin conexión aún no está disponible de forma segura en este servidor.',correct:'Corregir hora de parada',logout:'Al cerrar sesión se descartan {count} paradas pendientes en este dispositivo.',logoutDiscard:'Cerrar sesión y descartar',back:'Volver',details:'Han cambiado el inicio, las notas, la valoración o la estructura.',localTimer:'Último estado conocido. El estado compartido no está confirmado actualmente.',
+};
+export function offlineText(locale: string, key: Key, values: Record<string, string | number> = {}) {
+  let text = (locale === 'en' ? en : locale === 'es' ? es : de)[key];
+  for (const [name, value] of Object.entries(values)) text = text.replace(`{${name}}`, String(value));
+  return text;
+}

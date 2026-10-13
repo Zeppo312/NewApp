@@ -40,17 +40,14 @@ Nach den Änderungen an der Synchronisierungsfunktionalität für die Alltag-Ein
    Führen Sie den folgenden Befehl aus, um ein EAS Update für alle Plattformen zu erstellen:
 
    ```bash
-   eas update --auto
+   npm run update:preview -- --message "Beschreibung der Änderung"
    ```
 
    Oder für spezifische Plattformen:
 
    ```bash
-   # Nur für iOS
-   eas update --platform ios --auto
-
-   # Nur für Android
-   eas update --platform android --auto
+   # Production erst nach einem erfolgreichen TestFlight-Test:
+   npm run update:production -- --message "Beschreibung der Änderung"
    ```
 
 4. **Fügen Sie eine Beschreibung hinzu (empfohlen)**
@@ -58,7 +55,7 @@ Nach den Änderungen an der Synchronisierungsfunktionalität für die Alltag-Ein
    Es ist hilfreich, eine Beschreibung der Änderungen hinzuzufügen:
 
    ```bash
-   eas update --auto --message "Fix: Synchronisierung von Alltag-Einträgen zwischen verbundenen Benutzern"
+   npm run update:preview -- --message "Fix: Synchronisierung von Alltag-Einträgen zwischen verbundenen Benutzern"
    ```
 
 5. **Überprüfen Sie den Update-Status**

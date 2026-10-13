@@ -1,191 +1,335 @@
-import React, { useState } from 'react';
-import { StyleSheet, TouchableOpacity, View, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { caretakerCopy } from '@/lib/caretaker-copy';
+/* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
+import { useLocale } from '@/contexts/LocaleContext';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, TouchableOpacity, View, TextInput, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Alert, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Linking from 'expo-linking';
+import { Image } from 'expo-image';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { ActionButton } from '@/components/ui/action-button';
 import { ThemedBackground } from '@/components/ThemedBackground';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
+import { translateAccountLinkingText } from '@/lib/accountLinkingTranslations';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase, supabaseUrl, supabaseAnonKey, redeemInvitationCode } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
+import { acceptTerms, TERMS_VERSION } from '@/lib/termsConsent';
+import { googleAuthErrorKey } from '@/lib/google-auth';
+import {
+  AuthTranslationKey,
+  DEFAULT_AUTH_LOCALE,
+  translateAuthText,
+} from '@/lib/authTranslations';
+
+let ACTIVE_AUTH_LOCALE = DEFAULT_AUTH_LOCALE;
+const t = (key: AuthTranslationKey, params?: Record<string, string | number>) =>
+  translateAuthText(ACTIVE_AUTH_LOCALE, key, params);
+
+const isAndroid = Platform.OS === 'android';
 
 export default function LoginScreen() {
+  ACTIVE_AUTH_LOCALE = useLocale().locale;
+  const [androidKeyboardVisible, setAndroidKeyboardVisible] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const invitationRef = useRef<TextInput>(null);
+  const focusedInputRef = useRef<TextInput | null>(null);
+  useEffect(() => {
+    if (!isAndroid) return;
+    const show = Keyboard.addListener('keyboardDidShow', () => setAndroidKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setAndroidKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  const scrollFocusedAndroidInput = useCallback(() => {
+    if (!isAndroid || !Keyboard.isVisible() || !focusedInputRef.current) return;
+    scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(
+      focusedInputRef.current,
+      24,
+      true,
+    );
+  }, []);
+
+  // Run after the compact keyboard layout is committed; layout/content callbacks
+  // also handle the native resize arriving before or after the keyboard event.
+  useEffect(() => {
+    if (androidKeyboardVisible) scrollFocusedAndroidInput();
+  }, [androidKeyboardVisible, scrollFocusedAndroidInput]);
+
+  const focusAndroidInput = (input: TextInput | null) => {
+    focusedInputRef.current = input;
+    scrollFocusedAndroidInput();
+  };
+  const { fontScale } = useWindowDimensions();
+  // Keep larger accessibility text inside the field instead of clipping it.
+  const androidInputStyle = isAndroid
+    ? { height: Math.max(47, Math.ceil(24 * fontScale + 20)) }
+    : undefined;
+  const params = useLocalSearchParams<{ invitationCode?: string }>();
+  const prefilledInvitationCode = typeof params.invitationCode === 'string'
+    ? params.invitationCode.replace(/\s+/g, '').toUpperCase()
+    : '';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
-  const [invitationCode, setInvitationCode] = useState('');
-  const [showInvitationField, setShowInvitationField] = useState(false);
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
-  const { signInWithEmail, signUpWithEmail, signInWithApple } = useAuth();
+  const [invitationCode, setInvitationCode] = useState(prefilledInvitationCode);
+  const [showInvitationField, setShowInvitationField] = useState(prefilledInvitationCode.length > 0);
+  const [showInvitationScanner, setShowInvitationScanner] = useState(false);
+  const accentColor = Colors.light.accent;
+  const primaryTextColor = Colors.light.textPrimary;
+  const secondaryTextColor = Colors.light.textSecondary;
+  const { signInWithEmail, signUpWithEmail, signInWithApple, signInWithGoogle, signOut } = useAuth();
+  const googleBusyRef = useRef(false);
+  const normalizedInvitationCode = showInvitationField && invitationCode
+    ? invitationCode.trim().replace(/\s+/g, '').toUpperCase()
+    : undefined;
 
-  // Funktion zum Abrufen des is_baby_born-Flags
-  const checkIsBabyBorn = async (userId: string) => {
+  // Nach Auth immer über Root-Router gehen, damit ein zentraler Guard
+  // den passenden Startscreen anhand des aktuellen Baby-Status auswählt.
+  const navigateAfterAuth = async () => {
     try {
-      console.log('Checking is_baby_born flag for user:', userId);
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('is_baby_born')
-        .eq('user_id', userId)
-        .single();
-
-      if (error) {
-        console.error('Error fetching is_baby_born flag:', error);
-        return false; // Standardmäßig auf false setzen, wenn ein Fehler auftritt
+      if (normalizedInvitationCode) {
+        router.replace({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
       }
 
-      console.log('is_baby_born flag data:', data);
-      return data?.is_baby_born || false;
-    } catch (err) {
-      console.error('Exception when checking is_baby_born flag:', err);
-      return false;
-    }
-  };
-
-  // Funktion zur Navigation basierend auf dem is_baby_born-Flag
-  const navigateBasedOnBabyBornFlag = async (userId: string) => {
-    try {
-      const isBabyBorn = await checkIsBabyBorn(userId);
-      console.log('Navigation based on is_baby_born flag:', isBabyBorn);
-
-      if (isBabyBorn) {
-        // Wenn das Baby geboren ist, zur Home-Seite navigieren
-        router.replace('/(tabs)/home');
-      } else {
-        // Wenn das Baby noch nicht geboren ist, zur Countdown-Seite navigieren
-        router.replace('/(tabs)/countdown');
-      }
+      router.replace('/');
     } catch (navError) {
       console.error('Navigation error:', navError);
-      // Fallback-Navigation zur Countdown-Seite
-      router.navigate('/(tabs)/countdown');
+      if (normalizedInvitationCode) {
+        router.navigate({
+          pathname: '/account-linking',
+          params: {
+            invitationCode: normalizedInvitationCode,
+          },
+        });
+        return;
+      }
+
+      router.navigate('/');
     }
   };
 
-  const handleAuth = async () => {
-    // Reset error state
-    setError('');
-
-    // Basic validation
-    if (!email || !password) {
-      setError('Bitte E-Mail und Passwort eingeben');
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert(
+        t('login.emailRequiredTitle'),
+        t('login.emailRequiredMessage'),
+        [{ text: t('common.ok') }]
+      );
       return;
     }
 
     try {
       setIsLoading(true);
-      console.log('Starting authentication process...');
+      setError('');
 
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      const redirectTo = Linking.createURL('auth/reset-password');
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
 
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
+      if (resetError) {
+        throw resetError;
       }
 
+      Alert.alert(
+        t('login.resetEmailSentTitle'),
+        t('login.resetEmailSentMessage'),
+        [{ text: t('common.ok') }]
+      );
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(t('login.resetFailed'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const waitForAuthenticatedSession = async (timeoutMs = 2000) => {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('Session check error after login:', sessionError);
+        return null;
+      }
+
+      if (data.session?.user) {
+        return data.session;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    return null;
+  };
+
+  const handleAuth = async () => {
+    if (isLoading) return;
+    // Reset error state
+    setError('');
+
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+    setEmail(normalizedEmail);
+    setPassword(normalizedPassword);
+
+    // Basic validation
+    if (!normalizedEmail || !normalizedPassword) {
+      setError(t('login.credentialsRequired'));
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
       if (isRegistering) {
-        console.log('Registering with email:', email);
         // Registrierung mit Supabase
-        const { data, error: signUpError } = await signUpWithEmail(email, password);
+        const { data, error: signUpError } = await signUpWithEmail(normalizedEmail, normalizedPassword, {
+          version: TERMS_VERSION,
+          acceptedAt: new Date().toISOString(),
+        });
 
         if (signUpError) {
           console.error('Sign up error:', signUpError);
           throw signUpError;
         }
 
-        console.log('Registration successful:', data);
+        if (data?.session?.user) {
+          const consentResult = await acceptTerms('signup', data.session.user.id);
+          if (!consentResult.success) {
+            await signOut();
+            setError(t('login.termsSaveFailed'));
+            return;
+          }
+        }
 
         // Wenn die Registrierung erfolgreich war
         if (data && data.user) {
           // Bei Supabase wird nach der Registrierung automatisch ein OTP gesendet
-          console.log('Registration successful, redirecting to OTP verification...');
           router.replace({
             pathname: './verify-otp',
-            params: { email: email }
+            params: {
+              email: normalizedEmail,
+              invitationCode: normalizedInvitationCode
+            }
           });
           return;
         } else if (data && !data.user) {
           // Registrierung erfolgreich, aber User muss OTP bestätigen
-          console.log('Registration pending OTP verification...');
           router.replace({
             pathname: './verify-otp', 
-            params: { email: email }
+            params: {
+              email: normalizedEmail,
+              invitationCode: normalizedInvitationCode
+            }
           });
           return;
         }
       } else {
-        console.log('Signing in with email:', email);
         // Anmeldung mit Supabase
-        const { data, error: signInError } = await signInWithEmail(email, password);
+        const { data, error: signInError } = await signInWithEmail(normalizedEmail, normalizedPassword);
 
         if (signInError) {
           console.error('Sign in error:', signInError);
           throw signInError;
         }
 
-        console.log('Sign in successful:', data);
-
-        // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
-        if (data && data.user && data.user.id) {
-          await navigateBasedOnBabyBornFlag(data.user.id);
-        } else {
-          // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-          try {
-            router.replace('/(tabs)/countdown');
-          } catch (navError) {
-            console.error('Navigation error:', navError);
-            router.navigate('/(tabs)/countdown');
-          }
+        // Session explizit bestätigen, damit der Root-Guard nicht in einen Login-Redirect fällt
+        const session = data?.session ?? await waitForAuthenticatedSession();
+        if (!session?.user) {
+          setError(t('login.sessionUnavailable'));
+          return;
         }
+
+        const consentResult = await acceptTerms('login', session.user.id);
+        if (!consentResult.success) {
+          await signOut();
+          setError(t('login.termsSaveFailed'));
+          return;
+        }
+
+        await navigateAfterAuth();
       }
     } catch (err: any) {
       // Benutzerfreundliche Fehlermeldungen
       console.error('Authentication error:', err);
 
-      if (err.message?.includes('Invalid login')) {
-        setError('Ungültige E-Mail oder Passwort');
+      if (err.message?.toLowerCase().includes('rate limit')) {
+        setError(t('login.tooManyAttempts'));
+      } else if (err.message?.includes('Invalid login')) {
+        setError(t('login.invalidCredentials'));
       } else if (err.message?.includes('Email not confirmed')) {
-        setError('Bitte bestätige deine E-Mail-Adresse');
+        setError(t('login.emailNotConfirmed'));
         Alert.alert(
-          'E-Mail nicht bestätigt',
-          'Bitte öffne den Bestätigungslink in der E-Mail, die wir dir gesendet haben.',
-          [{ text: 'OK' }]
+          t('login.emailNotConfirmedTitle'),
+          t('login.emailNotConfirmedMessage'),
+          [{ text: t('common.ok') }]
         );
       } else {
-        setError(isRegistering
-          ? 'Registrierung fehlgeschlagen. Bitte versuche es erneut.'
-          : 'Login fehlgeschlagen. Bitte versuche es erneut.');
+        const friendlyFallback = isRegistering
+          ? t('login.registrationFailed')
+          : t('login.signInFailed');
+        setError(friendlyFallback);
       }
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (googleBusyRef.current || isLoading) return;
+    setError('');
+    googleBusyRef.current = true;
+    setIsLoading(true);
+    try {
+      const result = await signInWithGoogle({
+        source: isRegistering ? 'signup' : 'login',
+        termsVersion: TERMS_VERSION,
+        invitationCode: normalizedInvitationCode,
+      });
+      if (result.status === 'callback') {
+        const callback = new URL(result.url);
+        router.replace({
+          pathname: '/auth/google-callback',
+          params: Object.fromEntries(callback.searchParams),
+        });
+      }
+    } catch (failure) {
+      setError(t(googleAuthErrorKey(failure)));
+    } finally {
+      googleBusyRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
   const handleAppleSignIn = async () => {
+    if (isLoading) return;
     setError('');
     setIsLoading(true);
     
     try {
-      console.log('Starting Apple Sign-In...');
       const { data, error: appleError } = await signInWithApple();
       
       if (appleError) {
@@ -193,14 +337,19 @@ export default function LoginScreen() {
         throw appleError;
       }
       
-      console.log('Apple Sign-In successful:', data);
-      
       // Check if this is a new user or existing user
       if (data && data.user) {
+        const consentResult = await acceptTerms(isRegistering ? 'signup' : 'login', data.user.id);
+        if (!consentResult.success) {
+          await signOut();
+          setError(t('login.termsSaveFailed'));
+          return;
+        }
+
         // Check if user profile exists and is complete
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('first_name, is_baby_born')
+          .select('first_name')
           .eq('id', data.user.id)
           .single();
         
@@ -210,11 +359,13 @@ export default function LoginScreen() {
         
         // If profile is incomplete or doesn't exist, go to onboarding
         if (!profileData || !profileData.first_name) {
-          console.log('New Apple user, redirecting to onboarding');
-          router.replace('../getUserInfo');
+          router.replace({
+            pathname: '/(auth)/getUserInfo',
+            params: normalizedInvitationCode ? { invitationCode: normalizedInvitationCode } : {},
+          });
         } else {
-          // Existing user, navigate based on baby status
-          await navigateBasedOnBabyBornFlag(data.user.id);
+          // Existing user -> zentraler Root-Guard entscheidet über Startscreen
+          await navigateAfterAuth();
         }
       }
     } catch (err: any) {
@@ -223,89 +374,35 @@ export default function LoginScreen() {
         // User cancelled, don't show error
         return;
       }
-      setError(err.message || 'Apple Sign-In fehlgeschlagen');
+      setError(t('login.appleFailed'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = async () => {
-    try {
-      setIsLoading(true);
-      console.log('Starting demo login...');
-
-      // HINWEIS: Für Testzwecke ohne Supabase-Verbindung
-      // Wir simulieren eine erfolgreiche Anmeldung
-      if (supabaseUrl.includes('example.supabase.co')) {
-        console.log('Using demo mode because Supabase credentials are not set');
-        // Simulierte Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Im Demo-Modus zur Countdown-Seite navigieren
-        console.log('Demo login mode: Navigating to countdown page');
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          // Fallback-Navigation
-          router.navigate('/(tabs)/countdown');
-        }
-        return;
-      }
-
-      // Demo-Login mit einem Test-Konto
-      const { data, error: authError } = await signInWithEmail('demo@example.com', 'password123');
-
-      if (authError) {
-        console.error('Demo login auth error:', authError);
-        // Wenn das Demo-Konto nicht existiert, erstellen wir es
-        if (authError.message?.includes('Invalid login')) {
-          console.log('Demo account does not exist, creating it...');
-          const { data: signUpData, error: signUpError } = await signUpWithEmail('demo@example.com', 'password123');
-
-          if (signUpError) {
-            console.error('Demo account creation error:', signUpError);
-            throw signUpError;
-          }
-
-          console.log('Demo account created successfully:', signUpData);
-
-          // Nach der Registrierung anmelden
-          console.log('Signing in with demo account...');
-          const { data: loginData, error: loginError } = await signInWithEmail('demo@example.com', 'password123');
-
-          if (loginError) {
-            console.error('Demo account login error after creation:', loginError);
-            throw loginError;
-          }
-
-          console.log('Demo login successful after account creation:', loginData);
-        } else {
-          throw authError;
-        }
-      } else {
-        console.log('Demo login successful:', data);
-      }
-
-      // Bei erfolgreicher Anmeldung basierend auf is_baby_born-Flag navigieren
-      if (data && data.user && data.user.id) {
-        await navigateBasedOnBabyBornFlag(data.user.id);
-      } else {
-        // Fallback zur Countdown-Seite, wenn keine Benutzer-ID verfügbar ist
-        try {
-          router.replace('/(tabs)/countdown');
-        } catch (navError) {
-          console.error('Navigation error:', navError);
-          router.navigate('/(tabs)/countdown');
-        }
-      }
-    } catch (err) {
-      setError('Demo-Login fehlgeschlagen. Bitte versuche es erneut.');
-      console.error('Demo login error:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  if (showInvitationScanner) {
+    return (
+      <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={{ flex: 1 }}>
+          <TouchableOpacity accessibilityRole="button"
+            accessibilityLabel={translateAccountLinkingText(ACTIVE_AUTH_LOCALE, 'common.cancel')}
+            style={{ padding: 20 }} onPress={() => setShowInvitationScanner(false)}>
+            <IconSymbol name="chevron.left" size={24} color={primaryTextColor} />
+          </TouchableOpacity>
+          <AccountLinkingQrModal code={null}
+            invitationLink={Linking.createURL('invite', { queryParams: { code: '' } })}
+            locale={ACTIVE_AUTH_LOCALE} isDark={false}
+            onClose={() => setShowInvitationScanner(false)}
+            onScanned={code => {
+              setInvitationCode(code);
+              setShowInvitationField(true);
+              setShowInvitationScanner(false);
+            }} />
+        </SafeAreaView>
+      </ThemedBackground>
+    );
+  }
 
   return (
     <>
@@ -313,52 +410,87 @@ export default function LoginScreen() {
       <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
         <KeyboardAvoidingView
           style={styles.container}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          // Padding uses only the current overlap, unlike 'height', which retains
+          // the pre-keyboard height. This also covers fullscreen Android devices
+          // where adjustResize does not resize the activity itself.
+          behavior={Platform.OS === 'ios' || isAndroid ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' || isAndroid ? 0 : 20}
         >
-          <SafeAreaView style={styles.safeArea}>
+          <SafeAreaView
+            style={styles.safeArea}
+            edges={androidKeyboardVisible ? ['top', 'left', 'right'] : undefined}
+          >
             <StatusBar hidden={true} />
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-              <View style={styles.logoContainer}>
-                <ThemedText type="title" style={styles.appTitle}>
+            <ScrollView
+              ref={scrollRef}
+              style={isAndroid ? styles.container : undefined}
+              contentContainerStyle={[
+                styles.scrollContent,
+                androidKeyboardVisible && styles.androidKeyboardContent,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              onLayout={isAndroid ? scrollFocusedAndroidInput : undefined}
+              onContentSizeChange={isAndroid ? scrollFocusedAndroidInput : undefined}
+            >
+              <View style={[styles.logoContainer, androidKeyboardVisible && styles.androidKeyboardLogo]}>
+                <ThemedText type="title" style={styles.appTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
                   Lotti Baby
                 </ThemedText>
-                <ThemedText style={styles.appSubtitle}>
-                  Für werdende Eltern
+                <ThemedText style={styles.appSubtitle} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                  {t('login.subtitle')}
                 </ThemedText>
               </View>
 
               <View style={styles.formContainer}>
-                <BlurView intensity={25} tint="light" style={StyleSheet.absoluteFill} />
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                  style={StyleSheet.absoluteFill}
-                />
+                {isAndroid ? (
+                  // Match the warm iOS frosted surface without Android's unconfigured
+                  // BlurView fallback or stacked native shadow/transparent layers.
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['#FFF8F3', '#FAEAE0', '#FFF8F3']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                ) : (
+                  <>
+                    <BlurView intensity={25} tint="light" style={StyleSheet.absoluteFill} />
+                    <LinearGradient
+                      colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  </>
+                )}
                 <View style={styles.formContent}>
-                  <ThemedText type="subtitle" style={styles.formTitle}>
-                    {isRegistering ? 'Registrieren' : 'Anmelden'}
+                  <ThemedText type="dialogTitle" style={styles.formTitle} lightColor={primaryTextColor} darkColor={primaryTextColor}>
+                    {isRegistering ? t('login.register') : t('common.login')}
                   </ThemedText>
 
                   {error ? (
                     <View style={styles.errorContainer}>
-                      <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                      {!isAndroid && <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />}
                       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(244,67,54,0.15)' }]} />
-                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#FFCDD2">
+                      <ThemedText style={styles.errorText} lightColor="#B71C1C" darkColor="#B71C1C">
                         {error}
                       </ThemedText>
                     </View>
                   ) : null}
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
-                    E-Mail
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.email')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
-                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                     <TextInput
-                      style={styles.input}
-                      placeholder="deine@email.de"
+                      ref={emailRef}
+                      onFocus={isAndroid ? () => focusAndroidInput(emailRef.current) : undefined}
+                      onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                      returnKeyType={isAndroid ? 'next' : undefined}
+                      submitBehavior={isAndroid ? 'submit' : undefined}
+                      onSubmitEditing={isAndroid ? () => passwordRef.current?.focus() : undefined}
+                      style={[styles.input, androidInputStyle]}
+                      underlineColorAndroid="transparent"
+                      placeholder={t('login.emailPlaceholder')}
                       placeholderTextColor="#9D9D9D"
                       value={email}
                       onChangeText={setEmail}
@@ -369,14 +501,18 @@ export default function LoginScreen() {
                 </View>
 
                 <View style={styles.inputContainer}>
-                  <ThemedText style={styles.inputLabel}>
-                    Passwort
+                  <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.password')}
                   </ThemedText>
                   <View style={styles.inputWrapper}>
-                    <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                    {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                     <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                     <TextInput
-                      style={styles.input}
+                      ref={passwordRef}
+                      onFocus={isAndroid ? () => focusAndroidInput(passwordRef.current) : undefined}
+                      onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                      style={[styles.input, androidInputStyle]}
+                      underlineColorAndroid="transparent"
                       placeholder="••••••••"
                       placeholderTextColor="#9D9D9D"
                       value={password}
@@ -386,25 +522,49 @@ export default function LoginScreen() {
                   </View>
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.button, styles.loginButton, isLoading && styles.buttonDisabled]}
+                {!isRegistering && (
+                  <TouchableOpacity
+                    style={styles.forgotPasswordButton}
+                    onPress={handleForgotPassword}
+                    disabled={isLoading}
+                  >
+                    <ThemedText style={styles.forgotPasswordText} lightColor={accentColor} darkColor={accentColor}>
+                      {t('login.forgotPassword')}
+                    </ThemedText>
+                  </TouchableOpacity>
+                )}
+
+                <ActionButton
+                  label={isRegistering ? t('login.register') : t('common.login')}
+                  busyLabel={isRegistering ? t('login.registering') : t('login.signingIn')}
+                  busy={isLoading}
+                  style={styles.loginButton}
                   onPress={handleAuth}
+                />
+
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={t('login.google')}
+                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
+                  style={[styles.googleButton, isLoading && styles.buttonDisabled]}
+                  onPress={handleGoogleSignIn}
                   disabled={isLoading}
-                  activeOpacity={0.9}
+                  activeOpacity={0.85}
                 >
-                  <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
-                  <LinearGradient
-                    colors={['#9DBEBB', 'rgba(157, 190, 187, 0.9)']}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.buttonText}>
-                    {isLoading ? (isRegistering ? 'Registrieren...' : 'Anmelden...') : (isRegistering ? 'Registrieren' : 'Anmelden')}
-                  </ThemedText>
+                  <Image source={require('@/assets/images/google-sign-in-logo.png')}
+                    style={styles.googleLogo} contentFit="contain" accessibilityIgnoresInvertColors />
+                  <ThemedText style={styles.googleButtonText}>{t('login.google')}</ThemedText>
                 </TouchableOpacity>
 
                 {Platform.OS === 'ios' && (
                   <TouchableOpacity
-                    style={[styles.button, styles.appleButton]}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: isLoading, busy: isLoading }}
+                    style={[
+                      styles.button,
+                      styles.appleButton,
+                      isLoading && styles.buttonDisabled,
+                    ]}
                     onPress={handleAppleSignIn}
                     disabled={isLoading}
                     activeOpacity={0.9}
@@ -417,26 +577,35 @@ export default function LoginScreen() {
                     <View style={styles.buttonContent}>
                       <ThemedText style={styles.appleIcon}></ThemedText>
                       <ThemedText style={styles.buttonText}>
-                        Mit Apple anmelden
+                        {t('login.apple')}
                       </ThemedText>
                     </View>
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity
-                  style={[styles.button, styles.demoButton]}
-                  onPress={handleDemoLogin}
-                  disabled={isLoading}
-                  activeOpacity={0.9}
-                >
-                  <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <ThemedText style={styles.demoButtonText}>
-                    Demo-Modus
+                <View style={styles.termsContainer}>
+                  <ThemedText style={styles.termsText} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.termsPassiveIntro')}{' '}
+                    <ThemedText style={styles.termsLink} lightColor={primaryTextColor} darkColor={primaryTextColor}
+                      accessibilityRole="link" onPress={() => router.push('/nutzungsbedingungen')}>
+                      {t('login.termsLink')}
+                    </ThemedText>.{' '}
+                    {t('login.privacyNoticeIntro')}{' '}
+                    <ThemedText style={styles.termsLink} lightColor={primaryTextColor} darkColor={primaryTextColor}
+                      accessibilityRole="link" onPress={() => router.push('/datenschutz')}>
+                      {t('login.privacyLink')}
+                    </ThemedText>.
                   </ThemedText>
+                  <ThemedText style={styles.termsHint} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                    {t('login.termsRulesHint')}
+                  </ThemedText>
+                </View>
+
+                <TouchableOpacity accessibilityRole="button" disabled={isLoading}
+                  onPress={() => router.push('/caregiver-join')}
+                  style={[styles.button, { backgroundColor: 'rgba(255,255,255,0.6)', borderWidth: 1, borderColor: accentColor }, isAndroid && styles.androidGuestButton]}>
+                  <ThemedText style={[{ color: primaryTextColor, fontWeight: '700', fontSize: 16 }, isAndroid && styles.androidGuestTitle]}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestEntry}</ThemedText>
+                  <ThemedText style={[{ color: secondaryTextColor, fontSize: 12, marginTop: 4 }, isAndroid && styles.androidGuestHint]}>{caretakerCopy(ACTIVE_AUTH_LOCALE).guestHint}</ThemedText>
                 </TouchableOpacity>
 
                 {isRegistering && (
@@ -446,26 +615,38 @@ export default function LoginScreen() {
                       onPress={() => setShowInvitationField(!showInvitationField)}
                       disabled={isLoading}
                     >
-                      <ThemedText style={styles.invitationToggleText} lightColor={theme.accent} darkColor={theme.accent}>
-                        {showInvitationField ? 'Ohne Einladungscode fortfahren' : 'Ich habe einen Einladungscode'}
+                      <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
+                        {showInvitationField ? t('login.withoutInvitation') : t('login.hasInvitation')}
                       </ThemedText>
                     </TouchableOpacity>
 
                     {showInvitationField && (
                       <>
-                        <ThemedText style={styles.inputLabel}>
-                          Einladungscode (optional)
+                        <TouchableOpacity accessibilityRole="button" style={styles.invitationToggle}
+                          disabled={isLoading}
+                          onPress={() => { Keyboard.dismiss(); setShowInvitationScanner(true); }}>
+                          <ThemedText style={styles.invitationToggleText} lightColor={accentColor} darkColor={accentColor}>
+                            {translateAccountLinkingText(ACTIVE_AUTH_LOCALE, 'qr.scan')}
+                          </ThemedText>
+                        </TouchableOpacity>
+                        <ThemedText style={styles.inputLabel} lightColor={secondaryTextColor} darkColor={secondaryTextColor}>
+                          {t('login.invitationOptional')}
                         </ThemedText>
                         <View style={styles.inputWrapper}>
-                          <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                          {!isAndroid && <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />}
                           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.6)' }]} />
                           <TextInput
-                            style={styles.input}
-                            placeholder="Einladungscode eingeben"
+                            ref={invitationRef}
+                            onFocus={isAndroid ? () => focusAndroidInput(invitationRef.current) : undefined}
+                            onBlur={isAndroid ? () => { focusedInputRef.current = null; } : undefined}
+                            style={[styles.input, androidInputStyle]}
+                            underlineColorAndroid="transparent"
+                            placeholder={t('login.invitationPlaceholder')}
                             placeholderTextColor="#9D9D9D"
                             value={invitationCode}
-                            onChangeText={setInvitationCode}
+                            onChangeText={(value) => setInvitationCode(value.replace(/\s+/g, '').toUpperCase())}
                             autoCapitalize="characters"
+                            autoCorrect={false}
                           />
                         </View>
                       </>
@@ -477,13 +658,13 @@ export default function LoginScreen() {
                   style={styles.switchModeButton}
                   onPress={() => {
                     setIsRegistering(!isRegistering);
-                    setShowInvitationField(false);
-                    setInvitationCode('');
+                    setShowInvitationField(prefilledInvitationCode.length > 0);
+                    setInvitationCode(prefilledInvitationCode);
                   }}
                   disabled={isLoading}
                 >
-                  <ThemedText style={styles.switchModeText} lightColor={theme.accent} darkColor={theme.accent}>
-                    {isRegistering ? 'Bereits ein Konto? Anmelden' : 'Noch kein Konto? Registrieren'}
+                  <ThemedText style={styles.switchModeText} lightColor={accentColor} darkColor={accentColor}>
+                    {isRegistering ? t('login.hasAccount') : t('login.noAccount')}
                   </ThemedText>
                 </TouchableOpacity>
                 </View>
@@ -499,6 +680,9 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
+    // Let the Android activity's available height (including keyboard resizing)
+    // determine the viewport rather than ThemedBackground's fixed screen size.
+    ...(isAndroid && { width: '100%' as const, height: undefined }),
   },
   safeArea: {
     flex: 1,
@@ -510,6 +694,15 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 16,
+    ...(isAndroid && { paddingVertical: 24 }),
+  },
+  androidKeyboardContent: {
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  androidKeyboardLogo: {
+    display: 'none',
   },
   logoContainer: {
     alignItems: 'center',
@@ -531,6 +724,7 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    ...(isAndroid && { textAlign: 'center' as const }),
   },
   formContainer: {
     padding: 0,
@@ -544,6 +738,12 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 16,
     backgroundColor: 'rgba(255,255,255,0.12)',
+    ...(isAndroid && {
+      elevation: 0,
+      flexShrink: 0,
+      backgroundColor: '#FFF8F3',
+      boxShadow: '0 4px 20px rgba(92, 64, 51, 0.06)',
+    }),
   },
   formContent: {
     padding: 24,
@@ -551,10 +751,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   formTitle: {
-    fontSize: 24,
     marginBottom: 20,
     textAlign: 'center',
-    fontWeight: '700',
     letterSpacing: 0.3,
     textShadowColor: 'rgba(0,0,0,0.1)',
     textShadowOffset: { width: 0, height: 1 },
@@ -595,6 +793,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.3)',
     position: 'relative',
+    ...(isAndroid && { height: undefined, minHeight: 50 }),
   },
   input: {
     height: 50,
@@ -604,9 +803,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     position: 'relative',
     zIndex: 1,
+    ...(isAndroid && {
+      paddingVertical: 0,
+      includeFontPadding: false,
+      textAlignVertical: 'center' as const,
+    }),
   },
   button: {
-    height: 54,
+    minHeight: 54,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
@@ -620,20 +826,52 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 8,
     position: 'relative',
+    ...(isAndroid && {
+      height: undefined,
+      minHeight: 54,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      elevation: 0,
+    }),
   },
   loginButton: {
     marginTop: 24,
   },
+  androidGuestButton: {
+    paddingVertical: 6,
+  },
+  androidGuestTitle: {
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  androidGuestHint: {
+    textAlign: 'center',
+    lineHeight: 17,
+  },
   appleButton: {
     marginTop: 16,
   },
-  demoButton: {
+  googleButton: {
     marginTop: 16,
+    minHeight: 54,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#747775',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
+  googleLogo: { width: 20, height: 20 },
+  googleButtonText: { color: '#1F1F1F', fontSize: 16, fontWeight: '500', flexShrink: 1, textAlign: 'center' },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    maxWidth: '100%',
     position: 'relative',
     zIndex: 1,
   },
@@ -655,17 +893,8 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
     position: 'relative',
     zIndex: 1,
-  },
-  demoButtonText: {
-    color: '#7D5A50',
-    fontWeight: '700',
-    fontSize: 18,
-    letterSpacing: 0.3,
-    textShadowColor: 'rgba(255,255,255,0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    position: 'relative',
-    zIndex: 1,
+    flexShrink: 1,
+    textAlign: 'center',
   },
   switchModeButton: {
     marginTop: 20,
@@ -684,5 +913,36 @@ const styles = StyleSheet.create({
   invitationToggleText: {
     fontSize: 14,
     textDecorationLine: 'underline',
+  },
+  termsContainer: {
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  termsText: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  termsLink: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  termsHint: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 4,
+  },
+  forgotPasswordText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });

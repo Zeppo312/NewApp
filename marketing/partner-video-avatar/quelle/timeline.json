@@ -1,0 +1,65 @@
+{
+  "duration": 23.988897,
+  "segments": [
+    {
+      "scene": "home",
+      "text": "Hey, die Kleine ist gerade eingeschlafen.",
+      "lines": [
+        "Hey, die Kleine ist",
+        "gerade eingeschlafen."
+      ],
+      "start": 0,
+      "duration": 3.645417
+    },
+    {
+      "scene": "sleep",
+      "text": "Ich starte kurz den Schlaftracker.",
+      "lines": [
+        "Ich starte kurz",
+        "den Schlaftracker."
+      ],
+      "start": 3.645417,
+      "duration": 2.832167
+    },
+    {
+      "scene": "sleep",
+      "text": "So halten wir fest, wann ihr Schläfchen angefangen hat.",
+      "lines": [
+        "So halten wir fest, wann ihr",
+        "Schläfchen angefangen hat."
+      ],
+      "start": 6.477584,
+      "duration": 4.238146
+    },
+    {
+      "scene": "day",
+      "text": "Und dass ich sie gerade gewickelt habe, trage ich noch in Unser Tag ein.",
+      "lines": [
+        "Und dass ich sie gerade gewickelt habe,",
+        "trage ich noch in „Unser Tag“ ein."
+      ],
+      "start": 10.71573,
+      "duration": 5.499458
+    },
+    {
+      "scene": "home",
+      "text": "Wenn du gleich übernimmst, kannst du einfach nachschauen.",
+      "lines": [
+        "Wenn du gleich übernimmst,",
+        "kannst du einfach nachschauen."
+      ],
+      "start": 16.215188,
+      "duration": 4.306396
+    },
+    {
+      "scene": "end",
+      "text": "Lotti Baby. Ein Baby. Ein Team.",
+      "lines": [
+        "LottiBaby.",
+        "Ein Baby. Ein Team."
+      ],
+      "start": 20.521584,
+      "duration": 3.467313
+    }
+  ]
+}

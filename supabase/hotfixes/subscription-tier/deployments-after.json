@@ -1,0 +1,54 @@
+[
+  {
+    "created_at": 1783067332258,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_e0ade10c-055e-4ce0-92aa-a9594ebe8475_18/source/supabase/hotfixes/subscription-tier/supabase/functions/advisor-generate/index.ts",
+    "ezbr_sha256": "01685cf8952f28866576672b69af00ef111e4906a2708228096ca5e84e6369ac",
+    "id": "e0ade10c-055e-4ce0-92aa-a9594ebe8475",
+    "import_map": false,
+    "name": "advisor-generate",
+    "slug": "advisor-generate",
+    "status": "ACTIVE",
+    "updated_at": 1790232931834,
+    "verify_jwt": false,
+    "version": 19
+  },
+  {
+    "created_at": 1783441196301,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2dba6e35-6638-48d5-ad90-c76691b9003e_26/source/supabase/hotfixes/subscription-tier/supabase/functions/voice-log-parse/index.ts",
+    "ezbr_sha256": "fac9455b67e7228b9d2051f998c5785a591ed2fe10fe9232d6440d13e27c8ab1",
+    "id": "2dba6e35-6638-48d5-ad90-c76691b9003e",
+    "import_map": false,
+    "name": "voice-log-parse",
+    "slug": "voice-log-parse",
+    "status": "ACTIVE",
+    "updated_at": 1790232931834,
+    "verify_jwt": false,
+    "version": 27
+  },
+  {
+    "created_at": 1785846867938,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2322242b-e48a-4b12-aed0-26eeed2b9c0d_27/source/supabase/hotfixes/subscription-tier/supabase/functions/ask-lotti/index.ts",
+    "ezbr_sha256": "0c9c8724982ba0c6a4ad55b9e7164a38b38afff71a6a383dc7aab78c38f47ae6",
+    "id": "2322242b-e48a-4b12-aed0-26eeed2b9c0d",
+    "import_map": false,
+    "name": "ask-lotti",
+    "slug": "ask-lotti",
+    "status": "ACTIVE",
+    "updated_at": 1790232931834,
+    "verify_jwt": true,
+    "version": 28
+  },
+  {
+    "created_at": 1785846881330,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2a21e234-b4d8-402b-9a56-50f26ee8a06e_9/source/supabase/hotfixes/subscription-tier/supabase/functions/revenuecat-webhook/index.ts",
+    "ezbr_sha256": "023d1935ad3c755c306be0e268e969f56dcf0ac945d8258ff179f7b39ccc1bd3",
+    "id": "2a21e234-b4d8-402b-9a56-50f26ee8a06e",
+    "import_map": false,
+    "name": "revenuecat-webhook",
+    "slug": "revenuecat-webhook",
+    "status": "ACTIVE",
+    "updated_at": 1790232931834,
+    "verify_jwt": false,
+    "version": 10
+  }
+]

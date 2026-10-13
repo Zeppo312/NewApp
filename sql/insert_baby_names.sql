@@ -286,22 +286,37 @@ CREATE POLICY "Anyone can view baby names"
 CREATE POLICY "Only admins can add baby names"
   ON baby_names
   FOR INSERT
-  WITH CHECK (auth.uid() IN (
-    SELECT id FROM auth.users WHERE email = 'admin@example.com'
-  ));
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM profiles
+      WHERE id = auth.uid()
+        AND is_admin = true
+    )
+  );
 
 -- Policy für Aktualisieren (UPDATE) - Nur Administratoren können Namen aktualisieren
 CREATE POLICY "Only admins can update baby names"
   ON baby_names
   FOR UPDATE
-  USING (auth.uid() IN (
-    SELECT id FROM auth.users WHERE email = 'admin@example.com'
-  ));
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM profiles
+      WHERE id = auth.uid()
+        AND is_admin = true
+    )
+  );
 
 -- Policy für Löschen (DELETE) - Nur Administratoren können Namen löschen
 CREATE POLICY "Only admins can delete baby names"
   ON baby_names
   FOR DELETE
-  USING (auth.uid() IN (
-    SELECT id FROM auth.users WHERE email = 'admin@example.com'
-  ));
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM profiles
+      WHERE id = auth.uid()
+        AND is_admin = true
+    )
+  );

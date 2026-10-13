@@ -6,7 +6,7 @@ export const GLASS_BORDER = 'rgba(255,255,255,0.65)';
 export const RADIUS_LG = 22;
 export const RADIUS_MD = 20;
 export const LAYOUT_PAD = 20;
-export const SECTION_GAP_TOP = 20;
+export const SECTION_GAP_TOP = 10;
 export const SECTION_GAP_BOTTOM = 12;
 
 export const TEXT_PRIMARY = '#7D5A50';
