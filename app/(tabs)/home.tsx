@@ -811,7 +811,6 @@ export default function HomeScreen() {
   // Dark Mode angepasste Farben
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const glassCardBg = 'transparent';
   const sleepOffline = useSleepOffline();
   const homePendingRef = useRef(sleepOffline.actions); homePendingRef.current = sleepOffline.actions;
@@ -1664,6 +1663,8 @@ export default function HomeScreen() {
 
   // Rendere die Tagesübersicht
   const renderDailySummary = (wrapperStyle?: StyleProp<ViewStyle>) => {
+    const summaryTextColor = isDark ? Colors.dark.textPrimary : textSecondary;
+    const summaryValueColor = isDark ? Colors.dark.textPrimary : '#5E3DB3';
     const feedingOverview = buildFeedingOverview(dailyEntries);
     const hasBottleFeedings = feedingOverview.bottleCount > 0;
     const hasBreastFeedings = feedingOverview.breastCount > 0;
@@ -1743,7 +1744,7 @@ export default function HomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            <HomeOverviewHeading color={textSecondary}>
+            <HomeOverviewHeading color={summaryTextColor}>
               {t('summary.title')}
             </HomeOverviewHeading>
 
@@ -1764,7 +1765,7 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                    color: accentPurple,
+                    color: summaryValueColor,
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
@@ -1778,7 +1779,7 @@ export default function HomeScreen() {
                     adaptive={false}
                     numberOfLines={3}
                     ellipsizeMode="tail"
-                    style={[styles.feedingDetailPrimary, { color: textSecondary }]}
+                    style={[styles.feedingDetailPrimary, { color: summaryTextColor }]}
                   >
                     {readStates.care?.verifiedAt ? todayFeedingsPrimaryDetail : ''}
                   </ThemedText>
@@ -1787,7 +1788,7 @@ export default function HomeScreen() {
                       adaptive={false}
                       numberOfLines={2}
                       ellipsizeMode="tail"
-                      style={[styles.feedingDetailSecondary, { color: textSecondary }]}
+                      style={[styles.feedingDetailSecondary, { color: summaryTextColor }]}
                     >
                       {todayFeedingsSecondaryDetail}
                     </ThemedText>
@@ -1811,13 +1812,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                    color: accentPurple,
+                    color: summaryValueColor,
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
                   }]}>{readStates.care?.verifiedAt ? todayDiaperChanges : '—'}</ThemedText>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.diapers')}</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: summaryTextColor, opacity: isDark ? 1 : 0.9 }]}>{t('summary.diapers')}</ThemedText>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1836,13 +1837,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.statValueContainer}>
                   <ThemedText adaptive={false} style={[styles.statValue, styles.liquidGlassStatValue, {
-                    color: accentPurple,
+                    color: summaryValueColor,
                     textShadowColor: 'rgba(255, 255, 255, 0.8)',
                     textShadowOffset: { width: 0, height: 1 },
                     textShadowRadius: 2,
                   }]}>{readStates.sleep?.verifiedAt ? formatMinutes(todaySleepMinutes) : '—'}</ThemedText>
                 </View>
-                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: textSecondary }]}>{t('summary.sleep')}</ThemedText>
+                <ThemedText adaptive={false} style={[styles.statLabel, styles.liquidGlassStatLabel, { color: summaryTextColor, opacity: isDark ? 1 : 0.9 }]}>{t('summary.sleep')}</ThemedText>
               </TouchableOpacity>
             </View>
           </ThemedView>

@@ -1961,6 +1961,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   heroCard: {
+    width: '100%',
+    alignSelf: 'stretch',
     marginBottom: 18,
     borderRadius: 26,
     overflow: 'hidden',

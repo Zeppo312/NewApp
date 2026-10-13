@@ -17,18 +17,33 @@ type Props = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Shared selection chrome; access checks and date changes stay in each screen. */
-export function PeriodTabs({ value, labels, onSelect, isDark, monthLocked, style }: Props) {
+type SelectionOption<Value extends string> = {
+  value: Value;
+  label: string;
+  locked?: boolean;
+};
+type SelectionProps<Value extends string> = {
+  value: Value;
+  options: readonly SelectionOption<Value>[];
+  onSelect: (value: Value) => void;
+  isDark: boolean;
+  accessibilityRole?: 'tab' | 'button';
+  /** Override the horizontal margin when the parent already supplies screen padding. */
+  style?: StyleProp<ViewStyle>;
+};
+
+/** Shared selection chrome; filtering, access checks and date changes stay in each screen. */
+export function SelectionTabs<Value extends string>({ value, options, onSelect, isDark, accessibilityRole = 'tab', style }: SelectionProps<Value>) {
   const colors = ActionColors[isDark ? 'dark' : 'light'];
   const surface = ContentColors[isDark ? 'dark' : 'light'];
   const { fontScale } = useWindowDimensions();
   return <View style={[styles.group, style]}>
-    {(['day', 'week', 'month'] as const).map(period => {
-      const selected = value === period;
-      return <Pressable key={period} onPress={() => onSelect(period)}
-        accessibilityRole="tab" accessibilityLabel={labels[period]} accessibilityState={{ selected }} aria-selected={selected}
+    {options.map(option => {
+      const selected = value === option.value;
+      return <Pressable key={option.value} onPress={() => onSelect(option.value)}
+        accessibilityRole={accessibilityRole} accessibilityLabel={option.label} accessibilityState={{ selected }} aria-selected={selected}
         style={({ pressed }) => [styles.touchTarget, pressed && styles.pressed]}>
-        <View style={[styles.tab, fontScale >= 1.3 && styles.largeTextTab, {
+        <View style={[styles.tab, options.length > 3 && styles.compactTab, fontScale >= 1.3 && styles.largeTextTab, {
           backgroundColor: selected ? surface.surface
             : isDark ? 'rgba(39,33,30,0.60)' : 'rgba(255,255,255,0.48)',
           borderColor: selected ? colors.primary : surface.border,
@@ -36,12 +51,19 @@ export function PeriodTabs({ value, labels, onSelect, isDark, monthLocked, style
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
           <HomeGlassSurface intensity={22} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
         </View>
-        <Text style={[TYPOGRAPHY.label, styles.label, { color: selected ? isDark ? '#E9D5FF' : colors.primary : colors.onSecondary }]}>{labels[period]}</Text>
-        {period === 'month' && monthLocked && <IconSymbol name="lock.fill" size={14} color={selected ? isDark ? '#E9D5FF' : colors.primary : colors.onSecondary} />}
+        <Text style={[TYPOGRAPHY.label, styles.label, { color: selected ? isDark ? '#E9D5FF' : colors.primary : colors.onSecondary }]}>{option.label}</Text>
+        {option.locked && <IconSymbol name="lock.fill" size={14} color={selected ? isDark ? '#E9D5FF' : colors.primary : colors.onSecondary} />}
         </View>
       </Pressable>;
     })}
   </View>;
+}
+
+export function PeriodTabs({ value, labels, onSelect, isDark, monthLocked, style }: Props) {
+  return <SelectionTabs value={value} onSelect={onSelect} isDark={isDark} style={style}
+    options={(['day', 'week', 'month'] as const).map(period => ({
+      value: period, label: labels[period], locked: period === 'month' && monthLocked,
+    }))} />;
 }
 
 const styles = StyleSheet.create({
@@ -52,6 +74,7 @@ const styles = StyleSheet.create({
   tab: { minWidth: 0, minHeight: 38, paddingHorizontal: 18, paddingVertical: 6,
     borderRadius: 19, borderCurve: 'continuous', borderWidth: 1, overflow: 'hidden', alignItems: 'center', alignContent: 'center', justifyContent: 'center',
     flexDirection: 'row', gap: 4 },
+  compactTab: { paddingHorizontal: 14 },
   largeTextTab: { paddingHorizontal: 10 },
   label: { flexShrink: 1, textAlign: 'center', textAlignVertical: 'center', includeFontPadding: false },
 });

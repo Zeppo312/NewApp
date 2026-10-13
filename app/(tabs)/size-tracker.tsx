@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { FormField,FormSection,FormSheet } from '@/components/ui/form-sheet';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SelectionTabs } from '@/components/ui/period-tabs';
 import { Colors } from '@/constants/Colors';
 import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,LAYOUT_PAD,LiquidGlassCard,SECTION_GAP_BOTTOM,SECTION_GAP_TOP } from '@/constants/DesignGuide';
 import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
@@ -24,7 +25,7 @@ import { parseSafeDate } from '@/lib/safeDate';
 import { deleteSizeEntry as deleteWeightEntry,getSizeEntries as getWeightEntries,saveSizeEntry as saveWeightEntry,SizeEntry as WeightEntry,SizeSubject as WeightSubject } from '@/lib/size';
 import { Stack } from 'expo-router';
 import { useEffect,useMemo,useState } from 'react';
-import { ActivityIndicator,Alert,Dimensions,Modal,Platform,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TextInputProps,TouchableOpacity,View } from 'react-native';
+import { ActivityIndicator,Alert,Dimensions,Modal,Platform,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TextInputProps,View } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -436,7 +437,6 @@ export default function SizeTrackerScreen() {
     [filteredEntries, selectedSubject]
   );
 
-  const subjectColor = useMemo(() => getSubjectColor(selectedSubject), [selectedSubject, isDark]);
   const chartColor = useMemo(() => getChartColor(selectedSubject), [selectedSubject, isDark]);
   const chartLineStrokeWidth = 3;
 
@@ -468,41 +468,14 @@ export default function SizeTrackerScreen() {
     return (
       <>
         {/* Range Tabs bleiben immer sichtbar */}
-        <View style={styles.topTabsContainer}>
-          {([
-            { id: 'week', label: t('range.week') },
-            { id: 'month', label: t('range.month') },
-            { id: 'year', label: t('range.year') },
-            { id: 'all', label: t('range.all') },
-          ] as const).map(t => {
-            const isActive = selectedRange === t.id;
-            const tabTint = subjectColor;
-            return (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.topTab,
-                  {
-                    borderColor: isDark ? toRgba(tabTint, 0.28) : 'rgba(0,0,0,0.08)',
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.6)',
-                  },
-                  isActive && [
-                    styles.activeTopTab,
-                    {
-                      borderColor: toRgba(tabTint, 0.65),
-                      backgroundColor: isDark ? toRgba(tabTint, 0.2) : 'rgba(255,255,255,0.9)',
-                    },
-                  ],
-                ]}
-                onPress={() => setSelectedRange(t.id)}
-              >
-                <View style={styles.topTabInner}>
-                  <Text style={[styles.topTabText, { color: textSecondary }, isActive && [styles.activeTopTabText, { color: subjectColor }]]}>{t.label}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SelectionTabs value={selectedRange} isDark={isDark}
+          options={[
+            { value: 'week', label: t('range.week') },
+            { value: 'month', label: t('range.month') },
+            { value: 'year', label: t('range.year') },
+            { value: 'all', label: t('range.all') },
+          ]}
+          onSelect={setSelectedRange} style={{ marginHorizontal: 0 }} />
 
         {hasSeries ? (
           <LiquidGlassCard style={styles.chartContainer} intensity={26} overlayColor={glassOverlay}>
@@ -1011,23 +984,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  // Top tabs (like sleep-tracker)
-  topTabsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  topTab: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: {},
-  topTabText: { fontSize: 13, fontWeight: '700' }, // color wird dynamisch gesetzt
-  activeTopTabText: { fontWeight: '800' },
   // Modal styles (match Planner Capture)
 
   typeSwitchRow: {

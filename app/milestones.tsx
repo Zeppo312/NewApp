@@ -29,6 +29,7 @@ import IOSBottomDatePicker from '@/components/modals/IOSBottomDatePicker';
 import { Colors } from '@/constants/Colors';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SelectionTabs } from '@/components/ui/period-tabs';
 import { FloatingAddButton } from '@/components/planner/FloatingAddButton';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import { useBabyStatus } from '@/contexts/BabyStatusContext';
@@ -444,25 +445,11 @@ export default function MilestonesScreen() {
         )}
 
         <View style={styles.content}>
-          <View style={styles.filterRow}>
-            {PRIMARY_FILTERS.map((value) => (
-              <TouchableOpacity
-                key={value}
-                style={[
-                  styles.filterChip,
-                  {
-                    backgroundColor: filter === value ? selectedChipBg : chipBg,
-                    borderColor: cardBorder,
-                  },
-                ]}
-                onPress={() => setFilter(value)}
-              >
-                <ThemedText style={[styles.filterChipText, { color: textPrimary }]}>
-                  {value === 'all' ? t('category.all') : categoryLabel(value)}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <SelectionTabs value={filter} isDark={isDark}
+            options={PRIMARY_FILTERS.map(value => ({
+              value, label: value === 'all' ? t('category.all') : categoryLabel(value),
+            }))}
+            onSelect={setFilter} style={{ marginHorizontal: 0 }} />
 
           <FlatList
             data={entries}
@@ -864,25 +851,9 @@ export default function MilestonesScreen() {
               />
 
               <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.category')}</ThemedText>
-              <View style={styles.categoryGrid}>
-                {CATEGORY_ORDER.map((value) => (
-                  <TouchableOpacity
-                    key={value}
-                    style={[
-                      styles.categoryChip,
-                      {
-                        backgroundColor: category === value ? selectedChipBg : chipBg,
-                        borderColor: inputBorder,
-                      },
-                    ]}
-                    onPress={() => setCategory(value)}
-                  >
-                    <ThemedText style={[styles.categoryChipText, { color: textPrimary }]}>
-                      {categoryLabel(value)}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <SelectionTabs value={category} isDark={isDark} accessibilityRole="button"
+                options={CATEGORY_ORDER.map(value => ({ value, label: categoryLabel(value) }))}
+                onSelect={setCategory} style={{ marginHorizontal: 0, marginTop: 0 }} />
 
               <ThemedText style={[styles.fieldLabel, { color: textSecondary }]}>{t('form.date')}</ThemedText>
               <TouchableOpacity
@@ -1034,25 +1005,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 240, 220, 0.95)',
     fontSize: 12,
     fontWeight: '500',
-  },
-  filterRow: {
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 13,
-    borderWidth: 1,
-    alignSelf: 'center',
-    flexShrink: 1,
-  },
-  filterChipText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
   },
   listContent: {
     paddingTop: 14,
@@ -1548,22 +1500,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   removeImageText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  categoryChip: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-  },
-  categoryChipText: {
     fontSize: 13,
     fontWeight: '600',
   },

@@ -37,12 +37,14 @@ interface Props {
 
 // Halbtransparent, damit der Blur darunter durchscheint — der Lila-Ton bleibt,
 // wirkt aber wie getöntes Glas statt wie eine opake Fläche.
-const PANEL_GRADIENT = [
+export const PREMIUM_PANEL_GRADIENT = [
   'rgba(59,37,102,0.62)',
   'rgba(90,58,158,0.55)',
   'rgba(122,79,201,0.5)',
 ] as [string, string, string];
-const GOLD = '#F2CE88';
+export const PREMIUM_GOLD = '#F2CE88';
+const PANEL_GRADIENT = PREMIUM_PANEL_GRADIENT;
+const GOLD = PREMIUM_GOLD;
 
 /** Funkel-Sterne: Position (in %), Größe und Animations-Timing je Stern. */
 const SPARKLES = [

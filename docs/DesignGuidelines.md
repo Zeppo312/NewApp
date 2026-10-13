@@ -39,6 +39,14 @@ Auswahlabläufe bleiben im jeweiligen Screen; die gemeinsame Komponente zeichnet
 die flachen Glas-Pills. Hat der Elterncontainer bereits Bildschirm-Padding,
 setzt er nur die horizontale Außenmarge der Komponente auf null.
 
+Dieselbe Grundlage heißt für frei wählbare Optionen `SelectionTabs` und liegt
+in derselben Datei. Größen- und Gewichtskurve behalten Woche, Monat, Jahr und
+Gesamt; Meilensteine verwendet seine bestehenden Kategorien, auch im Formular.
+`PeriodTabs` ist der Adapter für Tag/Woche/Monat. Alle Varianten verwenden
+dieselbe Typografie, Glasfläche, Auswahlfarbe, Druckrückmeldung und Touchhöhe.
+Lange Beschriftungen und große Systemschrift dürfen in weitere Zeilen umbrechen.
+[Umfang und Prüfbelege](growth-selection-ota-20261013.md).
+
 ## Farbschema
 
 Die App verwendet ein warmes, weiches Beige-Farbschema, das für werdende Mütter angenehm und beruhigend wirkt.

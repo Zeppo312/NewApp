@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { PeriodTabs } from '@/components/ui/period-tabs';
+import { PeriodTabs, SelectionTabs } from '@/components/ui/period-tabs';
 
 jest.mock('@/components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
 jest.mock('@/components/ui/home-glass', () => ({ HomeGlassSurface: jest.requireActual('react-native').View }));
@@ -30,4 +30,31 @@ it('reflects the screen selection after an accepted navigation and keeps localiz
   act(() => tree.update(<PeriodTabs labels={translated} value="week" isDark onSelect={onSelect} />));
   expect(tab('Semana').props.accessibilityState.selected).toBe(true);
   expect(tab('Día').props.accessibilityState.selected).toBe(false);
+});
+
+it('delegates all growth ranges to the screen, including year and complete history', () => {
+  const onSelect = jest.fn();
+  const options = [
+    { value: 'week', label: 'Woche' }, { value: 'month', label: 'Monat' },
+    { value: 'year', label: 'Jahr' }, { value: 'all', label: 'Gesamt' },
+  ] as const;
+  act(() => { tree = create(<SelectionTabs value="month" options={options} isDark={false} onSelect={onSelect} />); });
+  act(() => tab('Jahr').props.onPress());
+  act(() => tab('Gesamt').props.onPress());
+  expect(onSelect.mock.calls).toEqual([['year'], ['all']]);
+  expect(tab('Monat').props.accessibilityState.selected).toBe(true);
+  act(() => tree.update(<SelectionTabs value="all" options={options} isDark={false} onSelect={onSelect} />));
+  expect(tab('Gesamt').props.accessibilityState.selected).toBe(true);
+  expect(tab('Monat').props.accessibilityState.selected).toBe(false);
+});
+
+it('supports localized milestone categories and form buttons without treating them as dates', () => {
+  const onSelect = jest.fn();
+  const options = [{ value: 'motorik', label: 'Movimiento' }, { value: 'ernaehrung', label: 'Alimentación' }] as const;
+  act(() => { tree = create(<SelectionTabs value="motorik" options={options} isDark accessibilityRole="button" onSelect={onSelect} />); });
+  const food = tree.root.findAll(node => node.props.accessibilityRole === 'button'
+    && node.props.accessibilityLabel === 'Alimentación' && typeof node.props.style === 'function')[0];
+  act(() => food.props.onPress());
+  expect(onSelect).toHaveBeenCalledWith('ernaehrung');
+  expect(food.props.accessibilityState.selected).toBe(false);
 });

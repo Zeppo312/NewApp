@@ -8,6 +8,7 @@ import { ThemedText } from '@/components/ThemedText';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { FormField,FormSection,FormSheet } from '@/components/ui/form-sheet';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { SelectionTabs } from '@/components/ui/period-tabs';
 import { Colors } from '@/constants/Colors';
 import { GLASS_OVERLAY,GLASS_OVERLAY_DARK,LAYOUT_PAD,LiquidGlassCard,SECTION_GAP_BOTTOM,SECTION_GAP_TOP } from '@/constants/DesignGuide';
 import { PRIMARY as PLANNER_PRIMARY } from '@/constants/PlannerDesign';
@@ -635,43 +636,14 @@ export default function WeightTrackerScreen() {
           </View>
         </View>
 
-        <View style={styles.topTabsContainer}>
-          {([
-            { id: 'week', label: t('range.week') },
-            { id: 'month', label: t('range.month') },
-            { id: 'year', label: t('range.year') },
-            { id: 'all', label: t('range.all') },
-          ] as const).map(t => {
-            const isActive = selectedRange === t.id;
-            const tabTint = subjectColor;
-            return (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.topTab,
-                  {
-                    borderColor: isDark ? toRgba(tabTint, 0.28) : 'rgba(0,0,0,0.08)',
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.6)',
-                  },
-                  isActive && [
-                    styles.activeTopTab,
-                    {
-                      borderColor: toRgba(tabTint, 0.65),
-                      backgroundColor: isDark ? toRgba(tabTint, 0.2) : 'rgba(255,255,255,0.9)',
-                    },
-                  ],
-                ]}
-                onPress={() => setSelectedRange(t.id)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-              >
-                <View style={styles.topTabInner}>
-                  <Text style={[styles.topTabText, { color: textSecondary }, isActive && [styles.activeTopTabText, { color: subjectColor }]]}>{t.label}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <SelectionTabs value={selectedRange} isDark={isDark}
+          options={[
+            { value: 'week', label: t('range.week') },
+            { value: 'month', label: t('range.month') },
+            { value: 'year', label: t('range.year') },
+            { value: 'all', label: t('range.all') },
+          ]}
+          onSelect={setSelectedRange} style={{ marginHorizontal: 0 }} />
 
         {hasSeries ? (
           <View style={styles.chartContainer}>
@@ -1375,24 +1347,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
   },
-  // Top tabs (like sleep-tracker)
-  topTabsContainer: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 16,
-    marginBottom: 4,
-    paddingHorizontal: 14,
-  },
-  topTab: {
-    flex: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  topTabInner: { alignItems: 'center', paddingHorizontal: 4, paddingVertical: 7 },
-  activeTopTab: {},
-  topTabText: { fontSize: 12, fontWeight: '700' }, // color wird dynamisch gesetzt
-  activeTopTabText: { fontWeight: '800' },
   // Modal styles (match Planner Capture)
 
   typeSwitchRow: {

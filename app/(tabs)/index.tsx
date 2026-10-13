@@ -1,5 +1,6 @@
 import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
 import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
+import { PeriodTabs } from '@/components/ui/period-tabs';
 import { FormField,FormSheet } from '@/components/ui/form-sheet';
 import { TYPOGRAPHY } from '@/constants/Typography';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
@@ -939,25 +940,9 @@ export default function HomeScreen() {
   };
 
   const TopTabs = () => (
-    <View style={styles.topTabsContainer}>
-      {(['day', 'week', 'month'] as const).map((tab) => (
-        <GlassCard
-          key={tab}
-          style={[styles.topTab, selectedTab === tab && styles.activeTopTab]}
-          intensity={22}
-        >
-          <TouchableOpacity
-            style={styles.topTabInner}
-            onPress={() => setSelectedTab(tab)}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.topTabText, { color: textSecondary }, selectedTab === tab && styles.activeTopTabText]}>
-              {tab === 'day' ? t('range.day') : tab === 'week' ? t('range.week') : t('range.month')}
-            </Text>
-          </TouchableOpacity>
-        </GlassCard>
-      ))}
-    </View>
+    <PeriodTabs value={selectedTab} isDark={isDark}
+      labels={{ day: t('range.day'), week: t('range.week'), month: t('range.month') }}
+      onSelect={setSelectedTab} style={{ marginHorizontal: 0 }} />
   );
 
   const StatusMetricsBar = () => (
@@ -1511,24 +1496,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  topTabsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    marginTop: 6,
-    marginBottom: 0,
-    alignSelf: 'center',
-    width: contentWidth,
-  },
-  topTab: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  topTabInner: { paddingHorizontal: 18, paddingVertical: 6 },
-  activeTopTab: { borderColor: 'rgba(94,61,179,0.65)' },
-  topTabText: { fontSize: 13, fontWeight: '700', color: '#7D5A50' },
-  activeTopTabText: { color: PRIMARY },
   kpiRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

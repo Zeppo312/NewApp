@@ -30,7 +30,11 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import SortableTileGrid, { type SortableTileGridScrollMetrics } from '@/components/SortableTileGrid';
 import VoiceLogModal from '@/components/VoiceLogModal';
-import PremiumHighlights, { type PremiumHighlightItem } from '@/components/PremiumHighlights';
+import PremiumHighlights, {
+  PREMIUM_GOLD,
+  PREMIUM_PANEL_GRADIENT,
+  type PremiumHighlightItem,
+} from '@/components/PremiumHighlights';
 import { useAdvisorAccess } from '@/lib/advisor/access';
 import { useVoiceLogAccess } from '@/lib/voiceLog/access';
 import { useAskLottiAccess } from '@/lib/askLotti/access';
@@ -319,7 +323,6 @@ export default function PregnancyHomeScreen() {
   // Dark Mode angepasste Farben (wie in home.tsx)
   const textPrimary = isDark ? Colors.dark.textPrimary : '#6B4C3B';
   const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
-  const accentPurple = isDark ? Colors.dark.textAccent : '#5E3DB3';
   const glassCardBg = isDark ? 'rgba(0, 0, 0, 0.22)' : 'rgba(255, 255, 255, 0.04)';
   const glassBlurBg = ContentColors[isDark ? 'dark' : 'light'].surface;
   const pathname = usePathname();
@@ -1340,23 +1343,37 @@ export default function PregnancyHomeScreen() {
 
                 {shouldShowBirthPreparationCard ? (
                   <TouchableOpacity
-                    style={styles.tipCard}
+                    style={[styles.tipCard, styles.birthPrepCard]}
                     onPress={openBirthPreparationOverview}
                     activeOpacity={0.9}
                   >
+                    {/* Gleicher Hintergrund wie das Lotti-Premium-Panel. */}
+                    <HomeGlassSurface
+                      pointerEvents="none"
+                      style={StyleSheet.absoluteFill}
+                      intensity={40}
+                      tint="dark"
+                    />
+                    <LinearGradient
+                      pointerEvents="none"
+                      colors={PREMIUM_PANEL_GRADIENT}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
                     <TipHighlightDots />
                     <View style={styles.tipCardRow}>
                       <View style={styles.tipIconWrap}>
-                        <IconSymbol name="calendar" size={18} color="#D6B28C" />
+                        <IconSymbol name="calendar" size={18} color={PREMIUM_GOLD} />
                       </View>
                       <View style={styles.tipContent}>
-                        <ThemedText adaptive={false} style={[styles.tipLabel, { color: accentPurple }]}>
+                        <ThemedText adaptive={false} style={[styles.tipLabel, { color: PREMIUM_GOLD }]}>
                           {t('birthPrep.title')}
                         </ThemedText>
-                        <ThemedText adaptive={false} style={[styles.tipText, { color: textPrimary }]}>
+                        <ThemedText adaptive={false} style={[styles.tipText, { color: '#FFFFFF' }]}>
                           {t('birthPrep.description')}
                         </ThemedText>
-                        <ThemedText adaptive={false} style={[styles.birthPrepTeaserList, { color: textSecondary }]}>
+                        <ThemedText adaptive={false} style={[styles.birthPrepTeaserList, { color: 'rgba(255,255,255,0.72)' }]}>
                           {birthPrepPreview}
                         </ThemedText>
                         <View style={styles.birthPrepTeaserCta}>
@@ -1821,6 +1838,12 @@ const styles = StyleSheet.create({
   cardsSection: {
     marginBottom: 16,
   },
+  birthPrepCard: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.28)',
+    shadowColor: '#3B2566',
+    shadowOpacity: 0.35,
+  },
   birthPrepTeaserList: {
     fontSize: 12,
     lineHeight: 16,
@@ -1831,7 +1854,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#5E3DB3',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,

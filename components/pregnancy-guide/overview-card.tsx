@@ -14,7 +14,7 @@ export function useOverviewColors() {
   const colors = useAdaptiveColors();
   const dark = colors.effectiveScheme === 'dark' || colors.isDarkBackground;
   return { dark, tint: colors.effectiveScheme === 'dark' ? 'dark' as const : 'light' as const,
-    text: dark ? Colors.dark.textSecondary : '#7D5A50', accent: dark ? Colors.dark.textAccent : '#5E3DB3',
+    text: dark ? Colors.dark.textPrimary : '#7D5A50', accent: dark ? Colors.dark.textPrimary : '#5E3DB3',
     blur: dark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.35)', fill: dark ? 'rgba(0,0,0,0.22)' : 'rgba(255,255,255,0.04)' };
 }
 
@@ -51,7 +51,7 @@ export function PregnancyNumbersSlide({ locale, currentWeek, progress, compact =
         { backgroundColor: `rgba(94,61,179,${item.opacity})`, borderColor: `rgba(94,61,179,${item.border})` }]}>
         <View style={styles.statIcon}><Text style={styles.emoji} allowFontScaling={false}>{item.emoji}</Text></View>
         <View style={styles.valueContainer}><ThemedText adaptive={false} style={[styles.value, { color: c.accent }]}>{item.value}</ThemedText></View>
-        <ThemedText adaptive={false} style={[styles.label, { color: c.text }]}>{translatePregnancyHomeText(locale, item.label)}</ThemedText>
+        <ThemedText adaptive={false} style={[styles.label, { color: c.text, opacity: c.dark ? 1 : 0.9 }]}>{translatePregnancyHomeText(locale, item.label)}</ThemedText>
       </View>)}
     </View>
   </OverviewCard>;
