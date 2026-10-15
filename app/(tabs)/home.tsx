@@ -1744,7 +1744,12 @@ export default function HomeScreen() {
             lightColor="rgba(255, 255, 255, 0.04)"
             darkColor="rgba(255, 255, 255, 0.02)"
           >
-            <HomeOverviewHeading color={summaryTextColor}>
+            <HomeOverviewHeading
+              color={summaryTextColor}
+              isDark={isDark}
+              accessibilityLabel={t('card.daily.title')}
+              onPress={() => handleNavigate('/(tabs)/daily_old')}
+            >
               {t('summary.title')}
             </HomeOverviewHeading>
 

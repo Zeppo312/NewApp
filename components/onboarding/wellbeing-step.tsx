@@ -7,6 +7,7 @@ import { OnboardingSurface } from './surfaces';
 import { onboardingColors as brand } from './theme';
 import { valueStyles } from './value-steps';
 import { LottiMedallion, type LottiPose } from './lotti-medallion';
+import { useFontScale } from '@/lib/fontScaling';
 
 // Hard answers get a comforting Lotti, never a sad one: the step is a check-in, not a judgement.
 const moodPoses: LottiPose[] = ['bunny', 'teddy', 'thinking', 'waving', 'confetti'];
@@ -42,6 +43,8 @@ export function WellbeingStep({ locale, kind, value, onChange }: { locale: Onboa
   const c = copy[locale];
   const labels = c[kind];
   const emoji = kind === 'mood' ? ['😢', '😔', '😐', '🙂', '😃'] : ['🪫', '🌱', '🌤️', '☀️', '✨'];
+  // Five columns are too narrow for larger text: labels like „Gemischt“ would break mid-word.
+  const stacked = useFontScale() >= 1.2;
   return <View style={s.screen}>
     <Text accessibilityRole="header" style={s.title}>{c[`${kind}Title`]}</Text>
     <Text style={s.body}>{c[`${kind}Body`]}</Text>
@@ -49,7 +52,7 @@ export function WellbeingStep({ locale, kind, value, onChange }: { locale: Onboa
       <LottiMedallion key={value ?? 'none'} pose={value === null ? (kind === 'mood' ? 'heart' : 'night') : (kind === 'mood' ? moodPoses : energyPoses)[value - 1]} float={value === null} />
       <Text accessibilityLiveRegion="polite" style={[s.selection, value === null && s.selectionHint]}>{value === null ? c.choose : labels[value - 1]}</Text>
       <Slider accessibilityRole="adjustable" testID="wellbeing-slider" accessibilityLabel={c[`${kind}Title`]} accessibilityValue={{ min: 1, max: 5, now: value ?? 3, text: value === null ? c.choose : labels[value - 1] }} minimumValue={1} maximumValue={5} step={1} value={value ?? 3} onValueChange={onChange} tapToSeek minimumTrackTintColor={value === null ? '#CBB5D7' : brand.accent} maximumTrackTintColor="#E4D8EA" thumbTintColor={brand.accent} style={s.slider} />
-      <View style={s.scale}>{labels.map((label, index) => <Pressable key={label} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: value === index + 1 }} onPress={() => onChange(index + 1)} style={[s.tick, value === index + 1 && s.selected]}><Text accessible={false} style={s.smallEmoji}>{emoji[index]}</Text><Text style={s.tickLabel}>{label}</Text></Pressable>)}</View>
+      <View style={[s.scale, stacked && s.scaleStacked]}>{labels.map((label, index) => <Pressable key={label} accessibilityRole="radio" accessibilityLabel={label} accessibilityState={{ checked: value === index + 1 }} onPress={() => onChange(index + 1)} style={[s.tick, stacked && s.tickStacked, value === index + 1 && s.selected]}><Text accessible={false} style={s.smallEmoji}>{emoji[index]}</Text><Text style={[s.tickLabel, stacked && s.tickLabelStacked]}>{label}</Text></Pressable>)}</View>
       {value !== null && <OnboardingSurface style={s.response}><Text accessibilityLiveRegion="polite" style={s.responseText}>{c[kind === 'mood' ? value <= 2 ? 'lowMood' : 'highMood' : value <= 2 ? 'lowEnergy' : 'highEnergy']}</Text></OnboardingSurface>}
       <Text style={s.optional}>{c.optional}</Text>
       {value !== null && <Pressable accessibilityRole="button" onPress={() => onChange(null)} style={s.reset}><Text style={s.resetText}>{c.reset}</Text></Pressable>}
@@ -60,5 +63,6 @@ const s = StyleSheet.create({
   ...valueStyles, center: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 22, paddingVertical: 24 },
   selection: { fontSize: 23, lineHeight: 30, fontWeight: '700', color: brand.text, textAlign: 'center', minHeight: 30 }, selectionHint: { fontSize: 16, lineHeight: 24, fontWeight: '400', color: brand.secondary },
   slider: { width: '100%', height: 44 }, scale: { flexDirection: 'row', gap: 3, alignItems: 'stretch' }, tick: { flex: 1, paddingVertical: 9, paddingHorizontal: 2, borderRadius: 16, gap: 8, minHeight: 76, borderWidth: 1, borderColor: 'transparent' }, selected: { backgroundColor: brand.selectedGlass, borderColor: brand.accent }, smallEmoji: { fontSize: 25, textAlign: 'center' }, tickLabel: { fontSize: 11, lineHeight: 16, textAlign: 'center', color: brand.text },
+  scaleStacked: { flexDirection: 'column', gap: 6 }, tickStacked: { flex: 0, flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 52, paddingHorizontal: 16 }, tickLabelStacked: { flex: 1, fontSize: 16, lineHeight: 22, textAlign: 'left' },
   response: { padding: 18 }, responseText: { fontSize: 16, lineHeight: 24, color: brand.text, textAlign: 'center' }, optional: { fontSize: 12, lineHeight: 19, color: brand.secondary, textAlign: 'center' }, reset: { minHeight: 44, justifyContent: 'center', alignItems: 'center' }, resetText: { fontSize: 13, color: brand.accentText },
 });

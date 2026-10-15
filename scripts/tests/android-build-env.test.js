@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 const { validateAndroidBuildEnv } = require('../check-android-build-env');
 
 const android = { EAS_BUILD_PLATFORM: 'android' };
-for (const profile of ['production', 'store-internal', 'preview-testflight']) {
+for (const profile of ['production', 'store-internal', 'preview-testflight', 'release-candidate', 'family-qa-play']) {
   test(`${profile} refuses a store build without an Android key`, () => {
     assert.throws(() => validateAndroidBuildEnv({ ...android, EAS_BUILD_PROFILE: profile }), /Missing Google Play/);
   });
 }
 for (const key of ['test_example', 'appl_example', 'sk_example', 'goog_']) {
   test(`release APK and store AAB reject the ${key.split('_')[0]} key case`, () => {
-    for (const profile of ['preview', 'store-internal', 'production']) {
+    for (const profile of ['preview', 'store-internal', 'production', 'release-candidate', 'family-qa-play']) {
       assert.throws(() => validateAndroidBuildEnv({ ...android, EAS_BUILD_PROFILE: profile, EXPO_PUBLIC_RC_ANDROID_KEY: key }), /requires a Google Play/);
     }
   });

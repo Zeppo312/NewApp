@@ -133,6 +133,45 @@ test('UPDATE and DELETE permission outcomes remain identical for owner, partner 
  assert(outcomes[1].filter(x=>x.uid===c).every(x=>x.ids?.length===0));
 });
 
+test('new baby INSERT RETURNING fails with 42501; a minimal INSERT remains readable and shares memberships',async()=>{
+ const db=await makeBabyDb(10);
+ const id='30000000-0000-4000-8000-000000000010';
+ try {
+  await db.exec(fs.readFileSync('supabase/migrations/20270107000004_share_new_babies_with_links.sql','utf8'));
+  await db.exec(`INSERT INTO public.account_links(creator_id,invited_id,status) VALUES('${a}','${b}','accepted')`);
+  await apply(db);await asUser(db,a);
+  await assert.rejects(db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2) RETURNING *',[id,a]),e=>e.code==='42501'&&/new row violates row-level security policy for table "baby_info"/.test(e.message));
+  assert.equal((await db.query('SELECT id FROM public.baby_info WHERE id=$1',[id])).rows.length,0);
+  await db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2)',[id,a]);
+  assert.deepEqual((await db.query('SELECT id,user_id FROM public.baby_info WHERE id=$1',[id])).rows,[{id,user_id:a}]);
+  assert.equal((await db.query('SELECT role FROM public.baby_members WHERE baby_id=$1 AND user_id=$2',[id,a])).rows[0].role,'owner');
+  await asUser(db,b);
+  assert.equal((await db.query('SELECT id FROM public.baby_info WHERE id=$1',[id])).rows[0].id,id);
+  assert.equal((await db.query('SELECT role FROM public.baby_members WHERE baby_id=$1 AND user_id=$2',[id,b])).rows[0].role,'partner');
+  await asUser(db,c);
+  assert.equal((await db.query('SELECT id FROM public.baby_info WHERE id=$1',[id])).rows.length,0);
+  await assert.rejects(db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2)',[id,a]),e=>e.code==='42501');
+ } finally {await db.close();}
+});
+
+test('minimal baby INSERT still enforces health consent and account deletion barriers',async()=>{
+ const db=await makeBabyDb(10);
+ const id='30000000-0000-4000-8000-000000000010';
+ try {
+  await apply(db);await asUser(db,a);
+  await decision(db,'health','revoked',0,10);
+  await assert.rejects(db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2)',[id,a]),e=>e.code==='42501');
+  await decision(db,'health','granted',1,11);
+  await db.exec(`RESET ROLE; INSERT INTO deletion_private.requests VALUES('${a}','account','pending')`);
+  await asUser(db,a);
+  await assert.rejects(db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2)',[id,a]),e=>e.code==='42501');
+  await db.exec(`RESET ROLE; DELETE FROM deletion_private.requests WHERE user_id='${a}'`);
+  await asUser(db,a);
+  await db.query('INSERT INTO public.baby_info(id,user_id) VALUES($1,$2)',[id,a]);
+  assert.equal((await db.query('SELECT id FROM public.baby_info WHERE id=$1',[id])).rows[0].id,id);
+ } finally {await db.close();}
+});
+
 test('policy drift aborts atomically without installing the helper',async()=>{
  const db=await makeBabyDb(30);
  try {

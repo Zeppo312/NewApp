@@ -10,7 +10,7 @@ import { refreshFamilyAccess } from './familySubscriptionAccess';
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { runtimeConsentAllowed } from './dataConsentRuntime';
+import { getRuntimeDataConsents, runtimeConsentAllowed } from './dataConsentRuntime';
 import { supabase, getCachedUser } from './supabase';
 import type { PaywallAccessRole } from './paywallAccess';
 import { getRevenueCatEntitlementStatus } from './revenuecat';
@@ -86,11 +86,13 @@ const setToMemory = <T>(key: string, data: T, ttl: number): void => {
   });
 };
 
-const getFromStorage = async <T>(key: string, ttl: number): Promise<T | null> => {
-  if (!runtimeConsentAllowed('health')) return null;
+const getFromStorage = async <T>(key: string, ttl: number, isCurrent: () => boolean): Promise<T | null> => {
+  if (!isCurrent() || !runtimeConsentAllowed('health')) return null;
   try {
     const stored = await AsyncStorage.getItem(key);
-    if (!stored) return null;
+    // Ein spaeter Disk-Read darf weder Memory fuellen noch einen inzwischen
+    // neu geschriebenen Storage-Wert als vermeintlich abgelaufen entfernen.
+    if (!isCurrent() || !runtimeConsentAllowed('health') || !stored) return null;
 
     const { data, timestamp } = JSON.parse(stored);
     if (Date.now() - timestamp > ttl) {
@@ -125,6 +127,9 @@ let cacheGeneration = 0;
 
 const bumpCacheGeneration = (): void => {
   cacheGeneration += 1;
+  // Auch gezielte Invalidierungen entwerten alle Requests der alten Generation.
+  // Neue Aufrufer duerfen deren noch laufenden Promises nicht mehr beitreten.
+  inFlightRequests.clear();
 };
 
 const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): Promise<T> => {
@@ -132,7 +137,11 @@ const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): 
   if (pending) return pending;
 
   const generation = cacheGeneration;
-  const isCurrent = () => generation === cacheGeneration;
+  const consentGeneration = getRuntimeDataConsents().generation;
+  const consentAllowed = runtimeConsentAllowed('health');
+  const isCurrent = () => generation === cacheGeneration &&
+    consentGeneration === getRuntimeDataConsents().generation &&
+    consentAllowed === runtimeConsentAllowed('health');
 
   const request: Promise<T> = run(isCurrent).finally(() => {
     // Nur den eigenen Eintrag abraeumen. Wurde zwischenzeitlich invalidiert und
@@ -224,7 +233,8 @@ export const getCachedUserSettings = async (knownUserId?: string): Promise<UserS
 
   return dedupe(key, async (isCurrent) => {
     // 2. Storage Cache
-    const storage = await getFromStorage<UserSettings>(key, ttl);
+    const storage = await getFromStorage<UserSettings>(key, ttl, isCurrent);
+    if (!isCurrent()) return null;
     if (storage) return storage;
 
     // 3. Fetch from Supabase
@@ -242,13 +252,12 @@ export const getCachedUserSettings = async (knownUserId?: string): Promise<UserS
         return null;
       }
 
+      if (!isCurrent()) return null;
       const settings = data || {};
-      if (isCurrent()) {
-        setToMemory(key, settings, ttl);
-        await setToStorage(key, settings);
-      }
+      setToMemory(key, settings, ttl);
+      await setToStorage(key, settings);
 
-      return settings;
+      return isCurrent() ? settings : null;
     } catch (err) {
       console.error('Error fetching user settings:', err);
       return null;
@@ -296,7 +305,8 @@ export const getCachedUserProfile = async (knownUserId?: string): Promise<UserPr
   if (memory) return memory;
 
   return dedupe(key, async (isCurrent) => {
-    const storage = await getFromStorage<UserProfile>(key, ttl);
+    const storage = await getFromStorage<UserProfile>(key, ttl, isCurrent);
+    if (!isCurrent()) return null;
     if (storage) return storage;
 
     try {
@@ -311,12 +321,13 @@ export const getCachedUserProfile = async (knownUserId?: string): Promise<UserPr
         return null;
       }
 
-      if (data && isCurrent()) {
+      if (!isCurrent()) return null;
+      if (data) {
         setToMemory(key, data, ttl);
         await setToStorage(key, data);
       }
 
-      return data;
+      return isCurrent() ? data : null;
     } catch (err) {
       console.error('Error fetching user profile:', err);
       return null;
@@ -486,9 +497,6 @@ export const preloadAppData = async (knownUserId?: string): Promise<void> => {
 export const invalidateAllCaches = async (): Promise<void> => {
   bumpCacheGeneration();
   memoryCache.clear();
-  // Laufende Requests nicht mehr wiederverwenden: nach einem Nutzerwechsel
-  // darf kein Aufrufer mehr auf ein Promise des alten Kontexts warten.
-  inFlightRequests.clear();
 
   try {
     // Generation checks reject late network responses. Writes that already

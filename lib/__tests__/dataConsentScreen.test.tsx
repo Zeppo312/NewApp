@@ -3,17 +3,28 @@ import { act,create,type ReactTestRenderer } from 'react-test-renderer';
 import Screen from '../../app/data-consents';
 import { DataConsentPanel } from '../../components/privacy/DataConsentPanel';
 import { activeDataConsentCopy as copies, dataConsentCopy } from '../dataConsentCopy';
+// Consent pages use the app shell (Header, background, glass card); keep it light in tests.
+jest.mock('@/components/Header', () => { const R = require('react'); const { Pressable, Text } = require('react-native');
+  return { __esModule: true, default: ({ title, showBackButton, onBackPress, backAccessibilityLabel }: any) => R.createElement(R.Fragment, null,
+    R.createElement(Text, null, title), showBackButton ? R.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: backAccessibilityLabel, onPress: onBackPress }) : null) }; });
+jest.mock('@/components/ThemedBackground', () => ({ ThemedBackground: ({ children }: any) => children }));
+jest.mock('@/components/ui/content-card', () => ({ ContentCard: ({ children }: any) => children }));
+jest.mock('@/contexts/NavigationContext', () => ({ NavigationProvider: ({ children }: any) => children }));
+jest.mock('@/hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light', isDarkBackground: false, textPrimary: '#000', textSecondary: '#333', textTertiary: '#666' }) }));
+
 let mockConsent:any;
 let mockParams: { scope?: string | string[] };
 const mockDecide=jest.fn(); const mockPush=jest.fn(); const mockRefresh=jest.fn(); const mockBack=jest.fn();
 jest.mock('@/contexts/LocaleContext',()=>({useLocale:()=>({locale:'de'})}));
 jest.mock('@/contexts/AuthContext',()=>({useAuth:()=>({signOut:jest.fn()})}));
+let mockGated=false; const mockRelease=jest.fn();
+jest.mock('@/components/privacy/DataConsentBoundary',()=>({useConsentGate:()=>({gated:mockGated,release:mockRelease})}));
 jest.mock('@/contexts/DataConsentContext',()=>({useDataConsents:()=>mockConsent}));
 jest.mock('expo-router',()=>({Stack:{Screen:()=>null},useLocalSearchParams:()=>mockParams,useRouter:()=>({push:mockPush,replace:jest.fn(),canGoBack:()=>true,back:mockBack})}));
 let tree:ReactTestRenderer;
 const text=()=>JSON.stringify(tree.toJSON());
-const press=(label:string)=>tree.root.findAll(n=>n.props.accessibilityRole==='button'&&n.props.children?.props?.children===label)[0].props.onPress();
-beforeEach(()=>{jest.clearAllMocks();mockParams={};mockDecide.mockReset().mockResolvedValue(undefined);mockConsent={mode:'active',snapshot:{health:null,ai:null,documentVersion:'2026-10-01.1'},healthAllowed:false,aiAllowed:false,pending:false,busy:false,cleanupFailed:false,decide:mockDecide,refresh:mockRefresh};});
+const press=(label:string)=>tree.root.findAll(n=>n.props.accessibilityRole==='button'&&typeof n.props.onPress==='function'&&n.findAll(c=>c.props.children===label).length>0)[0].props.onPress();
+beforeEach(()=>{jest.clearAllMocks();mockGated=false;mockParams={};mockDecide.mockReset().mockResolvedValue(undefined);mockConsent={mode:'active',snapshot:{health:null,ai:null,documentVersion:'2026-10-01.1'},healthAllowed:false,aiAllowed:false,pending:false,busy:false,cleanupFailed:false,decide:mockDecide,refresh:mockRefresh};});
 afterEach(()=>{act(()=>tree?.unmount());});
 const open=async()=>{await act(async()=>{tree=create(<Screen/>);});};
 it('offers independent choices without a default grant and keeps account deletion/support accessible',async()=>{
@@ -76,4 +87,23 @@ it('does not request a new choice before a current server check or during pendin
 });
 it.each(['unknown',['ai']] as const)('ignores invalid requested scope %s',async(scope)=>{
  mockParams={scope:scope as string|string[]};await open();expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);expect(mockDecide).not.toHaveBeenCalled();
+});
+it('first run leads through health, then offers the separate AI choice before continuing',async()=>{
+ mockGated=true;await open();
+ let panel=tree.root.findByType(DataConsentPanel);expect(panel.props.scope).toBe('health');expect(panel.props.step).toEqual({index:1,total:2});
+ await act(async()=>{await panel.props.onDecide(true);});
+ mockConsent={...mockConsent,healthAllowed:true,snapshot:{...mockConsent.snapshot,health:{decision:'granted',documentVersion:'2026-10-01.1'}}};act(()=>tree.update(<Screen/>));
+ panel=tree.root.findByType(DataConsentPanel);expect(panel.props.scope).toBe('ai');expect(panel.props.step).toEqual({index:2,total:2});
+ expect(mockDecide).not.toHaveBeenCalledWith('ai','granted','de');expect(mockRelease).not.toHaveBeenCalled();
+ await act(async()=>{await panel.props.onDecide(false);});expect(mockDecide).toHaveBeenLastCalledWith('ai','declined','de');
+ expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);
+ act(()=>press(copies.de.proceed));expect(mockRelease).toHaveBeenCalledTimes(1);
+});
+it('opened from Settings, returns there via the back button instead of jumping to the app',async()=>{
+ mockConsent.snapshot.health={decision:'granted',documentVersion:'2026-10-01.1'};mockConsent.healthAllowed=true;await open();
+ expect(text()).not.toContain(copies.de.continue);
+ const back=()=>tree.root.findAll(n=>n.props.accessibilityLabel===copies.de.cancel&&typeof n.props.onPress==='function')[0];
+ act(()=>press(copies.de.review));expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(1);
+ act(()=>back().props.onPress());expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);expect(mockBack).not.toHaveBeenCalled();
+ act(()=>back().props.onPress());expect(mockBack).toHaveBeenCalledTimes(1);
 });

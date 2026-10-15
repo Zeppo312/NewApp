@@ -2,6 +2,7 @@ import { backendHost, writeSnapshot, readSnapshot, validRows } from './localRead
 import { localHealthGeneration, localHealthAllowed, serializeLocalHealth } from './localHealthStorage';
 import { supabase, getCachedUser } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { randomUUID } from 'expo-crypto';
 import { isTransientBabyListError, type BabyListLoadResult } from './babyListLoading';
 
 // Cache-Konfiguration für Baby-Liste
@@ -491,6 +492,25 @@ export const getBabyInfo = async (babyId?: string) => {
   }
 };
 
+const insertBabyInfo = async (userId: string, info: BabyInfo) => {
+  const now = new Date().toISOString();
+  const baby = {
+    ...toBabyInfoWritePayload(info),
+    id: randomUUID(),
+    user_id: userId,
+    created_at: now,
+    updated_at: now,
+  };
+
+  // The SELECT policy enumerates accessible IDs from a STABLE snapshot and
+  // cannot see this new row during INSERT ... RETURNING. Request no returned
+  // row and use the known ID only after the server confirms the INSERT.
+  // Normal refreshes load the persisted profile; a failed read after a committed
+  // INSERT must not turn creation into a failed save that invites duplicates.
+  const { error } = await supabase.from('baby_info').insert(baby);
+  return error ? { data: null, error } : { data: baby, error: null };
+};
+
 export const createBaby = async (info: BabyInfo = {}) => {
   try {
     const { data: userData } = await getCachedUser();
@@ -501,16 +521,7 @@ export const createBaby = async (info: BabyInfo = {}) => {
     // Invalidiere Cache vor Erstellung
     await invalidateBabyListCache();
 
-    const { data: baby, error } = await supabase
-      .from('baby_info')
-      .insert({
-        user_id: userId,
-        ...info,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+    const { data: baby, error } = await insertBabyInfo(userId, info);
 
     if (error || !baby) {
       return { data: null, error };
@@ -609,18 +620,7 @@ export const saveBabyInfo = async (info: BabyInfo, babyId?: string) => {
       return { data: result.data, error: null };
     }
 
-    const result = await supabase
-      .from('baby_info')
-      .insert({
-        user_id: userData.user.id,
-        ...writePayload,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select('*')
-      .single();
-
-    return { data: result.data, error: result.error };
+    return await insertBabyInfo(userData.user.id, writePayload);
   } catch (err) {
     console.error('Failed to save baby info:', err);
     return { data: null, error: err };

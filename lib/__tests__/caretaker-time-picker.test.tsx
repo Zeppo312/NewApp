@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, TouchableOpacity, type PlatformOSType } from 'react-native';
+import { Platform, type PlatformOSType } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { TimePickerField } from '@/components/SleepQuickAddModal';
@@ -18,7 +18,10 @@ describe('shared sleep/caretaker time picker on Android', () => {
   afterEach(() => { act(() => tree.unmount()); Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOS }); });
   async function open() {
     await act(async () => { tree = create(<TimePickerField {...props} onConfirm={onConfirm} />); });
-    act(() => tree.root.findByType(TouchableOpacity).props.onPress());
+    const button = tree.root.findAll(
+      node => node.props.accessibilityRole === 'button' && typeof node.props.onPress === 'function',
+    )[0];
+    act(() => button.props.onPress());
   }
   it('chooses date first, then time, and confirms only after both', async () => {
     await open();

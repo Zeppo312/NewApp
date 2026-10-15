@@ -1,6 +1,6 @@
 import { activeDataConsentCopy, dataConsentCopy } from '@/lib/dataConsentCopy';
 import { useDataConsents } from '@/contexts/DataConsentContext';
-import { ConsentPage, consentStyles as consentPageStyles } from '@/components/privacy/DataConsentPanel';
+import { ConsentCard, ConsentPage, consentStyles as consentPageStyles, useConsentColors } from '@/components/privacy/DataConsentPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
@@ -90,11 +90,20 @@ export default function AppSettingsScreen() {
 }
 function BasicConsentSettings() {
   const { locale } = useLocale(); const { signOut } = useAuth(); const router = useRouter(); const copy = activeDataConsentCopy[locale];
-  const s = consentPageStyles;
+  const s = consentPageStyles; const c = useConsentColors();
   const links = [[copy.manage,'/data-consents'],[copy.privacy,'/datenschutz'],[copy.terms,'/nutzungsbedingungen'],[locale==='de'?'Abo verwalten':locale==='es'?'Gestionar suscripción':'Manage subscription','/subscription'],[copy.account,'/account-deletion'],[copy.support,'/support']] as const;
-  return <ConsentPage><Stack.Screen options={{ headerShown:false }} /><ThemedText style={s.title}>{copy.settingsTitle}</ThemedText><ThemedText style={s.body}>{copy.healthConsequence}</ThemedText>
-    {links.map(([label,href])=><TouchableOpacity key={href} accessibilityRole="button" style={s.secondary} onPress={()=>router.push(href)}><ThemedText style={s.linkText}>{label}</ThemedText></TouchableOpacity>)}
-    <TouchableOpacity accessibilityRole="button" style={s.link} onPress={()=>void signOut()}><ThemedText style={s.linkText}>{copy.signOut}</ThemedText></TouchableOpacity>
+  return <ConsentPage title={locale==='de'?'App-Einstellungen':locale==='es'?'Ajustes de la app':'App settings'} backLabel={copy.cancel} onBack={router.canGoBack() ? () => router.back() : undefined}>
+    <Stack.Screen options={{ headerShown:false }} />
+    <ConsentCard><View style={[s.notice, { backgroundColor: c.tint, borderColor: c.tintBorder }]}><IconSymbol name="info.circle.fill" size={18} color={c.accent} /><ThemedText adaptive={false} style={[s.noticeText, { color: c.text }]}>{copy.healthConsequence}</ThemedText></View></ConsentCard>
+    <ConsentCard style={{ padding: 0, paddingVertical: 4, gap: 0 }}>
+      {[...links.map(([label,href]) => ({ label, go: () => router.push(href) })), { label: copy.signOut, go: () => void signOut() }].map((link, index) => <React.Fragment key={link.label}>
+        {index > 0 && <View style={[s.menuDivider, { backgroundColor: c.divider, marginLeft: 18 }]} />}
+        <TouchableOpacity accessibilityRole="button" style={s.menuRow} onPress={link.go}>
+          <ThemedText adaptive={false} style={[s.menuText, { color: c.text }]}>{link.label}</ThemedText>
+          <IconSymbol name="chevron.right" size={14} color={c.muted} />
+        </TouchableOpacity>
+      </React.Fragment>)}
+    </ConsentCard>
   </ConsentPage>;
 }
 function FullAppSettingsScreen() {

@@ -26,7 +26,7 @@ import { shouldRedirectToPaywallForState, shouldShowPaywall } from '@/lib/paywal
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
 import { SurveyStep, ProductTryout } from '@/components/onboarding/personalized-steps';
 import { getPersonalizedStart, getOnboardingNeeds, type OnboardingNeed, type OnboardingChallenge, type OnboardingSupport, type OnboardingHabit } from '@/lib/onboarding-personalization';
-import { ValueStep, FeedbackStep, HabitStep } from '@/components/onboarding/value-steps';
+import { ValueStep, FeedbackStep, HabitStep, TrialStep } from '@/components/onboarding/value-steps';
 import { WellbeingStep, wellbeingCopy } from '@/components/onboarding/wellbeing-step';
 import { valueCopy } from '@/components/onboarding/value-copy';
 import { OnboardingProductMoment } from '@/components/onboarding/product-moment';
@@ -163,7 +163,7 @@ export default function GetUserInfoScreen() {
   const shouldShowInvitationStep = showInvitation
     || (!isRedeemingInvitation && invitationStatus !== 'accepted' && invitationError !== null);
   const onboardingSteps = useMemo(
-    () => getOnboardingSteps(shouldShowInvitationStep, invitationStatus === 'accepted'),
+    () => getOnboardingSteps(shouldShowInvitationStep, invitationStatus === 'accepted', Platform.OS === 'ios'),
     [invitationStatus, shouldShowInvitationStep],
   );
   const [currentStep, setCurrentStep] = useState(0);
@@ -182,10 +182,11 @@ export default function GetUserInfoScreen() {
     if (need && !getOnboardingNeeds(momentBabyBorn).includes(need)) setNeed(null);
   }, [momentBabyBorn, need]);
 
-  // Bei Schrittwechsel nach oben scrollen
+  // Bei Schrittwechsel nach oben scrollen – am Schlüssel, nicht am Index: „Ohne Code weiter"
+  // tauscht die Einladung gegen den nächsten Schritt aus, ohne dass sich der Index ändert.
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-  }, [boundedCurrentStep]);
+  }, [currentStepKey]);
 
   // Formatieren eines Datums für die Anzeige
   const formatDate = (date: Date | null) => {
@@ -605,8 +606,6 @@ export default function GetUserInfoScreen() {
   const renderCurrentStep = () => {
     switch (currentStepKey) {
       case 'welcome':
-      case 'personalValue':
-      case 'relief':
       case 'sharedValue':
         return <ValueStep kind={currentStepKey} locale={ACTIVE_ONBOARDING_LOCALE} need={selectedStart}
           dueDate={isPartnerFlow ? parseSafeDate(invitationInfo?.dueDate) : dueDate}
@@ -651,7 +650,7 @@ export default function GetUserInfoScreen() {
             {invitationStatus === 'accepted' ? (
               <>
                 <LottiMedallion pose="heart" float style={styles.medallion} />
-                <ThemedText style={styles.stepTitle}>{t('invitation.successTitle')}</ThemedText>
+                <ThemedText style={[styles.stepTitle, styles.centeredText]}>{t('invitation.successTitle')}</ThemedText>
                 <View style={styles.infoCardContainer}><OnboardingSurface style={styles.infoCard}>
                   <View style={styles.infoRow}>
                     <View style={[styles.infoRowIcon, { backgroundColor: brand.softAccent }]}>
@@ -691,7 +690,7 @@ export default function GetUserInfoScreen() {
                     </View>
                   </View>
                 </OnboardingSurface></View>
-                <ThemedText style={styles.invitationSkipNote}>
+                <ThemedText style={[styles.invitationSkipNote, styles.centeredText]}>
                   {t('invitation.continuePreview')}
                 </ThemedText>
               </>
@@ -917,6 +916,8 @@ export default function GetUserInfoScreen() {
             dueDate={isPartnerFlow ? parseSafeDate(invitationInfo?.dueDate) : dueDate}
           />
         );
+      case 'trial':
+        return <TrialStep locale={ACTIVE_ONBOARDING_LOCALE} />;
 
       default:
         return null;
@@ -998,7 +999,7 @@ export default function GetUserInfoScreen() {
                   >
                     <ThemedText style={styles.nextButtonText}>
                       {boundedCurrentStep === totalSteps - 1
-                        ? (isSaving ? t('common.saving') : isPartnerFlow ? t('invitation.openApp') : t(selectedStart === 'memories' ? 'flow.startMemories' : momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
+                        ? (isSaving ? t('common.saving') : currentStepKey === 'trial' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).trialCta : isPartnerFlow ? t('invitation.openApp') : t(momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
                         : (currentStepKey === 'mood' || currentStepKey === 'energy') && wellbeing[currentStepKey] === null ? wellbeingCopy(ACTIVE_ONBOARDING_LOCALE).skip : currentStepKey === 'welcome' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).welcomeCta : t(currentStepKey === 'productMoment' && !demoCompleted ? 'survey.skipDemo' : 'common.next')}
                     </ThemedText>
                     {isSaving && boundedCurrentStep === totalSteps - 1 && <ActivityIndicator color={brand.white} />}

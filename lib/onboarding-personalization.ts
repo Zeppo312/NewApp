@@ -1,5 +1,6 @@
 import type { OnboardingStart } from './onboarding-flow';
 
+// Keep memories readable in previously saved preferences, but do not offer it.
 export type OnboardingNeed = 'sleep' | 'daily' | 'overview' | 'checklist' | 'memories';
 export type OnboardingChallenge = 'remember' | 'patterns' | 'coordination' | 'overload';
 export type OnboardingHabit = 'in_moment' | 'quiet_moment';
@@ -14,7 +15,7 @@ export type OnboardingAnswers = {
   wellbeing?: OnboardingWellbeing;
 };
 export function getOnboardingNeeds(isBabyBorn: boolean): OnboardingNeed[] {
-  return isBabyBorn ? ['sleep', 'daily', 'memories'] : ['overview', 'checklist', 'memories'];
+  return isBabyBorn ? ['sleep', 'daily'] : ['overview', 'checklist'];
 }
 export function getPersonalizedStart(isBabyBorn: boolean, need: OnboardingNeed | null): OnboardingStart {
   return need && getOnboardingNeeds(isBabyBorn).includes(need) ? need : isBabyBorn ? 'daily' : 'overview';

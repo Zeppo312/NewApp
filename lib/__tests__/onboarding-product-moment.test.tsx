@@ -3,7 +3,7 @@ import { Dimensions, Text, TextInput } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { OnboardingProductMoment } from '../../components/onboarding/product-moment';
 import { SurveyStep, ProductTryout, BenefitStep } from '../../components/onboarding/personalized-steps';
-import { FeedbackStep, HabitStep, ValueStep, ProductPreview } from '../../components/onboarding/value-steps';
+import { FeedbackStep, HabitStep, TrialStep, ValueStep, ProductPreview } from '../../components/onboarding/value-steps';
 import { WellbeingStep, wellbeingSummary } from '../../components/onboarding/wellbeing-step';
 import Slider from '@react-native-community/slider';
 import { SleepTimerFace } from '../../components/tracking/SleepTimerFace';
@@ -71,6 +71,13 @@ describe('personalized onboarding', () => {
       expect(text()).not.toContain('So kann es aussehen');
     }
   });
+  it('promises payment only after the free week and keeps cancellation visible', () => {
+    act(() => { tree = create(<TrialStep locale="de" />); });
+    expect(text()).toContain('Erst ausprobieren.');
+    expect(text()).toContain('Heute keine Zahlung');
+    expect(text()).toContain('Nach 7 Tagen');
+    expect(text()).toContain('Kündigst du vorher, zahlst du nichts.');
+  });
   it('prioritizes readable activity cards over fixed-size decoration with larger text', () => {
     Dimensions.set({ window: { width: 390, height: 844, scale: 3, fontScale: 2 } });
     act(() => { tree = create(<ProductPreview locale="de" need="sleep" />); });
@@ -85,10 +92,10 @@ describe('personalized onboarding', () => {
     expect(text()).toContain('Das nächste Schläfchen mit Start und Ende eintragen.');
   });
   it('offers stage-appropriate priorities and rejects stale choices after changing stage', () => {
-    expect(getOnboardingNeeds(false)).toEqual(['overview', 'checklist', 'memories']);
+    expect(getOnboardingNeeds(false)).toEqual(['overview', 'checklist']);
     expect(getPersonalizedStart(false, 'sleep')).toBe('overview');
     expect(getPersonalizedStart(true, 'checklist')).toBe('daily');
-    expect(getPersonalizedStart(true, 'memories')).toBe('memories');
+    expect(getPersonalizedStart(true, 'memories')).toBe('daily');
   });
   it('reports an explicit priority selection to the parent flow', () => {
     const onSelect = jest.fn();

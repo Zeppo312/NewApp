@@ -3,6 +3,7 @@ import { AiConsentGate } from '@/components/privacy/DataConsentBoundary';
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -107,7 +108,7 @@ function ConsentedAskLottiScreen() {
   );
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
-  const requestInFlightRef = useRef(false);
+  const requestInFlightRef = useRef<object | null>(null);
   const t = (
     key: Parameters<typeof translateAskLotti>[1],
     params?: Record<string, string | number>,
@@ -157,6 +158,22 @@ function ConsentedAskLottiScreen() {
   const isHydratedRef = useRef(false);
   const conversationStorageEpoch = useRef(getConversationStorageEpoch()).current;
 
+  const invalidateRequest = useCallback(() => {
+    requestInFlightRef.current = null;
+    setIsSending(false);
+    setRemainingToday(null);
+  }, []);
+
+  // Discard all late outcomes after leaving a conversation or identity context,
+  // even if the user returns to it. Layout cleanup also covers unmount before
+  // pending promises resume; it must not update state on the unmounted screen.
+  useLayoutEffect(() => {
+    invalidateRequest();
+    return () => {
+      requestInFlightRef.current = null;
+    };
+  }, [activeConversationId, user?.id, activeBabyId, contextMode, invalidateRequest]);
+
   useEffect(() => {
     let cancelled = false;
     void loadConversations().then((stored) => {
@@ -167,6 +184,7 @@ function ConsentedAskLottiScreen() {
       // during the night is usually continued the next morning.
       const latest = stored[0];
       if (latest) {
+        invalidateRequest();
         setActiveConversationId(latest.id);
         setMessages([introMessage, ...latest.messages]);
       }
@@ -218,20 +236,22 @@ function ConsentedAskLottiScreen() {
   };
 
   const startNewChat = useCallback(() => {
+    invalidateRequest();
     setActiveConversationId(createConversationId());
     setMessages([introMessage]);
     setQuestion("");
     setChatListVisible(false);
-  }, [introMessage]);
+  }, [introMessage, invalidateRequest]);
 
   const openConversation = useCallback(
     (conversation: AskLottiConversation) => {
+      invalidateRequest();
       setActiveConversationId(conversation.id);
       setMessages([introMessage, ...conversation.messages]);
       setQuestion("");
       setChatListVisible(false);
     },
-    [introMessage],
+    [introMessage, invalidateRequest],
   );
 
   const deleteConversation = useCallback(
@@ -245,6 +265,7 @@ function ConsentedAskLottiScreen() {
         setConversations(next);
         void saveConversations(next, conversationStorageEpoch);
         if (conversation.id === activeConversationId) {
+          invalidateRequest();
           setActiveConversationId(createConversationId());
           setMessages([introMessage]);
         }
@@ -255,7 +276,7 @@ function ConsentedAskLottiScreen() {
       ]);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeConversationId, introMessage, locale],
+    [activeConversationId, introMessage, locale, invalidateRequest],
   );
   const normalizedQuestion = normalizeAskLottiQuestion(question);
   const canSend =
@@ -334,7 +355,8 @@ function ConsentedAskLottiScreen() {
       setQuestion("");
       return;
     }
-    requestInFlightRef.current = true;
+    const request = {};
+    requestInFlightRef.current = request;
     setMessages((current) => [...current, userMessage]);
     setQuestion("");
     setIsSending(true);
@@ -353,6 +375,7 @@ function ConsentedAskLottiScreen() {
         locale,
         history,
       });
+      if (requestInFlightRef.current !== request) return;
       if (typeof response.remaining?.day === "number")
         setRemainingToday(response.remaining.day);
       setMessages((current) => [
@@ -383,6 +406,7 @@ function ConsentedAskLottiScreen() {
         },
       ]);
     } catch (error) {
+      if (requestInFlightRef.current !== request) return;
       const askLottiError = error instanceof AskLottiError ? error : null;
       const errorText =
         askLottiError?.status === 429
@@ -407,8 +431,10 @@ function ConsentedAskLottiScreen() {
         },
       ]);
     } finally {
-      requestInFlightRef.current = false;
-      setIsSending(false);
+      if (requestInFlightRef.current === request) {
+        requestInFlightRef.current = null;
+        setIsSending(false);
+      }
     }
   };
 

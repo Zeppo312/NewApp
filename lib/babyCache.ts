@@ -1,7 +1,7 @@
 import {
   CacheStrategy,
   loadWithRevalidate,
-  invalidateCacheAfterAction,
+  clearCache,
 } from './screenCache';
 import { getBabyInfo, BabyInfo } from './baby';
 
@@ -64,7 +64,8 @@ export async function loadBabyInfoWithCache(
  */
 export async function invalidateBabyCache(babyId: string): Promise<void> {
   const cacheKey = `screen_cache_baby_info_${babyId}`;
-  await invalidateCacheAfterAction(cacheKey);
+  // clearCache accepts the full storage key and removes only this profile.
+  await clearCache(cacheKey);
 
   console.log('✅ Baby cache invalidated for baby:', babyId);
 }

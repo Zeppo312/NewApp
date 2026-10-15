@@ -101,6 +101,37 @@ export function HabitStep({ locale, need, habit, onSelect }: { locale: Onboardin
   </View></View>;
 }
 
+/** Explains the store's free week before the paywall, so subscribing reads as trying, not committing. */
+export function TrialStep({ locale }: { locale: OnboardingLocale }) {
+  const c = valueCopy(locale);
+  const rows = [
+    { icon: 'sparkles', label: c.trialToday, text: c.trialTodayText },
+    { icon: 'heart.fill', label: c.trialWeek, text: c.trialWeekText },
+    { icon: 'creditcard.fill', label: c.trialAfter, text: c.trialAfterText },
+  ] as const;
+  return <View style={s.screen}>
+    <Text style={s.eyebrow}>{c.trialEyebrow}</Text>
+    <Text accessibilityRole="header" style={s.title}>{c.trialTitle}</Text>
+    <Text style={s.body}>{c.trialBody}</Text>
+    <View style={s.trialArea}>
+      <LottiMedallion pose="heart" size={92} float />
+      <OnboardingSurface tone={brand.softAccent} style={s.trialCard}>
+        {rows.map((row, i) => <View key={row.label} style={s.trialRow}>
+          <View style={s.trialRail}>
+            <View style={[s.trialIcon, i === 0 && s.trialIconActive]}><IconSymbol name={row.icon} size={20} color={i === 0 ? brand.white : brand.accentText} /></View>
+            {i < rows.length - 1 && <View style={s.trialLine} />}
+          </View>
+          <View style={[s.trialCopy, i === rows.length - 1 && s.trialCopyLast]}><Text style={s.trialLabel}>{row.label}</Text><Text style={s.trialText}>{row.text}</Text></View>
+        </View>)}
+      </OnboardingSurface>
+      <View style={s.trialChips}>
+        {[c.trialNoPayment, c.trialCancel].map(chip => <View key={chip} style={s.trialChip}><IconSymbol name="checkmark.circle.fill" size={16} color={brand.accentText} /><Text style={s.trialChipText}>{chip}</Text></View>)}
+      </View>
+      <Text style={s.centered}>{c.trialNote}</Text>
+    </View>
+  </View>;
+}
+
 export const valueStyles = StyleSheet.create({
   screen: { flexGrow: 1, flexShrink: 0, gap: 16, paddingTop: 14, paddingBottom: 12 },
   title: { fontSize: 32, lineHeight: 39, letterSpacing: -0.5, fontWeight: '700', color: brand.text },
@@ -124,5 +155,11 @@ const s = StyleSheet.create({
   thought: { alignItems: 'center', gap: 12 }, thoughtRow: { flexDirection: 'row', alignItems: 'center', gap: 14, alignSelf: 'stretch' }, bubbleOuter: { flex: 1, minWidth: 0 }, thinker: { marginLeft: 11 }, bubble: { paddingVertical: 14, paddingHorizontal: 16, gap: 4 }, quote: { color: brand.text, fontSize: 19, lineHeight: 26, fontWeight: '600' }, people: { flexDirection: 'row', alignItems: 'flex-start' }, person: { width: 96, alignItems: 'center', gap: 8 }, personLabel: { fontSize: 12, lineHeight: 16, color: brand.secondary, textAlign: 'center' }, avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.45)', borderWidth: 1.5, borderColor: 'rgba(142,78,198,0.35)', justifyContent: 'center', alignItems: 'center' }, link: { flex: 1, height: 64, alignItems: 'center', justifyContent: 'center' }, linkLine: { position: 'absolute', left: -14, right: -14, top: 31, height: 2, borderWidth: 1, borderRadius: 1, borderStyle: 'dashed', borderColor: 'rgba(142,78,198,0.45)' },
   choice: { flexDirection: 'row', gap: 14, padding: 18, minHeight: 88, alignItems: 'center' },
   choiceIcon: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' }, medallion: { marginBottom: 8 },
+  eyebrow: { fontSize: 11, letterSpacing: 1.5, color: brand.accentText, fontWeight: '700', marginBottom: -8 },
+  trialArea: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 16, paddingTop: 4 }, trialCard: { paddingVertical: 18, paddingHorizontal: 18 }, trialRow: { flexDirection: 'row', gap: 14 }, trialRail: { alignItems: 'center' },
+  trialIcon: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', backgroundColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center' }, trialIconActive: { backgroundColor: brand.accent, borderColor: brand.accent },
+  trialLine: { flex: 1, width: 2, minHeight: 14, marginVertical: 4, borderRadius: 1, backgroundColor: 'rgba(142,78,198,0.28)' },
+  trialCopy: { flex: 1, gap: 2, paddingTop: 1, paddingBottom: 14 }, trialCopyLast: { paddingBottom: 0 }, trialLabel: { color: brand.accentText, fontSize: 13, lineHeight: 18, fontWeight: '700' }, trialText: { color: brand.text, fontSize: 15, lineHeight: 21 },
+  trialChips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }, trialChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.45)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.82)' }, trialChipText: { color: brand.accentText, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   hero: { marginTop: 4, marginBottom: 10 }, welcomeTitle: { fontSize: 30, lineHeight: 37, textAlign: 'center' }, welcomeBody: { textAlign: 'center' }, choiceText: { flex: 1, fontSize: 17, lineHeight: 25, fontWeight: '600', color: brand.text },
 });

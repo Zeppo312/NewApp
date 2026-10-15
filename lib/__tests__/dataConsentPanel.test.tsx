@@ -1,6 +1,15 @@
 import React from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { DataConsentPanel } from "../../components/privacy/DataConsentPanel";
+// Consent pages use the app shell (Header, background, glass card); keep it light in tests.
+jest.mock('@/components/Header', () => { const R = require('react'); const { Pressable, Text } = require('react-native');
+  return { __esModule: true, default: ({ title, showBackButton, onBackPress, backAccessibilityLabel }: any) => R.createElement(R.Fragment, null,
+    R.createElement(Text, null, title), showBackButton ? R.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: backAccessibilityLabel, onPress: onBackPress }) : null) }; });
+jest.mock('@/components/ThemedBackground', () => ({ ThemedBackground: ({ children }: any) => children }));
+jest.mock('@/components/ui/content-card', () => ({ ContentCard: ({ children }: any) => children }));
+jest.mock('@/contexts/NavigationContext', () => ({ NavigationProvider: ({ children }: any) => children }));
+jest.mock('@/hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light', isDarkBackground: false, textPrimary: '#000', textSecondary: '#333', textTertiary: '#666' }) }));
+
 let tree: ReactTestRenderer;
 afterEach(() => act(() => tree?.unmount()));
 it.each(["health", "ai"] as const)(

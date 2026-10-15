@@ -45,7 +45,9 @@ export function PregnancyNumbersSlide({ locale, currentWeek, progress, compact =
     { emoji: '📊', value: `${progress}%`, label: 'overview.progress' as const, opacity: 0.05, border: 0.15 },
   ];
   return <OverviewCard compact={compact} onPress={onPress} onLayout={onLayout} testID="pregnancy-numbers-slide">
-    <HomeOverviewHeading color={c.text}>{translateHomeText(locale, 'summary.title')}</HomeOverviewHeading>
+    <HomeOverviewHeading color={c.text} isDark={c.dark}
+      accessibilityLabel={translatePregnancyHomeText(locale, 'card.countdown.title')}
+      onPress={onPress}>{translateHomeText(locale, 'summary.title')}</HomeOverviewHeading>
     <View style={[styles.stats, stacked && styles.stackedStats]}>
       {items.map(item => <View key={item.label} style={[styles.stat, stacked && styles.stackedStat,
         { backgroundColor: `rgba(94,61,179,${item.opacity})`, borderColor: `rgba(94,61,179,${item.border})` }]}>

@@ -146,6 +146,7 @@ export const activeDataConsentCopy = {
     cleanupError: "Einige lokale Daten oder Erinnerungen konnten noch nicht bereinigt werden. Bitte wiederhole die Prüfung.",
     manage: "Einwilligungen verwalten", support: "Support", continue: "Zur App", aiRequired: "Für diese Funktion ist deine zusätzliche KI-Einwilligung erforderlich.",
     viewConsent: "Einwilligung ansehen", returnToFunction: "Zurück zur Funktion",
+    step: "Schritt {n} von {total}", healthBadge: "Für Tracking nötig", aiBadge: "Optional", aiNeedsHealth: "Setzt die Einwilligung für Gesundheitsdaten voraus.", proceed: "Weiter",
   },
   en: {
     ...dataConsentCopy.en,
@@ -164,6 +165,7 @@ export const activeDataConsentCopy = {
     cleanupError: "Some local data or reminders could not be cleared yet. Please check again.",
     manage: "Manage consents", support: "Support", continue: "Go to app", aiRequired: "This feature requires your additional AI consent.",
     viewConsent: "Review consent", returnToFunction: "Back to feature",
+    step: "Step {n} of {total}", healthBadge: "Needed for tracking", aiBadge: "Optional", aiNeedsHealth: "Requires consent to health data first.", proceed: "Continue",
   },
   es: {
     ...dataConsentCopy.es,
@@ -182,5 +184,6 @@ export const activeDataConsentCopy = {
     cleanupError: "No se pudieron borrar algunos datos locales o recordatorios. Vuelve a comprobarlo.",
     manage: "Gestionar consentimientos", support: "Soporte", continue: "Ir a la app", aiRequired: "Esta función requiere tu consentimiento adicional para IA.",
     viewConsent: "Ver consentimiento", returnToFunction: "Volver a la función",
+    step: "Paso {n} de {total}", healthBadge: "Necesario para el seguimiento", aiBadge: "Opcional", aiNeedsHealth: "Requiere antes el consentimiento para datos de salud.", proceed: "Continuar",
   },
 } satisfies Record<AppLocale, Record<string, string>>;

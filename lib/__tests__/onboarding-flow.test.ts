@@ -10,8 +10,16 @@ import {
 describe('onboarding flow', () => {
   it('reaches a product moment without asking for a surname, photo, or background', () => {
     expect(getOnboardingSteps(true, false)).toEqual([
-      'welcome', 'firstName', 'role', 'invitation', 'babyStatus', 'dates', 'mood', 'energy', 'needs', 'personalValue', 'challenge', 'relief', 'support', 'sharedValue', 'productMoment', 'feedback', 'habit', 'plan',
+      'welcome', 'firstName', 'role', 'invitation', 'babyStatus', 'dates', 'mood', 'energy', 'needs', 'challenge', 'support', 'sharedValue', 'productMoment', 'feedback', 'habit', 'plan',
     ]);
+  });
+
+  it('explains the free week right before the paywall only where the store grants it', () => {
+    const steps = getOnboardingSteps(false, false, true);
+    expect(steps.at(-1)).toBe('trial');
+    expect(steps.at(-2)).toBe('plan');
+    expect(getOnboardingSteps(false, true, true)).not.toContain('trial');
+    expect(getOnboardingChapters(steps, steps.indexOf('trial')).active).toBe('start');
   });
 
   it('uses the linked baby instead of asking an invited parent to enter baby details again', () => {
@@ -37,6 +45,7 @@ describe('onboarding flow', () => {
     expect(atDates.active).toBe('baby');
     expect(atDates.chapters.map(chapter => chapter.fill)).toEqual([1, 1, 0, 0, 0]);
     expect(getOnboardingChapters(steps, steps.indexOf('challenge')).chapters[3].fill).toBe(0.5);
+    expect(getOnboardingChapters(steps, steps.indexOf('support')).chapters[3].fill).toBe(0.75);
   });
 
   it('shows a single chapter for an invited parent', () => {
@@ -51,7 +60,7 @@ describe('onboarding flow', () => {
     expect(getOnboardingDestination(true, 'sleep')).toBe('/(tabs)/sleep-tracker');
     expect(getOnboardingDestination(true, 'daily')).toBe('/(tabs)/daily_old');
     expect(getOnboardingDestination(false, 'checklist')).toBe('/(tabs)/explore');
-    expect(getOnboardingDestination(false, 'memories')).toBe('/(tabs)/diary');
+    expect(getOnboardingDestination(false, 'memories')).toBe('/(tabs)/pregnancy-home');
     expect(getOnboardingDestination(false, 'sleep')).toBe('/(tabs)/pregnancy-home');
   });
 });

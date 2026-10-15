@@ -86,6 +86,7 @@ const MAPPING: Record<string, MaterialIconName> = {
   'moon.zzz': 'hotel',
   'moon': 'dark-mode',
   'heart.fill': 'favorite',
+  'leaf.fill': 'eco',
   'heart': 'favorite-border',
   'chart.bar.fill': 'bar-chart',
   'person.2.fill': 'people',

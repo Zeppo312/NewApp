@@ -2,17 +2,19 @@ import { differenceInCalendarDays } from 'date-fns';
 
 export type OnboardingStep =
   | 'welcome' | 'firstName' | 'role' | 'invitation' | 'babyStatus' | 'dates'
-  | 'mood' | 'energy' | 'needs' | 'personalValue' | 'challenge' | 'relief' | 'support'
-  | 'sharedValue' | 'productMoment' | 'feedback' | 'habit' | 'plan';
+  | 'mood' | 'energy' | 'needs' | 'challenge' | 'support'
+  | 'sharedValue' | 'productMoment' | 'feedback' | 'habit' | 'plan' | 'trial';
 
-export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean): OnboardingStep[] {
+/** The trial explanation is only shown where the store actually grants the free week (iOS intro offer). */
+export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean, showTrial = false): OnboardingStep[] {
   if (isLinked) return ['welcome', 'firstName', 'role', 'invitation'];
   return [
     'welcome', 'firstName', 'role',
     ...(showInvitation ? ['invitation' as const] : []),
     'babyStatus', 'dates',
-    'mood', 'energy', 'needs', 'personalValue', 'challenge', 'relief', 'support',
+    'mood', 'energy', 'needs', 'challenge', 'support',
     'sharedValue', 'productMoment', 'feedback', 'habit', 'plan',
+    ...(showTrial ? ['trial' as const] : []),
   ];
 }
 
@@ -23,8 +25,8 @@ const chapterOfStep: Record<OnboardingStep, OnboardingChapter | null> = {
   firstName: 'about', role: 'about', invitation: 'about',
   babyStatus: 'baby', dates: 'baby',
   mood: 'feeling', energy: 'feeling',
-  needs: 'everyday', personalValue: 'everyday', challenge: 'everyday', relief: 'everyday', support: 'everyday', sharedValue: 'everyday',
-  productMoment: 'start', feedback: 'start', habit: 'start', plan: 'start',
+  needs: 'everyday', challenge: 'everyday', support: 'everyday', sharedValue: 'everyday',
+  productMoment: 'start', feedback: 'start', habit: 'start', plan: 'start', trial: 'start',
 };
 
 /** Groups the long flow into a few chapters, each with its own fill, so progress stays readable. */
@@ -56,7 +58,7 @@ export type OnboardingStart = 'daily' | 'sleep' | 'overview' | 'checklist' | 'me
 
 export function getOnboardingDestination(isBabyBorn: boolean, start?: OnboardingStart) {
   // Legacy preferences use the same fallback as getPersonalizedStart.
-  if (start === 'memories') return '/(tabs)/diary' as const;
+  if (start === 'memories') start = isBabyBorn ? 'daily' : 'overview';
   if (isBabyBorn && start === 'daily') return '/(tabs)/daily_old' as const;
   if (isBabyBorn && start === 'sleep') return '/(tabs)/sleep-tracker' as const;
   if (!isBabyBorn && start === 'checklist') return '/(tabs)/explore' as const;

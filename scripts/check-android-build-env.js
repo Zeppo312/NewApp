@@ -5,7 +5,7 @@ function validateAndroidBuildEnv(env = process.env) {
   const profile = env.EAS_BUILD_PROFILE;
   const key = env.EXPO_PUBLIC_RC_ANDROID_KEY?.trim() ||
     env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY?.trim();
-  const isStoreBuild = ['production', 'store-internal', 'preview-testflight'].includes(profile);
+  const isStoreBuild = ['production', 'store-internal', 'preview-testflight', 'release-candidate', 'family-qa-play'].includes(profile);
   const isDevelopment = profile === 'development';
   if (!isDevelopment && key && !/^goog_\S+$/.test(key)) {
     throw new Error('[Android build] RevenueCat requires a Google Play SDK key (goog_...), not a Test Store, Apple, or secret key.');

@@ -14,6 +14,13 @@ const createDeferred = <T>() => {
   return { promise, resolve };
 };
 
+// Laesst den Request bis zur Netzwerkabfrage laufen. Eine Invalidierung
+// waehrend des Storage-Reads bricht ihn sonst schon vor Supabase ab.
+const untilCalled = async (mock: jest.Mock) => {
+  for (let i = 0; i < 50 && mock.mock.calls.length === 0; i += 1) await Promise.resolve();
+  if (mock.mock.calls.length === 0) throw new Error('Netzwerkabfrage wurde nicht gestartet');
+};
+
 const profileQuery = {
   maybeSingle: jest.fn(),
 };
@@ -153,6 +160,7 @@ describe('in-flight deduplication', () => {
       .mockReturnValueOnce(requestB.promise);
 
     const callA = getCachedUserSettings('user-1');
+    await untilCalled(settingsQuery.maybeSingle);
 
     await invalidateAllCaches();
     await AsyncStorage.clear();
@@ -179,6 +187,7 @@ describe('in-flight deduplication', () => {
     settingsQuery.maybeSingle.mockReturnValueOnce(stale.promise);
 
     const staleCall = getCachedUserSettings('user-1');
+    await untilCalled(settingsQuery.maybeSingle);
 
     await invalidateAllCaches();
     await AsyncStorage.clear();
@@ -199,6 +208,7 @@ describe('in-flight deduplication', () => {
     profileQuery.maybeSingle.mockReturnValueOnce(stale.promise);
 
     const staleCall = getCachedUserProfile('user-1');
+    await untilCalled(profileQuery.maybeSingle);
 
     await invalidateAllCaches();
     await AsyncStorage.clear();
@@ -214,6 +224,14 @@ describe('in-flight deduplication', () => {
 
     expect(fresh).toEqual({ id: 'user-1', paywall_access_role: 'frisch' });
     expect(profileQuery.maybeSingle).toHaveBeenCalledTimes(2);
+  });
+
+  it('bricht einen waehrend des Storage-Reads invalidierten Request vor Supabase ab', async () => {
+    const staleCall = getCachedUserSettings('user-1');
+    await invalidateAllCaches();
+
+    await expect(staleCall).resolves.toBeNull();
+    expect(settingsQuery.maybeSingle).not.toHaveBeenCalled();
   });
 
   it('startet nach abgeschlossenem Request wieder frisch', async () => {
