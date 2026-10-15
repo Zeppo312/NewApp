@@ -1,4 +1,5 @@
 import {
+  getOnboardingChapters,
   getOnboardingDestination,
   getOnboardingPregnancyProgress,
   getOnboardingSteps,
@@ -26,6 +27,22 @@ describe('onboarding flow', () => {
     expect(steps[getPreviousOnboardingIndex(steps, habit, false)]).toBe('productMoment');
     expect(steps[getNextOnboardingIndex(steps, demo, true)]).toBe('feedback');
     expect(steps[getPreviousOnboardingIndex(steps, habit, true)]).toBe('feedback');
+  });
+
+  it('groups progress into chapters that fill one after another', () => {
+    const steps = getOnboardingSteps(false, false);
+    expect(getOnboardingChapters(steps, 0)).toMatchObject({ active: null, activeIndex: -1 });
+    expect(getOnboardingChapters(steps, 0).chapters.map(chapter => chapter.key)).toEqual(['about', 'baby', 'feeling', 'everyday', 'start']);
+    const atDates = getOnboardingChapters(steps, steps.indexOf('dates'));
+    expect(atDates.active).toBe('baby');
+    expect(atDates.chapters.map(chapter => chapter.fill)).toEqual([1, 1, 0, 0, 0]);
+    expect(getOnboardingChapters(steps, steps.indexOf('challenge')).chapters[3].fill).toBe(0.5);
+  });
+
+  it('shows a single chapter for an invited parent', () => {
+    const steps = getOnboardingSteps(false, true);
+    const progress = getOnboardingChapters(steps, steps.indexOf('role'));
+    expect(progress.chapters).toEqual([{ key: 'about', fill: 2 / 3 }]);
   });
 
   it('continues to the corresponding home after access is resolved', () => {

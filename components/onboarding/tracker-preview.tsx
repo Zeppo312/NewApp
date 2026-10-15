@@ -16,12 +16,12 @@ export function exampleCareEntry(kind: 'daily' | 'sleep', date = new Date()): Da
     ? { id: 'onboarding-sleep', entry_type: 'sleep', entry_date: time(9, 5), start_time: time(9, 5), end_time: time(9, 50) }
     : { id: 'onboarding-meal', entry_type: 'feeding', feeding_type: 'BOTTLE', feeding_volume_ml: 120, entry_date: time(8, 10), start_time: time(8, 10) };
 }
-export function TrackerPreview({ kind, locale, compact = false }: { kind: 'daily' | 'sleep'; locale: OnboardingLocale; compact?: boolean }) {
+export function TrackerPreview({ kind, locale, compact = false, cardsOnly = false }: { kind: 'daily' | 'sleep'; locale: OnboardingLocale; compact?: boolean; cardsOnly?: boolean }) {
   const { width, fontScale } = useWindowDimensions();
   // Fixed-size decorative controls give way to readable activity cards at larger text sizes.
-  const showControls = !compact && (fontScale ?? 1) < 1.5;
+  const showControls = !compact && !cardsOnly && (fontScale ?? 1) < 1.5;
   return <View style={styles.preview}>
-    {!compact && <Text style={styles.title}>{kind === 'daily' ? translateDailyText(locale, 'screen.title') : translateSleepTrackerText(locale, 'screen.title')}</Text>}
+    {!compact && !cardsOnly && <Text style={styles.title}>{kind === 'daily' ? translateDailyText(locale, 'screen.title') : translateSleepTrackerText(locale, 'screen.title')}</Text>}
     {kind === 'sleep' && showControls && <View style={styles.clock}><SleepTimerFace size={Math.min(238, width - 88)} active progress={45 / 480 * 100} timeLabel="00:45:00" textColor={brand.text}><Text style={styles.status}>{translateDailyText(locale, 'card.sleep')}</Text><Text style={styles.hint}>09:05 – 09:50</Text></SleepTimerFace></View>}
     {kind === 'daily' && showControls && <View style={styles.actions}>
       <DailyQuickAction emoji="🍼" label={translateDailyText(locale, 'card.bottle')} textColor={brand.secondary} disabled />

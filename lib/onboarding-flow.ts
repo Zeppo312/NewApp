@@ -16,6 +16,33 @@ export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean): 
   ];
 }
 
+export type OnboardingChapter = 'about' | 'baby' | 'feeling' | 'everyday' | 'start';
+
+const chapterOfStep: Record<OnboardingStep, OnboardingChapter | null> = {
+  welcome: null,
+  firstName: 'about', role: 'about', invitation: 'about',
+  babyStatus: 'baby', dates: 'baby',
+  mood: 'feeling', energy: 'feeling',
+  needs: 'everyday', personalValue: 'everyday', challenge: 'everyday', relief: 'everyday', support: 'everyday', sharedValue: 'everyday',
+  productMoment: 'start', feedback: 'start', habit: 'start', plan: 'start',
+};
+
+/** Groups the long flow into a few chapters, each with its own fill, so progress stays readable. */
+export function getOnboardingChapters(steps: OnboardingStep[], current: number) {
+  const chapters: { key: OnboardingChapter; fill: number }[] = [];
+  for (const key of steps.map(step => chapterOfStep[step])) {
+    if (key && !chapters.some(chapter => chapter.key === key)) chapters.push({ key, fill: 0 });
+  }
+  const active = chapterOfStep[steps[current]];
+  for (const chapter of chapters) {
+    const indices = steps.flatMap((step, index) => chapterOfStep[step] === chapter.key ? [index] : []);
+    const done = indices.filter(index => index <= current).length;
+    chapter.fill = done / indices.length;
+  }
+  const activeIndex = active ? chapters.findIndex(chapter => chapter.key === active) : -1;
+  return { chapters, active, activeIndex };
+}
+
 /** Unused demos do not lead to a question about an experience the parent did not have. */
 export function getNextOnboardingIndex(steps: OnboardingStep[], current: number, demoCompleted: boolean) {
   return steps[current] === 'productMoment' && !demoCompleted ? steps.indexOf('habit') : current + 1;
@@ -28,6 +55,7 @@ export function getPreviousOnboardingIndex(steps: OnboardingStep[], current: num
 export type OnboardingStart = 'daily' | 'sleep' | 'overview' | 'checklist' | 'memories';
 
 export function getOnboardingDestination(isBabyBorn: boolean, start?: OnboardingStart) {
+  // Legacy preferences use the same fallback as getPersonalizedStart.
   if (start === 'memories') return '/(tabs)/diary' as const;
   if (isBabyBorn && start === 'daily') return '/(tabs)/daily_old' as const;
   if (isBabyBorn && start === 'sleep') return '/(tabs)/sleep-tracker' as const;

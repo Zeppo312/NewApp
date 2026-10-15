@@ -4,8 +4,8 @@ import Animated, { cubicBezier, Easing, FadeIn, FadeInDown, ReduceMotion, useRed
 import { GlassCard } from '@/components/ui/GlassCard';
 import { onboardingColors as brand } from './theme';
 
-export function OnboardingSurface({ children, style, tone }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; tone?: string }) {
-  return <GlassCard intensity={65} tint="systemUltraThinMaterialLight" radius={24} skipAndroidBlur
+export function OnboardingSurface({ children, style, outerStyle, tone }: { children: React.ReactNode; style?: StyleProp<ViewStyle>; outerStyle?: StyleProp<ViewStyle>; tone?: string }) {
+  return <GlassCard intensity={65} tint="systemUltraThinMaterialLight" radius={24} skipAndroidBlur style={outerStyle}
     frostColor="rgba(255,255,255,0.24)" toneColor={tone}
     borderColor="rgba(255,255,255,0.82)" innerBorderColor="rgba(255,255,255,0.40)"
     highlightStrength="subtle" grainOpacity={0} shadeOpacity={0.14} glossOpacity={0.45}

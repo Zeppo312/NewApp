@@ -69,6 +69,8 @@ jest.mock('@/components/onboarding/personalized-steps', () => ({ SurveyStep: () 
 jest.mock('@/components/onboarding/value-steps', () => ({ ValueStep: () => null, FeedbackStep: () => null, HabitStep: () => null }));
 jest.mock('@/components/onboarding/wellbeing-step', () => ({ WellbeingStep: () => null, wellbeingCopy: () => ({ skip: 'Überspringen' }) }));
 jest.mock('@/components/onboarding/product-moment', () => ({ OnboardingProductMoment: () => null }));
+jest.mock('@/components/onboarding/lotti-medallion', () => ({ LottiMedallion: () => null }));
+jest.mock('@/components/onboarding/chapter-progress', () => ({ ChapterProgress: () => null }));
 jest.mock('@/components/modals/IOSBottomDatePicker', () => () => null);
 jest.mock('@/components/ui/DateTimePicker', () => () => null);
 jest.mock('@/components/LinkedBabySelectionModal', () => ({ LinkedBabySelectionModal: () => null }));

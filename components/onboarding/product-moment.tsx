@@ -9,6 +9,7 @@ import { onboardingColors as brand } from './theme';
 import { wellbeingCopy, wellbeingSummary } from './wellbeing-step';
 import { valueCopy } from './value-copy';
 import { valueStyles } from './value-steps';
+import { LottiMedallion } from './lotti-medallion';
 
 type Props = {
   locale: OnboardingLocale; isBabyBorn: boolean; isPartner: boolean;
@@ -21,6 +22,7 @@ export function OnboardingProductMoment({ locale, isPartner, babyName, partnerNa
   const c = valueCopy(locale);
   const names = { sleep: 'Sleep', daily: 'Daily', overview: 'Overview', checklist: 'Checklist', memories: 'Memories' } as const;
   return <View style={styles.screen}>
+    <LottiMedallion pose="confetti" size="hero" float style={styles.medallion} />
     <View style={styles.ready}><IconSymbol name="checkmark.circle.fill" size={28} color={brand.accentText} /><Text style={styles.readyText}>{babyName?.trim() ? translateOnboardingText(locale, 'flow.forBaby', { name: babyName.trim() }) : translateOnboardingText(locale, 'flow.forFamily')}</Text></View>
     <Text accessibilityRole="header" style={styles.title}>{c.planTitle}</Text>
     <Text style={styles.body}>{c.planBody}</Text>
@@ -34,6 +36,7 @@ export function OnboardingProductMoment({ locale, isPartner, babyName, partnerNa
 }
 const styles = StyleSheet.create({
   ...valueStyles,
+  medallion: { marginTop: 8, marginBottom: 12 },
   ready: { flexDirection: 'row', alignItems: 'center', gap: 10 }, readyText: { flex: 1, color: brand.accentText, fontSize: 16, fontWeight: '600' },
   next: { padding: 20, gap: 9 }, label: { color: brand.accentText, fontSize: 12, fontWeight: '700' }, action: { color: brand.text, fontSize: 18, lineHeight: 26, fontWeight: '600' }, detail: { color: brand.secondary, fontSize: 13, lineHeight: 20 },
 });
