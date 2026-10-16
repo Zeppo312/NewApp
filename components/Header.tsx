@@ -8,6 +8,8 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ThemedText } from '@/components/ThemedText';
 import { useNavigation } from '@/contexts/NavigationContext';
+import { useLocale } from '@/contexts/LocaleContext';
+import { translateNavigationText } from '@/lib/navigationTranslations';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
 
@@ -35,7 +37,7 @@ const Header: React.FC<HeaderProps> = ({
   subtitle,
   showBackButton = false,
   onBackPress,
-  backAccessibilityLabel = 'Zurück',
+  backAccessibilityLabel,
   leftContent,
   rightContent,
   showBabySwitcher = true,
@@ -44,6 +46,7 @@ const Header: React.FC<HeaderProps> = ({
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
   const navigation = useNavigation();
+  const { locale } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
   const [leftWidth, setLeftWidth] = useState(HEADER_ACTION_SIZE);
@@ -89,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
           {showBackButton && (
             <PeriodNavigationButton
               direction="previous"
-              accessibilityLabel={backAccessibilityLabel}
+              accessibilityLabel={backAccessibilityLabel ?? translateNavigationText(locale, 'common.back')}
               isDark={useDarkMode || colorScheme === 'dark'}
               color={iconColor}
               onPress={handleBackPress}

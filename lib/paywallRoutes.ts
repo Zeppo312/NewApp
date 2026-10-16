@@ -9,7 +9,10 @@ const excludedPaths = new Set([
   '/nutzungsbedingungen',
   '/dsgvo',
   '/account-deletion',
+  '/app-settings',
   '/data-consents',
+  '/support',
+  '/subscription',
   '/caregiver',
   '/caregiver-join',
 ]);

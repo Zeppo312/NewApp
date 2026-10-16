@@ -1,6 +1,8 @@
 # App-Zugang für Google Reviewer
 
-**Status OFFEN-NUTZER/TECHNIK:** Kein geeignetes Konto aus Schritt 5 vorhanden. Keine Konten angelegt, Rollen gesetzt oder Passwörter gespeichert. Echte Zugangsdaten gehören in die Play Console bzw. einen abgestimmten sicheren Kanal, nicht ins Repository.
+**Stand 14.10.2026: teilweise vorbereitet.** Auf Nutzerwunsch werden die bestehenden Review-Zugangsdaten aus App Store Connect 1.0.23 auch für Google Play verwendet. Die E-Mail-/Passwortanmeldung in Produktion wurde erfolgreich geprüft; die E-Mail ist bestätigt, das Konto hat zwei eigene Babyprofile und keine Adminrechte. Zugangsdaten bleiben ausschließlich in privaten lokalen Unterlagen bzw. der Play Console.
+
+Das Konto besitzt bei der erneuten Prüfung am 14.10.2026 um 05:37 UTC weiterhin die Rolle `tester`, also Standard-Zugang. Für vollständigen Review-Zugriff fehlt die Freischaltung als `premium_tester`; der Betreiber übernimmt diese selbst und bestätigt erneut „Noch nicht erledigt“. Es wurde keine Rolle geändert. Google verlangt im Zugangsformular die Bestätigung des uneingeschränkten Zugriffs einschließlich Premium. Das Formular ist vorbereitet, diese Bestätigung ist noch nicht gesetzt und der Zugang noch nicht gespeichert. **Auch das Zielgruppenformular ist bis dahin durch Google gesperrt.** Eine native Abnahme aller Review-Funktionen ist nicht erfolgt. Nachweis ohne Zugangsdaten: `output/android-release-20261014/reviewer-access-verification.json`.
 
 Die App bietet E-Mail-/Passwortanmeldung und beschränkt persönliche Funktionen über Onboarding/Paywall. Google benötigt wiederverwendbaren, ortsunabhängigen Zugang einschließlich Bereichen hinter der Paywall. Die Zugangsanleitung soll auf Englisch vorliegen. [Google-Anforderungen](https://support.google.com/googleplay/android-developer/answer/15748846?hl=en).
 
@@ -25,12 +27,12 @@ R1/R2 dürfen weder einen Kauf noch E-Mail-OTP, eine Apple-Anmeldung, ablaufende
 
 **Password:** `[OFFEN: enter directly in Play Console; do not commit]`
 
-> Lotti Baby is intended for parents and adult caregivers. Personal features require an account and an access entitlement.
+> Lotti Baby is intended for parents and caregivers. Personal features require an account and an access entitlement.
 >
 > 1. Open the app and choose “Anmelden” (Sign in). Use the email and password provided above. Do not create a new account or choose Apple sign-in.
-> 2. The demo account has completed onboarding and contains fictional family data. Select the demo baby “Mila Demo”.
+> 2. Select an existing demo family profile. The account has two own baby profiles; profile names and complete onboarding must be verified in the release app before submitting this instruction.
 > 3. Open the daily overview to add and edit feeding or diaper entries. Open the sleep tracker to start and stop a sleep timer and view previous entries.
-> 4. Additional features include the planner, shopping list, milestones, community, “Frag Lotti” (AI assistant), and “Lottis Fürsorge”. The demo entitlement must allow access without a purchase.
+> 4. Additional features include the planner, shopping list, milestones, “Frag Lotti” (AI assistant), and “Lottis Fürsorge”. The demo entitlement must allow access without a purchase. Public community and direct/group chats are disabled in the current candidate.
 > 5. For the pregnancy experience, sign out and use the second account provided in the additional access instructions. For family sharing, use the linked caregiver account.
 > 6. App settings contain support, privacy information and data deletion. Use only the separate disposable account for a completed deletion test, so the main review credentials remain available.
 >

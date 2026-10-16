@@ -39,6 +39,7 @@ import * as Device from 'expo-device';
 import { useRouter } from 'expo-router';
 import { useEffect,useMemo,useRef,useState } from 'react';
 import { ActivityIndicator,Alert,Animated,AppState,Dimensions,Platform,RefreshControl,SafeAreaView,ScrollView,StatusBar,StyleSheet,Text,TouchableOpacity,View } from 'react-native';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 let ACTIVE_CONTRACTION_LOCALE = DEFAULT_CONTRACTION_LOCALE;
 let CONTRACTION_LOCALE_TAG = getContractionLocaleTag(ACTIVE_CONTRACTION_LOCALE);
@@ -1140,7 +1141,7 @@ export default function HomeScreen() {
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/pregnancy-home')}
+          onBackPress={() => navigateBack('/(tabs)/pregnancy-home')}
         />
 
         {isReadOnlyPreviewMode && (

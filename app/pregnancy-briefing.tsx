@@ -10,7 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import * as Haptics from 'expo-haptics';
 
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';

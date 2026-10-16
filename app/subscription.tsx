@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 
 import Header from '@/components/Header';
 import { SubscriptionCancellationFeedbackModal } from '@/components/SubscriptionCancellationFeedbackModal';
@@ -59,6 +60,7 @@ import {
   type SubscriptionTranslationKey,
 } from '@/lib/subscriptionTranslations';
 import { PAYWALL_VISIBLE_TIER_IDS } from '@/lib/paywallContent';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 // Standard wird als Bestandstier erkannt, aber nicht mehr als neuer Tarif beworben.
 const PLAN_TIER_PILLS = [
@@ -393,7 +395,7 @@ export default function SubscriptionScreen() {
             subtitle={t('screen.subtitle')}
             showBackButton
             showBabySwitcher={false}
-            onBackPress={() => router.push('/(tabs)/more')}
+            onBackPress={() => navigateBack('/(tabs)/more')}
           />
 
           <ScrollView

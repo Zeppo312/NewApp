@@ -1,0 +1,97 @@
+{
+  "generated": "2026-10-14T13:23:41.195Z",
+  "checks": [
+    {
+      "locale": "de-DE",
+      "scene": "v1-frage",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "de-DE",
+      "scene": "v2-eintrag",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "de-DE",
+      "scene": "v3-gemeinsam",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "de-DE",
+      "scene": "v4-schlaf",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "de-DE",
+      "scene": "v5-marke",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "en-US",
+      "scene": "v1-frage",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "en-US",
+      "scene": "v2-eintrag",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "en-US",
+      "scene": "v3-gemeinsam",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "en-US",
+      "scene": "v4-schlaf",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "en-US",
+      "scene": "v5-marke",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "es-ES",
+      "scene": "v1-frage",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "es-ES",
+      "scene": "v2-eintrag",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "es-ES",
+      "scene": "v3-gemeinsam",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "es-ES",
+      "scene": "v4-schlaf",
+      "copyBottom": 290,
+      "overflow": false
+    },
+    {
+      "locale": "es-ES",
+      "scene": "v5-marke",
+      "copyBottom": 290,
+      "overflow": false
+    }
+  ],
+  "passed": true,
+  "scope": "Prüft nur die Text-Overlays. Keine fertigen Videos und keine App-Bedienung."
+}

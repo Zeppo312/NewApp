@@ -40,6 +40,7 @@ import {
   ProfileTranslationKey,
   translateProfileText,
 } from '@/lib/profileTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 const PRIMARY_TEXT = '#7D5A50';
 const ACCENT_PURPLE = '#8E4EC6'; // Sleep-Tracker Akzent
@@ -457,7 +458,7 @@ export default function ProfilScreen() {
             title={t('screen.title')}
             subtitle={t('screen.subtitle')}
             showBackButton
-            onBackPress={() => router.push('/more')}
+            onBackPress={() => navigateBack('/more')}
           />
 
           <ScrollView

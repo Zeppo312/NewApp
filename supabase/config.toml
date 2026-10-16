@@ -30,6 +30,10 @@ verify_jwt = false
 [functions.request-account-deletion]
 verify_jwt = false
 
+# Direct deletion of standalone accounts; handler validates the user token.
+[functions.delete-own-account]
+verify_jwt = false
+
 # Internal scheduler only; a dedicated 32+ character secret is required.
 [functions.process-account-deletion]
 verify_jwt = false

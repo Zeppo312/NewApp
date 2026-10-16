@@ -28,6 +28,7 @@ import {
   SupportTranslationKey,
   translateSupportText,
 } from '@/lib/supportTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 const SUPPORT_EMAIL = 'support@lottibaby.de';
 let ACTIVE_SUPPORT_LOCALE = DEFAULT_SUPPORT_LOCALE;
@@ -108,7 +109,7 @@ export default function SupportScreen() {
             subtitle={t('screen.subtitle')}
             showBackButton
             showBabySwitcher={false}
-            onBackPress={() => router.push('/more')}
+            onBackPress={() => navigateBack('/more')}
           />
 
           <KeyboardAvoidingView

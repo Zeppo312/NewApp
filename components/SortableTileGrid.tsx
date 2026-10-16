@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  GestureResponderEvent,
   LayoutChangeEvent,
   PanResponder,
   Pressable,
@@ -21,7 +22,7 @@ export type SortableTileGridScrollMetrics = {
 type SortableTileGridProps<T extends { id: string }> = {
   items: T[];
   isEditing: boolean;
-  onPressItem: (item: T) => void;
+  onPressItem: (item: T, event?: GestureResponderEvent) => void;
   onRequestEditMode: () => void;
   onOrderChange: (items: T[]) => void;
   renderTile: (params: { item: T; isEditing: boolean; isActive: boolean }) => React.ReactNode;
@@ -47,7 +48,7 @@ type SortableTileGridItemProps<T extends { id: string }> = {
   animatedPosition: Animated.ValueXY;
   tileWidth: number;
   itemHeight: number;
-  onPress: (item: T) => void;
+  onPress: (item: T, event?: GestureResponderEvent) => void;
   onRequestEditMode: () => void;
   onDragGrant: (id: string, touchOffsetY: number) => void;
   onDragMove: (id: string, dx: number, dy: number) => void;
@@ -141,9 +142,9 @@ function SortableTileGridItem<T extends { id: string }>({
       ]}
     >
       <Pressable
-        onPress={() => {
+        onPress={(event) => {
           if (isEditing) return;
-          onPress(item);
+          onPress(item, event);
         }}
         onLongPress={() => {
           if (isEditing) return;

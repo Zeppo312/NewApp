@@ -326,6 +326,8 @@ describe('sleep screen server snapshot synchronization', () => {
     const newer = deferred<ReadResult>();
     const h = harness(started, () => older.promise);
     h.read.mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+    // A fresh data scope starts in the loading state; reloads no longer set it.
+    h.state.loading = true;
 
     const oldLoad = h.load();
     const newLoad = h.load();
@@ -450,10 +452,8 @@ describe('sleep screen server snapshot synchronization', () => {
     expect(h.state.active).toEqual({ ...started, period: 'day' });
     expect(h.state.entries).toEqual([{ ...started, period: 'day' }, { ...finished, period: 'day' }]);
     expect(latestClassifier).toHaveBeenCalledTimes(2);
-    expect(h.context.getAssignedDateForEntry).toHaveBeenCalledWith({ ...started, period: 'day' }, latestSettings);
-    expect(h.context.isEntryAssignedToDate).toHaveBeenCalledWith(
-      expect.objectContaining({ period: 'day' }), h.context.selectedDate, latestSettings,
-    );
+    // Loading never moves the selected day on its own.
+    expect(h.context.setSelectedDate).not.toHaveBeenCalled();
   });
 });
 

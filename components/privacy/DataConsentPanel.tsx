@@ -25,8 +25,6 @@ export type DataConsentPanelProps = {
   busy?: boolean;
   error?: boolean;
   active?: boolean;
-  /** Position in the first-run sequence, e.g. 1 of 2. */
-  step?: { index: number; total: number };
   onDecide: (granted: boolean) => void;
   onCancel?: () => void;
 };
@@ -83,7 +81,6 @@ export function DataConsentPanel({
   busy = false,
   error = false,
   active = false,
-  step,
   onDecide,
   onCancel,
 }: DataConsentPanelProps) {
@@ -99,15 +96,7 @@ export function DataConsentPanel({
         <ConsentScopeIcon scope={scope} />
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[consentStyles.eyebrow, { color: c.accent }]}>
-            {[
-              step &&
-                extra.step
-                  .replace("{n}", String(step.index))
-                  .replace("{total}", String(step.total)),
-              health ? extra.healthBadge : extra.aiBadge,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+            {health ? extra.healthBadge : extra.aiBadge}
           </Text>
           <Text accessibilityRole="header" style={[consentStyles.cardTitle, { color: c.text }]}>
             {health ? copy.healthTitle : copy.aiTitle}

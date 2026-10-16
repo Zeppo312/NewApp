@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'expo-router';
+import { animateBack } from '@/lib/navigation/zoomTransition';
 
 interface NavigationContextType {
   goBack: () => void;
@@ -35,6 +36,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
   const goBack = () => {
     try {
+      // A real back step keeps the swipe-back animation; the tracked history
+      // only steps in when the navigator itself has nothing to go back to.
+      if (router.canGoBack()) {
+        void animateBack(() => router.back());
+        return;
+      }
+
       // Try to use the navigation history first
       if (navigationHistory.current.length > 0) {
         const previousRoute = navigationHistory.current.pop();

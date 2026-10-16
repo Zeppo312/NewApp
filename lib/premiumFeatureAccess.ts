@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscriptionAccess } from '@/contexts/SubscriptionAccessContext';

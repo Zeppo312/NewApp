@@ -52,6 +52,7 @@ import {
 } from '@/lib/milestoneTranslations';
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 type CategoryFilter = 'all' | MilestoneCategory;
 
@@ -432,7 +433,7 @@ export default function MilestonesScreen() {
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/home')}
+          onBackPress={() => navigateBack('/(tabs)/home')}
         />
 
         {isReadOnlyPreviewMode && (

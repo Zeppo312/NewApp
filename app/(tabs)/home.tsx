@@ -14,9 +14,11 @@ import { boundedRead } from '@/lib/boundedRead';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
+import { Animated, Easing, StyleSheet, ScrollView, View, TouchableOpacity, Text, SafeAreaView, StatusBar, Image, ActivityIndicator, RefreshControl, Alert, Platform, StyleProp, ViewStyle, useWindowDimensions, type GestureResponderEvent } from 'react-native';
+import { openWithZoom, type ZoomSource } from '@/lib/navigation/zoomTransition';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { usePathname, useRouter , useFocusEffect } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -296,7 +298,7 @@ type SortableQuickAccessGridProps = {
   items: HomeQuickAccessCardConfig[];
   order: HomeQuickAccessCardId[];
   isEditing: boolean;
-  onPressItem: (item: HomeQuickAccessCardConfig) => void;
+  onPressItem: (item: HomeQuickAccessCardConfig, event?: GestureResponderEvent) => void;
   onRequestEditMode: () => void;
   onOrderChange: (order: HomeQuickAccessCardId[]) => void;
   onDragStateChange?: (isDragging: boolean) => void;
@@ -942,9 +944,9 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
   };
 
-  const handleNavigate = (destination: any) => {
+  const handleNavigate = (destination: any, source?: ZoomSource) => {
     triggerHaptic();
-    router.push(destination);
+    void openWithZoom(destination, source);
   };
 
   const openQuickAccessEditor = useCallback(() => {
@@ -1316,15 +1318,15 @@ export default function HomeScreen() {
   };
 
   // Handle stat item press
-  const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep') => {
+  const handleStatPress = (type: 'feeding' | 'diaper' | 'sleep', source?: ZoomSource) => {
     if (type === 'sleep') {
-      handleNavigate('/(tabs)/sleep-tracker');
+      handleNavigate('/(tabs)/sleep-tracker', source);
       return;
     }
     handleNavigate({
       pathname: '/(tabs)/daily_old',
       params: { quickAction: type },
-    });
+    }, source);
   };
 
   // Load only daily entries (for quick refresh after adding entries)
@@ -1634,7 +1636,7 @@ export default function HomeScreen() {
                 todayMinutes={todaySleepMinutes}
                 targetMinutes={getDailySleepTargetMinutes(activeBaby?.birth_date)}
                 isDark={isDark}
-                onPress={() => handleNavigate(activeHomeTimer.route)}
+                onPress={(event?: GestureResponderEvent) => handleNavigate(activeHomeTimer.route, event)}
               />
             ) : activeHomeTimer ? (
               <ActiveTimerCard
@@ -1649,10 +1651,10 @@ export default function HomeScreen() {
                 isDark={isDark}
                 textPrimary={textPrimary}
                 textSecondary={textSecondary}
-                onPress={() => handleNavigate(activeHomeTimer.route)}
+                onPress={(event?: GestureResponderEvent) => handleNavigate(activeHomeTimer.route, event)}
               />
             ) : (
-              <LottiWeekCard style={{ marginTop: 14, marginBottom: 0 }} />
+              <LottiWeekCard key={`${user?.id}:${activeBabyId}`} style={{ marginTop: 14, marginBottom: 0 }} />
             )}
           </ThemedView>
         </ContentCard>
@@ -1727,7 +1729,7 @@ export default function HomeScreen() {
 
     return (
       <TouchableOpacity
-        onPress={() => handleNavigate('/(tabs)/daily_old')}
+        onPress={(event?: GestureResponderEvent) => handleNavigate('/(tabs)/daily_old', event)}
         activeOpacity={0.9}
         style={[styles.liquidGlassWrapper, wrapperStyle]}
         onLayout={(event) => {
@@ -1748,7 +1750,7 @@ export default function HomeScreen() {
               color={summaryTextColor}
               isDark={isDark}
               accessibilityLabel={t('card.daily.title')}
-              onPress={() => handleNavigate('/(tabs)/daily_old')}
+              onPress={(event?: GestureResponderEvent) => handleNavigate('/(tabs)/daily_old', event)}
             >
               {t('summary.title')}
             </HomeOverviewHeading>
@@ -1762,7 +1764,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
                 onPress={(event) => {
                   event.stopPropagation();
-                  handleStatPress('feeding');
+                  handleStatPress('feeding', event);
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
@@ -1809,7 +1811,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
                 onPress={(event) => {
                   event.stopPropagation();
-                  handleStatPress('diaper');
+                  handleStatPress('diaper', event);
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
@@ -1834,7 +1836,7 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
                 onPress={(event) => {
                   event.stopPropagation();
-                  handleStatPress('sleep');
+                  handleStatPress('sleep', event);
                 }}
               >
                 <View style={styles.liquidGlassStatIcon}>
@@ -2014,7 +2016,7 @@ export default function HomeScreen() {
         emoji: '🌿',
         title: t('premium.advisor'),
         subtitle: t('premium.advisorDescription'),
-        onPress: () => handleNavigate('/lottis-fuersorge'),
+        onPress: (event?: GestureResponderEvent) => handleNavigate('/lottis-fuersorge', event),
       });
     }
     if (voiceLogAccess !== null) {
@@ -2034,7 +2036,7 @@ export default function HomeScreen() {
         emoji: '✨',
         title: t('premium.askLotti'),
         subtitle: t('premium.askLottiDescription'),
-        onPress: () => handleNavigate('/frag-lotti'),
+        onPress: (event?: GestureResponderEvent) => handleNavigate('/frag-lotti', event),
       });
     }
     return (
@@ -2252,7 +2254,7 @@ export default function HomeScreen() {
         items={orderedQuickAccessCards}
         order={orderedQuickAccessCards.map(({ id }) => id)}
         isEditing={isQuickAccessEditMode}
-        onPressItem={(item) => handleNavigate(item.destination)}
+        onPressItem={(item, event) => handleNavigate(item.destination, event)}
         onRequestEditMode={openQuickAccessEditor}
         onOrderChange={handleReorderQuickAccess}
         onDragStateChange={setIsQuickAccessDragging}

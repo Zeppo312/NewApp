@@ -2,6 +2,7 @@ jest.mock('../supabase',()=>({supabase:{functions:{invoke:jest.fn()},auth:{getUs
 import { getDeletionAvailability, parseDeletionReceipt, requestAccountDeletion, sendDeletionVerification, verifyDeletionCode } from '../accountDeletion';
 import { supabase } from '../supabase';
 const receipt={requestId:'11111111-1111-4111-8111-111111111111',scope:'account',status:'queued'};
+beforeEach(() => jest.clearAllMocks());
 it.each([null,undefined,{},true,{success:true},{...receipt,requestId:'guess'},{...receipt,status:'deleted'},{...receipt,scope:'unknown'}])('rejects incomplete deletion response %j',(value)=>{expect(()=>parseDeletionReceipt(value)).toThrow();});
 it('accepts a valid queued response without claiming deletion completed',()=>{expect(parseDeletionReceipt(receipt)).toEqual(receipt);});
 it('never falls back to the old destructive RPC on server failure',async()=>{
@@ -42,4 +43,11 @@ it('binds the request to the freshly verified token rather than a later session'
 });
 it.each([{user:{id:'other'},session:{access_token:'other-token'}},{user:{id:'expected'},session:null},{user:{id:'expected'},session:{}}])('rejects an unexpected identity or missing verified token',async(data)=>{
  (supabase.auth.verifyOtp as jest.Mock).mockResolvedValueOnce({data,error:null});await expect(verifyDeletionCode('test@example.invalid','123456','expected')).rejects.toThrow('deletion_verification_failed');
+});
+it('sends a code only to the authenticated address and never creates an account', async () => {
+ (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({data:{available:true},error:null});
+ (supabase.auth.getUser as jest.Mock).mockResolvedValueOnce({data:{user:{id:'expected',email:'owner@example.invalid'}},error:null});
+ (supabase.auth.signInWithOtp as jest.Mock).mockResolvedValueOnce({error:null});
+ expect(await sendDeletionVerification()).toBe('owner@example.invalid');
+ expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({email:'owner@example.invalid',options:{shouldCreateUser:false}});
 });

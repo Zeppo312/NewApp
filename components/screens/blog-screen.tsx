@@ -42,6 +42,7 @@ import {
   formatCommunityDate,
   translateCommunityText,
 } from '@/lib/communityTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 let ACTIVE_COMMUNITY_LOCALE = DEFAULT_COMMUNITY_LOCALE;
 const t = (key: CommunityTranslationKey, params?: Record<string, string | number>) =>
@@ -447,7 +448,7 @@ export default function BlogScreen() {
         title={t('blog.title')}
         subtitle={t('blog.subtitle')}
         showBackButton
-        onBackPress={() => router.push('/(tabs)/more')}
+        onBackPress={() => navigateBack('/(tabs)/more')}
       />
       {hero}
       {adminPanel}

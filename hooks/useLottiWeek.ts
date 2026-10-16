@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import { supabase, getCachedUser } from '@/lib/supabase';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';
 import {

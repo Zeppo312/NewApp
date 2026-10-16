@@ -53,6 +53,7 @@ import {
 
 // Sleep-Tracker Design Tokens
 import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD, SECTION_GAP_BOTTOM } from '@/constants/DesignGuide';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 const PRIMARY_TEXT = '#5C4033';
 const SECONDARY_TEXT = '#7D5A50';
@@ -554,7 +555,7 @@ export default function CountdownScreen() {
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/pregnancy-home')}
+          onBackPress={() => navigateBack('/(tabs)/pregnancy-home')}
         />
 
         {isReadOnlyPreviewMode && (

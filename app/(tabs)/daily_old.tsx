@@ -105,6 +105,8 @@ import {
   getCustomActivityTypes,
   updateCustomActivityType,
 } from '@/lib/customActivities';
+import { navigateBack } from '@/lib/navigation/backNavigation';
+import { runAfterTransition } from '@/lib/navigation/zoomTransition';
 
 let ACTIVE_DAILY_LOCALE = DEFAULT_DAILY_LOCALE;
 let DAILY_LOCALE_TAG = getDailyLocaleTag(ACTIVE_DAILY_LOCALE);
@@ -2023,14 +2025,15 @@ export default function DailyScreen() {
       return;
     }
     quickActionHandledRef.current = rawAction;
-    const timeoutId = setTimeout(() => {
+    // Opened from Home with a grow transition: the sheet follows once the
+    // page has fully grown instead of sliding up mid-animation.
+    return runAfterTransition(() => {
       setSelectedActivityType(resolved.activityType);
       setSelectedSubType(resolved.subType);
       setEditingEntry(null);
       setShowInputModal(true);
       router.setParams({ quickAction: undefined });
-    }, 0);
-    return () => clearTimeout(timeoutId);
+    });
   }, [ensureWritableInCurrentMode, quickAction, router]);
 
   const handleSaveEntry = async (payload: any, options?: { startTimer?: boolean; draftManaged?: boolean }): Promise<ActivitySaveOutcome> => {
@@ -3087,7 +3090,7 @@ export default function DailyScreen() {
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/home')}
+          onBackPress={() => navigateBack('/(tabs)/home')}
         />
         {TopTabs()}
 

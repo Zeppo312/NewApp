@@ -1,0 +1,469 @@
+{
+  "generated": "2026-10-14T21:25:59.435Z",
+  "installedBuilds": [
+    {
+      "simulator": "2A2C79AB-B4CE-4226-8230-7B01C8D4A6C3",
+      "version": "1.0.24",
+      "build": "1.0.51"
+    },
+    {
+      "simulator": "B7D7268C-1FB4-48CD-88DA-882E579B7250",
+      "version": "1.0.24",
+      "build": "1.0.51"
+    }
+  ],
+  "captureCount": 42,
+  "expectedCount": 42,
+  "captures": [
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "01-mahlzeiten",
+      "path": "captures/de-DE/iphone/01-mahlzeiten.png",
+      "sha256": "5f169c99f1351ab773340acec7b4601a0c914f26c55ec4fea23cf0666019e41f",
+      "bytes": 1694003,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "02-gemeinsam",
+      "path": "captures/de-DE/iphone/02-gemeinsam.png",
+      "sha256": "e5f9575ba0b029db34b77d12b2025abe59017bb96c0fdb19562157a6d28a7ddb",
+      "bytes": 2383827,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "03-schlaf",
+      "path": "captures/de-DE/iphone/03-schlaf.png",
+      "sha256": "a2f28a2f457e1cc0929572661a32c55c5614e8187603a344a6b6c3e7c967d19c",
+      "bytes": 1987983,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "04-schwangerschaft",
+      "path": "captures/de-DE/iphone/04-schwangerschaft.png",
+      "sha256": "b605a6136307fb32de896faa549e6991464c8df0df2a8d2143c480dc4ce7510a",
+      "bytes": 1599386,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "05-erinnerungen",
+      "path": "captures/de-DE/iphone/05-erinnerungen.png",
+      "sha256": "cb5e32362ad747733e7d943e0cf63a55cdebd16f350a0801c779f3f572745dc5",
+      "bytes": 1970019,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "06-familienalltag",
+      "path": "captures/de-DE/iphone/06-familienalltag.png",
+      "sha256": "d85fb3a8bed942f5b177323a2057fcbae7b62289f50422edd052c52fd7c388f7",
+      "bytes": 2256566,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "iphone",
+      "motif": "07-babywetter",
+      "path": "captures/de-DE/iphone/07-babywetter.png",
+      "sha256": "9fba8838d9a9a05be5cf96f85adfcf49e39485dfdb3ac5b3625442009d4441b9",
+      "bytes": 1890596,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "01-mahlzeiten",
+      "path": "captures/de-DE/ipad/01-mahlzeiten.png",
+      "sha256": "9dde10138ee12cf4a4499c8ef96cad0dce5ec203c658b73bcf5f8e8314c30962",
+      "bytes": 3209593,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "02-gemeinsam",
+      "path": "captures/de-DE/ipad/02-gemeinsam.png",
+      "sha256": "467009b80ad927c1ea73ba42cf65c15b30d0712bdd085b1df3d964030418c9af",
+      "bytes": 3819163,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "03-schlaf",
+      "path": "captures/de-DE/ipad/03-schlaf.png",
+      "sha256": "d8e1217e64da26b0c4d0da1fb576936b8248078b9880723abf141d4d64a96314",
+      "bytes": 3297594,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "04-schwangerschaft",
+      "path": "captures/de-DE/ipad/04-schwangerschaft.png",
+      "sha256": "d08078cb56c0c375708f5223238bfd40c32336d691e48fa54ce85d6bfecf83c6",
+      "bytes": 4069081,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "05-erinnerungen",
+      "path": "captures/de-DE/ipad/05-erinnerungen.png",
+      "sha256": "3cb1b82d06f0894a163916fdbd735752f154b8764a50591f38ce0fa5bf132089",
+      "bytes": 3253434,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "06-familienalltag",
+      "path": "captures/de-DE/ipad/06-familienalltag.png",
+      "sha256": "81020859b74746247571db0d537296036f29d3c8e01b94398729749002a94fb9",
+      "bytes": 4544111,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "de-DE",
+      "device": "ipad",
+      "motif": "07-babywetter",
+      "path": "captures/de-DE/ipad/07-babywetter.png",
+      "sha256": "72eca36d93060b7128fd2c8177ca84e98ef90dcb80d998b3ca986fcf9b10bea7",
+      "bytes": 3046887,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "01-mahlzeiten",
+      "path": "captures/en-US/iphone/01-mahlzeiten.png",
+      "sha256": "6772c9e9bfff7871384b8d0f6c13df1ed9b5d146a4e075296b101019d93b905c",
+      "bytes": 1694490,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "02-gemeinsam",
+      "path": "captures/en-US/iphone/02-gemeinsam.png",
+      "sha256": "d5c1fa545351dfaa8ba6e854bbab8fc85d6ff4a545a2b7386623c111da51b52e",
+      "bytes": 2393183,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "03-schlaf",
+      "path": "captures/en-US/iphone/03-schlaf.png",
+      "sha256": "13d38e07bcf7de572e9eec190f2fa773deb3695a637efd520b40e7ca3faf402d",
+      "bytes": 2027156,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "04-schwangerschaft",
+      "path": "captures/en-US/iphone/04-schwangerschaft.png",
+      "sha256": "a31a8f5ae2215814b250a82a0fe8d0173644315760c6338dc72a9bb8ea443fb6",
+      "bytes": 1599737,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "05-erinnerungen",
+      "path": "captures/en-US/iphone/05-erinnerungen.png",
+      "sha256": "eecc7656cadf6533e3e8b603a3008ee3a26e4313b1d79892045881c068e1fa03",
+      "bytes": 1958485,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "06-familienalltag",
+      "path": "captures/en-US/iphone/06-familienalltag.png",
+      "sha256": "5d469735f7eb74a8c42568cbf767158831b5e8514276858e230d664f0bbee42a",
+      "bytes": 2276070,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "iphone",
+      "motif": "07-babywetter",
+      "path": "captures/en-US/iphone/07-babywetter.png",
+      "sha256": "55676a904cfe9a0a1d011a7a1ef0ae8b2af002512f09c4f0298f646d72714c5f",
+      "bytes": 1794786,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "01-mahlzeiten",
+      "path": "captures/en-US/ipad/01-mahlzeiten.png",
+      "sha256": "f3ca7c80a132a6f1cbe848f45ffb6603975bd668c721404fb83388c19b11e977",
+      "bytes": 3204661,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "02-gemeinsam",
+      "path": "captures/en-US/ipad/02-gemeinsam.png",
+      "sha256": "03cb9dba020d5f937c7489fdaa856e52150b47f1e33e3a9bdd19f403c54b4d03",
+      "bytes": 3826503,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "03-schlaf",
+      "path": "captures/en-US/ipad/03-schlaf.png",
+      "sha256": "0c3656f4f5891a4f93ca7b1cb8a791054f756a01c80245e6725634cfe86eca91",
+      "bytes": 3300412,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "04-schwangerschaft",
+      "path": "captures/en-US/ipad/04-schwangerschaft.png",
+      "sha256": "b2d6bb505462400c518ee9f19c528c1fc6ee2e12c6d5b0405095759d2da8a1ba",
+      "bytes": 4063583,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "05-erinnerungen",
+      "path": "captures/en-US/ipad/05-erinnerungen.png",
+      "sha256": "58eb7c5a0440de70a0d4628cc8b85cb59393accbe1a9e1946fda92009912068d",
+      "bytes": 3251691,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "06-familienalltag",
+      "path": "captures/en-US/ipad/06-familienalltag.png",
+      "sha256": "33efeaa7b3197219aa4b5e7dda3b17bb6e8450686a716e513c6f4250692c9ec5",
+      "bytes": 4541641,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "en-US",
+      "device": "ipad",
+      "motif": "07-babywetter",
+      "path": "captures/en-US/ipad/07-babywetter.png",
+      "sha256": "67b4a5589605f158f6fc9a4a1c66bdfae0fa7181bcca60de0e72972b15daf795",
+      "bytes": 2759454,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "01-mahlzeiten",
+      "path": "captures/es-ES/iphone/01-mahlzeiten.png",
+      "sha256": "13975fb1e30b37e9f007f4d8a057fd06a823ebd249dad216dfcebe34d09afc50",
+      "bytes": 1666684,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "02-gemeinsam",
+      "path": "captures/es-ES/iphone/02-gemeinsam.png",
+      "sha256": "a024a0dc1b28d724377741dcb34111e017c14724c464dacb7e73ac9786d1fc92",
+      "bytes": 2388868,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "03-schlaf",
+      "path": "captures/es-ES/iphone/03-schlaf.png",
+      "sha256": "08e85f031709f69a5939abaee7724acac2dd40452622c73d42ee96103053ef6d",
+      "bytes": 1955386,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "04-schwangerschaft",
+      "path": "captures/es-ES/iphone/04-schwangerschaft.png",
+      "sha256": "284d70ec58e50b765f187bfce614ce76f2cba777ef4cb8eb9137365e88973e2d",
+      "bytes": 1927840,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "05-erinnerungen",
+      "path": "captures/es-ES/iphone/05-erinnerungen.png",
+      "sha256": "8c0db3a430af244b1f484d3ddab20106c6adb470cf81aeb99ba4c400918ad024",
+      "bytes": 1986327,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "06-familienalltag",
+      "path": "captures/es-ES/iphone/06-familienalltag.png",
+      "sha256": "ab7160b10195afda7bdcdceb2a4e7d95f486020f76d69aed66c3a383f71c6103",
+      "bytes": 2245593,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "iphone",
+      "motif": "07-babywetter",
+      "path": "captures/es-ES/iphone/07-babywetter.png",
+      "sha256": "1bd85f50e2871aafd8c31398d5f890e029ff0e489091a6ceda984098edbd05c5",
+      "bytes": 1686942,
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "01-mahlzeiten",
+      "path": "captures/es-ES/ipad/01-mahlzeiten.png",
+      "sha256": "baa0d09dc4e963a0f3cfea3540212d3402ae6373d8c7d1431ce33f192729fc8f",
+      "bytes": 3215858,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "02-gemeinsam",
+      "path": "captures/es-ES/ipad/02-gemeinsam.png",
+      "sha256": "3f06a1f4a87ecc3895e6488c52a308f22c07fbcff72acc4f490bc3462d317ac3",
+      "bytes": 3828505,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "03-schlaf",
+      "path": "captures/es-ES/ipad/03-schlaf.png",
+      "sha256": "a187256ea06dd3fc5f86ca7bce16efcfb297a1e3ae62a64d3972f0e60b017156",
+      "bytes": 3685983,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "04-schwangerschaft",
+      "path": "captures/es-ES/ipad/04-schwangerschaft.png",
+      "sha256": "ab4c1461c05f618dfd36cdb987d363b5d4fd52f025601fd8d953c4177b9fb48c",
+      "bytes": 4069501,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "05-erinnerungen",
+      "path": "captures/es-ES/ipad/05-erinnerungen.png",
+      "sha256": "2db6d114c8970e1670f20b8b1fb411e391458668cb5580a72f2a8978a1ffb1c5",
+      "bytes": 3252743,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "06-familienalltag",
+      "path": "captures/es-ES/ipad/06-familienalltag.png",
+      "sha256": "73665468804fd062617fa24e50eba198ebe299490bca5f59641988fbc62d7810",
+      "bytes": 4541330,
+      "width": 2064,
+      "height": 2752
+    },
+    {
+      "locale": "es-ES",
+      "device": "ipad",
+      "motif": "07-babywetter",
+      "path": "captures/es-ES/ipad/07-babywetter.png",
+      "sha256": "279a66274acbe1cdebfee2a24c63b8808aea7e940ed6d5c39afb3e647099bad2",
+      "bytes": 3052682,
+      "width": 2064,
+      "height": 2752
+    }
+  ],
+  "missingCaptures": [],
+  "visualFollowups": [],
+  "visualNotes": [
+    {
+      "captures": [
+        "es-ES/iphone/02-gemeinsam.png"
+      ],
+      "finding": "In der echten Kennzahlenkarte bleibt Stillen 1x deutsch. Die übrige Last-bottle-Zeile ist nach Neustart spanisch."
+    },
+    {
+      "captures": [
+        "de-DE/iphone/05-erinnerungen.png",
+        "en-US/iphone/05-erinnerungen.png",
+        "en-US/iphone/02-gemeinsam.png"
+      ],
+      "finding": "Vorhandene App-Umbrüche bei VERÄNDERUNG, MEASUREMENTS und Breastfeeding bleiben in den echten Aufnahmen erhalten."
+    },
+    {
+      "captures": [
+        "en-US/iphone/06-familienalltag.png",
+        "en-US/ipad/06-familienalltag.png",
+        "es-ES/iphone/06-familienalltag.png",
+        "es-ES/ipad/06-familienalltag.png"
+      ],
+      "finding": "Die Demo-Personenzuordnung Ich wird im echten Planer auch nach Sprachwechsel angezeigt."
+    }
+  ],
+  "assetPackageComplete": true,
+  "releaseReady": false,
+  "releaseNote": "Lokale Assets vollständig. Endgültige Freigabe, Abgleich mit der tatsächlich einzureichenden Version und Store-Verarbeitung stehen separat aus. Keine Veröffentlichung."
+}

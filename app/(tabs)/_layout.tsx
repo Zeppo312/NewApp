@@ -221,6 +221,8 @@ export default function TabLayout() {
   return (
     <Tabs
       initialRouteName={isBabyBorn ? 'home' : 'pregnancy-home'}
+      // "Zurück" returns to the tab visited before, not the first declared tab (account-linking).
+      backBehavior="history"
       screenOptions={{
         tabBarActiveTintColor: adaptiveColors.tabIconSelected,
         tabBarInactiveTintColor: adaptiveColors.tabIconDefault,

@@ -21,8 +21,11 @@ import {
   TouchableOpacity,
   View,
   type GestureResponderEvent,
+  type ImageSourcePropType,
+  type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import Reanimated, { cubicBezier, useReducedMotion } from 'react-native-reanimated';
 import { HomeGlassSurface, androidHomeShadow } from '@/components/ui/home-glass';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '@/components/ThemedText';
@@ -41,6 +44,62 @@ import { useFontScale, useLineLimit, useScaledSize } from '@/lib/fontScaling';
 const ACCENT_PURPLE = '#5E3DB3';
 const PLACEHOLDER_SIZE = 64;
 const DAY_COUNT = 7;
+const CONTENT_REVEAL_DURATION_MS = 800;
+const CONTENT_REVEAL_EASING = cubicBezier(0.23, 1, 0.32, 1);
+
+/** Das Gerüst behält seine Größe, während nur der geladene Inhalt erscheint. */
+function WeekContentReveal({
+  ready, children, style, contentStyle, delay = 0, placeholderColor, paragraph = false,
+}: {
+  ready: boolean;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
+  delay?: number;
+  placeholderColor?: string;
+  paragraph?: boolean;
+}) {
+  const reducedMotion = useReducedMotion();
+  return (
+    <View style={style}>
+      {placeholderColor && (
+        <Reanimated.View
+          pointerEvents="none"
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[
+            StyleSheet.absoluteFill,
+            styles.loadingLines,
+            {
+              opacity: ready ? 0 : 1,
+              transitionProperty: 'opacity',
+              transitionDuration: ready ? 240 : 0,
+              transitionDelay: ready && !reducedMotion ? delay : 0,
+            },
+          ]}
+        >
+          <View style={[styles.loadingLine, { backgroundColor: placeholderColor }]} />
+          {paragraph && <View style={[styles.loadingLine, styles.loadingLineShort, { backgroundColor: placeholderColor }]} />}
+        </Reanimated.View>
+      )}
+      <Reanimated.View
+        pointerEvents={ready ? 'auto' : 'none'}
+        accessibilityElementsHidden={!ready}
+        importantForAccessibility={ready ? 'auto' : 'no-hide-descendants'}
+        style={[contentStyle, {
+          opacity: ready ? 1 : 0,
+          transform: [{ translateY: ready || reducedMotion ? 0 : 5 }],
+          transitionProperty: ['opacity', 'transform'],
+          transitionDuration: ready ? (reducedMotion ? 160 : CONTENT_REVEAL_DURATION_MS) : 0,
+          transitionDelay: ready && !reducedMotion ? delay : 0,
+          transitionTimingFunction: CONTENT_REVEAL_EASING,
+        }]}
+      >
+        {children}
+      </Reanimated.View>
+    </View>
+  );
+}
 
 /**
  * Avatar-Zustände — gemäß Spec. Aktuell wählen wir ein zufälliges Bild aus
@@ -99,6 +158,8 @@ export function LottiWeekCard({ style }: Props) {
   const fontScale = useFontScale();
   const isStacked = fontScale >= 1.3;
   const [cardWidth, setCardWidth] = useState(0);
+  const [loadedAvatar, setLoadedAvatar] = useState<ImageSourcePropType | null>(null);
+  const reducedMotion = useReducedMotion();
   const isCompactAndroid = Platform.OS === 'android' && cardWidth > 0 && cardWidth < 310;
   // Reserve a complete row for collecting hearts when seven days leave no room.
   const isFooterStacked = isStacked || (Platform.OS === 'android' && cardWidth > 0 && cardWidth < 330 * fontScale);
@@ -127,10 +188,18 @@ export function LottiWeekCard({ style }: Props) {
     totalSleepMinutes,
     dayBuckets,
     dayPoints,
+    isLoading: isWeekLoading,
+    error: weekError,
   } = useLottiWeek();
-  const { totalPoints, level, levelJustIncreased } = useLottiLevel();
-  const { claimable } = useWeekHeartsClaim(weekStart, weekPoints);
-  const { chosenLevel } = useLottiAvatarChoice();
+  const {
+    totalPoints,
+    level,
+    levelJustIncreased,
+    isLoading: isLevelLoading,
+    error: levelError,
+  } = useLottiLevel();
+  const { claimable, isLoaded: isClaimLoaded } = useWeekHeartsClaim(weekStart, weekPoints);
+  const { chosenLevel, isLoaded: isAvatarChoiceLoaded } = useLottiAvatarChoice();
 
   const isDark =
     adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
@@ -193,6 +262,10 @@ export function LottiWeekCard({ style }: Props) {
     chosenLevel !== null && chosenLevel <= level.level
       ? babyImageForLevel(chosenLevel)
       : randomUnlockedImage;
+  const isWeekReady = !isWeekLoading && !weekError;
+  const isLevelReady = !isLevelLoading && !levelError;
+  const isAvatarReady = isLevelReady && isAvatarChoiceLoaded && loadedAvatar === unlockedBabyImage;
+  const isCardReady = isWeekReady && isLevelReady && isClaimLoaded;
 
   const handlePress = () => {
     router.push('/wochenmoment' as any);
@@ -207,28 +280,6 @@ export function LottiWeekCard({ style }: Props) {
   const subtitle = level.isMax
     ? `${c.level} ${level.level} · ${totalPoints} ${c.hearts}`
     : `${c.level} ${level.level} · ${totalPoints} / ${level.nextThreshold ?? '—'} ${c.hearts}`;
-
-  // Progressbar-Animation
-  const progressAnim = useMemo(() => new Animated.Value(0), []);
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: level.progressFraction,
-      duration: 700,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [level.progressFraction, progressAnim]);
-
-  // Sanfter Bounce/Blink des Avatars beim Laden.
-  const avatarScale = useMemo(() => new Animated.Value(0.92), []);
-  useEffect(() => {
-    Animated.spring(avatarScale, {
-      toValue: 1,
-      friction: 6,
-      tension: 80,
-      useNativeDriver: true,
-    }).start();
-  }, [avatarScale]);
 
   // Level-Up-Glow: sanfter Halo + leichter Bounce des Badges.
   const glowOpacity = useMemo(() => new Animated.Value(0), []);
@@ -301,11 +352,13 @@ export function LottiWeekCard({ style }: Props) {
     <>
       <TouchableOpacity
         activeOpacity={0.9}
+        disabled={!isCardReady}
         onPress={handlePress}
         style={[styles.wrapper, style]}
         onLayout={(event) => setCardWidth(event.nativeEvent.layout.width)}
         accessibilityRole="button"
-        accessibilityLabel={`${copy.title}. ${subtitle}`}
+        accessibilityLabel={isCardReady ? `${copy.title}. ${subtitle}` : c.title}
+        accessibilityState={{ busy: !isCardReady, disabled: !isCardReady }}
       >
         <HomeGlassSurface
           intensity={22}
@@ -320,29 +373,32 @@ export function LottiWeekCard({ style }: Props) {
             ]}
           >
             <View style={[styles.row, isCompactAndroid && styles.rowCompact, isStacked ? styles.rowStacked : null]}>
-              <Animated.View
+              <View
                 style={[
                   styles.avatarBlock,
                   isCompactAndroid && styles.avatarCompact,
-                  { transform: [{ scale: avatarScale }] },
                 ]}
                 // data-avatar-state damit später Illustration leicht zu finden
-        accessibilityLabel={`${c.avatar} (${avatarState})`}
+                accessibilityLabel={isWeekReady ? `${c.avatar} (${avatarState})` : c.avatar}
               >
                 <View
                   style={[
                     styles.placeholder,
                     isCompactAndroid && styles.avatarCompact,
-                    { borderColor: avatarBorder },
+                    { borderColor: avatarBorder, backgroundColor: progressTrackColor },
                   ]}
                 >
-                  <Image
-                    source={unlockedBabyImage}
-                    style={styles.placeholderImage}
-                    resizeMode="cover"
-                  />
+                  <WeekContentReveal ready={isAvatarReady} style={styles.placeholderImage} contentStyle={styles.placeholderImage}>
+                    <Image
+                      key={LEVEL_BABY_IMAGES.indexOf(unlockedBabyImage)}
+                      source={unlockedBabyImage}
+                      style={styles.placeholderImage}
+                      resizeMode="cover"
+                      onLoad={() => setLoadedAvatar(unlockedBabyImage)}
+                    />
+                  </WeekContentReveal>
                 </View>
-                <View style={styles.badgeAnchor} pointerEvents="none">
+                <WeekContentReveal ready={isLevelReady} delay={60} style={styles.badgeAnchor}>
                   <Animated.View
                     pointerEvents="none"
                     style={[
@@ -369,8 +425,8 @@ export function LottiWeekCard({ style }: Props) {
                       {level.level}
                     </ThemedText>
                   </Animated.View>
-                </View>
-              </Animated.View>
+                </WeekContentReveal>
+              </View>
 
               <View style={[styles.textBlock, isStacked ? styles.textBlockStacked : null]}>
                 <ThemedText
@@ -380,13 +436,15 @@ export function LottiWeekCard({ style }: Props) {
                 >
                   {copy.title}
                 </ThemedText>
-                <ThemedText
-                  adaptive={false}
-                  style={[styles.subtitle, { color: textSecondary }]}
-                  numberOfLines={twoLineLimit}
-                >
-                  {subtitle}
-                </ThemedText>
+                <WeekContentReveal ready={isLevelReady} delay={60} placeholderColor={progressTrackColor}>
+                  <ThemedText
+                    adaptive={false}
+                    style={[styles.subtitle, { color: textSecondary }]}
+                    numberOfLines={twoLineLimit}
+                  >
+                    {subtitle}
+                  </ThemedText>
+                </WeekContentReveal>
 
                 <View
                   style={[
@@ -394,41 +452,36 @@ export function LottiWeekCard({ style }: Props) {
                     { backgroundColor: progressTrackColor },
                   ]}
                 >
-                  <Animated.View
+                  <Reanimated.View
                     style={[
                       styles.progressFill,
                       {
                         backgroundColor: ACCENT_PURPLE,
-                        width: progressAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ['0%', '100%'],
-                        }),
+                        width: '100%',
+                        transformOrigin: 'left',
+                        transform: [{ scaleX: isLevelReady ? level.progressFraction : 0 }],
+                        transitionProperty: 'transform',
+                        transitionDuration: reducedMotion ? 0 : CONTENT_REVEAL_DURATION_MS,
+                        transitionTimingFunction: CONTENT_REVEAL_EASING,
                       },
                     ]}
                   />
                 </View>
-                {!level.isMax ? (
+                <WeekContentReveal ready={isLevelReady} delay={100} placeholderColor={progressTrackColor}>
                   <ThemedText
                     adaptive={false}
                     style={[styles.progressHint, { color: textTertiary }]}
                     numberOfLines={oneLineLimit}
                   >
-                    {c.until.replace('{{points}}', String(level.pointsToNext)).replace('{{level}}', String(level.level + 1))}
+                    {level.isMax ? c.max : c.until.replace('{{points}}', String(level.pointsToNext)).replace('{{level}}', String(level.level + 1))}
                   </ThemedText>
-                ) : (
-                  <ThemedText
-                    adaptive={false}
-                    style={[styles.progressHint, { color: textTertiary }]}
-                    numberOfLines={oneLineLimit}
-                  >
-                    {c.max}
-                  </ThemedText>
-                )}
+                </WeekContentReveal>
               </View>
             </View>
 
             <Pressable
               onPress={handleStoryPress}
+              disabled={!isCardReady}
               style={({ pressed }) => [
                 styles.reviewRow,
                 isCompactAndroid && styles.reviewRowCompact,
@@ -443,6 +496,7 @@ export function LottiWeekCard({ style }: Props) {
               ]}
               accessibilityRole="button"
               accessibilityLabel={c.storyA11y}
+              accessibilityState={{ disabled: !isCardReady }}
             >
               <View
                 style={[
@@ -454,11 +508,13 @@ export function LottiWeekCard({ style }: Props) {
                   },
                 ]}
               >
-                <ThemedText adaptive={false} allowFontScaling={false} style={styles.reviewEmoji}>
-                  {mood.emoji}
-                </ThemedText>
+                <WeekContentReveal ready={isWeekReady} delay={100}>
+                  <ThemedText adaptive={false} allowFontScaling={false} style={styles.reviewEmoji}>
+                    {mood.emoji}
+                  </ThemedText>
+                </WeekContentReveal>
               </View>
-              <View style={[styles.reviewTextBlock, isStacked ? styles.reviewTextBlockStacked : null]}>
+              <WeekContentReveal ready={isWeekReady} delay={140} placeholderColor={progressTrackColor} paragraph style={[styles.reviewTextBlock, isStacked ? styles.reviewTextBlockStacked : null]}>
                 <ThemedText
                   adaptive={false}
                   style={[styles.reviewTitle, { color: textPrimary }]}
@@ -473,7 +529,7 @@ export function LottiWeekCard({ style }: Props) {
                 >
                   {reviewSubtitle}
                 </ThemedText>
-              </View>
+              </WeekContentReveal>
               <View style={[styles.reviewCta, isCompactAndroid && styles.reviewCtaCompact, { height: reviewCtaHeight, borderRadius: reviewCtaHeight / 2 }]}>
                 <ThemedText adaptive={false} style={styles.reviewCtaText}>
                   {c.story}
@@ -513,24 +569,38 @@ export function LottiWeekCard({ style }: Props) {
                         style={[
                           styles.daySpot,
                           {
-                            backgroundColor: isOn ? ACCENT_PURPLE : daySpotEmpty,
+                            backgroundColor: daySpotEmpty,
                           },
-                          isToday && !isOn ? styles.daySpotTodayRing : null,
+                          isToday && (!isWeekReady || !isOn) ? styles.daySpotTodayRing : null,
                         ]}
-                      />
+                      >
+                        <Reanimated.View style={[
+                          StyleSheet.absoluteFill,
+                          styles.daySpot,
+                          {
+                            backgroundColor: ACCENT_PURPLE,
+                            opacity: isWeekReady && isOn ? 1 : 0,
+                            transitionProperty: 'opacity',
+                            transitionDuration: reducedMotion ? 160 : 600,
+                            transitionDelay: isWeekReady && !reducedMotion ? idx * 35 : 0,
+                          },
+                        ]} />
+                      </View>
                     </View>
                   );
                 })}
               </View>
 
               <View style={[styles.ctaInner, isFooterStacked && styles.ctaInnerStacked]}>
-                <ThemedText
-                  adaptive={false}
-                  style={[styles.cta, { color: ACCENT_PURPLE }]}
-                  numberOfLines={isFooterStacked ? undefined : oneLineLimit}
-                >
-                  {ctaLabel}
-                </ThemedText>
+                <WeekContentReveal ready={isWeekReady && isClaimLoaded} delay={160} placeholderColor={progressTrackColor} style={{ flexShrink: 1 }}>
+                  <ThemedText
+                    adaptive={false}
+                    style={[styles.cta, { color: ACCENT_PURPLE }]}
+                    numberOfLines={isFooterStacked ? undefined : oneLineLimit}
+                  >
+                    {ctaLabel}
+                  </ThemedText>
+                </WeekContentReveal>
                 <IconSymbol name="chevron.right" size={13} color={ACCENT_PURPLE} />
               </View>
             </View>
@@ -559,6 +629,18 @@ export function LottiWeekCard({ style }: Props) {
 }
 
 const styles = StyleSheet.create({
+  loadingLines: {
+    justifyContent: 'center',
+    gap: 7,
+  },
+  loadingLine: {
+    width: '76%',
+    height: 7,
+    borderRadius: 4,
+  },
+  loadingLineShort: {
+    width: '52%',
+  },
   wrapper: {
     marginBottom: 16,
     borderRadius: 22,

@@ -2,13 +2,15 @@
 import { caretakerCopy } from '@/lib/caretaker-copy';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useCallback, useState } from 'react';
-import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, ScrollView, View, TouchableOpacity, Alert, SafeAreaView, StatusBar, type GestureResponderEvent } from 'react-native';
+import { openWithZoom } from '@/lib/navigation/zoomTransition';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Redirect, useRouter , useFocusEffect } from 'expo-router';
+import { Redirect, useRouter, type Href } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import { useAuth } from '@/contexts/AuthContext';
 import Header from '@/components/Header';
 import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD } from '@/constants/DesignGuide';
@@ -23,8 +25,12 @@ import {
   MoreTranslationKey,
   translateMoreText,
 } from '@/lib/moreTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 let ACTIVE_MORE_LOCALE = DEFAULT_MORE_LOCALE;
+// Rows sit inside a rounded section; a soft radius lets the page grow out of them.
+const MENU_ITEM_RADIUS = 14;
+
 const t = (key: MoreTranslationKey, params?: Record<string, string | number>) =>
   translateMoreText(ACTIVE_MORE_LOCALE, key, params);
 
@@ -73,8 +79,12 @@ export default function MoreScreen() {
     return <Redirect href="/(auth)/login" />;
   }
 
-  const handlePremiumPress = async () => {
-    router.push('/subscription');
+  const handlePremiumPress = async (event?: GestureResponderEvent) => {
+    void openWithZoom('/subscription', event, { radius: MENU_ITEM_RADIUS });
+  };
+
+  const openMenuItem = (href: Href, event: GestureResponderEvent) => {
+    void openWithZoom(href, event, { radius: MENU_ITEM_RADIUS });
   };
 
   const hasActiveAccess = accessReason !== 'none';
@@ -133,7 +143,7 @@ export default function MoreScreen() {
           title={t('screen.title')}
           subtitle={t('screen.subtitle')}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/home')}
+          onBackPress={() => navigateBack('/(tabs)/home')}
         />
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer}>
@@ -169,7 +179,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/prints-shop' as any)}
+              onPress={(event) => openMenuItem('/prints-shop', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="bag.fill" size={24} color={iconAccentColor} />
@@ -193,7 +203,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/app-settings')}
+              onPress={(event) => openMenuItem('/app-settings', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="gear" size={24} color={iconAccentColor} />
@@ -211,7 +221,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/profil')}
+              onPress={(event) => openMenuItem('/profil', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.crop.circle" size={24} color={iconAccentColor} />
@@ -227,7 +237,7 @@ export default function MoreScreen() {
               <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/caregiver')}>
+            <TouchableOpacity style={styles.menuItem} onPress={(event) => openMenuItem('/caregiver', event)}>
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="person.2.fill" size={24} color={iconAccentColor} />
               </View>
@@ -240,7 +250,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/account-linking')}
+              onPress={(event) => openMenuItem('/account-linking', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="link" size={24} color={iconAccentColor} />
@@ -265,7 +275,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/support' as any)}
+              onPress={(event) => openMenuItem('/support', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="envelope.fill" size={24} color={iconAccentColor} />
@@ -283,7 +293,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => router.push('/feature-requests' as any)}
+              onPress={(event) => openMenuItem('/feature-requests', event)}
             >
               <View style={styles.menuItemIcon}>
                 <IconSymbol name="lightbulb.fill" size={24} color={iconAccentColor} />
@@ -307,7 +317,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.legalItem}
-              onPress={() => router.push('/datenschutz' as any)}
+              onPress={(event) => openMenuItem('/datenschutz', event)}
             >
               <ThemedText style={styles.legalTitle}>{t('legal.privacy')}</ThemedText>
               <ThemedText style={styles.legalMeta}>{t('legal.privacyVersion')}</ThemedText>
@@ -315,7 +325,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.legalItem}
-              onPress={() => router.push('/nutzungsbedingungen' as any)}
+              onPress={(event) => openMenuItem('/nutzungsbedingungen', event)}
             >
               <ThemedText style={styles.legalTitle}>{t('legal.terms')}</ThemedText>
               <ThemedText style={styles.legalMeta}>{t('legal.termsVersion')}</ThemedText>
@@ -323,7 +333,7 @@ export default function MoreScreen() {
 
             <TouchableOpacity
               style={styles.legalItem}
-              onPress={() => router.push('/impressum' as any)}
+              onPress={(event) => openMenuItem('/impressum', event)}
             >
               <ThemedText style={styles.legalTitle}>{t('legal.imprint')}</ThemedText>
             </TouchableOpacity>

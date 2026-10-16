@@ -55,6 +55,7 @@ import {
   DEFAULT_DISPLAY_YEARLY_PRICE,
 } from '@/lib/paywallDefaults';
 import { getPaywallAdminCopy } from '@/lib/paywallAdminTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 type Mode = 'edit' | 'preview';
 
@@ -301,7 +302,7 @@ export default function PaywallContentAdminScreen() {
           subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
-          onBackPress={() => router.push('/app-settings')}
+          onBackPress={() => navigateBack('/app-settings')}
         />
 
         {isAuthorizing || isLoading ? (

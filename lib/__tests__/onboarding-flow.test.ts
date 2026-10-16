@@ -22,6 +22,16 @@ describe('onboarding flow', () => {
     expect(getOnboardingChapters(steps, steps.indexOf('trial')).active).toBe('start');
   });
 
+  it('asks for the health consent right before the first step with health data', () => {
+    const steps = getOnboardingSteps(false, false, false, true);
+    expect(steps.slice(0, 5)).toEqual(['welcome', 'firstName', 'role', 'healthConsent', 'babyStatus']);
+    // Redeeming an invitation syncs the due date, so the consent comes before it.
+    expect(getOnboardingSteps(true, false, false, true).slice(3, 5)).toEqual(['healthConsent', 'invitation']);
+    expect(getOnboardingSteps(true, true, false, true)).toEqual(['welcome', 'firstName', 'role', 'healthConsent', 'invitation']);
+    expect(getOnboardingSteps(true, false)).not.toContain('healthConsent');
+    expect(getOnboardingChapters(steps, steps.indexOf('healthConsent')).active).toBe('about');
+  });
+
   it('uses the linked baby instead of asking an invited parent to enter baby details again', () => {
     expect(getOnboardingSteps(true, true)).toEqual(['welcome', 'firstName', 'role', 'invitation']);
     expect(getOnboardingSteps(false, true)).toEqual(['welcome', 'firstName', 'role', 'invitation']);

@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getRevenueCatEntitlementStatus } from '../revenuecat';
 import { persistStartupAccess, readStartupAccess, revokeStartupAccess, STARTUP_ACCESS_MAX_AGE_MS } from '../startupAccess';
 import { notifyServerContact } from '../serverContact';
+import { isPaywallExcludedPath } from '../paywallRoutes';
 
 jest.mock('../../hooks/useAdaptiveColors', () => ({ useAdaptiveColors: () => ({ effectiveScheme: 'light', textPrimary: '#5C4033', textSecondary: '#7D5A50' }) }));
 jest.mock('../../components/ui/IconSymbol', () => ({ IconSymbol: () => null }));
@@ -216,6 +217,19 @@ describe('mounted RootLayout boundary with the real startup access verifier', ()
   it('rejects a mismatched Auth cache and leaves excluded recovery routes reachable', async () => {
     user('B'); await render(); expect(blocked()).toBe(true);
     expect(premium).not.toHaveBeenCalled(); await render({ pathname: '/account-deletion', excluded: true }); expect(blocked()).toBe(false);
+  });
+  it.each(['/app-settings', '/account-deletion', '/data-consents', '/support', '/subscription'])('keeps %s open without a paid entitlement', async (pathname) => {
+    premium.mockResolvedValue(inactive);
+    await render({ pathname, excluded: isPaywallExcludedPath(pathname) });
+    expect(blocked()).toBe(false); expect(denied).not.toHaveBeenCalled();
+    expect(premium).not.toHaveBeenCalled();
+  });
+  it.each(['/support', '/subscription'])('keeps %s open when access is denied', async (pathname) => {
+    premium.mockResolvedValue(inactive);
+    await render({ pathname, excluded: isPaywallExcludedPath(pathname) });
+    expect(blocked()).toBe(false);
+    expect(denied).not.toHaveBeenCalled();
+    expect(premium).not.toHaveBeenCalled();
   });
   it('preserves the screen beyond five minutes without preserving the family entitlement', async () => {
     jest.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { user: { id: 'A' } } }, error: null } as any);

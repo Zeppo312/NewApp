@@ -1,15 +1,20 @@
 import { differenceInCalendarDays } from 'date-fns';
 
 export type OnboardingStep =
-  | 'welcome' | 'firstName' | 'role' | 'invitation' | 'babyStatus' | 'dates'
+  | 'welcome' | 'firstName' | 'role' | 'healthConsent' | 'invitation' | 'babyStatus' | 'dates'
   | 'mood' | 'energy' | 'needs' | 'challenge' | 'support'
   | 'sharedValue' | 'productMoment' | 'feedback' | 'habit' | 'plan' | 'trial';
 
-/** The trial explanation is only shown where the store actually grants the free week (iOS intro offer). */
-export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean, showTrial = false): OnboardingStep[] {
-  if (isLinked) return ['welcome', 'firstName', 'role', 'invitation'];
+/**
+ * The trial explanation is only shown where the store actually grants the free week (iOS intro offer).
+ * The health consent comes right before the first step that touches health data: redeeming an
+ * invitation syncs the due date, and the baby questions ask about pregnancy and birth.
+ */
+export function getOnboardingSteps(showInvitation: boolean, isLinked: boolean, showTrial = false, askHealthConsent = false): OnboardingStep[] {
+  const consent = askHealthConsent ? ['healthConsent' as const] : [];
+  if (isLinked) return ['welcome', 'firstName', 'role', ...consent, 'invitation'];
   return [
-    'welcome', 'firstName', 'role',
+    'welcome', 'firstName', 'role', ...consent,
     ...(showInvitation ? ['invitation' as const] : []),
     'babyStatus', 'dates',
     'mood', 'energy', 'needs', 'challenge', 'support',
@@ -22,7 +27,7 @@ export type OnboardingChapter = 'about' | 'baby' | 'feeling' | 'everyday' | 'sta
 
 const chapterOfStep: Record<OnboardingStep, OnboardingChapter | null> = {
   welcome: null,
-  firstName: 'about', role: 'about', invitation: 'about',
+  firstName: 'about', role: 'about', healthConsent: 'about', invitation: 'about',
   babyStatus: 'baby', dates: 'baby',
   mood: 'feeling', energy: 'feeling',
   needs: 'everyday', challenge: 'everyday', support: 'everyday', sharedValue: 'everyday',

@@ -34,6 +34,7 @@ import {
   type PaywallAccessAdminUser,
   type PaywallAccessRole,
 } from '@/lib/paywallAccess';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 export default function PaywallAccessAdminScreen() {
   const { locale } = useLocale();
@@ -217,7 +218,7 @@ export default function PaywallAccessAdminScreen() {
           subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
-          onBackPress={() => router.push('/app-settings')}
+          onBackPress={() => navigateBack('/app-settings')}
         />
 
         <ScrollView

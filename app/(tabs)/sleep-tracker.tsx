@@ -17,8 +17,10 @@ import { overlayTrackingRows,queueTrackingUpdate,readTrackingOutbox,trackingScop
 /* eslint-disable react-hooks/globals -- module helpers share the single app-wide locale */
 import { useLocale } from '@/contexts/LocaleContext';
 
-import { useFocusEffect,useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
+import Reanimated,{ Easing,FadeIn,FadeOut,LinearTransition } from 'react-native-reanimated';
 import {
 Alert,
 Animated,
@@ -99,6 +101,7 @@ type SleepPeriod,
 import { DEFAULT_SLEEP_TRACKER_LOCALE,SleepTrackerTranslationKey,getSleepTrackerLocaleTag,translateSleepTrackerText } from '@/lib/sleepTrackerTranslations';
 import { syncSleepWidget } from '@/lib/sleepWidget';
 import { cancelLocalSleepWindowReminders } from '@/lib/sleepWindowReminderNotifications';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 let ACTIVE_SLEEP_TRACKER_LOCALE = DEFAULT_SLEEP_TRACKER_LOCALE;
 let SLEEP_TRACKER_LOCALE_TAG = getSleepTrackerLocaleTag(ACTIVE_SLEEP_TRACKER_LOCALE);
@@ -250,6 +253,16 @@ const findOverlappingEntries = (
 
 // Match Timeline (ActivityCard marginHorizontal=8 -> 16px gesamt)
 const TIMELINE_INSET = 8;
+// Soft appear/disappear for timeline cards: day switches, deletes and new
+// entries fade instead of snapping, and the remaining cards glide into place.
+// The short exit plus a small entry delay keeps old and new cards from
+// visibly overlapping when the day changes. Remaining cards wait until a
+// deleted card has mostly faded before they glide up into its place.
+const TIMELINE_ITEM_ENTERING = FadeIn.duration(260).delay(70);
+const TIMELINE_ITEM_EXITING = FadeOut.duration(160);
+const TIMELINE_ITEM_LAYOUT = LinearTransition.duration(280).delay(110).easing(Easing.out(Easing.cubic));
+// The empty state follows only after the last card is gone.
+const TIMELINE_EMPTY_ENTERING = FadeIn.duration(280).delay(200);
 const contentWidth = screenWidth - 2 * LAYOUT_PAD;
 
 const COLS = 7;
@@ -676,7 +689,9 @@ function CentralTimerComponent({
               <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary }]}>
                 {t('prediction.since')} {new Date(activeSleepEntry.start_time).toLocaleTimeString(SLEEP_TRACKER_LOCALE_TAG, { hour: '2-digit', minute: '2-digit' })}
               </Text>
-            ) : predictionLoading ? (
+            ) : predictionLoading && !sleepPrediction ? (
+              // A recalculation keeps the previous window visible instead of
+              // flashing "calculating" after every list change.
               <Text style={[styles.centralHint, fontScale < 1.3 && TYPOGRAPHY.caption, { color: textSecondary }]}>
                 {t('prediction.calculating')}
               </Text>
@@ -1610,6 +1625,8 @@ export default function SleepTrackerScreen() {
     verifiedSleepScopeRef.current = '';
     sleepMutationRef.current = { scope: sleepDataScopeKey, pending: 0 };
     invalidateSleepDataRequests();
+    // Only a new scope hides empty hints until its first server read settles.
+    setIsLoading(true);
     activeSleepEntryRef.current = null;
     activeEntryPeriodOverridesRef.current = {};
     hasAutoSelectedDateRef.current = false;
@@ -2017,8 +2034,9 @@ export default function SleepTrackerScreen() {
       sleepDataScopeRef.current === sleepDataScopeKey;
     const canCommit = () => isLatestRequest() && sleepMutationRef.current.pending === 0;
 
+    // Background reloads keep the current UI; toggling isLoading here made the
+    // empty hints flash on every focus/sync refresh.
     try {
-      setIsLoading(true);
       const result = await loadVisibleSleepEntries(activeBabyId ?? undefined);
       if (!canCommit()) return;
       if (!result.success || !Array.isArray(result.entries)) {
@@ -2040,7 +2058,6 @@ export default function SleepTrackerScreen() {
 
       // Use the current settings even if this read began before they loaded.
       const classify = classifySleepEntryRef.current;
-      const currentNightWindow = nightWindowSettingsRef.current;
       const activeSleep = active ? classify(active, periodOverride) : null;
       const finishedEntries = visibleEntries
         .filter((entry) => entry.end_time)
@@ -2050,34 +2067,24 @@ export default function SleepTrackerScreen() {
       activeEntryPeriodOverridesRef.current = active?.id && periodOverride
         ? { [active.id]: periodOverride }
         : {};
-      activeSleepEntryRef.current = activeSleep;
-      setActiveSleepEntry(activeSleep);
-      setSleepEntries(allEntries);
+      // An unchanged snapshot keeps the current objects, so repeated refreshes
+      // (own reload after a delete plus the realtime echo) cost no re-render,
+      // no prediction rerun and no restarted card animations.
+      const previousEntries = sleepEntriesDisplayRef.current;
+      const entriesUnchanged = previousEntries.length === allEntries.length
+        && JSON.stringify(previousEntries) === JSON.stringify(allEntries);
+      const nextEntries = entriesUnchanged ? previousEntries : allEntries;
+      const nextActive = activeSleep && entriesUnchanged ? nextEntries[0] : activeSleep;
+      activeSleepEntryRef.current = nextActive;
+      setActiveSleepEntry(nextActive);
+      setSleepEntries(nextEntries);
       setIsLiveStatusLoaded(true);
       setSleepLiveConfirmed(true);
       verifiedSleepScopeRef.current = sleepDataScopeKey;
-      sleepEntriesDisplayRef.current = allEntries;
+      sleepEntriesDisplayRef.current = nextEntries;
       setSleepReadFailed(false);
-
-      // Auto-select latest entry logic
-      if (
-        !hasAutoSelectedDateRef.current &&
-        allEntries.length > 0 &&
-        !allEntries.some((entry) => isEntryAssignedToDate(entry, selectedDate, currentNightWindow))
-      ) {
-        const latest = allEntries.reduce((latestEntry, entry) => {
-          if (!latestEntry) return entry;
-          return new Date(entry.start_time).getTime() > new Date(latestEntry.start_time).getTime()
-            ? entry
-            : latestEntry;
-        }, null as ClassifiedSleepEntry | null);
-
-        if (latest) {
-          hasAutoSelectedDateRef.current = true;
-          selectTab('day');
-          setSelectedDate(getAssignedDateForEntry(latest, currentNightWindow));
-        }
-      }
+      // No auto-jump to the latest entry's day: the view stays on the day the
+      // user is looking at, and an empty today offers "Zum letzten Eintrag".
     } catch (error) {
       if (!isLatestRequest()) return;
       console.error('Failed to load sleep data:', error);
@@ -2105,8 +2112,13 @@ export default function SleepTrackerScreen() {
       const verified = verifiedSleepScopeRef.current === key;
       const base = current.length || verified ? current : cached?.data ?? [];
       const projected = overlayTrackingRows('sleep',base,operations,activeBabyId,verified ? undefined : cached?.verifiedAt ?? '').map(row => classifySleepEntry(row as any));
-      const active = findFreshActiveSleepEntry(projected);
-      activeSleepEntryRef.current = active; setActiveSleepEntry(active); setSleepEntries(projected);
+      // Outbox changes (e.g. a queued delete) often project the same list;
+      // keeping the current objects avoids a needless full re-render.
+      const unchanged = current.length === projected.length && JSON.stringify(current) === JSON.stringify(projected);
+      if (!unchanged) {
+        const active = findFreshActiveSleepEntry(projected);
+        activeSleepEntryRef.current = active; setActiveSleepEntry(active); setSleepEntries(projected);
+      }
       // Local hydration releases the start buttons even with an empty cached history.
       setIsLiveStatusLoaded(true);
       if (operations.some(op => op.kind === 'sleep' && op.scope.babyId === activeBabyId && op.state === 'confirmed')) void loadSleepDataRef.current?.();
@@ -3453,17 +3465,26 @@ export default function SleepTrackerScreen() {
           onPress: async () => {
             triggerHaptic();
             if (!ensureWritableInCurrentMode()) return;
+            if (!sleepService) {
+              Alert.alert(t('common.error'), t('alert.serviceUnavailable'));
+              return;
+            }
+            const deletedEntry = sleepEntries.find(e => e.id === entryId);
+            const mutation = beginSleepMutation();
+            // Remove the card right away so it fades out instead of waiting for
+            // the server round trip and a full reload.
+            setSleepEntries(prev => prev.filter(e => e.id !== entryId));
+            const restoreDeletedEntry = () => {
+              if (!deletedEntry || !mutation.isCurrentScope()) return;
+              setSleepEntries(prev => prev.some(e => e.id === entryId) ? prev : [...prev, deletedEntry]);
+            };
             try {
-              if (!sleepService) {
-                Alert.alert(t('common.error'), t('alert.serviceUnavailable'));
-                return;
-              }
-
               // Delete entry via service (dual-write)
-              const result = await sleepService.deleteEntry(entryId, sleepEntries.find(e => e.id === entryId));
+              const result = await sleepService.deleteEntry(entryId, deletedEntry);
 
               if (result.primary.error) {
                 console.error('❌ Delete error:', result.primary.error);
+                restoreDeletedEntry();
                 Alert.alert(t('common.error'), t('alert.entryDeleteFailed'));
                 return;
               }
@@ -3478,10 +3499,12 @@ export default function SleepTrackerScreen() {
               // Invalidate cache because entry was deleted
               // WICHTIG: Korrekter Cache-Key wie in loadSleepHistory!
               await invalidateCacheAfterAction(`sleep_history_${activeBackend}_${activeBabyId || 'default'}`);
-              await loadSleepData();
-              Alert.alert(t('common.success'), t('alert.deleted'));
-            } catch (error) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            } catch {
+              restoreDeletedEntry();
               Alert.alert(t('common.error'), t('alert.entryDeleteFailed'));
+            } finally {
+              if (mutation.finish() && mutation.isCurrentScope()) void loadSleepDataRef.current?.();
             }
           }
         }
@@ -4660,7 +4683,7 @@ export default function SleepTrackerScreen() {
           title={t('screen.title')}
           subtitle={headerSubtitle}
           showBackButton
-          onBackPress={() => router.push('/(tabs)/home')}
+          onBackPress={() => navigateBack('/(tabs)/home')}
         />
 
         {/* Top Tabs - über der Status Bar (Funktionsaufruf statt <TopTabs />, verhindert Remount bei jedem Render) */}
@@ -4726,9 +4749,26 @@ export default function SleepTrackerScreen() {
                       ? new Date().toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })
                       : selectedDate.toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>
-                  {!isLoading && !hasEntryToday && (
-                    <Text style={[styles.todayEmptyHint, { color: textSecondary }]}>{t('day.empty')}</Text>
-                  )}
+                  {/* The invisible copy keeps the header height constant, so switching
+                      days or loading never shifts the content below. */}
+                  <View>
+                    <Text
+                      style={[styles.todayEmptyHint, styles.todayEmptyHintPlaceholder]}
+                      accessibilityElementsHidden
+                      importantForAccessibility="no-hide-descendants"
+                    >
+                      {t('day.empty')}
+                    </Text>
+                    {!isLoading && !hasEntryToday && isSameDay(selectedDate, today) && (
+                      <Reanimated.Text
+                        entering={FadeIn.duration(240)}
+                        exiting={FadeOut.duration(160)}
+                        style={[styles.todayEmptyHint, styles.todayEmptyHintOverlay, { color: textSecondary }]}
+                      >
+                        {t('day.empty')}
+                      </Reanimated.Text>
+                    )}
+                  </View>
                 </View>
                 <PeriodNavigationButton direction="next"
                   accessibilityLabel={t('navigation.nextDay')}
@@ -4825,8 +4865,13 @@ export default function SleepTrackerScreen() {
                 const timelineBarWidth = Math.round(contentWidth * 0.70);
 
                 return (
-                  <TouchableOpacity
+                  <Reanimated.View
                     key={`night-group-${group.start.toISOString()}`}
+                    entering={TIMELINE_ITEM_ENTERING}
+                    exiting={TIMELINE_ITEM_EXITING}
+                    layout={TIMELINE_ITEM_LAYOUT}
+                  >
+                  <TouchableOpacity
                     activeOpacity={0.85}
                     onPress={() => {
                       triggerHaptic();
@@ -4916,13 +4961,19 @@ export default function SleepTrackerScreen() {
                       </View>
                     </LiquidGlassCard>
                   </TouchableOpacity>
+                  </Reanimated.View>
                 );
               }
 
               const entry = item.entry;
               return (
-                <ActivityCard
+                <Reanimated.View
                   key={entry.id || index}
+                  entering={TIMELINE_ITEM_ENTERING}
+                  exiting={TIMELINE_ITEM_EXITING}
+                  layout={TIMELINE_ITEM_LAYOUT}
+                >
+                <ActivityCard
                   entry={convertSleepToDailyEntry(entry, nightWindowSettings)}
                   auxiliaryBadgeLabel={(entry as any).local_pending ? offlineText(ACTIVE_SLEEP_TRACKER_LOCALE,'queuedEntry') : null}
                   onDelete={(entryId) => {
@@ -4935,44 +4986,47 @@ export default function SleepTrackerScreen() {
                   }}
                   marginHorizontal={8}
                 />
+                </Reanimated.View>
               );
             })}
           {dayEntries.length === 0 && !isLoading && (
-            <LiquidGlassCard style={styles.emptyState}>
-              <Text style={styles.emptyEmoji}>💤</Text>
-              <Text style={[styles.emptyTitle, { color: textSecondary }]}>{t('day.noEntries')}</Text>
-              <Text style={styles.emptySubtitle}>
-                {sleepEntries.length > 0
-                  ? t('day.changeDate')
-                  : t('day.first')}
-              </Text>
-              {sleepEntries.length > 0 && (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.manualButton, { marginTop: 12 }]}
-                  onPress={() => {
-                    triggerHaptic();
-                    jumpToLatestEntry();
-                  }}
-                >
-                  <Text style={[styles.actionButtonText, { color: textSecondary }]}>{t('day.lastAction')}</Text>
+            <Reanimated.View entering={TIMELINE_EMPTY_ENTERING} exiting={TIMELINE_ITEM_EXITING} layout={TIMELINE_ITEM_LAYOUT}>
+              <LiquidGlassCard style={styles.emptyState}>
+                <Text style={styles.emptyEmoji}>💤</Text>
+                <Text style={[styles.emptyTitle, { color: textSecondary }]}>{t('day.noEntries')}</Text>
+                <Text style={styles.emptySubtitle}>
+                  {sleepEntries.length > 0
+                    ? t('day.changeDate')
+                    : t('day.first')}
+                </Text>
+                {sleepEntries.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.manualButton, { marginTop: 12 }]}
+                    onPress={() => {
+                      triggerHaptic();
+                      jumpToLatestEntry();
+                    }}
+                  >
+                    <Text style={[styles.actionButtonText, { color: textSecondary }]}>{t('day.lastAction')}</Text>
+                  </TouchableOpacity>
+                )}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionButton,
+                      styles.manualButton,
+                      { marginTop: 16 },
+                      isReadOnlyPreviewMode && styles.actionDisabled,
+                    ]}
+                    disabled={isReadOnlyPreviewMode}
+                    onPress={() => {
+                      triggerHaptic();
+                      openManualSleepModal();
+                    }}
+                  >
+                  <Text style={[styles.actionButtonText, { color: textSecondary }]}>{t('day.manualAction')}</Text>
                 </TouchableOpacity>
-              )}
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    styles.manualButton,
-                    { marginTop: 16 },
-                    isReadOnlyPreviewMode && styles.actionDisabled,
-                  ]}
-                  disabled={isReadOnlyPreviewMode}
-                  onPress={() => {
-                    triggerHaptic();
-                    openManualSleepModal();
-                  }}
-                >
-                <Text style={[styles.actionButtonText, { color: textSecondary }]}>{t('day.manualAction')}</Text>
-              </TouchableOpacity>
-            </LiquidGlassCard>
+              </LiquidGlassCard>
+            </Reanimated.View>
           )}
           </View>
 
@@ -6374,7 +6428,16 @@ const styles = StyleSheet.create({
   todayEmptyHint: {
     ...TYPOGRAPHY.bodySmall,
     marginTop: 4,
-    opacity: 1,
+    textAlign: 'center',
+  },
+  todayEmptyHintPlaceholder: {
+    opacity: 0,
+  },
+  todayEmptyHintOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
   },
 
   // Chart Styles (Design Guide konform)

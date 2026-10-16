@@ -33,6 +33,7 @@ import {
   formatCommunityDate,
   translateCommunityText,
 } from '@/lib/communityTranslations';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 type Category = 'feature' | 'improvement' | 'bug-fix';
 type Priority = 'low' | 'medium' | 'high';
@@ -161,7 +162,7 @@ export default function FeatureRequestsScreen() {
             title={t('feature.screenTitle')}
             subtitle={t('feature.screenSubtitle')}
             showBackButton
-            onBackPress={() => router.push('/more')}
+            onBackPress={() => navigateBack('/more')}
           />
 
           <ScrollView contentContainerStyle={styles.content}>

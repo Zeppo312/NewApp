@@ -1,0 +1,226 @@
+{
+  "status": "Entwurf zur Gestaltung, nicht veröffentlicht",
+  "date": "2026-10-14",
+  "positioning": "Lotti Baby hilft Eltern, Mahlzeiten, Schlaf und Windeln festzuhalten und den Babyalltag gemeinsam zu überblicken. Schwangerschaft bleibt als weiterer Einstieg enthalten.",
+  "design": {
+    "typography": "Eine durchgängige Schriftfamilie: SF Pro / System sans; große Überschriften in Satzschreibung.",
+    "colors": [
+      "Warmes Creme",
+      "Gedämpftes Lavendel",
+      "Dunkles Pflaumenbraun"
+    ],
+    "layout": "Eine Hauptaussage, eine kurze Ergänzung und eine gut lesbare echte App-Ansicht pro Motiv. Gleiches Raster, gleiche Abstände und Geräterahmen.",
+    "icon": "Das bestehende Icon im ersten Entwurf beibehalten; Erkennbarkeit separat prüfen."
+  },
+  "metadata": {
+    "title": "Lotti Baby: Baby Tracker",
+    "subtitle": "Stillen, Schlaf & gemeinsam",
+    "promoText": "Wann war das letzte Fläschchen? Haltet Stillen, Schlaf und Windeln fest – und behaltet euren Babyalltag gemeinsam im Blick.",
+    "keywords": [
+      "schwangerschaft",
+      "fläschchen",
+      "windeln",
+      "wehen",
+      "meilensteine",
+      "tagebuch",
+      "geburt",
+      "beikost",
+      "wochenbett"
+    ],
+    "description": "Wann hat euer Baby zuletzt getrunken? Wie lange hat es geschlafen? Mit Lotti Baby haltet ihr Mahlzeiten, Schlaf und Windeln fest und behaltet euren Babyalltag gemeinsam im Blick.\n\nEUER TAG AUF EINEN BLICK\nErfasse Stillen, Fläschchen, Schlaf und Windelwechsel. Sieh in der Tagesübersicht nach, was wann passiert ist, und behalte die erfassten Einträge im Verlauf im Blick.\n\nGEMEINSAM ALS ELTERN\nVerknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So kann auch das andere Elternteil nachsehen, was bereits erfasst wurde – hilfreich beim Wechsel der Betreuung.\n\nSCHLAF FESTHALTEN\nStarte und beende Schlafphasen im Tracker. Die erfassten Zeiten helfen euch, den Tagesablauf eures Babys nachzuvollziehen.\n\nVON DER SCHWANGERSCHAFT AN\nVerfolge den Countdown bis zum Geburtstermin, dokumentiere Wehen und bereite mit Geburtsplan und Klinik-Checkliste die Ankunft deines Babys vor.\n\nERINNERUNGEN UND FAMILIENALLTAG\nHalte Gewicht, Größe und Meilensteine fest. Gemeinsame Termine, Einkaufslisten und Babywetter ergänzen euren Alltag.\n\nABONNEMENTS\nLotti Baby bietet Lite, Standard und Premium. Der Funktionsumfang hängt vom gewählten Tarif ab. Preise und Laufzeiten werden vor dem Kauf in der App angezeigt. Abonnements kannst du über deinen Apple Account verwalten und kündigen.\n\nLade Lotti Baby herunter und halte euren ersten Eintrag fest.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+  },
+  "screenshots": [
+    {
+      "order": 1,
+      "title": "Wann war das letzte Fläschchen?",
+      "support": "Mahlzeiten und Uhrzeiten im Blick.",
+      "requiredCapture": "Mahlzeitenübersicht mit schlüssigen Demo-Einträgen; Zeitpunkt und Menge sichtbar.",
+      "conceptSource": "marketing/app-store-optimierung-2026-09-07/screenshots-v1/raw/meals.png"
+    },
+    {
+      "order": 2,
+      "title": "Euer gemeinsamer Überblick.",
+      "support": "Baby-Daten gemeinsam nutzen.",
+      "requiredCapture": "Gefüllte Tagesübersicht. Partner-Verknüpfung bei Tarif und Release prüfen.",
+      "conceptSource": "marketing/app-store-optimierung-2026-09-07/screenshots-v1/raw/day.png"
+    },
+    {
+      "order": 3,
+      "title": "Schlaf festhalten. Verlauf im Blick.",
+      "support": "Schlafphasen starten und beenden.",
+      "requiredCapture": "Schlaftracker mit Demo-Verlauf und gut sichtbarer Steuerung.",
+      "conceptSource": "marketing/app-store-optimierung-2026-09-07/screenshots-v1/raw/sleep.png"
+    },
+    {
+      "order": 4,
+      "title": "Schon vor der Geburt an eurer Seite.",
+      "support": "Countdown, Geburtsplan und Vorbereitung.",
+      "requiredCapture": "Aktuelle Schwangerschaftsübersicht oder Vorbereitung, ohne sensible Echtdaten."
+    },
+    {
+      "order": 5,
+      "title": "Kleine Schritte. Große Erinnerungen.",
+      "support": "Meilensteine, Gewicht und Größe festhalten.",
+      "requiredCapture": "Aktuelle Meilenstein-Ansicht mit Demo-Inhalten."
+    },
+    {
+      "order": 6,
+      "title": "Euer Familienalltag an einem Ort.",
+      "support": "Termine und Einkaufslisten gemeinsam im Blick.",
+      "requiredCapture": "Kalender oder Einkaufsliste im Release mit Demo-Einträgen."
+    },
+    {
+      "order": 7,
+      "title": "Was zieht unser Baby heute an?",
+      "support": "Babywetter für euren Alltag.",
+      "requiredCapture": "Aktuelle Babywetter-Ansicht; kein Schlaf- oder Sicherheitsversprechen."
+    }
+  ],
+  "previewVideo": {
+    "durationSeconds": 24,
+    "audio": "Auch ohne Ton verständlich.",
+    "footage": "Ausschließlich echte Aufnahmen der einzureichenden App-Version. Große kurze Texttafeln.",
+    "scenes": [
+      {
+        "seconds": "0–3",
+        "text": "Wann war das letzte Fläschchen?",
+        "screen": "Mahlzeitenübersicht"
+      },
+      {
+        "seconds": "3–8",
+        "text": "Mahlzeiten. Schlaf. Windeln.",
+        "screen": "Tagesübersicht und kurzer tatsächlicher Eintrag"
+      },
+      {
+        "seconds": "8–14",
+        "text": "Euer gemeinsamer Überblick.",
+        "screen": "Partner-Verknüpfung und Tagesübersicht"
+      },
+      {
+        "seconds": "14–20",
+        "text": "Schlafphasen einfach festhalten.",
+        "screen": "Schlaftracker und Verlauf"
+      },
+      {
+        "seconds": "20–24",
+        "text": "Lotti Baby",
+        "screen": "Aktuelle App-Startansicht; Nutzen im Bild statt externem Werbeclip"
+      }
+    ]
+  },
+  "inventory": [
+    {
+      "area": "Titel und Untertitel",
+      "path": "store.config.json → apple.info.de-DE",
+      "action": "Entwurf prüfen; Themenbegriffe und Nutzen zusammenbringen."
+    },
+    {
+      "area": "Werbetext und Beschreibung",
+      "path": "store.config.json → apple.info.de-DE",
+      "action": "Konkrete Elternfrage als Einstieg; kürzen, klare Abschnitte, Tarifhinweis."
+    },
+    {
+      "area": "Keyword-Feld",
+      "path": "store.config.json → apple.info.de-DE.keywords",
+      "action": "Passende Kandidaten ohne Wiederholungen. Suchvolumen und Ranking sind noch nicht gemessen."
+    },
+    {
+      "area": "iPhone-Screenshots",
+      "path": "store/apple/screenshot/de-DE/APP_IPHONE_65",
+      "action": "Neue einheitliche Serie aus sieben Motiven, aktuelle UI statt alter Community-Navigation."
+    },
+    {
+      "area": "iPad-Screenshots",
+      "path": "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129",
+      "action": "Dasselbe Gestaltungsraster mit echten aktuellen iPad-Aufnahmen."
+    },
+    {
+      "area": "App-Vorschau",
+      "path": "store/apple/preview/de-DE/IPHONE_65",
+      "action": "24-Sekunden-Storyboard in echte aktuelle App-Aufnahmen übertragen; passenden Posterframe wählen."
+    },
+    {
+      "area": "App-Icon",
+      "path": "assets/images/icon.png",
+      "action": "Wiedererkennung und Lesbarkeit in kleinen Größen prüfen. Zunächst bestehendes Icon verwenden."
+    },
+    {
+      "area": "Englisch und Spanisch",
+      "path": "store.config.json → apple.info.en-US / es-ES",
+      "action": "Nach deutscher Gestaltung dieselbe Bildsprache und passende lokale Texte."
+    },
+    {
+      "area": "Tarife und In-App-Käufe",
+      "path": "App Store Connect / aktuelle Release-App",
+      "action": "Tarifnamen, Beschreibungen, dargestellte Funktionen und tatsächlich verfügbare Tests abgleichen."
+    },
+    {
+      "area": "Support und Datenschutz",
+      "path": "https://lottibaby.de/support / https://lottibaby.de/datenschutz",
+      "action": "Links und aktuelle Angaben vor Veröffentlichung prüfen; keine ungeprüften Datenschutzversprechen."
+    }
+  ],
+  "validation": {
+    "characterLimits": {
+      "title": 30,
+      "subtitle": 30,
+      "promoText": 170,
+      "keywords": 100,
+      "description": 4000
+    },
+    "conceptAssets": "Die Vorschau verwendet unveränderte Demo-Aufnahmen vom 7. September. Die Gleichheit mit dem aktuellen einzureichenden Build ist nicht geprüft.",
+    "pending": [
+      "Aktuelle iPhone- und iPad-Aufnahmen im einzureichenden Release erstellen.",
+      "Dargestellte Tarifverfügbarkeit prüfen.",
+      "Neues Vorschauvideo aufnehmen und exportieren.",
+      "Detail-Analytics benötigen Anmeldung in App Store Connect.",
+      "Gestaltungsrichtung mit dem Nutzer abstimmen, danach Store-Zuordnung aktualisieren."
+    ],
+    "publication": "Nicht veröffentlicht; bestehende store.config.json und App-Dateien bleiben in ihrem bisherigen Zustand.",
+    "fieldLengths": {
+      "title": {
+        "length": 24,
+        "limit": 30,
+        "pass": true
+      },
+      "subtitle": {
+        "length": 27,
+        "limit": 30,
+        "pass": true
+      },
+      "promoText": {
+        "length": 123,
+        "limit": 170,
+        "pass": true
+      },
+      "keywords": {
+        "length": 88,
+        "limit": 100,
+        "pass": true
+      },
+      "description": {
+        "length": 1433,
+        "limit": 4000,
+        "pass": true
+      }
+    }
+  },
+  "measurement": {
+    "scope": "Für Vergleiche identische Regionen, Plattformen, Quellen und vollständige Wochen verwenden.",
+    "metrics": [
+      "Eindeutige Store-Einblendungen",
+      "Eindeutige Produktseitenaufrufe",
+      "Erstdownloads",
+      "Apples Konversionsrate",
+      "Aktive Geräte und Opt-in-Rate"
+    ],
+    "test": "Nach Korrektur sachlich veralteter Assets eine alternative Screenshot-Serie testen. Änderungen an Metadaten und TikTok-Aktivität mit Datum dokumentieren. Bei niedrigem Traffic keine verlässliche Entscheidung nach wenigen Tagen erwarten."
+  },
+  "sources": [
+    "https://apps.apple.com/de/app/lotti-baby-schlaf-stillen/id6745569710",
+    "https://developer.apple.com/app-store/product-page/",
+    "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications/",
+    "marketing/app-store-optimierung-2026-09-07/README.md",
+    "marketing/app-store-optimierung-2026-09-07/screenshots-v1/README.md"
+  ]
+}

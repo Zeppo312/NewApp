@@ -1,6 +1,6 @@
 import { useCallback, type RefObject } from 'react';
 import { AppState, Keyboard, Platform, type TextInput } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 
 /** Restore an open keyboard after returning to the same, still-mounted input. */
 export function useResumeInputFocus(inputRefs: readonly RefObject<TextInput | null>[]) {

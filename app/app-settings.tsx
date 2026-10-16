@@ -1,6 +1,8 @@
 import { activeDataConsentCopy, dataConsentCopy } from '@/lib/dataConsentCopy';
 import { useDataConsents } from '@/contexts/DataConsentContext';
 import { ConsentCard, ConsentPage, consentStyles as consentPageStyles, useConsentColors } from '@/components/privacy/DataConsentPanel';
+import { AccountDeletionSettings } from '@/components/privacy/AccountDeletionSettings';
+import { AppVersionFooter } from '@/components/ui/app-version-footer';
 import React, { useState, useEffect, useRef } from 'react';
 import { StyleSheet, View, StatusBar, TouchableOpacity, ScrollView, Switch, Alert, ActivityIndicator, Image, Linking, Platform, Share } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@/components/ui/DateTimePicker';
@@ -51,6 +53,7 @@ import {
 import { translateModerationText } from '@/lib/moderationTranslations';
 import { translateAdminDashboardText } from '@/lib/adminDashboardTranslations';
 import type { LanguagePreference } from '@/lib/localization';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 const PRESET_OPTIONS = [
   { id: 'default', labelKey: 'background.preset.default' },
@@ -91,7 +94,7 @@ export default function AppSettingsScreen() {
 function BasicConsentSettings() {
   const { locale } = useLocale(); const { signOut } = useAuth(); const router = useRouter(); const copy = activeDataConsentCopy[locale];
   const s = consentPageStyles; const c = useConsentColors();
-  const links = [[copy.manage,'/data-consents'],[copy.privacy,'/datenschutz'],[copy.terms,'/nutzungsbedingungen'],[locale==='de'?'Abo verwalten':locale==='es'?'Gestionar suscripción':'Manage subscription','/subscription'],[copy.account,'/account-deletion'],[copy.support,'/support']] as const;
+  const links = [[copy.manage,'/data-consents'],[copy.privacy,'/datenschutz'],[copy.terms,'/nutzungsbedingungen'],[locale==='de'?'Abo verwalten':locale==='es'?'Gestionar suscripción':'Manage subscription','/subscription'],[copy.support,'/support']] as const;
   return <ConsentPage title={locale==='de'?'App-Einstellungen':locale==='es'?'Ajustes de la app':'App settings'} backLabel={copy.cancel} onBack={router.canGoBack() ? () => router.back() : undefined}>
     <Stack.Screen options={{ headerShown:false }} />
     <ConsentCard><View style={[s.notice, { backgroundColor: c.tint, borderColor: c.tintBorder }]}><IconSymbol name="info.circle.fill" size={18} color={c.accent} /><ThemedText adaptive={false} style={[s.noticeText, { color: c.text }]}>{copy.healthConsequence}</ThemedText></View></ConsentCard>
@@ -104,6 +107,8 @@ function BasicConsentSettings() {
         </TouchableOpacity>
       </React.Fragment>)}
     </ConsentCard>
+    <AccountDeletionSettings />
+    <AppVersionFooter color={c.muted} />
   </ConsentPage>;
 }
 function FullAppSettingsScreen() {
@@ -208,7 +213,6 @@ function FullAppSettingsScreen() {
   const [isNotificationsExpanded, setIsNotificationsExpanded] = useState(true);
   const [showVitaminDTimePicker, setShowVitaminDTimePicker] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const isDeletingData = false;
   const [isChangingBackground, setIsChangingBackground] = useState(false);
   const [isSyncingLiveActivities, setIsSyncingLiveActivities] = useState(false);
   const [liveActivitiesStatusText, setLiveActivitiesStatusText] = useState(t('live.statusLoading'));
@@ -872,14 +876,6 @@ function FullAppSettingsScreen() {
     }
   };
 
-  const handleDeleteDataRequest = () => {
-    Alert.alert(t('data.deleteTitle'), t('data.deleteAccountQuestion'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('data.deleteOnly'), onPress: () => router.push('/account-deletion?scope=data') },
-      { text: t('data.deleteWithAccount'), style: 'destructive', onPress: () => router.push('/account-deletion') },
-    ]);
-  };
-
   const handleLanguageChange = async (nextPreference: LanguagePreference) => {
     if (nextPreference === preference || isSavingLanguage) return;
     setIsSavingLanguage(true);
@@ -922,7 +918,7 @@ function FullAppSettingsScreen() {
               title={t('screen.title')}
               subtitle={t('screen.subtitle')}
               showBackButton
-              onBackPress={() => router.push('/more')}
+              onBackPress={() => navigateBack('/more')}
             />
             <ScrollView
               ref={settingsScrollRef}
@@ -1740,26 +1736,6 @@ function FullAppSettingsScreen() {
                       </View>
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={[styles.rowItem, isDeletingData && styles.disabledRow]}
-                      onPress={handleDeleteDataRequest}
-                      disabled={isDeletingData}
-                    >
-                      <View style={styles.rowIcon}>
-                        <IconSymbol name="trash" size={24} color="#FF6B6B" />
-                      </View>
-                      <View style={styles.rowContent}>
-                        <ThemedText style={[styles.rowTitle, styles.dangerText]}>{t('data.deleteTitle')}</ThemedText>
-                        <ThemedText style={styles.rowDescription}>{t('data.deleteDescription')}</ThemedText>
-                      </View>
-                      <View style={styles.trailing}>
-                        {isDeletingData ? (
-                          <ActivityIndicator size="small" color="#FF6B6B" />
-                        ) : (
-                          <IconSymbol name="chevron.right" size={20} color="#FF6B6B" />
-                        )}
-                      </View>
-                    </TouchableOpacity>
                   </LiquidGlassCard>
 
                   {/* Debug Tools - nur für Admins */}
@@ -1928,6 +1904,11 @@ function FullAppSettingsScreen() {
               )}
                 </View>
               )}
+              {/* Konto löschen / App-Daten löschen: bewusst ganz unten, auch während des Ladens erreichbar */}
+              <View style={styles.deletionSection}>
+                <AccountDeletionSettings />
+              </View>
+              <AppVersionFooter />
             </ScrollView>
           </View>
         </SafeAreaView>
@@ -1955,6 +1936,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: LAYOUT_PAD,
     paddingBottom: 48,
     paddingTop: 12,
+  },
+  deletionSection: {
+    marginTop: 8,
   },
   contentWrap: {
     width: '100%',

@@ -17,6 +17,7 @@ jest.mock("@/contexts/LocaleContext", () => ({
 }));
 jest.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ signOut: jest.fn() }) }));
 jest.mock("@/contexts/DataConsentContext", () => ({ useDataConsents: () => ({ mode: 'preview' }) }));
+jest.mock("@/lib/onboarding", () => ({ hasFinishedOnboardingBefore: jest.fn() }));
 const mockBack = jest.fn();
 jest.mock("expo-router", () => ({
   Stack: { Screen: () => null },

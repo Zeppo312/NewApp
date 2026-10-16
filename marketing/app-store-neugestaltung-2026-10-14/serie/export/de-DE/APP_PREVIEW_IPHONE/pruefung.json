@@ -1,0 +1,108 @@
+{
+  "generated": "2026-10-14T21:31:18.000Z",
+  "passed": true,
+  "technical": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "profile": "High",
+        "width": 886,
+        "height": 1920,
+        "level": 40,
+        "r_frame_rate": "30/1",
+        "bit_rate": "9917324"
+      },
+      {
+        "codec_name": "aac",
+        "profile": "LC",
+        "sample_rate": "48000",
+        "channels": 2,
+        "r_frame_rate": "0/0",
+        "bit_rate": "256184"
+      }
+    ],
+    "format": {
+      "duration": "24.000000",
+      "size": "30549802"
+    }
+  },
+  "scenes": [
+    {
+      "scene": "v1-frage",
+      "clip": "captures/de-DE/video/v1-mahlzeiten.mp4",
+      "sha256": "f2acfcf90b64516a3b4dc98a7d5c4b17af050879a5e2867c37fbd0be97fc70ce",
+      "start": 0.4,
+      "duration": 3.4,
+      "sourceDuration": 13.851667,
+      "sourceStreams": [
+        {
+          "width": 1206,
+          "height": 2622
+        }
+      ]
+    },
+    {
+      "scene": "v2-eintrag",
+      "clip": "captures/de-DE/video/v2-eintrag.mp4",
+      "sha256": "345f8c6121583d8bfa59e7d95d1f9ab31b369e1c5d5c856c22a51be5621863d7",
+      "start": 4.2,
+      "duration": 5.4,
+      "sourceDuration": 32.165,
+      "sourceStreams": [
+        {
+          "width": 1206,
+          "height": 2622
+        }
+      ]
+    },
+    {
+      "scene": "v3-gemeinsam",
+      "clip": "captures/de-DE/video/v3-gemeinsam.mp4",
+      "sha256": "2b020a1ec7a585d1abaaae9becfc4f9abbf658c89a9ca6832974f02c720d6635",
+      "start": 42,
+      "duration": 4.4,
+      "sourceDuration": 52.646667,
+      "sourceStreams": [
+        {
+          "width": 1206,
+          "height": 2622
+        }
+      ]
+    },
+    {
+      "scene": "v4-schlaf",
+      "clip": "captures/de-DE/video/v4-schlaf.mp4",
+      "sha256": "fa926aa4a468f56586f0a89881b897235507cf1940eff2fae86b440b33ac0072",
+      "start": 0,
+      "duration": 8.4,
+      "sourceDuration": 8.4,
+      "sourceStreams": [
+        {
+          "width": 1206,
+          "height": 2622
+        }
+      ]
+    },
+    {
+      "scene": "v5-marke",
+      "clip": "captures/de-DE/video/v5-start.mp4",
+      "sha256": "b9a7e85d42c499ad2b1349cb30937fc0fd113da0385c4b2c1508e831a130b73c",
+      "start": 0.4,
+      "duration": 4,
+      "sourceDuration": 12.418333,
+      "sourceStreams": [
+        {
+          "width": 1206,
+          "height": 2622
+        }
+      ]
+    }
+  ],
+  "presentation": "Echte App-Aufnahmen im Vollbild mit Texteinblendungen; keine nachgebauten App-Ansichten.",
+  "appleSources": [
+    "https://developer.apple.com/app-store/app-previews/",
+    "https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications"
+  ]
+}

@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View, ActivityIndicator, Alert, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import FloatingVoiceButton from '@/components/FloatingVoiceButton';
+import { ZoomTransitionStage } from '@/components/navigation/ZoomTransitionStage';
 import 'react-native-reanimated';
 import * as Notifications from '@/lib/notifications';
 
@@ -827,6 +828,7 @@ function RootLayoutNav() {
           ready={!loading && isBabyStatusResolved} excluded={shouldSkipGlobalPaywallCheck}
           onDenied={handlePaywallDenied} locale={locale} onSignOut={() => { void signOut(); }}>
           {(isPaywallCheckBlocking) => <>
+        <ZoomTransitionStage>
         <Stack
           initialRouteName={initialRoute ?? undefined}
           screenOptions={{
@@ -866,6 +868,7 @@ function RootLayoutNav() {
         <Stack.Screen name="auth/google-callback" />
         <Stack.Screen name="auth/reset-password" />
       </Stack>
+        </ZoomTransitionStage>
       <StartupMessageModal
         visible={!isPaywallCheckBlocking && Boolean(startupMessage)}
         message={startupMessage}

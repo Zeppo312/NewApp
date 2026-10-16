@@ -18,19 +18,22 @@ let mockMode = 'checking';
 const mockPush = jest.fn();
 const mockMount = jest.fn();
 const mockStack = jest.fn();
+const mockRoutes: string[] = [];
 const mockGate: { current: { gated: boolean; release: () => void } | null } = { current: null };
 jest.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'a' }, loading: false }) }));
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
 jest.mock('@/contexts/DataConsentContext', () => ({ useDataConsents: () => ({ aiAllowed: mockAllowed, healthAllowed: mockHealthAllowed, mode: mockMode }) }));
 jest.mock('@/lib/dataConsentRuntime', () => ({ DATA_CONSENTS_ENABLED: true }));
+const mockFinishedBefore = jest.fn();
+jest.mock('@/lib/onboarding', () => ({ hasFinishedOnboardingBefore: (...args: unknown[]) => mockFinishedBefore(...args) }));
 jest.mock('expo-router', () => {
   const Stack = ({ children }: { children: React.ReactNode }) => { mockStack(); mockGate.current = require('../../components/privacy/DataConsentBoundary').useConsentGate(); return children; };
-  Stack.Screen = function MockScreen() { return null; }; Stack.Protected = function MockProtected() { return null; };
+  Stack.Screen = function MockScreen({ name }: { name: string }) { mockRoutes.push(name); return null; }; Stack.Protected = function MockProtected() { return null; };
   return { Stack, useRouter: () => ({ push: mockPush, canGoBack: () => true, back: jest.fn() }) };
 });
 let tree: ReactTestRenderer;
 function PrivateFeature() { mockMount(); return <Text>AI feature</Text>; }
-beforeEach(() => { mockAllowed = false; mockHealthAllowed = false; mockMode = 'checking'; jest.clearAllMocks(); });
+beforeEach(() => { mockAllowed = false; mockHealthAllowed = false; mockMode = 'checking'; mockRoutes.length = 0; jest.clearAllMocks(); mockFinishedBefore.mockResolvedValue(true); });
 afterEach(() => { act(() => tree?.unmount()); });
 it('explains the missing consent and opens the matching review without mounting the private feature', async () => {
   await act(async () => { tree = create(<AiConsentGate><PrivateFeature /></AiConsentGate>); });
@@ -60,16 +63,36 @@ it('opens the consent screen once a resolved decision requires it', async () => 
   mockMode = 'active';
   await act(async () => { tree = create(<DataConsentBoundary><PrivateFeature /></DataConsentBoundary>); });
   expect(mockStack).toHaveBeenCalled();expect(mockMount).not.toHaveBeenCalled();
+  expect(mockRoutes).toEqual(expect.arrayContaining(['data-consents','app-settings','account-deletion']));
+  expect(mockRoutes).not.toContain('paywall');
 });
 it('keeps the consent flow open after the health grant until the user continues', async () => {
   mockMode = 'active';
   const render = () => <DataConsentBoundary><PrivateFeature /></DataConsentBoundary>;
   await act(async () => { tree = create(render()); });
   expect(mockMount).not.toHaveBeenCalled();
-  // Granting health must leave room for the separate AI decision.
+  // Granting health keeps the screen until the user continues explicitly.
   mockHealthAllowed = true; act(() => tree.update(render()));
   expect(mockMount).not.toHaveBeenCalled();
   expect(mockGate.current?.gated).toBe(true);
   act(() => mockGate.current!.release());
   expect(mockMount).toHaveBeenCalledTimes(1);
+});
+it('lets a new account into onboarding, where the health consent is asked before the first health question', async () => {
+  mockMode = 'active'; mockFinishedBefore.mockResolvedValue(false);
+  await act(async () => { tree = create(<DataConsentBoundary><PrivateFeature /></DataConsentBoundary>); });
+  expect(mockFinishedBefore).toHaveBeenCalledWith('a', false);
+  expect(mockStack).not.toHaveBeenCalled(); expect(mockMount).toHaveBeenCalledTimes(1);
+});
+it('blocks a finished account again after a later withdrawal, without unmounting meanwhile', async () => {
+  mockMode = 'active'; mockFinishedBefore.mockResolvedValue(false);
+  const render = () => <DataConsentBoundary><PrivateFeature /></DataConsentBoundary>;
+  await act(async () => { tree = create(render()); });
+  mockHealthAllowed = true; act(() => tree.update(render()));
+  expect(tree.root.findAllByType(PrivateFeature)).toHaveLength(1); expect(mockStack).not.toHaveBeenCalled();
+  // Onboarding has finished meanwhile; the withdrawal re-checks the account.
+  mockFinishedBefore.mockResolvedValue(true); mockHealthAllowed = false;
+  await act(async () => { tree.update(render()); });
+  expect(mockFinishedBefore).toHaveBeenCalledTimes(2);
+  expect(mockStack).toHaveBeenCalled(); expect(tree.root.findAllByType(PrivateFeature)).toHaveLength(0);
 });

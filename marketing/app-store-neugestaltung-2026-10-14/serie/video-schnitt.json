@@ -1,0 +1,22 @@
+{
+  "generated": "2026-10-14T21:28:25.852Z",
+  "source": "captures/de-DE/video/v4-schlaf-raw.mp4",
+  "sourceSha256": "90d9e6fbd194f9d6e599cd4564a00da4b619df2fb3e854e7d313ef4c08e9ef1c",
+  "output": "captures/de-DE/video/v4-schlaf.mp4",
+  "outputSha256": "fa926aa4a468f56586f0a89881b897235507cf1940eff2fae86b440b33ac0072",
+  "cuts": [
+    {
+      "start": 6.4,
+      "duration": 1.8
+    },
+    {
+      "start": 13.5,
+      "duration": 1.2
+    },
+    {
+      "start": 30,
+      "duration": 5.4
+    }
+  ],
+  "note": "Echte Aufnahme: Start und Speichern des beendeten Schlafs. Wartezeiten entfernt; keine App-Ansichten ersetzt und keine Bewegung beschleunigt."
+}

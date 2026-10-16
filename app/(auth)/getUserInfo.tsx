@@ -20,7 +20,8 @@ import { getLinkedBabySelectionOptions, saveBabyInfo } from '@/lib/baby';
 import { invalidateFamilyAccess, refreshFamilyAccess } from '@/lib/familySubscriptionAccess';
 import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
 import { translateAccountLinkingText } from '@/lib/accountLinkingTranslations';
-import { router, Stack, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import DateTimePicker from '@/components/ui/DateTimePicker';
 import { shouldRedirectToPaywallForState, shouldShowPaywall } from '@/lib/paywall';
 import { redeemInvitationCodeFixed } from '@/lib/redeemInvitationCodeFixed';
@@ -28,6 +29,9 @@ import { SurveyStep, ProductTryout } from '@/components/onboarding/personalized-
 import { getPersonalizedStart, getOnboardingNeeds, type OnboardingNeed, type OnboardingChallenge, type OnboardingSupport, type OnboardingHabit } from '@/lib/onboarding-personalization';
 import { ValueStep, FeedbackStep, HabitStep, TrialStep } from '@/components/onboarding/value-steps';
 import { WellbeingStep, wellbeingCopy } from '@/components/onboarding/wellbeing-step';
+import { HealthConsentStep, healthConsentCopy } from '@/components/onboarding/health-consent-step';
+import { useDataConsents } from '@/contexts/DataConsentContext';
+import { activeDataConsentCopy } from '@/lib/dataConsentCopy';
 import { valueCopy } from '@/components/onboarding/value-copy';
 import { OnboardingProductMoment } from '@/components/onboarding/product-moment';
 import { getOnboardingSteps, getOnboardingDestination, getNextOnboardingIndex, getPreviousOnboardingIndex, getOnboardingChapters } from '@/lib/onboarding-flow';
@@ -54,7 +58,8 @@ export default function GetUserInfoScreen() {
   ONBOARDING_LOCALE_TAG = getOnboardingLocaleTag(ACTIVE_ONBOARDING_LOCALE);
   const theme = Colors.light;
   const invitationAccessoryViewID = 'invitation-code-keyboard-accessory';
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const consent = useDataConsents();
   const { refreshBabyDetails } = useBabyStatus();
   const { refreshBabies, activeBaby } = useActiveBaby();
   const { refresh: refreshOnboardingStatus } = useOnboardingStatus();
@@ -159,12 +164,21 @@ export default function GetUserInfoScreen() {
 
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Gesundheits-Einwilligung als eigener Schritt, sobald sie fehlt. Einmal
+  // aufgenommen bleibt der Schritt in der Liste, damit sich Indizes nicht verschieben.
+  const needsHealthConsent = consent.mode !== 'preview' && !consent.healthAllowed;
+  const [askHealthConsent, setAskHealthConsent] = useState(needsHealthConsent);
+  if (needsHealthConsent && !askHealthConsent) setAskHealthConsent(true);
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [consentError, setConsentError] = useState(false);
+  const [isSavingConsent, setIsSavingConsent] = useState(false);
+
   // Schrittweise Abfrage
   const shouldShowInvitationStep = showInvitation
     || (!isRedeemingInvitation && invitationStatus !== 'accepted' && invitationError !== null);
   const onboardingSteps = useMemo(
-    () => getOnboardingSteps(shouldShowInvitationStep, invitationStatus === 'accepted', Platform.OS === 'ios'),
-    [invitationStatus, shouldShowInvitationStep],
+    () => getOnboardingSteps(shouldShowInvitationStep, invitationStatus === 'accepted', Platform.OS === 'ios', askHealthConsent),
+    [invitationStatus, shouldShowInvitationStep, askHealthConsent],
   );
   const [currentStep, setCurrentStep] = useState(0);
   const [helpful, setHelpful] = useState(false);
@@ -519,9 +533,38 @@ export default function GetUserInfoScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invitationStatus, isRedeemingInvitation, pendingBabySelection]);
 
+  const grantHealthConsent = async () => {
+    if (isSavingConsent) return;
+    setConsentError(false);
+    setIsSavingConsent(true);
+    try {
+      await consent.decide('health', 'granted', ACTIVE_ONBOARDING_LOCALE);
+      setCurrentStep(boundedCurrentStep + 1);
+    } catch (error) {
+      console.error('Failed to save health consent:', error);
+      setConsentError(true);
+    } finally {
+      setIsSavingConsent(false);
+    }
+  };
+
+  const declineHealthConsent = () => {
+    const c = healthConsentCopy(ACTIVE_ONBOARDING_LOCALE);
+    Alert.alert(c.declineTitle, c.declineBody, [
+      { text: c.back, style: 'cancel' },
+      { text: activeDataConsentCopy[ACTIVE_ONBOARDING_LOCALE].signOut, style: 'destructive', onPress: () => void signOut() },
+    ]);
+  };
+
   // Zum nächsten Schritt gehen
   const goToNextStep = () => {
     switch (currentStepKey) {
+      case 'healthConsent':
+        if (!consent.healthAllowed) {
+          if (consentChecked) void grantHealthConsent();
+          return;
+        }
+        break;
       case 'firstName':
         if (!firstName.trim()) {
           Alert.alert(t('common.notice'), t('validation.firstName'));
@@ -594,13 +637,13 @@ export default function GetUserInfoScreen() {
   useFocusEffect(useCallback(() => {
     if (Platform.OS !== 'android') return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (isSaving || isRedeemingInvitation || pendingBabySelection) return true;
+      if (isSaving || isSavingConsent || isRedeemingInvitation || pendingBabySelection) return true;
       if (boundedCurrentStep === 0) return false;
       goToPreviousStep();
       return true;
     });
     return () => subscription.remove();
-  }, [boundedCurrentStep, goToPreviousStep, isSaving, isRedeemingInvitation, pendingBabySelection]));
+  }, [boundedCurrentStep, goToPreviousStep, isSaving, isSavingConsent, isRedeemingInvitation, pendingBabySelection]));
 
   // Render-Funktion für den aktuellen Schritt
   const renderCurrentStep = () => {
@@ -637,12 +680,18 @@ export default function GetUserInfoScreen() {
                 Keyboard.dismiss();
                 setShowInvitation(true);
                 if (!userRole) { Alert.alert(t('common.notice'), t('validation.role')); return; }
-                setCurrentStep(getOnboardingSteps(true, false).indexOf('invitation'));
+                // Das Einlösen synchronisiert Gesundheitsdaten: erst die Einwilligung.
+                setCurrentStep(getOnboardingSteps(true, false, false, askHealthConsent).indexOf(askHealthConsent ? 'healthConsent' : 'invitation'));
               }}>
               <ThemedText style={styles.linkText}>{t('flow.inviteLink')}</ThemedText><IconSymbol name="arrow.right" size={16} color={brand.accentText} />
             </TouchableOpacity>}
           </View>
         </View>;
+
+      case 'healthConsent':
+        return <HealthConsentStep locale={ACTIVE_ONBOARDING_LOCALE} checked={consentChecked} granted={consent.healthAllowed}
+          error={consentError} busy={isSavingConsent || consent.busy}
+          onToggle={() => { setConsentError(false); setConsentChecked(value => !value); }} onDecline={declineHealthConsent} />;
 
       case 'invitation': // Einladungscode
         return (
@@ -926,6 +975,7 @@ export default function GetUserInfoScreen() {
 
   const answerMissing = currentStepKey === 'firstName' ? !firstName.trim()
     : currentStepKey === 'role' ? !userRole
+    : currentStepKey === 'healthConsent' ? !consent.healthAllowed && !consentChecked
     : currentStepKey === 'babyStatus' ? isBabyBorn === null
     : currentStepKey === 'dates' ? !(isBabyBorn ? birthDate : dueDate)
     : currentStepKey === 'needs' ? !need
@@ -933,7 +983,7 @@ export default function GetUserInfoScreen() {
     : currentStepKey === 'support' ? !support
     : false;
   const chapterProgress = getOnboardingChapters(onboardingSteps, boundedCurrentStep);
-  const continueDisabled = answerMissing || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection)
+  const continueDisabled = answerMissing || isSaving || isSavingConsent || isRedeemingInvitation || Boolean(pendingBabySelection)
     || (currentStepKey === 'invitation' && invitationStatus !== 'accepted');
 
   return (
@@ -943,7 +993,7 @@ export default function GetUserInfoScreen() {
           <StatusBar barStyle="dark-content" />
           <View style={styles.header}>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('common.back')}
-              disabled={boundedCurrentStep === 0 || isSaving || isRedeemingInvitation || Boolean(pendingBabySelection)}
+              disabled={boundedCurrentStep === 0 || isSaving || isSavingConsent || isRedeemingInvitation || Boolean(pendingBabySelection)}
               style={[styles.backButton, boundedCurrentStep === 0 && { opacity: 0 }]} onPress={goToPreviousStep}>
               <IconSymbol name="chevron.left" size={20} color={brand.secondary} />
             </TouchableOpacity>
@@ -1000,6 +1050,7 @@ export default function GetUserInfoScreen() {
                     <ThemedText style={styles.nextButtonText}>
                       {boundedCurrentStep === totalSteps - 1
                         ? (isSaving ? t('common.saving') : currentStepKey === 'trial' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).trialCta : isPartnerFlow ? t('invitation.openApp') : t(momentBabyBorn ? (selectedStart === 'sleep' ? 'flow.startSleep' : 'flow.startDaily') : (selectedStart === 'checklist' ? 'flow.startChecklist' : 'flow.startPregnancy')))
+                        : currentStepKey === 'healthConsent' && !consent.healthAllowed ? (isSavingConsent ? activeDataConsentCopy[ACTIVE_ONBOARDING_LOCALE].saving : healthConsentCopy(ACTIVE_ONBOARDING_LOCALE).cta)
                         : (currentStepKey === 'mood' || currentStepKey === 'energy') && wellbeing[currentStepKey] === null ? wellbeingCopy(ACTIVE_ONBOARDING_LOCALE).skip : currentStepKey === 'welcome' ? valueCopy(ACTIVE_ONBOARDING_LOCALE).welcomeCta : t(currentStepKey === 'productMoment' && !demoCompleted ? 'survey.skipDemo' : 'common.next')}
                     </ThemedText>
                     {isSaving && boundedCurrentStep === totalSteps - 1 && <ActivityIndicator color={brand.white} />}

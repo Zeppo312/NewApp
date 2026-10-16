@@ -8,7 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 

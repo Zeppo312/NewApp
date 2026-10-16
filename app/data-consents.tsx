@@ -137,11 +137,8 @@ function EffectiveConsents() {
     setError(false);
     try {
       await consent.decide(scope, decision, locale);
-      // The gate keeps this screen after a health grant, so the separate and
-      // optional AI choice is offered next instead of being skipped.
-      const offerAi = gate.gated && scope === 'health' && decision === 'granted' && !decided('ai') && !reviewedRequests.current.has('ai');
-      if (offerAi) reviewedRequests.current.add('ai');
-      setReview(offerAi ? 'ai' : null);
+      // The optional AI choice is asked where an AI feature is opened, not here.
+      setReview(null);
     }
     catch { setError(true); }
   };
@@ -175,11 +172,10 @@ function EffectiveConsents() {
     {consent.cleanupFailed && alert(copy.cleanupError)}
     {(consent.mode === 'unavailable' || consent.pending || consent.cleanupFailed) && <View style={s.header}><Pressable accessibilityRole="button" disabled={consent.busy} onPress={() => void consent.refresh()} style={secondary}><Text style={[s.secondaryText, { color: c.accent }]}>{copy.retry}</Text></Pressable></View>}
     {review && consent.mode === 'active' ? <DataConsentPanel key={`${review}:${locale}`} active scope={review} locale={locale} busy={consent.busy} error={error}
-      step={gate.gated ? { index: review === 'health' ? 1 : 2, total: 2 } : undefined}
       onDecide={granted => void decide(review, granted ? 'granted' : consent.snapshot?.[review]?.decision === 'granted' ? 'revoked' : 'declined')} onCancel={() => { setReview(null); setError(false); }} /> :
       consent.mode === 'active' && <>
         {!consent.healthAllowed && <ConsentCard><View style={[s.notice, { backgroundColor: c.tint, borderColor: c.tintBorder }]}><IconSymbol name="info.circle.fill" size={18} color={c.accent} /><Text style={[s.noticeText, { color: c.text }]}>{copy.healthConsequence}</Text></View></ConsentCard>}
-        {(['health','ai'] as const).map(scope => {
+        {(gate.gated ? ['health'] as const : ['health', 'ai'] as const).map(scope => {
           const record = consent.snapshot?.[scope];
           const state = status(scope);
           const locked = scope === 'ai' && !consent.healthAllowed;
@@ -203,8 +199,8 @@ function EffectiveConsents() {
       </>}
     {error && !review && alert(copy.error)}
     {leave && !review && <View style={s.header}><Pressable accessibilityRole="button" disabled={consent.busy} style={[s.button, consent.busy && s.buttonDisabled]} onPress={leave.go}><Text style={s.buttonText}>{leave.label}</Text></Pressable></View>}
-    {!review && <>
-      <View style={s.header}><Text style={[s.small, { color: c.secondary }]}>{copy.withdrawal}</Text></View>
+    <>
+      {!review && <View style={s.header}><Text style={[s.small, { color: c.secondary }]}>{copy.withdrawal}</Text></View>}
       <ConsentCard style={{ padding: 0, paddingVertical: 4, gap: 0 }}>{links.map((link, index) => <React.Fragment key={link.label}>
         {index > 0 && <View style={[s.menuDivider, { backgroundColor: c.divider }]} />}
         <Pressable accessibilityRole={link.role} disabled={consent.busy && link.role === 'button'} style={s.menuRow} onPress={link.go}>
@@ -213,6 +209,6 @@ function EffectiveConsents() {
           <IconSymbol name={link.role === 'link' ? 'arrow.up.right' : 'chevron.right'} size={14} color={c.muted} />
         </Pressable>
       </React.Fragment>)}</ConsentCard>
-    </>}
+    </>
   </ConsentPage>;
 }

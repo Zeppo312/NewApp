@@ -10,6 +10,7 @@ export type NavigationLocale = 'de' | 'en' | 'es';
 export const DEFAULT_NAVIGATION_LOCALE: NavigationLocale = 'de';
 
 const de = {
+  'common.back': 'Zurück',
   'period.previousDay': 'Vorheriger Tag', 'period.previousWeek': 'Vorherige Woche', 'period.previousMonth': 'Vorheriger Monat', 'period.nextDay': 'Nächster Tag', 'period.nextWeek': 'Nächste Woche', 'period.nextMonth': 'Nächster Monat',
   'tab.development': 'Entwicklungssprünge',
   'tab.baby': 'Mein Baby',
@@ -39,6 +40,7 @@ export type NavigationTranslationKey = keyof typeof de;
 type Catalog = Record<NavigationTranslationKey, string>;
 
 const en: Catalog = {
+  'common.back': 'Back',
   'period.previousDay': 'Previous day', 'period.previousWeek': 'Previous week', 'period.previousMonth': 'Previous month', 'period.nextDay': 'Next day', 'period.nextWeek': 'Next week', 'period.nextMonth': 'Next month',
   'tab.development': 'Development leaps',
   'tab.baby': 'My baby',
@@ -65,6 +67,7 @@ const en: Catalog = {
 };
 
 const es: Catalog = {
+  'common.back': 'Atrás',
   'period.previousDay': 'Día anterior', 'period.previousWeek': 'Semana anterior', 'period.previousMonth': 'Mes anterior', 'period.nextDay': 'Día siguiente', 'period.nextWeek': 'Semana siguiente', 'period.nextMonth': 'Mes siguiente',
   'tab.development': 'Saltos de desarrollo',
   'tab.baby': 'Mi bebé',

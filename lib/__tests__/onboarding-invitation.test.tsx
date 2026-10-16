@@ -5,6 +5,7 @@ import GetUserInfoScreen from '../../app/(auth)/getUserInfo';
 import { AccountLinkingQrModal } from '@/components/account-linking-qr-modal';
 import { translateOnboardingText } from '@/lib/onboardingTranslations';
 import { LinkedBabySelectionModal } from '@/components/LinkedBabySelectionModal';
+import { HealthConsentStep } from '@/components/onboarding/health-consent-step';
 
 const mockUser = { id: 'invited-user' };
 let mockParams: { invitationCode?: string } = {};
@@ -25,6 +26,8 @@ const mockInvalidatePremium = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: mockUser }) }));
 jest.mock('@/contexts/LocaleContext', () => ({ useLocale: () => ({ locale: 'de' }) }));
+let mockConsent: { mode: string; healthAllowed: boolean; busy: boolean; decide: jest.Mock } = { mode: 'preview', healthAllowed: true, busy: false, decide: jest.fn() };
+jest.mock('@/contexts/DataConsentContext', () => ({ useDataConsents: () => mockConsent }));
 jest.mock('@/contexts/ActiveBabyContext', () => ({ useActiveBaby: () => ({ refreshBabies: mockRefresh, activeBaby: null }) }));
 jest.mock('@/contexts/BabyStatusContext', () => ({ useBabyStatus: () => ({ refreshBabyDetails: mockRefresh }) }));
 jest.mock('@/contexts/OnboardingStatusContext', () => ({ useOnboardingStatus: () => ({ refresh: mockRefresh }) }));
@@ -109,6 +112,7 @@ const scan = async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = {};
+  mockConsent = { mode: 'preview', healthAllowed: true, busy: false, decide: jest.fn() };
   mockRedeem.mockResolvedValue({ success: true, linkedUserId: 'parent', creatorInfo: { firstName: 'Sam' }, syncedData: { isBabyBorn: true, dueDate: null } });
   mockSelection.mockResolvedValue({ data: [{ id: 'baby', is_shared_between_accounts: true }], error: null });
   mockProfile.mockResolvedValue({ error: null });
@@ -240,4 +244,56 @@ it('prevents duplicate redemption while a scan is being processed', async () => 
   await act(async () => { resolve({ success: true, syncedData: { isBabyBorn: true } }); });
   expect(mockProfile).toHaveBeenCalledTimes(1);
   expect(mockReplace).toHaveBeenCalledWith('/(tabs)/home');
+});
+
+describe('health consent inside onboarding', () => {
+  const nextButton = () => tree.root.findAllByType(TouchableOpacity).find(node => node.props.accessibilityState && node.props.accessibilityRole === 'button')!;
+  const consentStep = () => tree.root.findAllByType(HealthConsentStep);
+  beforeEach(() => {
+    mockConsent = { mode: 'active', healthAllowed: false, busy: false, decide: jest.fn(async () => { mockConsent = { ...mockConsent, healthAllowed: true }; }) };
+  });
+
+  it('asks right before the baby questions and continues only after the explicit agreement', async () => {
+    await basics();
+    await next();
+    expect(consentStep()).toHaveLength(1);
+    expect(nextButton().props.disabled).toBe(true);
+    act(() => consentStep()[0].props.onToggle());
+    await next();
+    expect(mockConsent.decide).toHaveBeenCalledWith('health', 'granted', 'de');
+    expect(consentStep()).toHaveLength(0);
+    expect(tree.root.findAllByType(Text).some(node => node.props.children === translateOnboardingText('de', 'flow.stageTitle'))).toBe(true);
+  });
+
+  it('stays on the consent step with an error when the decision cannot be saved', async () => {
+    mockConsent.decide.mockRejectedValueOnce(new Error('offline'));
+    await basics();
+    await next();
+    act(() => consentStep()[0].props.onToggle());
+    await next();
+    expect(consentStep()).toHaveLength(1);
+    expect(consentStep()[0].props.error).toBe(true);
+  });
+
+  it('asks before an invitation code syncs the shared due date', async () => {
+    await invitation();
+    expect(consentStep()).toHaveLength(1);
+    expect(mockRedeem).not.toHaveBeenCalled();
+    act(() => consentStep()[0].props.onToggle());
+    await next();
+    await scan();
+    expect(mockConsent.decide.mock.invocationCallOrder[0]).toBeLessThan(mockRedeem.mock.invocationCallOrder[0]);
+    expect(mockReplace).toHaveBeenCalledWith('/(tabs)/home');
+  });
+
+  it('asks before redeeming an invitation link', async () => {
+    mockParams = { invitationCode: 'ABCD2345' };
+    await basics();
+    await next();
+    expect(consentStep()).toHaveLength(1);
+    expect(mockRedeem).not.toHaveBeenCalled();
+    act(() => consentStep()[0].props.onToggle());
+    await next();
+    expect(mockRedeem).toHaveBeenCalledTimes(1);
+  });
 });

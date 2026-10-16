@@ -100,6 +100,61 @@ const cases = [
 describe.each(cases)('$name storage generation', (entry) => {
   const key = `${entry.prefix}:user-a`;
 
+  it('starts a fresh disk read after the consent check generation changes', async () => {
+    await persist(key, entry.old);
+    const { gates: [a], readCount } = holdReads(key);
+    const callA = entry.read('user-a');
+    await a.entered.promise;
+    consent.invalidateConsentChecks();
+    expect(consent.runtimeConsentAllowed('health')).toBe(true);
+    await persist(key, entry.fresh);
+    const callB = entry.read('user-a');
+    a.release.resolve();
+
+    expect(await callA).toBeNull();
+    expect(await callB).toEqual(entry.fresh);
+    expect(readCount()).toBe(2);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('keeps B deduplicated when an older consent generation finishes', async () => {
+    await persist(key, entry.old);
+    const { gates: [a, b], readCount } = holdReads(key, 2);
+    const callA = entry.read('user-a');
+    await a.entered.promise;
+    consent.invalidateConsentChecks();
+    await persist(key, entry.fresh);
+    const callB = entry.read('user-a');
+    expect(readCount()).toBe(2);
+    await b.entered.promise;
+    a.release.resolve();
+    expect(await callA).toBeNull();
+
+    const callC = entry.read('user-a');
+    b.release.resolve();
+    expect(await Promise.all([callB, callC])).toEqual([entry.fresh, entry.fresh]);
+    expect(readCount()).toBe(2);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh network read after the consent check generation changes', async () => {
+    const entered = deferred<void>();
+    const resultA = deferred<{ data: object; error: null }>();
+    query.maybeSingle
+      .mockImplementationOnce(() => { entered.resolve(); return resultA.promise; })
+      .mockResolvedValueOnce({ data: entry.fresh, error: null });
+    const callA = entry.read('user-a');
+    await entered.promise;
+    consent.invalidateConsentChecks();
+    const callB = entry.read('user-a');
+    resultA.resolve({ data: entry.old, error: null });
+
+    expect(await callA).toBeNull();
+    expect(await callB).toEqual(entry.fresh);
+    expect(query.maybeSingle).toHaveBeenCalledTimes(2);
+    expect(await entry.read('user-a')).toEqual(entry.fresh);
+  });
+
   it('starts a fresh read after targeted invalidation instead of joining obsolete A', async () => {
     await persist(key, entry.old);
     const { gates: [a] } = holdReads(key);

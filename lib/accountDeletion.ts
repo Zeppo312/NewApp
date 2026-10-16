@@ -54,3 +54,46 @@ export async function verifyDeletionCode(email: string, token: string, expectedU
   if (error || !data.user || data.user.id !== expectedUserId || !data.session?.access_token) throw new Error('deletion_verification_failed');
   return data.session.access_token;
 }
+
+// Direct self-service deletion for standalone accounts (delete-own-account).
+// Shared accounts report a reason and keep the reviewed request path above.
+export type DirectDeletionStatus = { available: true; pending: DeletionScope | null } | { available: false; reason: string | null } | 'unavailable';
+export async function getDirectDeletionStatus(): Promise<DirectDeletionStatus> {
+  try {
+    const { data, error } = await supabase.functions.invoke('delete-own-account', { method: 'GET' });
+    if (error || typeof data?.available !== 'boolean') return 'unavailable';
+    // pending: a started deletion that has to be resumed (the account is locked meanwhile).
+    if (data.available) return { available: true, pending: data.pending === 'account' || data.pending === 'data' ? data.pending : null };
+    return { available: false, reason: typeof data.reason === 'string' ? data.reason : null };
+  } catch { return 'unavailable'; }
+}
+export async function deleteOwnAccount(scope: DeletionScope): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('delete-own-account', { body: { confirm: true, scope } });
+  if (error || data?.deleted !== true) throw new Error('direct_deletion_failed');
+}
+
+type AppleLinkedUser = { app_metadata?: { provider?: string; providers?: string[] }; identities?: { provider?: string }[] } | null | undefined;
+export function isAppleLinkedUser(user: AppleLinkedUser): boolean {
+  if (!user) return false;
+  return user.app_metadata?.provider === 'apple' || !!user.app_metadata?.providers?.includes('apple') ||
+    !!user.identities?.some(identity => identity.provider === 'apple');
+}
+/** Apple requires revoking Sign in with Apple tokens when an account is deleted.
+ * 'cancelled' means the user dismissed the Apple sheet and deletion must stop. */
+export async function revokeAppleSignIn(): Promise<'revoked' | 'cancelled' | 'failed'> {
+  let credential: { authorizationCode?: string | null; user?: string } | null = null;
+  try {
+    const AppleAuthentication = require('expo-apple-authentication');
+    if (!(await AppleAuthentication.isAvailableAsync())) return 'failed';
+    credential = await AppleAuthentication.signInAsync({ requestedScopes: [] });
+  } catch (error: any) {
+    return error?.code === 'ERR_REQUEST_CANCELED' ? 'cancelled' : 'failed';
+  }
+  if (!credential?.authorizationCode) return 'failed';
+  try {
+    const { data, error } = await supabase.functions.invoke('revoke-apple-sign-in', {
+      body: { authorizationCode: credential.authorizationCode, appleUser: credential.user ?? null },
+    });
+    return !error && data?.success === true ? 'revoked' : 'failed';
+  } catch { return 'failed'; }
+}

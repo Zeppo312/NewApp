@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLocale } from '@/contexts/LocaleContext';
 import { useDataConsents } from '@/contexts/DataConsentContext';
 import { DATA_CONSENTS_ENABLED } from '@/lib/dataConsentRuntime';
+import { hasFinishedOnboardingBefore } from '@/lib/onboarding';
 import { activeDataConsentCopy } from '@/lib/dataConsentCopy';
 import { NavigationProvider } from '@/contexts/NavigationContext';
 import { ConsentCard, ConsentPage, ConsentScopeIcon, consentStyles as s, useConsentColors } from './DataConsentPanel';
@@ -25,12 +26,27 @@ export const useConsentGate = () => useContext(ConsentGateContext);
 export function DataConsentBoundary({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const consent = useDataConsents();
-  const checking = DATA_CONSENTS_ENABLED && (loading || (!!user && consent.mode === 'checking'));
-  const blocked = DATA_CONSENTS_ENABLED && (loading || (!!user && !consent.healthAllowed));
-  // Once the gate was shown, granting health must not swap the navigator away
-  // mid-flow: the separate AI choice still follows. The user leaves explicitly.
-  const [heldFor, setHeldFor] = useState<string | null>(null);
   const userId = user?.id ?? null;
+  const undecided = DATA_CONSENTS_ENABLED && !loading && !!user && consent.mode !== 'checking' && !consent.healthAllowed;
+  // New accounts give the health consent inside onboarding, right before the
+  // first health question. Only accounts that finished onboarding are blocked.
+  // Re-checked whenever consent is missing again, e.g. after a withdrawal. The
+  // previous answer stays meanwhile, so onboarding is never unmounted mid-flow.
+  const [account, setAccount] = useState<{ userId: string; existing: boolean } | null>(null);
+  const answeredOnboarding = !!user?.user_metadata?.onboarding_preferences;
+  useEffect(() => {
+    if (!undecided || !userId) return;
+    let cancelled = false;
+    void hasFinishedOnboardingBefore(userId, answeredOnboarding).then(existing => { if (!cancelled) setAccount({ userId, existing }); });
+    return () => { cancelled = true; };
+  }, [undecided, userId, answeredOnboarding]);
+  const accountKnown = !!userId && account?.userId === userId;
+  const inOnboarding = accountKnown && !account.existing;
+  const checking = DATA_CONSENTS_ENABLED && (loading || (!!user && (consent.mode === 'checking' || (undecided && !accountKnown))));
+  const blocked = DATA_CONSENTS_ENABLED && (loading || (!!user && !consent.healthAllowed && !inOnboarding));
+  // Once the gate was shown, granting health must not swap the navigator away
+  // mid-flow. The user leaves explicitly with "Weiter".
+  const [heldFor, setHeldFor] = useState<string | null>(null);
   useEffect(() => { if (blocked && !checking && userId) setHeldFor(userId); }, [blocked, checking, userId]);
   const held = !!userId && heldFor === userId;
   const gate = useMemo<ConsentGate>(() => ({ gated: true, release: () => setHeldFor(null) }), []);

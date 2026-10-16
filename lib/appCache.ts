@@ -115,7 +115,10 @@ const getFromStorage = async <T>(key: string, ttl: number, isCurrent: () => bool
  * Abfrage gleichzeitig ausloesen. Parallele Aufrufer teilen sich hier dasselbe
  * Promise, statt zwei identische Supabase-Requests zu starten.
  */
-const inFlightRequests = new Map<string, Promise<unknown>>();
+const inFlightRequests = new Map<string, {
+  promise: Promise<unknown>;
+  isCurrent: () => boolean;
+}>();
 
 /**
  * Generation-Zaehler: jede Invalidierung erhoeht ihn. Ein Request, der vor der
@@ -133,8 +136,10 @@ const bumpCacheGeneration = (): void => {
 };
 
 const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): Promise<T> => {
-  const pending = inFlightRequests.get(key) as Promise<T> | undefined;
-  if (pending) return pending;
+  const pending = inFlightRequests.get(key);
+  // Consent checks can change generation without clearing this map.
+  // A new reader must not join a request whose result will be discarded.
+  if (pending?.isCurrent()) return pending.promise as Promise<T>;
 
   const generation = cacheGeneration;
   const consentGeneration = getRuntimeDataConsents().generation;
@@ -148,12 +153,12 @@ const dedupe = <T>(key: string, run: (isCurrent: () => boolean) => Promise<T>): 
     // ein neuer Request fuer denselben Key registriert, wuerde ein blindes
     // delete dessen Eintrag entfernen - der naechste Aufrufer startete dann
     // einen dritten Request, statt dem laufenden beizutreten.
-    if (inFlightRequests.get(key) === request) {
+    if (inFlightRequests.get(key)?.promise === request) {
       inFlightRequests.delete(key);
     }
   });
 
-  inFlightRequests.set(key, request);
+  inFlightRequests.set(key, { promise: request, isCurrent });
   return request;
 };
 

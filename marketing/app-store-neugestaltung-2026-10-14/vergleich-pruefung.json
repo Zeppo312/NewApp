@@ -1,0 +1,24 @@
+{
+  "generated": "2026-10-14T21:28:25.822Z",
+  "after": [
+    {
+      "variant": "Bisherige lokale Serie",
+      "hidden": true
+    },
+    {
+      "variant": "Neue Serie",
+      "hidden": false
+    }
+  ],
+  "before": [
+    {
+      "variant": "Bisherige lokale Serie",
+      "hidden": false
+    },
+    {
+      "variant": "Neue Serie",
+      "hidden": true
+    }
+  ],
+  "passed": true
+}

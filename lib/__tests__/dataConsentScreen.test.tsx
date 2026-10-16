@@ -88,16 +88,15 @@ it('does not request a new choice before a current server check or during pendin
 it.each(['unknown',['ai']] as const)('ignores invalid requested scope %s',async(scope)=>{
  mockParams={scope:scope as string|string[]};await open();expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);expect(mockDecide).not.toHaveBeenCalled();
 });
-it('first run leads through health, then offers the separate AI choice before continuing',async()=>{
+it('first run asks only for health and leaves the optional AI choice to the AI features',async()=>{
  mockGated=true;await open();
- let panel=tree.root.findByType(DataConsentPanel);expect(panel.props.scope).toBe('health');expect(panel.props.step).toEqual({index:1,total:2});
- await act(async()=>{await panel.props.onDecide(true);});
+ const panel=tree.root.findByType(DataConsentPanel);expect(panel.props.scope).toBe('health');
+ await act(async()=>{await panel.props.onDecide(true);});expect(mockDecide).toHaveBeenCalledWith('health','granted','de');
  mockConsent={...mockConsent,healthAllowed:true,snapshot:{...mockConsent.snapshot,health:{decision:'granted',documentVersion:'2026-10-01.1'}}};act(()=>tree.update(<Screen/>));
- panel=tree.root.findByType(DataConsentPanel);expect(panel.props.scope).toBe('ai');expect(panel.props.step).toEqual({index:2,total:2});
- expect(mockDecide).not.toHaveBeenCalledWith('ai','granted','de');expect(mockRelease).not.toHaveBeenCalled();
- await act(async()=>{await panel.props.onDecide(false);});expect(mockDecide).toHaveBeenLastCalledWith('ai','declined','de');
  expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);
+ expect(text()).not.toContain(copies.de.aiLabel);expect(mockRelease).not.toHaveBeenCalled();
  act(()=>press(copies.de.proceed));expect(mockRelease).toHaveBeenCalledTimes(1);
+ expect(mockDecide).toHaveBeenCalledTimes(1);
 });
 it('opened from Settings, returns there via the back button instead of jumping to the app',async()=>{
  mockConsent.snapshot.health={decision:'granted',documentVersion:'2026-10-01.1'};mockConsent.healthAllowed=true;await open();
@@ -106,4 +105,10 @@ it('opened from Settings, returns there via the back button instead of jumping t
  act(()=>press(copies.de.review));expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(1);
  act(()=>back().props.onPress());expect(tree.root.findAllByType(DataConsentPanel)).toHaveLength(0);expect(mockBack).not.toHaveBeenCalled();
  act(()=>back().props.onPress());expect(mockBack).toHaveBeenCalledTimes(1);
+});
+it('offers account deletion directly during the initial health review without consent', async () => {
+ mockGated=true; await open();
+ expect(tree.root.findByType(DataConsentPanel).props.scope).toBe('health');
+ act(()=>press(copies.de.account));
+ expect(mockPush).toHaveBeenCalledWith('/account-deletion'); expect(mockDecide).not.toHaveBeenCalled();
 });

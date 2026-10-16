@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import { getPregnancyAge } from '@/lib/pregnancy-age';
 
 /** Recalculate on local midnight, focus and return from the background. */

@@ -86,6 +86,13 @@ describe('mandatory paywall', () => {
     expect(purchaseSubscriptionPlan).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
+  it('lets an unpaid account open account and data management from the hard paywall', async () => {
+    await mount();
+    expect(props().allowClose).toBe(false);
+    act(() => props().onOpenDataManagement());
+    expect(mockRouter.push).toHaveBeenCalledWith('/dsgvo');
+    expect(purchaseSubscriptionPlan).not.toHaveBeenCalled();
+  });
 
   it('keeps checkout disabled when family access cannot be verified', async () => {
     mockFamily = { status: 'unavailable', userId: 'new-parent' };

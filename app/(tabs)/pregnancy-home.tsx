@@ -4,7 +4,8 @@ import { localHealthAllowed, localHealthGeneration } from '@/lib/localHealthStor
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '@/contexts/LocaleContext';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, SafeAreaView, StatusBar, TouchableOpacity, ScrollView, ActivityIndicator, Alert, RefreshControl, Platform, ToastAndroid, Animated, Easing, Text, Image, StyleProp, ViewStyle, useWindowDimensions, type GestureResponderEvent } from 'react-native';
+import { openWithZoom } from '@/lib/navigation/zoomTransition';
 import { Colors, ContentColors } from '@/constants/Colors';
 import { CONTENT_LAYOUT, TYPOGRAPHY } from '@/constants/DesignGuide';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
@@ -15,7 +16,8 @@ import BabySwitcherButton from '@/components/BabySwitcherButton';
 import { PregnancyProgressRing } from '@/components/PregnancyProgressRing';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import CountdownTimer from '@/components/CountdownTimer';
-import { useFocusEffect, usePathname, useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase, getDueDateWithLinkedUsers } from '@/lib/supabase';
 import { loadPregnancyHomeDataWithCache, invalidatePregnancyCache } from '@/lib/pregnancyCache';
@@ -850,7 +852,7 @@ export default function PregnancyHomeScreen() {
 
   const renderPregnancyOverviewCard = () => <PregnancyNumbersSlide locale={locale} currentWeek={currentWeek}
     progress={pregnancyProgressPercent} compact={isCompactAndroid} stacked={isStackedLayout}
-    onPress={() => router.push('/(tabs)/countdown')} onLayout={event => {
+    onPress={(event?: GestureResponderEvent) => { void openWithZoom('/(tabs)/countdown', event); }} onLayout={event => {
       const nextHeight = Math.ceil(event.nativeEvent.layout.height);
       if (nextHeight > 0) setOverviewSummaryHeight(current => current === nextHeight ? current : nextHeight);
     }} />;
@@ -1159,7 +1161,7 @@ export default function PregnancyHomeScreen() {
         emoji: '🌿',
         title: t('premium.advisor'),
         subtitle: t('premium.advisorDescription'),
-        onPress: () => router.push('/lottis-fuersorge'),
+        onPress: (event?: GestureResponderEvent) => { void openWithZoom('/lottis-fuersorge', event); },
       });
     }
     if (voiceLogAccess !== null) {
@@ -1182,7 +1184,7 @@ export default function PregnancyHomeScreen() {
         emoji: '✨',
         title: t('premium.askLotti'),
         subtitle: t('premium.askLottiDescription'),
-        onPress: () => router.push('/frag-lotti'),
+        onPress: (event?: GestureResponderEvent) => { void openWithZoom('/frag-lotti', event); },
       });
     }
     return (
@@ -1220,8 +1222,8 @@ export default function PregnancyHomeScreen() {
       <SortableTileGrid
         items={orderedQuickAccessCards}
         isEditing={isQuickAccessEditMode}
-        onPressItem={(item) => {
-          router.push(item.destination);
+        onPressItem={(item, event) => {
+          void openWithZoom(item.destination, event);
         }}
         onRequestEditMode={openQuickAccessEditor}
         onOrderChange={(data) => handleReorderQuickAccess(data.map(({ id }) => id))}

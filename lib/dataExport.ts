@@ -27,7 +27,7 @@ export type UserDataExportResult = {
 const EXPORT_TABLES: TableExportConfig[] = [
   { key: 'profile', table: 'profiles', userColumn: 'id', single: true },
   { key: 'settings', table: 'user_settings' },
-  { key: 'baby_info', table: 'baby_info', single: true },
+  { key: 'baby_info', table: 'baby_info' },
   { key: 'baby_diary', table: 'baby_diary', orderBy: { column: 'entry_date', ascending: true } },
   { key: 'baby_daily', table: 'baby_daily', orderBy: { column: 'entry_date', ascending: true } },
   { key: 'baby_care_entries', table: 'baby_care_entries', orderBy: { column: 'start_time', ascending: true } },
@@ -93,6 +93,7 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
     const exportData: Record<string, any> = {};
     const summary: Record<string, number> = {};
     const warnings: string[] = [];
+    let failedQueries = 0;
 
     for (const config of EXPORT_TABLES) {
       try {
@@ -106,6 +107,7 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
         if (config.single) {
           const { data, error } = await query.maybeSingle();
           if (error && error.code !== 'PGRST116') {
+            failedQueries += 1;
             warnings.push(`${config.table}: ${error.message}`);
             exportData[config.key] = [];
             summary[config.key] = 0;
@@ -118,6 +120,7 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
         } else {
           const { data, error } = await query;
           if (error) {
+            failedQueries += 1;
             warnings.push(`${config.table}: ${error.message}`);
             exportData[config.key] = [];
             summary[config.key] = 0;
@@ -128,10 +131,21 @@ export const exportUserData = async (format: 'pdf' | 'json' = 'pdf'): Promise<Us
           summary[config.key] = data?.length ?? 0;
         }
       } catch (err) {
+        failedQueries += 1;
         warnings.push(`${config.table}: ${(err as Error)?.message ?? 'Unbekannter Fehler'}`);
         exportData[config.key] = [];
         summary[config.key] = 0;
       }
+    }
+
+    // A failed read is not an empty data set. Do not create a misleading file
+    // when no server query succeeded, even if local pending records exist.
+    if (failedQueries === EXPORT_TABLES.length) {
+      return {
+        success: false,
+        error: 'Daten konnten nicht geladen werden. Bitte prüfe deine Verbindung und versuche es erneut.',
+        warnings,
+      };
     }
 
     const localTracking = await readTrackingOutbox(userId);

@@ -1,83 +1,113 @@
 {
   "configVersion": 0,
   "apple": {
-    "version": "1.0.23",
+    "version": "1.0.25",
     "copyright": "2025 Laura-Michelle Zeppenfeld",
     "release": {
       "automaticRelease": false
     },
     "info": {
       "es-ES": {
-        "description": "Lotti Baby – Embarazo, sueño y seguimiento del bebé\n\nTe acompaña desde el embarazo hasta el día a día con tu bebé.\n\nRegistra contracciones, la cuenta atrás para la fecha de parto, sueño, lactancia, biberones, pañales y momentos importantes, todo en una aplicación cuidada y fácil de usar para familias.\n\nLotti Baby te ayuda a vivir el embarazo y los primeros años de tu bebé de forma más organizada, tranquila y consciente. La aplicación reúne acompañamiento durante el embarazo, seguimiento del bebé y herramientas prácticas para la vida familiar en un solo lugar.\n\nDurante el embarazo, Lotti Baby te ayuda a prepararte para el nacimiento. Consulta la cuenta atrás hasta la fecha prevista de parto, registra posibles contracciones, crea tu plan de parto y organiza los preparativos importantes para la llegada de tu bebé.\n\nDespués del nacimiento, Lotti Baby te acompaña en las rutinas diarias. Registra fácilmente el sueño, la lactancia, los biberones, los pañales y otros momentos del día para reconocer patrones y comprender mejor el ritmo de tu bebé.\n\nTambién puedes guardar hitos y etapas importantes del desarrollo. Así se crea poco a poco un diario personal con recuerdos valiosos de los primeros meses y años.\n\nAdemás, Lotti Baby ofrece funciones útiles para la vida familiar. La información sobre el tiempo te ayuda a elegir la ropa adecuada para tu bebé según las condiciones actuales. También encontrarás contenidos, consejos y recomendaciones seleccionadas para acompañarte en el día a día.\n\nLa aplicación está diseñada para ser sencilla, clara y agradable. Lotti Baby reúne embarazo, seguimiento, organización y recuerdos para que puedas centrarte en lo que realmente importa: disfrutar del tiempo con tu bebé.\n\nTérminos de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "description": "¿Cuándo comió vuestro bebé por última vez? ¿Cuánto duró la siesta de la tarde? Con Lotti Baby registráis lactancia, biberones, sueño y pañales en pocos toques, y los dos podéis consultar lo que ya ha pasado hoy. También a las tres de la madrugada, cuando nadie recuerda ya las horas.\n\nTOMAS DE UN VISTAZO\nRegistrad lactancia, biberones, extracciones y alimentación complementaria en segundos. El resumen de tomas muestra cuándo fue la última y cuánto ha bebido vuestro bebé hoy.\n\nVUESTRO RESUMEN COMPARTIDO\nVinculad vuestras cuentas y usad juntos los datos del bebé. Así la otra persona ve lo que ya se ha registrado, muy práctico en cada relevo.\n\nREGISTRAR EL SUEÑO\nIniciad y terminad las fases de sueño con un toque. En el historial veis cuándo y cuánto ha dormido vuestro bebé.\n\nANTES DEL PARTO\nLa cuenta atrás hasta la fecha prevista, el cronómetro de contracciones, el plan de parto y la lista para la bolsa del hospital os acompañan durante el embarazo.\n\nPEQUEÑOS PASOS, GRANDES RECUERDOS\nGuardad hitos, primeros dientes, peso y talla: un recuerdo personal de los primeros años.\n\nLA VIDA FAMILIAR EN UN SOLO LUGAR\nCitas compartidas, listas de la compra y el tiempo para vuestro bebé con sugerencias de ropa os ayudan en el día a día.\n\nSUSCRIPCIONES\nLotti Baby ofrece las suscripciones Lite, Standard y Premium. Las funciones disponibles dependen del plan elegido. Los precios y periodos se muestran en la app antes de la compra. Podéis gestionar o cancelar las suscripciones en vuestra cuenta de Apple.\n\nLotti Baby no sustituye el consejo médico.\n\nTérminos de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "keywords": [
           "biberón",
           "pañal",
+          "embarazo",
           "contracciones",
           "hitos",
-          "seguimiento",
           "reciénnacido",
           "destete",
           "crecimiento",
-          "alimentación"
+          "siesta"
         ],
         "releaseNotes": "Novedades de la versión 1.0.23:\n• Nueva lista de la compra con gestión de existencias y escáner de códigos de barras.\n• Nuevo widget de sueño para consultar la información rápidamente.\n• Navegación mejorada e inicio de sesión más estable.\n• Las áreas de comunidad y mensajería ya no están disponibles en esta versión.",
         "supportUrl": "https://lottibaby.de/support",
-        "title": "Lotti Baby: Sueño y Lactancia",
-        "subtitle": "Embarazo y diario del bebé",
-        "promoText": "Tu acompañante para el embarazo y los primeros años del bebé. Registra sueño, lactancia, biberones, pañales, contracciones e hitos en un solo lugar.",
+        "title": "Lotti Baby: Baby Tracker",
+        "subtitle": "Lactancia y sueño en familia",
+        "promoText": "¿Cuándo fue el último biberón? Registrad lactancia, sueño y pañales, y seguid juntos el día a día de vuestro bebé.",
         "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
         "screenshots": {
+          "APP_IPHONE_67": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_67/07-babywetter.png"
+          ],
           "APP_IPHONE_65": [
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-1.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-2.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-3.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-4.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-5.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-6.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-7.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-8.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-9.png",
-            "store/apple/screenshot/es-ES/APP_IPHONE_65/store-shot-es-10.png"
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPHONE_65/07-babywetter.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/es-ES/APP_IPAD_PRO_3GEN_129/07-babywetter.png"
           ]
         }
       },
       "en-US": {
-        "description": "Lotti Baby – Pregnancy & Baby Tracker\n\nFrom pregnancy through everyday life with your baby, Lotti Baby keeps everything in one calm, lovingly designed place.\n\nDuring pregnancy, follow the countdown to your due date, log contractions, create a birth plan and organize important preparations.\n\nAfter birth, record sleep, breastfeeding, bottles, diapers, complementary feeding and other daily routines. Clear histories help you recognize patterns and understand your baby’s rhythm. Save milestones and development steps to create a personal baby diary.\n\nLotti Baby also supports family organization with shared planning, lists, reminders, evaluations and helpful content. Depending on your plan, additional AI features such as voice logging, a personal pregnancy briefing and “Ask Lotti” are available.\n\nChoose between Lite, Standard and Premium subscriptions. Prices and billing periods are shown in the app before purchase. Subscriptions can be managed or cancelled through your Apple Account.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "description": "When did your baby last feed? How long was that afternoon nap? With Lotti Baby, you log breastfeeding, bottles, sleep and diapers in a few taps – and both of you can see what has already happened today. Even at 3 a.m., when nobody remembers the times anymore.\n\nFEEDS AT A GLANCE\nLog breastfeeding, bottles, pumping and solids in seconds. The feeding overview shows when your baby last fed and how much they have had today.\n\nYOUR SHARED OVERVIEW\nLink your accounts and use your baby's data together. Your partner can see what has already been logged – handy at every handover.\n\nTRACK SLEEP\nStart and stop sleep phases with one tap. The history shows when and how long your baby slept.\n\nBEFORE BIRTH\nA countdown to your due date, a contraction timer, a birth plan and a hospital bag checklist support you through pregnancy.\n\nLITTLE STEPS, BIG MEMORIES\nSave milestones, first teeth, weight and height – a personal record of the first years.\n\nFAMILY LIFE IN ONE PLACE\nShared appointments, shopping lists and baby weather with outfit suggestions help you through the day.\n\nSUBSCRIPTIONS\nLotti Baby offers Lite, Standard and Premium subscriptions. Available features depend on your plan. Prices and billing periods are shown in the app before purchase. You can manage or cancel subscriptions in your Apple Account.\n\nLotti Baby does not replace medical advice.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "keywords": [
           "breastfeeding",
           "bottle",
           "diaper",
+          "newborn",
+          "pregnancy",
           "contractions",
           "milestones",
-          "babydiary",
-          "weaning",
-          "babyweather",
-          "newborn",
-          "routine"
+          "nap",
+          "pumping",
+          "weaning"
         ],
         "releaseNotes": "New in version 1.0.23:\n• New shopping list with inventory management and barcode scanning.\n• New sleep widget for a quick overview.\n• Improved navigation and more reliable sign-in.\n• Community and messaging areas are no longer available in this version.",
         "supportUrl": "https://lottibaby.de/support",
-        "title": "Lotti Baby: Sleep & Feeding",
-        "subtitle": "Pregnancy & Baby Tracker",
-        "promoText": "Your caring companion from pregnancy through baby's first years. Track sleep, breastfeeding, bottles, diapers, contractions and milestones in one place.",
+        "title": "Lotti Baby: Baby Tracker",
+        "subtitle": "Feeding, Sleep & Shared Log",
+        "promoText": "When was the last bottle? Log breastfeeding, sleep and diapers – and keep track of your baby's day together.",
         "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
         "screenshots": {
+          "APP_IPHONE_67": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_67/07-babywetter.png"
+          ],
           "APP_IPHONE_65": [
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-1.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-2.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-3.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-4.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-5.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-6.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-7.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-8.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-9.png",
-            "store/apple/screenshot/en-US/APP_IPHONE_65/store-shot-en-10.png"
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPHONE_65/07-babywetter.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/en-US/APP_IPAD_PRO_3GEN_129/07-babywetter.png"
           ]
         }
       },
       "de-DE": {
-        "description": "Wann hat euer Baby zuletzt getrunken? Wie lange hat es geschlafen? Mit Lotti Baby haltet ihr Stillen, Fläschchen, Schlaf und Windeln an einem Ort fest – und behaltet als Eltern gemeinsam den Überblick.\n\nEUER BABYALLTAG AUF EINEN BLICK\nDokumentiere Mahlzeiten, Schlafphasen und Windelwechsel. In der Tagesübersicht kannst du nachsehen, was wann passiert ist, ohne dir jede Uhrzeit merken zu müssen.\n\nGEMEINSAM ALS ELTERN\nVerknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So kann auch das andere Elternteil nachsehen, welche Einträge bereits erfasst wurden – praktisch beim Wechsel zwischen euren Betreuungszeiten.\n\nSCHLAF EINFACH FESTHALTEN\nStarte und beende Schlafphasen im Schlaftracker. Im Verlauf kannst du die erfassten Schlafzeiten nachsehen und den Tagesablauf eures Babys nachvollziehen.\n\nSCHON IN DER SCHWANGERSCHAFT AN DEINER SEITE\nVerfolge den Countdown bis zum Geburtstermin, erfasse Wehen und bereite mit Geburtsplan und Klinik-Checkliste die Ankunft deines Babys vor.\n\nERINNERUNGEN UND FAMILIENALLTAG\nHalte Gewicht, Größe und Meilensteine fest. Gemeinsame Termine und Einkaufslisten helfen euch, den Familienalltag zu organisieren.\n\nABONNEMENTS\nLotti Baby bietet die Abonnements Lite, Standard und Premium. Der Funktionsumfang hängt vom gewählten Tarif ab. Preise und Laufzeiten werden dir vor dem Kauf in der App angezeigt. Abonnements kannst du über deinen Apple Account verwalten und kündigen.\n\nLade Lotti Baby herunter und halte euren ersten Eintrag fest.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+        "description": "Wann hat euer Baby zuletzt getrunken? Wie lange hat es heute Mittag geschlafen? Mit Lotti Baby haltet ihr Stillen, Fläschchen, Schlaf und Windeln mit wenigen Fingertipps fest – und seht beide nach, was heute schon war. Auch nachts um drei, wenn sich niemand mehr Uhrzeiten merken kann.\n\nMAHLZEITEN IM BLICK\nStillen, Fläschchen, Abpumpen und Beikost erfasst ihr in Sekunden. Die Mahlzeitenübersicht zeigt, wann die letzte Mahlzeit war und wie viel euer Baby heute getrunken hat.\n\nEUER GEMEINSAMER ÜBERBLICK\nVerknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So sieht auch das andere Elternteil, was bereits eingetragen ist – praktisch bei jeder Übergabe.\n\nSCHLAF FESTHALTEN\nStartet und beendet Schlafphasen mit einem Tippen. Im Verlauf seht ihr, wann und wie lange euer Baby geschlafen hat.\n\nSCHON VOR DER GEBURT\nCountdown bis zum Geburtstermin, Wehen-Timer, Geburtsplan und Klinik-Checkliste begleiten euch durch die Schwangerschaft.\n\nKLEINE SCHRITTE, GROSSE ERINNERUNGEN\nHaltet Meilensteine, erste Zähne, Gewicht und Größe fest – als persönliche Erinnerung an die ersten Jahre.\n\nFAMILIENALLTAG AN EINEM ORT\nGemeinsame Termine, Einkaufslisten und das Babywetter mit Kleidungsvorschlag helfen euch durch den Tag.\n\nABONNEMENTS\nLotti Baby bietet die Abonnements Lite, Standard und Premium. Der Funktionsumfang hängt vom gewählten Tarif ab. Preise und Laufzeiten seht ihr vor dem Kauf in der App. Abonnements verwaltet und kündigt ihr über euren Apple Account.\n\nLotti Baby ersetzt keine ärztliche Beratung.\n\nLadet Lotti Baby herunter und haltet euren ersten Eintrag fest.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
         "keywords": [
           "schwangerschaft",
           "fläschchen",
@@ -87,44 +117,48 @@
           "tagebuch",
           "geburt",
           "beikost",
-          "wochenbett",
+          "babywetter",
           "kalender"
         ],
         "releaseNotes": "Neu in Version 1.0.23:\n• Neue Einkaufsliste mit Vorratsverwaltung und Barcode-Scanner.\n• Neues Schlaf-Widget für einen schnellen Überblick.\n• Verbesserte Navigation und stabilere Anmeldung.\n• Community- und Nachrichtenbereiche sind in dieser Version nicht mehr verfügbar.",
         "supportUrl": "https://lottibaby.de/support",
         "title": "Lotti Baby: Baby Tracker",
         "subtitle": "Stillen, Schlaf & gemeinsam",
-        "promoText": "Wann war das letzte Fläschchen? Wie lange hat euer Baby geschlafen? Haltet euren Babyalltag gemeinsam fest – mit Lotti Baby habt ihr beide den Überblick.",
+        "promoText": "Wann war das letzte Fläschchen? Haltet Stillen, Schlaf und Windeln fest – und behaltet euren Babyalltag gemeinsam im Blick.",
         "privacyPolicyUrl": "https://lottibaby.de/datenschutz",
         "screenshots": {
-          "APP_IPAD_PRO_3GEN_129": [
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.12.35.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.10.38.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.08.19.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.11.57.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.12.16.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.08.50.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.09.08.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.09.59.png",
-            "store/apple/screenshot/de-DE/APP_IPAD_PRO_3GEN_129/WhatsApp Image 2026-03-04 at 13.11.16.png"
+          "APP_IPHONE_67": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/07-babywetter.png"
           ],
           "APP_IPHONE_65": [
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/14.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/20.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/19.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/23.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/15.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/22.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/17.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/18.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/21.png",
-            "store/apple/screenshot/de-DE/APP_IPHONE_65/16.png"
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/07-babywetter.png"
+          ],
+          "APP_IPAD_PRO_3GEN_129": [
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/01-mahlzeiten.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/02-gemeinsam.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/03-schlaf.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/04-schwangerschaft.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/05-erinnerungen.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/06-familienalltag.png",
+            "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/07-babywetter.png"
           ]
         },
         "previews": {
           "IPHONE_65": {
-            "path": "store/apple/preview/de-DE/IPHONE_65/Teste_886_x_1920_px_5_restored.mp4",
-            "previewFrameTimeCode": "00:00:05:01"
+            "path": "marketing/app-store-video-motion-2026-10-15/export/lotti-baby-vorschau-motion-de.mp4",
+            "previewFrameTimeCode": "00:00:02:27"
           }
         }
       }

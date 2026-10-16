@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect } from '@/lib/navigation/useFocusEffect';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, getCachedUser } from '@/lib/supabase';
 import { useActiveBaby } from '@/contexts/ActiveBabyContext';

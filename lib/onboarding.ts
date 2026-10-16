@@ -5,6 +5,7 @@ import {
   type UserSettings,
 } from './appCache';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from './supabase';
 
 const ONBOARDING_COMPLETE_KEY = 'onboarding_complete_v1';
 
@@ -58,3 +59,22 @@ export const getOnboardingCompletionState = async (knownUserId?: string) => {
   }
   return readSavedOnboardingCompletionState(knownUserId);
 };
+
+/**
+ * Decides without health data whether an account already finished onboarding:
+ * only `profiles` is read, which stays reachable before the health consent.
+ * Onboarding writes `user_role` at the very end (Apple sign-in only sets names).
+ * New accounts give their consent inside onboarding; existing ones see the
+ * blocking consent screen. When unsure, the blocking screen is the safe side.
+ */
+export async function hasFinishedOnboardingBefore(userId: string, answeredOnboarding = false): Promise<boolean> {
+  if (answeredOnboarding) return true;
+  if (await readSavedOnboardingCompletionState(userId)) return true;
+  try {
+    const { data, error } = await supabase.from('profiles').select('user_role').eq('id', userId).maybeSingle();
+    if (error) return true;
+    return typeof data?.user_role === 'string' && data.user_role.trim().length > 0;
+  } catch {
+    return true;
+  }
+}

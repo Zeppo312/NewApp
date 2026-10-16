@@ -39,6 +39,7 @@ import {
   type StartupMessageContentType,
   type StartupMessageDraft,
 } from '@/lib/startupMessages';
+import { navigateBack } from '@/lib/navigation/backNavigation';
 
 const formatAdminDate = (value: string, localeTag: string, unknown: string) => {
   if (!value) return unknown;
@@ -254,7 +255,7 @@ export default function StartupMessageAdminScreen() {
           subtitle={c.subtitle}
           showBackButton
           showBabySwitcher={false}
-          onBackPress={() => router.push('/app-settings')}
+          onBackPress={() => navigateBack('/app-settings')}
         />
 
         {isAuthorizing || isLoading ? (
