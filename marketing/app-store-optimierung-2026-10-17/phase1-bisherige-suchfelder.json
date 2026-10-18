@@ -1,0 +1,54 @@
+{
+  "sourceVersion": "1.0.23",
+  "sourceVersionId": "149c2530-4dab-40b7-9c3c-0085ee51a0c0",
+  "sourceAppInfoId": "b0ebb47d-045b-47a6-bdae-99e83d774b80",
+  "locales": {
+    "es-ES": {
+      "title": "Lotti Baby: Sueño y Lactancia",
+      "subtitle": "Embarazo y diario del bebé",
+      "keywords": [
+        "biberón",
+        "pañal",
+        "contracciones",
+        "hitos",
+        "seguimiento",
+        "reciénnacido",
+        "destete",
+        "crecimiento",
+        "alimentación"
+      ]
+    },
+    "en-US": {
+      "title": "Lotti Baby: Sleep & Feeding",
+      "subtitle": "Pregnancy & Baby Tracker",
+      "keywords": [
+        "breastfeeding",
+        "bottle",
+        "diaper",
+        "contractions",
+        "milestones",
+        "babydiary",
+        "weaning",
+        "babyweather",
+        "newborn",
+        "routine"
+      ]
+    },
+    "de-DE": {
+      "title": "Lotti Baby: Schlaf & Stillen",
+      "subtitle": "Babytracker, Windeln & Wetter",
+      "keywords": [
+        "schwangerschaft",
+        "fläschchen",
+        "beikost",
+        "wehen",
+        "meilensteine",
+        "tagebuch",
+        "geburt",
+        "blw",
+        "wochenbett",
+        "kalender"
+      ]
+    }
+  }
+}

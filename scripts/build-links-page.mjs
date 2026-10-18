@@ -43,6 +43,7 @@ const html = `<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#faf8f5">
+  <meta name="apple-itunes-app" content="app-id=6745569710">
   <title>Lottis Links – App, Familienalltag & Lieblingsstücke | Lotti Baby</title>
   <meta name="description" content="Alle Links von Lotti an einem Ort: die Lotti Baby App, Instagram, TikTok und Empfehlungen für euren Babyalltag. Direkt bei Lotti Baby.">
   <link rel="canonical" href="https://lottibaby.de/links/">

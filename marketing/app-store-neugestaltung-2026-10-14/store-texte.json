@@ -1,25 +1,81 @@
 {
-  "status": "Abgestimmt auf die Bildserie vom 14.10.2026. Lokal in store.config.json übernommen, nicht hochgeladen.",
-  "hinweis": "Keywords sind Kandidaten. Es liegen keine gemessenen Suchvolumen oder Rankings vor. Apple zählt das Keyword-Feld in Bytes (UTF-8); Umlaute und ñ zählen doppelt.",
+  "status": "Textstand vom 17.10.2026. Lokales ASO-Ziel in store.config.json; Veröffentlichung in getrennten Messphasen, noch nicht hochgeladen.",
+  "hinweis": "Keyword-Kandidaten ohne garantierte Ranking-Wirkung. Apple dokumentiert 100 Zeichen; die Prüfung hält zusätzlich konservativ 100 UTF-8-Bytes ein. en-GB ist eine zusätzliche unterstützte Anzeigesprache, keine garantierte Verdopplung des Suchindexes.",
   "de-DE": {
-    "title": "Lotti Baby: Baby Tracker",
-    "subtitle": "Stillen, Schlaf & gemeinsam",
+    "title": "Lotti Baby: Tracker & Stillen",
+    "subtitle": "Schlaf, Windeln & Fläschchen",
     "promoText": "Wann war das letzte Fläschchen? Haltet Stillen, Schlaf und Windeln fest – und behaltet euren Babyalltag gemeinsam im Blick.",
-    "keywords": ["schwangerschaft", "fläschchen", "windeln", "wehen", "meilensteine", "tagebuch", "geburt", "beikost", "babywetter", "kalender"],
-    "description": "Wann hat euer Baby zuletzt getrunken? Wie lange hat es heute Mittag geschlafen? Mit Lotti Baby haltet ihr Stillen, Fläschchen, Schlaf und Windeln mit wenigen Fingertipps fest – und seht beide nach, was heute schon war. Auch nachts um drei, wenn sich niemand mehr Uhrzeiten merken kann.\n\nMAHLZEITEN IM BLICK\nStillen, Fläschchen, Abpumpen und Beikost erfasst ihr in Sekunden. Die Mahlzeitenübersicht zeigt, wann die letzte Mahlzeit war und wie viel euer Baby heute getrunken hat.\n\nEUER GEMEINSAMER ÜBERBLICK\nVerknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So sieht auch das andere Elternteil, was bereits eingetragen ist – praktisch bei jeder Übergabe.\n\nSCHLAF FESTHALTEN\nStartet und beendet Schlafphasen mit einem Tippen. Im Verlauf seht ihr, wann und wie lange euer Baby geschlafen hat.\n\nSCHON VOR DER GEBURT\nCountdown bis zum Geburtstermin, Wehen-Timer, Geburtsplan und Klinik-Checkliste begleiten euch durch die Schwangerschaft.\n\nKLEINE SCHRITTE, GROSSE ERINNERUNGEN\nHaltet Meilensteine, erste Zähne, Gewicht und Größe fest – als persönliche Erinnerung an die ersten Jahre.\n\nFAMILIENALLTAG AN EINEM ORT\nGemeinsame Termine, Einkaufslisten und das Babywetter mit Kleidungsvorschlag helfen euch durch den Tag.\n\nABONNEMENTS\nLotti Baby bietet die Abonnements Lite, Standard und Premium. Der Funktionsumfang hängt vom gewählten Tarif ab. Preise und Laufzeiten seht ihr vor dem Kauf in der App. Abonnements verwaltet und kündigt ihr über euren Apple Account.\n\nLotti Baby ersetzt keine ärztliche Beratung.\n\nLadet Lotti Baby herunter und haltet euren ersten Eintrag fest.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+    "keywords": [
+      "babytagebuch",
+      "stilltracker",
+      "wehentimer",
+      "schwangerschaft",
+      "abpumpen",
+      "beikost",
+      "meilensteine",
+      "säugling",
+      "ssw"
+    ],
+    "description": "Wann hat euer Baby zuletzt getrunken? Wie lange hat es heute Mittag geschlafen? Mit Lotti Baby haltet ihr Stillen, Fläschchen, Schlaf und Windeln mit wenigen Fingertipps fest – und seht beide nach, was heute schon war. Auch nachts um drei, wenn sich niemand mehr Uhrzeiten merken kann.\n\nMAHLZEITEN IM BLICK\nStillen, Fläschchen, Abpumpen und Beikost erfasst ihr in Sekunden. Die Mahlzeitenübersicht zeigt, wann die letzte Mahlzeit war und wie viel euer Baby heute getrunken hat.\n\nEUER GEMEINSAMER ÜBERBLICK\nVerknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So sieht auch das andere Elternteil, was bereits eingetragen ist – praktisch bei jeder Übergabe.\n\nSCHLAF FESTHALTEN\nStartet und beendet Schlafphasen mit einem Tippen. Im Verlauf seht ihr, wann und wie lange euer Baby geschlafen hat.\n\nSCHON VOR DER GEBURT\nCountdown bis zum Geburtstermin, Wehen-Timer, Geburtsplan und Klinik-Checkliste begleiten euch durch die Schwangerschaft.\n\nKLEINE SCHRITTE, GROSSE ERINNERUNGEN\nHaltet Meilensteine, erste Zähne, Gewicht und Größe fest – als persönliche Erinnerung an die ersten Jahre.\n\nFAMILIENALLTAG AN EINEM ORT\nGemeinsame Termine, Einkaufslisten und das Babywetter mit Kleidungsvorschlag helfen euch durch den Tag.\n\nABONNEMENTS\nLotti Baby bietet die Abonnements Lite, Standard und Premium. Der Funktionsumfang hängt vom gewählten Tarif ab. Preise und Laufzeiten seht ihr vor dem Kauf in der App. Abonnements verwaltet und kündigt ihr über euren Apple Account.\n\nLotti Baby ersetzt keine ärztliche Beratung.\n\nLadet Lotti Baby herunter und haltet euren ersten Eintrag fest.\n\nNutzungsbedingungen (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+    "releaseNotes": "Neu in Version 1.0.25:\n• Überarbeitete Startseite und Schwangerschaftsansichten.\n• Verbesserte Lesbarkeit und Unterstützung größerer Schrift.\n• Klarere Einwilligungs- und Anmeldeabläufe.\n• Verbesserungen bei Navigation und Zwischenspeicherung."
   },
   "en-US": {
     "title": "Lotti Baby: Baby Tracker",
-    "subtitle": "Feeding, Sleep & Shared Log",
+    "subtitle": "Feeding, Sleep & Diaper Log",
     "promoText": "When was the last bottle? Log breastfeeding, sleep and diapers – and keep track of your baby's day together.",
-    "keywords": ["breastfeeding", "bottle", "diaper", "newborn", "pregnancy", "contractions", "milestones", "nap", "pumping", "weaning"],
-    "description": "When did your baby last feed? How long was that afternoon nap? With Lotti Baby, you log breastfeeding, bottles, sleep and diapers in a few taps – and both of you can see what has already happened today. Even at 3 a.m., when nobody remembers the times anymore.\n\nFEEDS AT A GLANCE\nLog breastfeeding, bottles, pumping and solids in seconds. The feeding overview shows when your baby last fed and how much they have had today.\n\nYOUR SHARED OVERVIEW\nLink your accounts and use your baby's data together. Your partner can see what has already been logged – handy at every handover.\n\nTRACK SLEEP\nStart and stop sleep phases with one tap. The history shows when and how long your baby slept.\n\nBEFORE BIRTH\nA countdown to your due date, a contraction timer, a birth plan and a hospital bag checklist support you through pregnancy.\n\nLITTLE STEPS, BIG MEMORIES\nSave milestones, first teeth, weight and height – a personal record of the first years.\n\nFAMILY LIFE IN ONE PLACE\nShared appointments, shopping lists and baby weather with outfit suggestions help you through the day.\n\nSUBSCRIPTIONS\nLotti Baby offers Lite, Standard and Premium subscriptions. Available features depend on your plan. Prices and billing periods are shown in the app before purchase. You can manage or cancel subscriptions in your Apple Account.\n\nLotti Baby does not replace medical advice.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+    "keywords": [
+      "breastfeeding",
+      "bottle",
+      "newborn",
+      "pregnancy",
+      "contractions",
+      "milestones",
+      "nap",
+      "pumping",
+      "weaning",
+      "growth",
+      "routine"
+    ],
+    "description": "When did your baby last feed? How long was that afternoon nap? With Lotti Baby, you log breastfeeding, bottles, sleep and diapers in a few taps – and both of you can see what has already happened today. Even at 3 a.m., when nobody remembers the times anymore.\n\nFEEDS AT A GLANCE\nLog breastfeeding, bottles, pumping and solids in seconds. The feeding overview shows when your baby last fed and how much they have had today.\n\nYOUR SHARED OVERVIEW\nLink your accounts and use your baby's data together. Your partner can see what has already been logged – handy at every handover.\n\nTRACK SLEEP\nStart and stop sleep phases with one tap. The history shows when and how long your baby slept.\n\nBEFORE BIRTH\nA countdown to your due date, a contraction timer, a birth plan and a hospital bag checklist support you through pregnancy.\n\nLITTLE STEPS, BIG MEMORIES\nSave milestones, first teeth, weight and height – a personal record of the first years.\n\nFAMILY LIFE IN ONE PLACE\nShared appointments, shopping lists and baby weather with outfit suggestions help you through the day.\n\nSUBSCRIPTIONS\nLotti Baby offers Lite, Standard and Premium subscriptions. Available features depend on your plan. Prices and billing periods are shown in the app before purchase. You can manage or cancel subscriptions in your Apple Account.\n\nLotti Baby does not replace medical advice.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+    "releaseNotes": "New in version 1.0.25:\n• Updated home screen and pregnancy views.\n• Improved readability and support for larger text.\n• Clearer consent and sign-in flows.\n• Improvements to navigation and caching."
   },
   "es-ES": {
-    "title": "Lotti Baby: Baby Tracker",
-    "subtitle": "Lactancia y sueño en familia",
+    "title": "Lotti Baby: Lactancia y sueño",
+    "subtitle": "Pañales y registro compartido",
     "promoText": "¿Cuándo fue el último biberón? Registrad lactancia, sueño y pañales, y seguid juntos el día a día de vuestro bebé.",
-    "keywords": ["biberón", "pañal", "embarazo", "contracciones", "hitos", "reciénnacido", "destete", "crecimiento", "siesta"],
-    "description": "¿Cuándo comió vuestro bebé por última vez? ¿Cuánto duró la siesta de la tarde? Con Lotti Baby registráis lactancia, biberones, sueño y pañales en pocos toques, y los dos podéis consultar lo que ya ha pasado hoy. También a las tres de la madrugada, cuando nadie recuerda ya las horas.\n\nTOMAS DE UN VISTAZO\nRegistrad lactancia, biberones, extracciones y alimentación complementaria en segundos. El resumen de tomas muestra cuándo fue la última y cuánto ha bebido vuestro bebé hoy.\n\nVUESTRO RESUMEN COMPARTIDO\nVinculad vuestras cuentas y usad juntos los datos del bebé. Así la otra persona ve lo que ya se ha registrado, muy práctico en cada relevo.\n\nREGISTRAR EL SUEÑO\nIniciad y terminad las fases de sueño con un toque. En el historial veis cuándo y cuánto ha dormido vuestro bebé.\n\nANTES DEL PARTO\nLa cuenta atrás hasta la fecha prevista, el cronómetro de contracciones, el plan de parto y la lista para la bolsa del hospital os acompañan durante el embarazo.\n\nPEQUEÑOS PASOS, GRANDES RECUERDOS\nGuardad hitos, primeros dientes, peso y talla: un recuerdo personal de los primeros años.\n\nLA VIDA FAMILIAR EN UN SOLO LUGAR\nCitas compartidas, listas de la compra y el tiempo para vuestro bebé con sugerencias de ropa os ayudan en el día a día.\n\nSUSCRIPCIONES\nLotti Baby ofrece las suscripciones Lite, Standard y Premium. Las funciones disponibles dependen del plan elegido. Los precios y periodos se muestran en la app antes de la compra. Podéis gestionar o cancelar las suscripciones en vuestra cuenta de Apple.\n\nLotti Baby no sustituye el consejo médico.\n\nTérminos de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
+    "keywords": [
+      "bebé",
+      "biberón",
+      "embarazo",
+      "contracciones",
+      "hitos",
+      "recién nacido",
+      "destete",
+      "crecimiento",
+      "siesta",
+      "leche",
+      "peso"
+    ],
+    "description": "¿Cuándo comió vuestro bebé por última vez? ¿Cuánto duró la siesta de la tarde? Con Lotti Baby registráis lactancia, biberones, sueño y pañales en pocos toques, y los dos podéis consultar lo que ya ha pasado hoy. También a las tres de la madrugada, cuando nadie recuerda ya las horas.\n\nTOMAS DE UN VISTAZO\nRegistrad lactancia, biberones, extracciones y alimentación complementaria en segundos. El resumen de tomas muestra cuándo fue la última y cuánto ha bebido vuestro bebé hoy.\n\nVUESTRO RESUMEN COMPARTIDO\nVinculad vuestras cuentas y usad juntos los datos del bebé. Así la otra persona ve lo que ya se ha registrado, muy práctico en cada relevo.\n\nREGISTRAR EL SUEÑO\nIniciad y terminad las fases de sueño con un toque. En el historial veis cuándo y cuánto ha dormido vuestro bebé.\n\nANTES DEL PARTO\nLa cuenta atrás hasta la fecha prevista, el cronómetro de contracciones, el plan de parto y la lista para la bolsa del hospital os acompañan durante el embarazo.\n\nPEQUEÑOS PASOS, GRANDES RECUERDOS\nGuardad hitos, primeros dientes, peso y talla: un recuerdo personal de los primeros años.\n\nLA VIDA FAMILIAR EN UN SOLO LUGAR\nCitas compartidas, listas de la compra y el tiempo para vuestro bebé con sugerencias de ropa os ayudan en el día a día.\n\nSUSCRIPCIONES\nLotti Baby ofrece las suscripciones Lite, Standard y Premium. Las funciones disponibles dependen del plan elegido. Los precios y periodos se muestran en la app antes de la compra. Podéis gestionar o cancelar las suscripciones en vuestra cuenta de Apple.\n\nLotti Baby no sustituye el consejo médico.\n\nTérminos de uso (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+    "releaseNotes": "Novedades de la versión 1.0.25:\n• Pantalla de inicio y vistas del embarazo renovadas.\n• Mejor legibilidad y compatibilidad con texto de mayor tamaño.\n• Consentimiento e inicio de sesión más claros.\n• Mejoras en la navegación y la caché."
+  },
+  "en-GB": {
+    "title": "Lotti Baby: Feeding Tracker",
+    "subtitle": "Breastfeeding, Sleep & Nappies",
+    "promoText": "When was the last bottle? Log breastfeeding, sleep and nappies – and keep track of your baby's day together.",
+    "keywords": [
+      "babyschlaf",
+      "wickeln",
+      "neugeborenes",
+      "wehenzähler",
+      "stillapp",
+      "milch",
+      "partner",
+      "geburtsplan",
+      "wachstum",
+      "gewicht"
+    ],
+    "description": "When did your baby last feed? How long was that afternoon nap? With Lotti Baby, you log breastfeeding, bottles, sleep and nappies in a few taps – and both of you can see what has already happened today. Even at 3 a.m., when nobody remembers the times anymore.\n\nFEEDS AT A GLANCE\nLog breastfeeding, bottles, pumping and solids in seconds. The feeding overview shows when your baby last fed and how much they have had today.\n\nYOUR SHARED OVERVIEW\nLink your accounts and use your baby's data together. Your partner can see what has already been logged – handy at every handover.\n\nTRACK SLEEP\nStart and stop sleep phases with one tap. The history shows when and how long your baby slept.\n\nBEFORE BIRTH\nA countdown to your due date, a contraction timer, a birth plan and a hospital bag checklist support you through pregnancy.\n\nLITTLE STEPS, BIG MEMORIES\nSave milestones, first teeth, weight and height – a personal record of the first years.\n\nFAMILY LIFE IN ONE PLACE\nShared appointments, shopping lists and baby weather with outfit suggestions help you through the day.\n\nSUBSCRIPTIONS\nLotti Baby offers Lite, Standard and Premium subscriptions. Available features depend on your plan. Prices and billing periods are shown in the app before purchase. You can manage or cancel subscriptions in your Apple Account.\n\nLotti Baby does not replace medical advice.\n\nTerms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+    "releaseNotes": "New in version 1.0.25:\n• Updated home screen and pregnancy views.\n• Improved readability and support for larger text.\n• Clearer consent and sign-in flows.\n• Improvements to navigation and caching."
   }
 }

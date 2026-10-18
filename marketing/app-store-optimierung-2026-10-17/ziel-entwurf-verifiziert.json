@@ -1,0 +1,80 @@
+{
+  "version": "1.0.25",
+  "verifiedDefaultScreenshots": 84,
+  "groups": [
+    {
+      "locale": "en-GB",
+      "screenshotSetId": "b65cc548-aba1-4dd4-a6ba-58f2f56b325d",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-GB",
+      "screenshotSetId": "0f735bad-2812-4170-a0fe-3a8d114b4812",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-GB",
+      "screenshotSetId": "b9237550-4413-4eb0-b675-e2e0a9fd497e",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "es-ES",
+      "screenshotSetId": "0b20349e-33fc-4e3f-bd22-a82bb65658da",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "es-ES",
+      "screenshotSetId": "56df3bc4-dd56-4391-b5fc-d1ab6d06d0d5",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "es-ES",
+      "screenshotSetId": "114fb44f-a4f8-4943-92bf-d917bbe4e242",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "screenshotSetId": "ce14eaf8-a0eb-4512-abb5-9a84d6bd96d0",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "screenshotSetId": "3eee06e9-73fb-4513-a5ab-97d443a3d3b4",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "screenshotSetId": "3f355507-e68d-4295-8b42-45f589ccab69",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "screenshotSetId": "04a2acbf-ec98-40fb-9d8b-c24c377c8d65",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "screenshotSetId": "65bbdabb-6ebd-4abd-940c-a0ac90aa49c7",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "screenshotSetId": "8756d106-1bdd-4ab9-a73f-f1ae67adf8bd",
+      "count": 7,
+      "state": "COMPLETE"
+    }
+  ],
+  "futureMetadataConfig": "store.config.json",
+  "status": "Search-field target verified in Apple draft before restoring the original search fields for the first measurement phase"
+}

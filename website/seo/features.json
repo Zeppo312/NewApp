@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "wehen-timer",
+    "number": "01",
+    "eyebrow": "SCHWANGERSCHAFT",
+    "title": "Wehen-Timer: Dauer & Abstände festhalten | Lotti Baby",
+    "description": "Mit dem Wehen-Timer von Lotti Baby Dauer und Abstände eurer Wehen festhalten. Dazu Geburtsplan und Klinik-Checkliste – in einer App für euren Familienalltag.",
+    "heading": "Wehen festhalten. Einen Überblick behalten.",
+    "intro": "Wenn ihr Wehen beobachtet, hilft eine ruhige Übersicht: Wann ging es los, wie lange hat die Wehe gedauert und wann kam die nächste? Mit dem Wehen-Timer von Lotti Baby haltet ihr diese Zeiten fest.",
+    "image": "04-schwangerschaft.png",
+    "imageAlt": "Lotti Baby zeigt Funktionen für die Schwangerschaft: Countdown, Wehen-Tracker und Geburtsplan.",
+    "stepsTitle": "So nutzt ihr den Wehen-Timer",
+    "steps": [
+      { "title": "Starten und stoppen", "text": "Öffnet den Wehen-Tracker in der App. Startet die Zeitmessung zu Beginn einer Wehe und beendet sie, wenn die Wehe nachlässt." },
+      { "title": "Den Verlauf ansehen", "text": "Schaut die erfassten Zeiten im Verlauf nach. So müsst ihr euch Dauer und Abstände nicht im Kopf merken." },
+      { "title": "Für Gespräche nachschauen", "text": "Die Aufzeichnungen können euch helfen, eure Beobachtungen bei einem Gespräch mit eurer Hebamme oder Geburtsklinik zu beschreiben." }
+    ],
+    "detailsTitle": "Schon vor der Geburt an eurer Seite",
+    "details": "Lotti Baby verbindet den Wehen-Timer mit einem Countdown bis zum Geburtstermin, einem Geburtsplan und einer Klinik-Checkliste. Nach der Geburt könnt ihr Stillen, Fläschchen, Windeln und Schlaf festhalten. Welche Funktionen verfügbar sind, hängt vom gewählten Tarif ab.",
+    "note": "Der Wehen-Timer ist ein Protokoll und gibt keine medizinische Einschätzung. Er entscheidet nicht, wann ihr in die Klinik fahren solltet. Bei Fragen oder Unsicherheit wendet euch an eure Hebamme oder Geburtsklinik."
+  },
+  {
+    "slug": "stillprotokoll",
+    "number": "02",
+    "eyebrow": "STILLEN & MAHLZEITEN",
+    "title": "Stillprotokoll & Still-App für euren Alltag | Lotti Baby",
+    "description": "Mit der Still-App von Lotti Baby Stillen, Fläschchen und Abpumpen festhalten. Im Stillprotokoll nachsehen, wann euer Baby zuletzt getrunken hat.",
+    "heading": "Wann war die letzte Mahlzeit? Ein Blick genügt.",
+    "intro": "Gerade nachts verschwimmen die Uhrzeiten schnell. Ein Stillprotokoll hält fest, was schon war. Mit Lotti Baby dokumentiert ihr Stillen, Fläschchen und Abpumpen und schaut die Einträge später in Ruhe nach.",
+    "image": "01-mahlzeiten.png",
+    "imageAlt": "Mahlzeitenübersicht der Lotti Baby Still-App mit dem zuletzt erfassten Fläschchen und der heutigen Trinkmenge.",
+    "stepsTitle": "Euer Stillprotokoll in wenigen Schritten",
+    "steps": [
+      { "title": "Mahlzeit erfassen", "text": "Wählt im Tagesüberblick Stillen, Fläschchen oder Abpumpen aus. Haltet die Angaben fest, die für euren Alltag hilfreich sind." },
+      { "title": "Später nachschauen", "text": "In der Mahlzeitenübersicht seht ihr die letzte erfasste Mahlzeit. Bei Fläschchen könnt ihr die eingetragenen Mengen im Blick behalten." },
+      { "title": "Gemeinsam den Überblick behalten", "text": "Verknüpft eure Accounts und nutzt die Baby-Daten gemeinsam. So kann auch das andere Elternteil nachsehen, was bereits eingetragen wurde." }
+    ],
+    "detailsTitle": "Ein Baby Tracker für mehr als Stillzeiten",
+    "details": "Auch Beikost, Windeln und Schlaf finden in Lotti Baby ihren Platz. Ihr entscheidet, was ihr dokumentieren möchtet. Das Protokoll hilft beim Erinnern und bei der Übergabe zwischen euch – es macht keine Vorgaben für euren Familienalltag.",
+    "note": "Ein Stillprotokoll beurteilt nicht, ob euer Baby genug trinkt. Bei Fragen zu Ernährung oder Entwicklung wendet euch an eure Hebamme oder Kinderarztpraxis."
+  },
+  {
+    "slug": "babyschlaf",
+    "number": "03",
+    "eyebrow": "BABYSCHLAF",
+    "title": "Babyschlaf festhalten: Schlaftagebuch fürs Baby | Lotti Baby",
+    "description": "Babyschlaf mit einem Tippen starten und beenden. Im Schlaftagebuch von Lotti Baby nachsehen, wann und wie lange euer Baby geschlafen hat.",
+    "heading": "Weniger merken. Schlafzeiten nachschauen.",
+    "intro": "Wie lange ging das Mittagsschläfchen? Wann ist euer Baby aufgewacht? Mit dem Schlaf-Tracker von Lotti Baby haltet ihr Schlafphasen fest und könnt im Verlauf nachschauen, was ihr eingetragen habt.",
+    "image": "03-schlaf.png",
+    "imageAlt": "Schlafübersicht in Lotti Baby mit erfassten Schlafphasen und einem laufenden Schlaftimer.",
+    "stepsTitle": "So entsteht euer Schlaftagebuch",
+    "steps": [
+      { "title": "Schlaf starten", "text": "Startet den Schlaf-Tracker, wenn ihr eine Schlafphase festhalten möchtet. Der Timer merkt sich den Beginn für euch." },
+      { "title": "Schlaf beenden", "text": "Beendet den Eintrag, wenn euer Baby wieder wach ist. Die erfasste Schlafphase bleibt im Verlauf sichtbar." },
+      { "title": "Zeiten gemeinsam nachsehen", "text": "Mit verknüpften Accounts könnt ihr beide auf die Baby-Daten zugreifen. Das erleichtert den Überblick, wenn ihr euch im Alltag abwechselt." }
+    ],
+    "detailsTitle": "Beobachten, ohne Schlafziele erfüllen zu müssen",
+    "details": "Das Schlaftagebuch ist eine Erinnerungshilfe für euch. Es muss nicht jeder Tag vollständig sein. Neben dem Schlaf könnt ihr Mahlzeiten und Windeln festhalten, damit wichtige Informationen bei der nächsten Übergabe schnell zu finden sind.",
+    "note": "Lotti Baby verspricht keinen besseren Schlaf und ersetzt keine medizinische Beratung. Bei Fragen zur Gesundheit oder zum Schlaf eures Babys wendet euch an eure Kinderarztpraxis."
+  }
+]

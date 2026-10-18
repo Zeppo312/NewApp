@@ -1,0 +1,48 @@
+{
+  "status": "Bestehende Produktseite Schwangere aktualisiert und zusammen mit App 1.0.25 (1.0.83) eingereicht: WAITING_FOR_REVIEW",
+  "referenceName": "Schwangerschaft · DE",
+  "locale": "de-DE",
+  "promoText": "Schon vor der Geburt an eurer Seite: Haltet Wehen fest, bereitet euren Geburtsplan vor und nutzt die Klinik-Checkliste. Später begleitet euch Lotti Baby im Babyalltag.",
+  "keywordCandidatesAfterVersionApproval": [
+    "schwangerschaft",
+    "wehentimer",
+    "ssw"
+  ],
+  "keywordNote": "Nur aus der zuletzt genehmigten App-Version zuweisen. Verfügbarkeit der Begriffe in App Store Connect prüfen. Kein zusätzliches Keyword-Feld.",
+  "screenshots": {
+    "APP_IPHONE_67": [
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/04-schwangerschaft.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/02-gemeinsam.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_67/06-familienalltag.png"
+    ],
+    "APP_IPHONE_65": [
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/04-schwangerschaft.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/02-gemeinsam.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPHONE_65/06-familienalltag.png"
+    ],
+    "APP_IPAD_PRO_3GEN_129": [
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/04-schwangerschaft.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/02-gemeinsam.png",
+      "marketing/app-store-neugestaltung-2026-10-14/serie/export/de-DE/APP_IPAD_PRO_3GEN_129/06-familienalltag.png"
+    ]
+  },
+  "preview": null,
+  "deepLink": null,
+  "deepLinkNote": "Kein ungeprüfter Deep Link zugewiesen. Nach Anmeldung/Onboarding separat auf einem Gerät prüfen.",
+  "appleAds": {
+    "status": "Nicht angelegt; kein Budget und keine Gebote festgelegt",
+    "keywordCandidates": [
+      "wehen",
+      "ssw"
+    ],
+    "storefront": "DE"
+  },
+  "appCustomProductPageId": "98163514-3af2-4af7-8837-7a1fa34232d6",
+  "appCustomProductPageVersionId": "2fc8708f-dd70-41ee-be81-abc4dead326c",
+  "url": "https://apps.apple.com/de/app/id6745569710?ppid=98163514-3af2-4af7-8837-7a1fa34232d6",
+  "assignedSearchKeywords": [
+    "schwangerschaft"
+  ],
+  "reviewSubmissionId": "a950aa77-d02a-4f1f-a616-542c6d19097b",
+  "reviewState": "WAITING_FOR_REVIEW"
+}

@@ -1,0 +1,85 @@
+{
+  "baseCommit": "cdc6fc4de0ac54e04b6bed6b6278a2c98da8a5aa",
+  "snapshot": "/tmp/lotti-aso-release-20261017",
+  "buildId": "7819b5a5-505b-42ce-a71b-35706e07f0c2",
+  "submissionId": "c9ec6d87-277f-4e0c-a719-5e82b27d10fa",
+  "version": "1.0.25",
+  "buildNumber": "1.0.83",
+  "runtimeVersion": "1.0.25-aso-20261017",
+  "channel": "aso-release-20261017",
+  "changes": [
+    {
+      "file": "app/_layout.tsx",
+      "sha256": "cc25a1b1f84dfb22cfcd9a2b5221009f011791f6fb8bde1cdcbd7604ee9e189f"
+    },
+    {
+      "file": "components/StoreReviewPrompt.tsx",
+      "sha256": "9e1ac39ec9d43df4b792cf94b9c0f38be66e53ec113874428edeea8cb51087e6"
+    },
+    {
+      "file": "lib/storeReview.ts",
+      "sha256": "204d6c1b01ef1190a82d6096820770eccdc6444fc63274502eeee784a7477463"
+    },
+    {
+      "file": "lib/__tests__/storeReview.test.ts",
+      "sha256": "1043d4b51179cc9abe5e86f345c98ceac9538bc909b072d5f0a41b633dfbb818"
+    },
+    {
+      "file": "lib/__tests__/storeReviewPrompt.test.tsx",
+      "sha256": "bfc97b98d22afa177baee80c14cde814f11f534b2f18b15d5097d689d8f1f65c"
+    },
+    {
+      "file": "package.json",
+      "sha256": "e36558974309b584439b77b0a48b5bd6c97be8fedc31f93da2dc45e20db8c8c3"
+    },
+    {
+      "file": "package-lock.json",
+      "sha256": "5a56c4bfea3ec6d16fc60c0be07d824264f1d495646d5f33709fcd66c290e140"
+    },
+    {
+      "file": "app.json",
+      "sha256": "7478ce775fc6a2d2fd1b3cfd1a1bf3e44b2a6084edbd5a1822706f051a841f16"
+    },
+    {
+      "file": "eas.json",
+      "sha256": "81391e68200fe94e97744bb2476f2529583d8a5d1d0e7cd4f9e36a9e9a943770"
+    },
+    {
+      "file": "ios/LottiBaby/Info.plist",
+      "sha256": "0e5e6ebfb0168c00a1572cf96d5f6a8be0f5f189f567c9330f142f7cc53fb159"
+    },
+    {
+      "file": "ios/LottiBaby.xcodeproj/project.pbxproj",
+      "sha256": "042b9de7e5dbf47b3e352e1f63a824ae76747236a451c011e71f8fb7c8811bed"
+    },
+    {
+      "file": "ios/LottiBaby/Supporting/Expo.plist",
+      "sha256": "016c40fe729d603f57d3cf7f685d1abd6d8622dec99472723be9e390f1f6a57a"
+    }
+  ],
+  "excludesOtherUncommittedChanges": true,
+  "buildStatus": "FINISHED",
+  "submissionStatus": "FINISHED",
+  "artifactUrl": "https://expo.dev/artifacts/eas/19-8EEMbRm0JoBi-QRgs8GCD9Xr83H6733GKOWm__nk.ipa",
+  "archiveChecks": {
+    "bundleIdentifier": "com.LottiBaby.app",
+    "marketingVersion": "1.0.25",
+    "buildNumber": "1.0.83",
+    "runtimeVersion": "1.0.25-aso-20261017",
+    "nativeExpoStoreReview": true,
+    "storeKitLinked": true,
+    "mainAndWidgetVersionsMatch": true,
+    "codesignDeepStrict": "PASS"
+  },
+  "appleBuildUploadId": "41362989-7c01-4011-b0a3-e69725c0271d",
+  "appleProcessingState": "VALID",
+  "releasePhase": "visuals",
+  "originalSearchFields": "phase1-bisherige-suchfelder.json",
+  "appleBuildId": "41362989-7c01-4011-b0a3-e69725c0271d",
+  "appleBuildUploadState": "COMPLETE",
+  "reviewSubmissionId": "a950aa77-d02a-4f1f-a616-542c6d19097b",
+  "appStoreVersionState": "WAITING_FOR_REVIEW",
+  "reviewState": "WAITING_FOR_REVIEW",
+  "releaseType": "MANUAL",
+  "checkedAt": "2026-10-17T09:50:35.734Z"
+}
