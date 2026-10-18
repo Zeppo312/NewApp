@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="de" data-resolution="custom">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=886, height=1920" />
+    <title>Lotti Baby – App-Vorschau (Motion)</title>
+    <script src="assets/vendor/gsap.min.js"></script>
+    <style>
+      /* Lotti Baby App-Vorschau 886 × 1920 (Apple-Format iPhone hochkant).
+         Echte Simulator-Aufnahmen im Gerätebildschirm; Typografie, Hinweise und
+         Berührungs-Hotspots liegen außerhalb bzw. als Grafik über der Aufnahme. */
+      @font-face {
+        font-family: "Inter";
+        src: url("assets/fonts/inter-latin-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+      @font-face {
+        font-family: "Inter";
+        src: url("assets/fonts/inter-latin-ext-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+        unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+      }
+      :root {
+        --cream: #fcf7f1;
+        --cream-2: #f7efea;
+        --lavender: #eee5f3;
+        --lavender-2: #e3d6ef;
+        --ink: #33263a;
+        --accent: #75489e;
+        --accent-soft: #a98bd0;
+        --muted: #5e4f66;
+        --frame: #2b2430;
+        --frame-edge: #4a4150;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        width: 886px; height: 1920px; overflow: hidden;
+        background: var(--cream);
+      }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        font-family: "Inter", sans-serif;
+        font-feature-settings: "ss01" 0, "cv11" 1;
+        -webkit-font-smoothing: antialiased;
+        color: var(--ink);
+      }
+
+      /* ---------- Hintergrund ---------- */
+      .bg { position: absolute; inset: 0; overflow: hidden;
+        background: linear-gradient(180deg, var(--cream) 0%, var(--cream-2) 48%, var(--lavender) 100%); }
+      .blob { position: absolute; border-radius: 50%; filter: blur(70px); }
+      #blob-a { width: 760px; height: 760px; left: -260px; top: -240px; background: rgba(238, 222, 246, 0.95); }
+      #blob-b { width: 820px; height: 820px; left: 300px; top: 820px; background: rgba(205, 182, 232, 0.55); }
+      #blob-c { width: 560px; height: 560px; left: 420px; top: -180px; background: rgba(252, 226, 214, 0.75); }
+
+      /* ---------- Gerät ---------- */
+      #device {
+        position: absolute; left: 107px; top: 440px; width: 672px; height: 1424px;
+        transform-origin: 50% 0%;
+      }
+      .shadow {
+        position: absolute; left: 30px; right: 30px; top: 60px; bottom: -10px; border-radius: 96px;
+        box-shadow: 0 50px 110px rgba(58, 38, 72, 0.26), 0 14px 34px rgba(58, 38, 72, 0.16);
+      }
+      .bezel {
+        position: absolute; inset: 0; border-radius: 100px; background: var(--frame);
+        box-shadow: inset 0 0 0 3px var(--frame-edge), inset 0 0 0 6px #1d1820;
+      }
+      .screen {
+        position: absolute; left: 16px; top: 16px; width: 640px; height: 1392px;
+        border-radius: 84px; overflow: hidden; background: #fbf5f0;
+        isolation: isolate;
+      }
+      .vid { position: absolute; left: 0; top: 0; width: 640px; height: 1392px; object-fit: cover; }
+      .glare {
+        position: absolute; inset: 0; border-radius: 84px; pointer-events: none;
+        background: linear-gradient(125deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 30%);
+      }
+      .island { position: absolute; left: 221px; top: 23px; width: 198px; height: 57px; border-radius: 29px; background: #000; }
+      .dip { position: absolute; inset: 0; background: #fbf5f0; opacity: 0; }
+      svg.marks { position: absolute; left: 0; top: 0; width: 640px; height: 1392px; overflow: visible; }
+      .ring { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; }
+      .ring-glow { fill: rgba(169, 139, 208, 0.10); stroke: rgba(169, 139, 208, 0.45); stroke-width: 16; }
+
+      /* Berührungs-Hotspot: Finger-Kontakt + Ausbreitungsring */
+      .tap { position: absolute; width: 0; height: 0; }
+      .tap .dot, .tap .wave {
+        position: absolute; left: -38px; top: -38px; width: 76px; height: 76px; border-radius: 50%;
+      }
+      .tap .dot, .tap .wave { opacity: 0; }
+      .tap .dot { background: rgba(255, 255, 255, 0.55); border: 4px solid rgba(117, 72, 158, 0.9);
+        box-shadow: 0 6px 22px rgba(58, 38, 72, 0.28); }
+      .tap .wave { border: 4px solid rgba(117, 72, 158, 0.75); }
+
+      /* ---------- Typografie ---------- */
+      .copy {
+        position: absolute; left: 48px; right: 48px; top: 0; height: 440px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding-bottom: 6px;
+      }
+      .kicker {
+        display: flex; align-items: center; gap: 12px;
+        font-size: 23px; font-weight: 650; letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--accent); margin-bottom: 20px;
+      }
+      .kicker .pip { display: block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+      .kicker .rule { display: block; width: 36px; height: 3px; border-radius: 2px; background: var(--accent-soft); transform-origin: 0% 50%; }
+      .kicker span.label { display: inline-block; }
+      h1 {
+        font-size: 70px; line-height: 1.06; font-weight: 760; letter-spacing: -0.028em; color: var(--ink);
+      }
+      h1 .line { display: block; white-space: nowrap; }
+      h1 .w { display: inline-block; white-space: pre; }
+      h1 .accent { color: var(--accent); position: relative; display: inline-block; }
+      h1 .accent svg.swoosh {
+        position: absolute; left: -2%; width: 104%; height: 22px; bottom: -14px; overflow: visible;
+      }
+      .swoosh path { fill: none; stroke: var(--accent-soft); stroke-width: 6; stroke-linecap: round; }
+      .sub {
+        margin-top: 22px; font-size: 36px; line-height: 1.25; font-weight: 560; color: var(--muted);
+        white-space: nowrap;
+      }
+      .sub b { font-weight: 720; color: var(--ink); }
+
+      /* Schlaf-Schritte */
+      .steps { display: flex; align-items: center; gap: 0; margin-top: 28px; }
+      .step {
+        position: relative; display: flex; align-items: center; gap: 10px;
+        height: 62px; padding: 0 24px; border-radius: 31px;
+        font-size: 31px; font-weight: 650; color: var(--muted);
+        background: rgba(255, 255, 255, 0.62); border: 2px solid rgba(117, 72, 158, 0.18);
+      }
+      .step .fill {
+        position: absolute; inset: -2px; border-radius: 31px; background: var(--accent); opacity: 0;
+      }
+      .step .t { position: relative; display: flex; align-items: center; gap: 10px; }
+      .step .t.on { position: absolute; left: 24px; right: 24px; color: #fff; opacity: 0; display: flex; align-items: center; gap: 10px; }
+      .step .ico { display: block; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+      .link { display: block; width: 26px; height: 3px; background: rgba(117, 72, 158, 0.22); position: relative; }
+      .link .lfill { position: absolute; inset: 0; background: var(--accent); transform-origin: 0% 50%; transform: scaleX(0); }
+
+      /* ---------- Abschluss ---------- */
+      .end-top {
+        position: absolute; left: 40px; right: 40px; top: 70px;
+        display: flex; flex-direction: column; align-items: center; text-align: center;
+      }
+      .end-top img.icon {
+        display: block; width: 156px; height: 156px; border-radius: 36px;
+        box-shadow: 0 18px 40px rgba(58, 38, 72, 0.22), 0 0 0 1px rgba(58, 38, 72, 0.06);
+      }
+      .end-top .name { margin-top: 30px; font-size: 84px; line-height: 1; font-weight: 780; letter-spacing: -0.03em; color: var(--ink); }
+      .end-top .tag { margin-top: 18px; font-size: 34px; line-height: 1.25; font-weight: 560; color: var(--muted); white-space: nowrap; }
+      .end-note {
+        position: absolute; left: 0; right: 0; top: 1690px; display: flex; justify-content: center;
+      }
+      .end-note .nl { display: block; }
+      .end-note .pill {
+        display: block; padding: 20px 40px; border-radius: 34px; text-align: center;
+        background: rgba(255, 255, 255, 0.78); border: 2px solid rgba(117, 72, 158, 0.16);
+        font-size: 36px; line-height: 1.25; font-weight: 650; color: var(--ink); white-space: nowrap;
+        box-shadow: 0 8px 24px rgba(58, 38, 72, 0.08);
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-seig" id="root" data-composition-id="main" data-start="0" data-duration="27.5" data-width="886" data-height="1920">
+      <div data-hf-id="hf-m7dd" class="bg">
+        <div data-hf-id="hf-x001" class="blob" id="blob-a" data-layout-allow-overflow></div>
+        <div data-hf-id="hf-4w83" class="blob" id="blob-c" data-layout-allow-overflow></div>
+        <div data-hf-id="hf-0y42" class="blob" id="blob-b" data-layout-allow-overflow></div>
+      </div>
+
+      <!-- Gerät mit echten Aufnahmen. Zeiten: data-start = Filmzeit, data-media-start = Zeit in der Aufnahme. -->
+      <div data-hf-id="hf-awvj" id="device">
+        <div data-hf-id="hf-iufw" class="shadow"></div>
+        <div data-hf-id="hf-g0x4" class="bezel"></div>
+        <div data-hf-id="hf-ylue" class="screen" id="screen">
+          <!-- 01 Mahlzeitenübersicht (statisch) -->
+          <video data-hf-id="hf-ouje" id="c1" class="clip vid" src="assets/clips/v1-mahlzeiten.mp4" muted playsinline
+            data-start="0" data-duration="4.6" data-media-start="1.0" data-track-index="1"></video>
+          <!-- 02 Wickeln: Formular → Tippen auf Speichern (Aufnahme 5,80 s) → Ladeanzeige -->
+          <video data-hf-id="hf-uwon" id="c2" class="clip vid" src="assets/clips/v2-eintrag.mp4" muted playsinline
+            data-start="4.2" data-duration="2.0" data-media-start="4.2" data-track-index="2"></video>
+          <!-- Ladeanzeige (Wartezeit 6,25–6,95 s entfernt) → Bestätigung „Wickeln gespeichert" -->
+          <video data-hf-id="hf-0eqm" id="c3" class="clip vid" src="assets/clips/v2-eintrag.mp4" muted playsinline
+            data-start="6.2" data-duration="1.8" data-media-start="6.95" data-track-index="1"></video>
+          <!-- Bestätigung (Standbild 8,75–10,45 s entfernt) → App blendet selbst zu „Unser Tag" über -->
+          <video data-hf-id="hf-60rj" id="c4" class="clip vid" src="assets/clips/v2-eintrag.mp4" muted playsinline
+            data-start="8.0" data-duration="2.6" data-media-start="10.45" data-track-index="2"></video>
+          <!-- 03 Unser Tag, gescrollt: Kennzahlen + Timeline mit dem gespeicherten Eintrag -->
+          <video data-hf-id="hf-dv9c" id="c5" class="clip vid" src="assets/clips/v3-gemeinsam.mp4" muted playsinline
+            data-start="10.1" data-duration="3.0" data-media-start="44.3" data-track-index="1"></video>
+          <!-- 04 Schlaf: Ausgangszustand, Tippen auf „Schlaf starten" (Aufnahme 7,45 s) -->
+          <video data-hf-id="hf-brkf" id="c6" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="12.7" data-duration="1.85" data-media-start="6.0" data-track-index="2"></video>
+          <!-- „Starte …" -->
+          <video data-hf-id="hf-eai0" id="c7" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="14.55" data-duration="0.6" data-media-start="7.85" data-track-index="1"></video>
+          <!-- „Nachtschlaf läuft" → laufender Timer (Hinweis-Banner 8,45–10,9 s entfernt) -->
+          <video data-hf-id="hf-d193" id="c8" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="15.15" data-duration="3.3" data-media-start="10.9" data-track-index="2"></video>
+          <!-- Timer später (Überblendung = Zeitsprung), Tippen auf „Nachtschlaf beenden" (Aufnahme 26,62 s) -->
+          <video data-hf-id="hf-qbrw" id="c9" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="17.95" data-duration="1.0" data-media-start="25.85" data-track-index="1"></video>
+          <!-- Dialog Schlafqualität -->
+          <video data-hf-id="hf-rryj" id="c10" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="18.95" data-duration="0.8" data-media-start="27.1" data-track-index="2"></video>
+          <!-- Dialog (Standbild 27,9–31,5 s entfernt) → Auswahl → beendeter Schlaf, Ansicht bleibt bis zum Schluss -->
+          <video data-hf-id="hf-j2yl" id="c11" class="clip vid" src="assets/clips/v4-schlaf-raw.mp4" muted playsinline
+            data-start="19.75" data-duration="7.75" data-media-start="31.5" data-track-index="1"></video>
+
+          <div class="dip" id="dip"></div>
+          <div class="island"></div>
+
+          <svg data-hf-id="hf-4srz" class="marks" viewBox="0 0 640 1392">
+            <rect data-hf-id="hf-eus6" id="r1g" class="ring-glow" x="26" y="752" width="289" height="348" rx="38" opacity="0" />
+            <rect data-hf-id="hf-6o0n" id="r1" class="ring" x="26" y="752" width="289" height="348" rx="38" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" />
+            <rect data-hf-id="hf-8qvc" id="r2g" class="ring-glow" x="326" y="925" width="282" height="272" rx="34" opacity="0" />
+            <rect data-hf-id="hf-c2t7" id="r2" class="ring" x="326" y="925" width="282" height="272" rx="34" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" />
+            <circle data-hf-id="hf-4706" id="r3g" class="ring-glow" cx="320" cy="600" r="196" opacity="0" />
+            <circle data-hf-id="hf-mykx" id="r3" class="ring" cx="320" cy="600" r="196" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" transform="rotate(-90 320 600)" />
+          </svg>
+          <div data-hf-id="hf-pb2w" class="tap" id="tap1" style="left: 457px; top: 1276px"><div data-hf-id="hf-cfyz" class="wave"></div><div data-hf-id="hf-lu65" class="dot"></div></div>
+          <div data-hf-id="hf-0t9g" class="tap" id="tap2" style="left: 168px; top: 1030px"><div data-hf-id="hf-wrob" class="wave"></div><div data-hf-id="hf-ww7l" class="dot"></div></div>
+          <div data-hf-id="hf-kdg7" class="tap" id="tap3" style="left: 468px; top: 1037px"><div data-hf-id="hf-wdda" class="wave"></div><div data-hf-id="hf-y34o" class="dot"></div></div>
+          <div data-hf-id="hf-62pl" class="glare"></div>
+        </div>
+      </div>
+
+      <!-- Szene 1 -->
+      <div data-hf-id="hf-l28s" id="t1" class="clip copy" data-start="0" data-duration="4.5" data-track-index="5">
+        <div data-hf-id="hf-7j0z" class="kicker"><span data-hf-id="hf-rz58" class="pip"></span><span data-hf-id="hf-f1gc" class="label">Mahlzeiten</span><span data-hf-id="hf-6o6j" class="rule"></span></div>
+        <h1 data-hf-id="hf-m3fm">
+          <span data-hf-id="hf-6c9z" class="line"><span data-hf-id="hf-4zxc" class="w">Wann </span><span data-hf-id="hf-6dwy" class="w">war </span><span data-hf-id="hf-p0d0" class="w">das</span></span>
+          <span data-hf-id="hf-tvt3" class="line"><span data-hf-id="hf-srpz" class="accent"><span data-hf-id="hf-yuuq" class="w">letzte </span><span data-hf-id="hf-p4nt" class="w">Fläschchen?</span><svg data-hf-id="hf-whl6" class="swoosh" viewBox="0 0 100 20" preserveAspectRatio="none"><path data-hf-id="hf-cull" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" d="M2 13 C 28 5, 64 5, 98 11" /></svg></span></span>
+        </h1>
+        <p data-hf-id="hf-qjo4" class="sub">Zuletzt um <b data-hf-id="hf-ucmy">11:40 Uhr</b> – ein Blick genügt.</p>
+      </div>
+
+      <!-- Szene 2 -->
+      <div data-hf-id="hf-rznv" id="t2" class="clip copy" data-start="4.2" data-duration="4.25" data-track-index="5">
+        <div data-hf-id="hf-h303" class="kicker"><span data-hf-id="hf-zww4" class="pip"></span><span data-hf-id="hf-okas" class="label">Wickeln</span><span data-hf-id="hf-424r" class="rule"></span></div>
+        <h1 data-hf-id="hf-7xza">
+          <span data-hf-id="hf-thi2" class="line"><span data-hf-id="hf-m5ki" class="w">Gewickelt?</span></span>
+          <span data-hf-id="hf-t371" class="line"><span data-hf-id="hf-5h7b" class="accent"><span data-hf-id="hf-hkwx" class="w">Schnell </span><span data-hf-id="hf-5xnk" class="w">festgehalten.</span><svg data-hf-id="hf-16mm" class="swoosh" viewBox="0 0 100 20" preserveAspectRatio="none"><path data-hf-id="hf-lcd9" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" d="M2 13 C 28 5, 64 5, 98 11" /></svg></span></span>
+        </h1>
+        <p data-hf-id="hf-qqpp" class="sub">Mit wenigen <b>Fingertipps</b> gespeichert.</p>
+      </div>
+
+      <!-- Szene 3 -->
+      <div data-hf-id="hf-69oi" id="t3" class="clip copy" data-start="8.2" data-duration="4.65" data-track-index="5">
+        <div data-hf-id="hf-gop2" class="kicker"><span data-hf-id="hf-ypz1" class="pip"></span><span data-hf-id="hf-lkls" class="label">Unser Tag</span><span data-hf-id="hf-3ntq" class="rule"></span></div>
+        <h1 data-hf-id="hf-8cab">
+          <span data-hf-id="hf-vvc8" class="line"><span data-hf-id="hf-n60x" class="w">Euer </span><span data-hf-id="hf-vtoy" class="w">Tag.</span></span>
+          <span data-hf-id="hf-vh17" class="line"><span data-hf-id="hf-52wa" class="accent"><span data-hf-id="hf-sux0" class="w">Auf </span><span data-hf-id="hf-sq3j" class="w">einen </span><span data-hf-id="hf-pys7" class="w">Blick.</span><svg data-hf-id="hf-1kxn" class="swoosh" viewBox="0 0 100 20" preserveAspectRatio="none"><path data-hf-id="hf-mjac" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" d="M2 13 C 28 5, 64 5, 98 11" /></svg></span></span>
+        </h1>
+        <p data-hf-id="hf-kvm8" class="sub" id="t3-sub">Der neue Eintrag – in der <b data-hf-id="hf-mqxi">Timeline</b>.</p>
+      </div>
+
+      <!-- Szene 4 -->
+      <div data-hf-id="hf-w5qq" id="t4" class="clip copy" data-start="12.55" data-duration="11.05" data-track-index="5">
+        <div data-hf-id="hf-gae1" class="kicker"><span data-hf-id="hf-z4a2" class="pip"></span><span data-hf-id="hf-5bxw" class="label">Schlaf</span><span data-hf-id="hf-39ip" class="rule"></span></div>
+        <h1 data-hf-id="hf-8qlc">
+          <span data-hf-id="hf-v2q6" class="line"><span data-hf-id="hf-no7e" class="w">Schlafphasen</span></span>
+          <span data-hf-id="hf-uof5" class="line"><span data-hf-id="hf-4ol9" class="accent"><span data-hf-id="hf-nsrq" class="w">einfach </span><span data-hf-id="hf-091g" class="w">festhalten.</span><svg data-hf-id="hf-1z8o" class="swoosh" viewBox="0 0 100 20" preserveAspectRatio="none"><path data-hf-id="hf-m4zb" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1" d="M2 13 C 28 5, 64 5, 98 11" /></svg></span></span>
+        </h1>
+        <div data-hf-id="hf-7g7r" class="steps" data-layout-allow-overlap data-layout-allow-occlusion>
+          <div data-hf-id="hf-hqky" class="step" id="st1"><span data-hf-id="hf-s5oi" class="fill"></span><span data-hf-id="hf-4mvq" class="t"><span data-hf-id="hf-gm9w" class="ico"></span>Starten</span><span data-hf-id="hf-p1up" class="t on"><span data-hf-id="hf-qj98" class="ico"></span>Starten</span></div>
+          <span data-hf-id="hf-jmg9" class="link"><span data-hf-id="hf-jvq6" class="lfill" id="lk1"></span></span>
+          <div data-hf-id="hf-dsgx" class="step" id="st2"><span data-hf-id="hf-ngva" class="fill"></span><span data-hf-id="hf-c8hc" class="t"><span data-hf-id="hf-pcc5" class="ico"></span>Läuft</span><span data-hf-id="hf-jizr" class="t on"><span data-hf-id="hf-pqn6" class="ico"></span>Läuft</span></div>
+          <span data-hf-id="hf-9hst" class="link"><span data-hf-id="hf-fxm5" class="lfill" id="lk2"></span></span>
+          <div data-hf-id="hf-d0t4" class="step" id="st3"><span data-hf-id="hf-nv6b" class="fill"></span><span data-hf-id="hf-uljy" class="t"><span data-hf-id="hf-rq6b" class="ico"></span>Beendet</span><span data-hf-id="hf-u4dx" class="t on"><span data-hf-id="hf-s4hc" class="ico"></span>Beendet</span></div>
+        </div>
+      </div>
+
+      <!-- Abschluss -->
+      <div data-hf-id="hf-h8z5" id="t5" class="clip" data-start="23.3" data-duration="4.2" data-track-index="5" style="position:absolute; inset:0;">
+        <div data-hf-id="hf-yqbl" class="end-top">
+          <img data-hf-id="hf-14z4" class="icon" id="end-icon" src="assets/brand/app-icon.png" alt="Lotti Baby App-Icon" />
+          <div data-hf-id="hf-8d9y" class="name" id="end-name">Lotti Baby</div>
+          <div data-hf-id="hf-f944" class="tag" id="end-tag">Euer Babyalltag an einem Ort.</div>
+        </div>
+        <div data-hf-id="hf-snac" class="end-note"><span data-hf-id="hf-f25o" class="pill" id="end-note"><span class="nl">Anmeldung erforderlich.</span><span class="nl">Funktionen je nach Abo.</span></span></div>
+      </div>
+
+      <!-- Eigene Musik (in diesem Projekt erzeugt, werkzeuge/musik-erzeugen.mjs) -->
+      <audio data-hf-id="hf-7twy" id="score" src="assets/audio/lotti-score.wav" data-start="0" data-duration="27.5" data-track-index="9" data-volume="1"></audio>
+    </div>
+
+    <script>
+      // Eine pausierte Zeitleiste; alle Zeiten in Filmsekunden.
+      const E_IN = "power3.out";
+      const E_OUT = "power2.in";
+      const E_SOFT = "sine.inOut";
+
+      function build() {
+        const tl = gsap.timeline({ paused: true });
+
+        // --- Hintergrund: langsame, endliche Drift ---
+        tl.fromTo("#blob-a", { x: 0, y: 0 }, { x: 120, y: 80, duration: 27.5, ease: E_SOFT }, 0);
+        tl.fromTo("#blob-b", { x: 0, y: 0 }, { x: -160, y: -60, duration: 27.5, ease: E_SOFT }, 0);
+        tl.fromTo("#blob-c", { x: 0, y: 0 }, { x: -90, y: 70, duration: 27.5, ease: E_SOFT }, 0);
+
+        // --- Gerät: kurzes Einschwingen ab Bild 1 (App sofort sichtbar) ---
+        tl.fromTo("#device", { y: 26, scale: 1.02 }, { y: 0, scale: 1, duration: 1.1, ease: "power3.out" }, 0);
+
+        // --- Textbausteine ---
+        function textIn(id, t) {
+          const k = "#" + id + " .kicker";
+          tl.fromTo(k + " .pip", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, t);
+          tl.fromTo(k + " .label", { opacity: 0, x: -10 }, { opacity: 1, x: 0, duration: 0.45, ease: E_IN }, t + 0.05);
+          tl.fromTo(k + " .rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: E_IN }, t + 0.12);
+          tl.fromTo("#" + id + " h1 .w", { opacity: 0, y: 42, filter: "blur(10px)" },
+            { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.62, ease: E_IN, stagger: 0.06 }, t + 0.08);
+          const n = document.querySelectorAll("#" + id + " h1 .w").length;
+          tl.fromTo("#" + id + " .swoosh path", { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.6, ease: "power2.inOut" }, t + 0.25 + n * 0.06);
+        }
+        function subIn(id, t) {
+          tl.fromTo("#" + id + " .sub", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: E_IN }, t);
+        }
+        function textOut(id, t) {
+          tl.to("#" + id + " > *", { opacity: 0, y: -22, duration: 0.3, ease: E_OUT, stagger: 0.04 }, t);
+        }
+        function ring(id, t0, t1) {
+          tl.fromTo("#" + id, { strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut" }, t0);
+          tl.fromTo("#" + id + "g", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: E_SOFT }, t0 + 0.2);
+          tl.to(["#" + id, "#" + id + "g"], { opacity: 0, duration: 0.35, ease: E_SOFT }, t1);
+        }
+        function tap(id, t) {
+          // Kontakt erscheint kurz vor dem echten Tippen, Ausbreitung genau beim Tippen.
+          tl.fromTo("#" + id + " .dot", { scale: 0.5, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.22, ease: "power2.out" }, t - 0.24);
+          tl.to("#" + id + " .dot", { scale: 0.82, duration: 0.12, ease: "power2.inOut" }, t - 0.04);
+          tl.fromTo("#" + id + " .wave", { scale: 0.8, opacity: 0.9 }, { scale: 2.3, opacity: 0, duration: 0.65, ease: "power2.out", immediateRender: false }, t);
+          tl.to("#" + id + " .dot", { scale: 1.1, opacity: 0, duration: 0.3, ease: E_SOFT }, t + 0.18);
+        }
+
+        // Kurze Abblende über Hell: neue Aufnahme wird im hellsten Moment sichtbar.
+        function dip(t, show) {
+          tl.set(show, { opacity: 0 }, 0);
+          tl.fromTo("#dip", { opacity: 0 }, { opacity: 1, duration: 0.16, ease: "power1.in", immediateRender: false }, t - 0.16);
+          tl.set(show, { opacity: 1 }, t);
+          tl.to("#dip", { opacity: 0, duration: 0.26, ease: "power1.out" }, t);
+        }
+
+        // Szene 1 – Mahlzeiten
+        textIn("t1", 0.12);
+        ring("r1", 1.25, 4.0);
+        subIn("t1", 1.55);
+        textOut("t1", 4.15);
+
+        // Szene 2 – Wickeln speichern
+        dip(4.4, ["#c2"]);
+        textIn("t2", 4.45);
+        subIn("t2", 5.0);
+        tap("tap1", 5.8);
+        textOut("t2", 8.1);
+
+        // Szene 3 – Unser Tag
+        textIn("t3", 8.4);
+        ring("r2", 8.95, 9.8);
+        dip(10.2, ["#c5"]);
+        // Markierung wandert mit der Ansicht: Wickeln-Kennzahl → gespeicherter Eintrag in der Timeline.
+        tl.set(["#r2", "#r2g"], { attr: { x: 42, y: 1064, width: 556, height: 160, rx: 30 } }, 10.2);
+        tl.set("#r2", { opacity: 1, strokeDashoffset: 1 }, 10.2);
+        ring("r2", 10.35, 12.4);
+        subIn("t3", 10.45);
+        textOut("t3", 12.45);
+
+        // Szene 4 – Schlaf
+        dip(12.85, ["#c6"]);
+        textIn("t4", 12.75);
+        tl.fromTo("#t4 .steps", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: E_IN }, 13.3);
+        function stepOn(n, t) {
+          tl.to("#st" + n + " .fill", { opacity: 1, duration: 0.35, ease: E_SOFT }, t);
+          tl.to("#st" + n + " .t.on", { opacity: 1, duration: 0.3, ease: E_SOFT }, t);
+          tl.to("#st" + n + " .t:not(.on)", { opacity: 0, duration: 0.2, ease: E_SOFT }, t);
+          tl.fromTo("#st" + n, { scale: 1 }, { scale: 1.08, duration: 0.18, ease: "power2.out", yoyo: true, repeat: 1 }, t);
+        }
+        function stepDone(n, t) {
+          tl.to("#st" + n + " .fill", { opacity: 0.22, duration: 0.35, ease: E_SOFT }, t);
+          tl.to("#st" + n + " .t.on", { opacity: 0, duration: 0.25, ease: E_SOFT }, t);
+          tl.to("#st" + n + " .t:not(.on)", { opacity: 1, color: "#75489e", duration: 0.25, ease: E_SOFT }, t);
+        }
+        tap("tap2", 14.15);
+        stepOn(1, 14.2);
+        tl.fromTo("#lk1", { scaleX: 0 }, { scaleX: 1, duration: 1.6, ease: "power1.inOut" }, 14.9);
+        stepDone(1, 16.6);
+        stepOn(2, 16.65);
+        ring("r3", 16.85, 17.75);
+        dip(18.05, ["#c9"]);
+        tap("tap3", 18.72);
+        tl.fromTo("#lk2", { scaleX: 0 }, { scaleX: 1, duration: 2.6, ease: "power1.inOut" }, 19.4);
+        stepDone(2, 22.1);
+        stepOn(3, 22.16);
+        textOut("t4", 23.2);
+
+        // Abschluss – Gerät rückt nach unten, Marke und Hinweis erscheinen
+        tl.to("#device", { scale: 0.74, y: 128, duration: 1.0, ease: "power3.inOut" }, 23.3);
+        tl.fromTo("#end-icon", { opacity: 0, y: 30, scale: 0.86 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 23.55);
+        tl.fromTo("#end-name", { opacity: 0, y: 34, filter: "blur(10px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.65, ease: E_IN }, 23.68);
+        tl.fromTo("#end-tag", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.55, ease: E_IN }, 23.9);
+        tl.fromTo("#end-note", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.55, ease: E_IN }, 24.1);
+
+        window.__timelines["main"] = tl;
+      }
+
+      document.fonts.ready.then(build);
+    </script>
+  </body>
+</html>

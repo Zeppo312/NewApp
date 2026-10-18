@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView, Dimensions, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+import { useLocale } from '@/contexts/LocaleContext';
+import { getContractionLocaleTag, translateContractionText } from '@/lib/contractionTranslations';
 
 // Typ für die Wehen-Daten
 type Contraction = {
@@ -26,12 +28,11 @@ const getContractionColor = (): string => {
 };
 
 // Formatierung der Zeit für die Anzeige
-const formatTime = (date: Date, showDate: boolean = false): string => {
+const formatTime = (date: Date, localeTag: string, showDate: boolean = false): string => {
   if (showDate) {
-    // Format: "DD.MM. HH:MM"
-    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}. ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return `${date.toLocaleDateString(localeTag, { day: '2-digit', month: '2-digit' })} ${date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' })}`;
   }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
 };
 
 // Prüft, ob zwei Daten am selben Tag sind
@@ -42,17 +43,17 @@ const isSameDay = (date1: Date, date2: Date): boolean => {
 };
 
 // Formatiert das Datum für die Anzeige im Tagesfilter
-const formatDateForFilter = (date: Date): string => {
+const formatDateForFilter = (date: Date, todayLabel: string, yesterdayLabel: string, localeTag: string): string => {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
   if (isSameDay(date, today)) {
-    return 'Heute';
+    return todayLabel;
   } else if (isSameDay(date, yesterday)) {
-    return 'Gestern';
+    return yesterdayLabel;
   } else {
-    return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+    return date.toLocaleDateString(localeTag);
   }
 };
 
@@ -93,6 +94,9 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
   lightColor = '#FFFFFF',
   darkColor = '#333333'
 }) => {
+  const { locale } = useLocale();
+  const t = (key: Parameters<typeof translateContractionText>[1]) => translateContractionText(locale, key);
+  const localeTag = getContractionLocaleTag(locale);
   // State für den Tooltip
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipData, setTooltipData] = useState<{
@@ -132,7 +136,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
     return (
       <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
         <ThemedText style={styles.noDataText}>
-          Noch keine Wehen aufgezeichnet.
+          {t('history.emptyAll')}
         </ThemedText>
       </ThemedView>
     );
@@ -158,14 +162,14 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                   styles.dayFilterButtonText,
                   selectedDay === dayKey && styles.selectedDayButtonText
                 ]}>
-                  {formatDateForFilter(date)}
+                  {formatDateForFilter(date, t('date.today'), t('date.yesterday'), localeTag)}
                 </Text>
               </TouchableOpacity>
             );
           })}
         </View>
         <ThemedText style={styles.noDataText}>
-          Keine Wehen an diesem Tag aufgezeichnet.
+          {t('history.emptyDay')}
         </ThemedText>
       </ThemedView>
     );
@@ -190,7 +194,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
 
   return (
     <ThemedView style={styles.container} lightColor={lightColor} darkColor={darkColor}>
-      <ThemedText style={styles.title}>Wehenverlauf</ThemedText>
+      <ThemedText style={styles.title}>{t('history.title')}</ThemedText>
 
       {/* Tagesfilter */}
       <View style={styles.dayFilterContainer}>
@@ -209,7 +213,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                 styles.dayFilterButtonText,
                 selectedDay === dayKey && styles.selectedDayButtonText
               ]}>
-                {formatDateForFilter(date)}
+                {formatDateForFilter(date, t('date.today'), t('date.yesterday'), localeTag)}
               </Text>
             </TouchableOpacity>
           );
@@ -243,8 +247,8 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                   <TouchableOpacity
                     onPress={() => {
                       setTooltipData({
-                        time: formatTime(contraction.startTime),
-                        duration: formatDuration(contraction.duration),
+                        time: formatTime(contraction.startTime, localeTag),
+                        duration: formatDuration(contraction.duration ?? 0),
                         x: barLeft + barWidth / 2,
                         y: 30, // Position über dem Balken
                       });
@@ -330,7 +334,7 @@ const ContractionChart: React.FC<ContractionChartProps> = ({
                         isNewDay && styles.newDayMarkerLabel
                       ]}
                     >
-                      {formatTime(markerTime, isNewDay)}
+                      {formatTime(markerTime, localeTag, isNewDay ?? false)}
                     </Text>
                   )}
                 </View>

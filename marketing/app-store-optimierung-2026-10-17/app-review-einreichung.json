@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-10-17T09:50:35.734Z",
+  "reviewSubmissionId": "a950aa77-d02a-4f1f-a616-542c6d19097b",
+  "reviewState": "WAITING_FOR_REVIEW",
+  "version": {
+    "id": "6943443b-e45e-466a-b556-df7824dbb641",
+    "version": "1.0.25",
+    "state": "WAITING_FOR_REVIEW",
+    "releaseType": "MANUAL",
+    "buildId": "41362989-7c01-4011-b0a3-e69725c0271d",
+    "buildNumber": "1.0.83",
+    "processingState": "VALID"
+  },
+  "pregnancyPage": {
+    "id": "98163514-3af2-4af7-8837-7a1fa34232d6",
+    "versionId": "2fc8708f-dd70-41ee-be81-abc4dead326c",
+    "state": "WAITING_FOR_REVIEW",
+    "url": "https://apps.apple.com/de/app/id6745569710?ppid=98163514-3af2-4af7-8837-7a1fa34232d6"
+  },
+  "items": [
+    {
+      "id": "YTk1MGFhNzctZDAyYS00ZjFmLWE2MTYtNTQyYzZkMTkwOTdifDZ8ODkzMTkyNzMx",
+      "state": "READY_FOR_REVIEW"
+    },
+    {
+      "id": "YTk1MGFhNzctZDAyYS00ZjFmLWE2MTYtNTQyYzZkMTkwOTdifDV8MmZjODcwOGYtZGQ3MC00MWVlLWJlODEtYWJjNGRlYWQzMjZj",
+      "state": "READY_FOR_REVIEW"
+    }
+  ]
+}

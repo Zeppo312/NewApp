@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["jest", "node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "lib/__tests__/**/*.ts",
+    "lib/__tests__/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

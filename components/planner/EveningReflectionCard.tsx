@@ -4,6 +4,7 @@ import { LiquidGlassCard } from '@/constants/DesignGuide';
 import { Mood } from '@/services/planner';
 import { ThemedText } from '@/components/ThemedText';
 import { GLASS_BORDER, GLASS_OVERLAY, LAYOUT_PAD, PRIMARY } from '@/constants/PlannerDesign';
+import { useLocale } from '@/contexts/LocaleContext';
 
 type Props = {
   mood?: Mood;
@@ -12,18 +13,20 @@ type Props = {
   onChangeReflection: (text: string) => void;
 };
 
-const moods: { key: Mood; label: string; emoji: string }[] = [
-  { key: 'great', label: 'Super', emoji: '🌟' },
-  { key: 'good', label: 'Gut', emoji: '🙂' },
-  { key: 'okay', label: 'Okay', emoji: '😐' },
-  { key: 'bad', label: 'Schwer', emoji: '🌧️' },
-];
-
 export const EveningReflectionCard: React.FC<Props> = ({ mood, reflection, onChangeMood, onChangeReflection }) => {
+  const { locale } = useLocale();
+  const c = {
+    de: { title: 'Abend-Reflexion', choose: 'Stimmung auswählen', placeholder: 'Was lief heute gut?', note: 'Reflexionsnotiz', moods: ['Super', 'Gut', 'Okay', 'Schwer'] },
+    en: { title: 'Evening reflection', choose: 'Choose a mood', placeholder: 'What went well today?', note: 'Reflection note', moods: ['Great', 'Good', 'Okay', 'Hard'] },
+    es: { title: 'Reflexión de la tarde', choose: 'Elegir estado de ánimo', placeholder: '¿Qué ha ido bien hoy?', note: 'Nota de reflexión', moods: ['Genial', 'Bien', 'Regular', 'Difícil'] },
+  }[locale];
+  const moods: { key: Mood; label: string; emoji: string }[] = [
+    { key: 'great', label: c.moods[0], emoji: '🌟' }, { key: 'good', label: c.moods[1], emoji: '🙂' }, { key: 'okay', label: c.moods[2], emoji: '😐' }, { key: 'bad', label: c.moods[3], emoji: '🌧️' },
+  ];
   return (
     <LiquidGlassCard style={styles.card} overlayColor={GLASS_OVERLAY} borderColor={GLASS_BORDER} intensity={24}>
-      <ThemedText style={styles.title}>Abend-Reflexion</ThemedText>
-      <View style={styles.moodRow} accessible accessibilityRole="radiogroup" accessibilityLabel="Stimmung auswählen">
+      <ThemedText style={styles.title}>{c.title}</ThemedText>
+      <View style={styles.moodRow} accessible accessibilityRole="radiogroup" accessibilityLabel={c.choose}>
         {moods.map((m) => {
           const active = mood === m.key;
           return (
@@ -44,9 +47,9 @@ export const EveningReflectionCard: React.FC<Props> = ({ mood, reflection, onCha
       <TextInput
         value={reflection}
         onChangeText={onChangeReflection}
-        placeholder="Was lief heute gut?"
+        placeholder={c.placeholder}
         placeholderTextColor={'rgba(0,0,0,0.35)'}
-        accessibilityLabel="Reflexionsnotiz"
+        accessibilityLabel={c.note}
         style={styles.input}
         multiline
       />

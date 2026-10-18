@@ -1,0 +1,84 @@
+{
+  "date": "2026-09-10",
+  "status": "passed",
+  "scope": "Documentation and source assets only; no release validation",
+  "text_limits": {
+    "title.txt": {
+      "characters": 27,
+      "limit": 30,
+      "passed": true
+    },
+    "short-description.txt": {
+      "characters": 79,
+      "limit": 80,
+      "passed": true
+    },
+    "full-description.txt": {
+      "characters": 2326,
+      "limit": 4000,
+      "passed": true
+    },
+    "release-notes.txt": {
+      "characters": 224,
+      "limit": 500,
+      "passed": true
+    }
+  },
+  "local_links_checked": 63,
+  "source_copies": [
+    {
+      "path": "material/qa-step05/01-login.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/02-keyboard-130.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/03-onboarding-back-fixed.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/04-date-picker.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/05-camera-permission.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/06-paywall-disabled.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/qa-step05/07-onboarding-summary.png",
+      "matches_source": true
+    },
+    {
+      "path": "material/source/icon-1024-source.png",
+      "matches_source": true
+    }
+  ],
+  "planned_screenshots": 8,
+  "final_screenshots": 0,
+  "screenshot_alt_text_lengths": [
+    94,
+    59,
+    58,
+    54,
+    78,
+    68,
+    58,
+    101
+  ],
+  "tester_rows": 0,
+  "errors": [],
+  "health_notice_update": {
+    "date": "2026-09-11",
+    "status": "passed",
+    "scope": "Health disclaimer, prepared declaration, text limits and local file links; no app build or Play Console submission",
+    "local_links_checked": 25,
+    "required_disclaimer_present": true,
+    "health_features_mapped_to_source": true
+  }
+}

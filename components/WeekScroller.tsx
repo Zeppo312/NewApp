@@ -1,3 +1,5 @@
+import { getPeriodNavigationLabel } from '@/lib/navigationTranslations';
+import { PeriodNavigationButton } from '@/components/ui/period-navigation-button';
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Dimensions } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
@@ -6,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { getDailyEntriesForDateRange, calculateDailyStats, DailyEntry } from '@/lib/baby';
+import { useLocale } from '@/contexts/LocaleContext';
 
 interface WeekScrollerProps {
   selectedDate: Date;
@@ -13,8 +16,12 @@ interface WeekScrollerProps {
 }
 
 const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect }) => {
+  const { locale, localeTag } = useLocale();
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const isDark = colorScheme === 'dark';
+  const todayBorderColor = isDark ? Colors.dark.accent : '#7D5A50';
+  const todayBgColor = isDark ? Colors.dark.accent : '#7D5A50';
   const [weeks, setWeeks] = useState<Date[][]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
   const [entries, setEntries] = useState<DailyEntry[]>([]);
@@ -131,7 +138,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
 
   // Formatiere Monat und Jahr für den Header
   const formatMonthYear = (date: Date): string => {
-    return date.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    return date.toLocaleDateString(localeTag, { month: 'long', year: 'numeric' });
   };
 
   // Wechsle zur vorherigen Woche
@@ -189,7 +196,7 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
         <ThemedView
           style={[
             styles.dayCard,
-            isToday && styles.todayCard,
+            isToday && [styles.todayCard, { borderColor: todayBorderColor }],
             isSelected && styles.selectedDayCard
           ]}
           lightColor={isSelected ? theme.accent : theme.cardLight}
@@ -200,13 +207,13 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
             lightColor={isSelected ? '#FFFFFF' : theme.text}
             darkColor={isSelected ? '#FFFFFF' : theme.text}
           >
-            {item.toLocaleDateString('de-DE', { weekday: 'short' })}
+            {item.toLocaleDateString(localeTag, { weekday: 'short' })}
           </ThemedText>
 
           <ThemedView
             style={[
               styles.dayNumberContainer,
-              isToday && styles.todayNumberContainer,
+              isToday && [styles.todayNumberContainer, { backgroundColor: todayBgColor }],
               isSelected && styles.selectedNumberContainer
             ]}
             lightColor={isToday ? theme.accent : 'transparent'}
@@ -298,23 +305,21 @@ const WeekScroller: React.FC<WeekScrollerProps> = ({ selectedDate, onDateSelect 
     return (
       <View style={styles.weekContainer}>
         <View style={styles.weekHeader}>
-          <TouchableOpacity
-            style={styles.weekNavButton}
+          <PeriodNavigationButton direction="previous"
+            accessibilityLabel={getPeriodNavigationLabel(locale, 'previous', 'week')}
+            isDark={isDark} color={theme.text}
             onPress={goToPreviousWeek}
-          >
-            <IconSymbol name="chevron.left" size={20} color={theme.text} />
-          </TouchableOpacity>
+          />
 
           <ThemedText style={styles.monthYearText}>
             {monthYear}
           </ThemedText>
 
-          <TouchableOpacity
-            style={styles.weekNavButton}
+          <PeriodNavigationButton direction="next"
+            accessibilityLabel={getPeriodNavigationLabel(locale, 'next', 'week')}
+            isDark={isDark} color={theme.text}
             onPress={goToNextWeek}
-          >
-            <IconSymbol name="chevron.right" size={20} color={theme.text} />
-          </TouchableOpacity>
+          />
         </View>
 
         <FlatList
@@ -359,11 +364,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(125, 90, 80, 0.1)',
   },
-  weekNavButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(125, 90, 80, 0.1)',
-  },
   monthYearText: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   },
   todayCard: {
     borderWidth: 2,
-    borderColor: '#7D5A50',
+    // borderColor wird dynamisch gesetzt
   },
   selectedDayCard: {
     borderWidth: 0,
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   todayNumberContainer: {
-    backgroundColor: '#7D5A50',
+    // backgroundColor wird dynamisch gesetzt
   },
   selectedNumberContainer: {
     backgroundColor: 'rgba(255, 255, 255, 0.3)',

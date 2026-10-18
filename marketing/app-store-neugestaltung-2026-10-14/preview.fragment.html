@@ -1,0 +1,66 @@
+<style>
+#lotti-store-review{--store-paper:light-dark(#fff,#211e24);--store-ink:light-dark(#312a36,#f2edf4);--store-secondary:light-dark(#6c6472,#bcb1c5);--store-line:light-dark(#ece7ed,#443d48);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;color:var(--store-ink);color-scheme:light dark}
+#lotti-store-review .store-stage{background:var(--store-paper);padding:24px 20px 28px;border-radius:20px;min-height:710px}
+#lotti-store-review .store-header{display:flex;align-items:center;gap:16px;min-height:100px}
+#lotti-store-review .app-icon{width:76px;height:76px;border-radius:18px;flex:none}
+#lotti-store-review .app-title{font-size:clamp(20px,3.3vw,26px);line-height:1.2;font-weight:600;letter-spacing:-.6px;margin:0 0 6px}
+#lotti-store-review .app-subtitle{font-size:15px;line-height:1.4;margin:0;color:var(--store-secondary)}
+#lotti-store-review .store-facts{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:13px;line-height:1.5;padding:14px 0 16px;border-bottom:1px solid var(--store-line)}
+#lotti-store-review .screens{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:20px}
+#lotti-store-review .existing-shot{display:block;width:100%;height:auto;border-radius:14px}
+#lotti-store-review .shot{aspect-ratio:1242/2688;overflow:hidden;display:flex;flex-direction:column;background:linear-gradient(155deg,#fff8f0,#e7dced);border-radius:14px;color:#342a3b}
+#lotti-store-review .shot-copy{padding:17px 15px 8px;min-height:128px}
+#lotti-store-review .shot-brand{font-size:10px;line-height:1.3;font-weight:600;color:#71607a;margin-bottom:12px;letter-spacing:.2px}
+#lotti-store-review .shot h4{font-size:clamp(17px,2.7vw,23px);line-height:1.16;font-weight:600;letter-spacing:-.55px;margin:0 0 9px}
+#lotti-store-review .shot .accent{color:var(--lotti-accent,#735092)}
+#lotti-store-review .shot p{font-size:12px;line-height:1.4;margin:0;color:#695971}
+#lotti-store-review .shot-screen{min-height:0;flex:1;display:flex;justify-content:center;align-items:flex-end;padding:4px 12px 14px}
+#lotti-store-review .shot-screen img{display:block;height:100%;width:auto;max-width:100%;object-fit:contain;border:4px solid #2f2932;border-radius:21px;background:#2f2932;box-shadow:0 8px 18px #37274122}
+#lotti-store-review .description{font-size:15px;line-height:1.55;margin:20px 0 0;min-height:72px;max-width:600px;color:var(--store-secondary)}
+#lotti-store-review nav button{font:inherit;font-size:14px;border:1px solid var(--store-line);border-radius:12px;padding:10px 16px;background:var(--store-paper);color:var(--store-secondary);cursor:pointer}
+#lotti-store-review nav button[aria-pressed="true"]{background:#eee5f3;color:#75489e;border-color:#c6afd8}
+@media(max-width:560px){#lotti-store-review .store-stage{padding:18px 14px;min-height:710px}#lotti-store-review .app-icon{width:58px;height:58px;border-radius:14px}#lotti-store-review .app-title{font-size:20px}#lotti-store-review .app-subtitle{font-size:14px}#lotti-store-review .screens{grid-template-columns:1fr;max-width:330px;margin:20px auto 0;gap:16px}#lotti-store-review .shot-copy{padding:28px 24px 14px;min-height:180px}#lotti-store-review .shot-brand{font-size:13px;margin-bottom:18px}#lotti-store-review .shot h4{font-size:30px}#lotti-store-review .shot p{font-size:15px}#lotti-store-review .shot-screen{padding:4px 22px 22px}#lotti-store-review .shot-screen img{border-radius:30px}#lotti-store-review .description{min-height:100px}}
+</style>
+<div id="lotti-store-review">
+  <nav aria-label="Vergleich auswählen" style="display:flex;gap:12px;margin:16px 0"><button type="button" data-show="0" aria-pressed="true">Bisherige Serie</button><button type="button" data-show="1" aria-pressed="false">Neue Serie</button></nav>
+  <div class="viz-carousel" aria-label="LottiBaby Store-Auftritt vergleichen" data-previous-label="Zurück" data-next-label="Weiter">
+    <section data-variant="Bisherige lokale Serie" aria-label="Bisherige lokale deutsche Store-Serie">
+      <div class="store-stage">
+        <div class="store-header"><img class="app-icon" src="@@ICON@@" alt="Lotti Baby App-Icon"><div><h3 class="app-title">Lotti Baby: Schlaf &amp; Stillen</h3><p class="app-subtitle">Babytracker, Windeln &amp; Wetter</p></div></div>
+        <div class="store-facts"><span>Anmeldung · In-App-Käufe</span><span>Deutsch + 2 weitere</span></div>
+        <div class="screens" aria-label="Erste drei bestehende iPhone-Screenshots ohne Vorschauvideo">
+          <img class="existing-shot" src="@@OLD1@@" alt="Bestehendes Motiv: Baby und Kleinkind-Modus">
+          <img class="existing-shot" src="@@OLD2@@" alt="Bestehendes Motiv: Verknüpft eure Accounts">
+          <img class="existing-shot" src="@@OLD3@@" alt="Bestehendes Motiv: Verbinde Baby und Schwangerschaft">
+        </div>
+        <p class="description">Dein liebevoller Begleiter für Schwangerschaft und Babyzeit: Schlaf, Stillen, Fläschchen, Windeln, Wehen und Meilensteine einfach festhalten.</p>
+      </div>
+    </section>
+    <section data-variant="Neue Serie" aria-label="Neuer Entwurf für den deutschen App-Store-Auftritt" hidden>
+      <div class="store-stage" id="lotti-store-proposal" aria-label="Warme, ruhige Gestaltung">
+        <div class="store-header"><img class="app-icon" src="@@ICON@@" alt="Lotti Baby App-Icon"><div><h3 class="app-title">Lotti Baby: Baby Tracker</h3><p class="app-subtitle">Stillen, Schlaf &amp; gemeinsam</p></div></div>
+        <div class="store-facts"><span>Anmeldung · In-App-Käufe</span><span>Deutsch + 2 weitere</span></div>
+        <div class="screens" aria-label="Erste drei fertig exportierte Screenshot-Motive">
+          <img class="existing-shot" src="@@MEALS@@" alt="Neue Mahlzeitenübersicht aus dem Release-Build 1.0.24">
+          <img class="existing-shot" src="@@DAY@@" alt="Neue Tagesübersicht aus dem Release-Build 1.0.24">
+          <img class="existing-shot" src="@@SLEEP@@" alt="Neuer Schlaftracker aus dem Release-Build 1.0.24">
+        </div>
+        <p class="description">Wann war das letzte Fläschchen? Haltet Stillen, Schlaf und Windeln fest – und behaltet euren Babyalltag gemeinsam im Blick.</p>
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+{
+  const root=document.getElementById('lotti-store-review');
+  root.querySelectorAll('[data-show]').forEach(button=>button.addEventListener('click',()=>{
+    root.querySelectorAll('[data-show]').forEach(option=>option.setAttribute('aria-pressed',String(option===button)));
+    root.querySelectorAll('section[data-variant]').forEach((section,index)=>section.hidden=index!==Number(button.dataset.show));
+  }));
+  const proposal=document.getElementById('lotti-store-proposal');
+  const design={accent:'#735092'};
+  const paint=()=>proposal.style.setProperty('--lotti-accent',design.accent);
+  paint();
+  if(globalThis.Tweak){const tweak=new Tweak({container:proposal,onChange:paint});tweak.addColorPicker(design,'accent',{label:'Akzentfarbe',reference:'--lotti-accent'});}
+}
+</script>

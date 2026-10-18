@@ -1,0 +1,185 @@
+{
+  "date": "2026-09-10",
+  "git_head": "0adbccd7e5751288798804dca49f5e5fc9b0d53c",
+  "scope": "Current dirty working tree; not a deployed-backend attestation",
+  "sources": [
+    {
+      "path": "package.json",
+      "sha256": "985aab46228adb6cf4ce20bbc173962d8ce4cdaa449801be466426622cef41a8"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "99e6b1a44a38bb2b65cce1cfec4dbb9122b604ade725faaecc5e10ed174b6138"
+    },
+    {
+      "path": "app.json",
+      "sha256": "42405b23ae445d0b4bf3b9f82b292f1683d8c3b6e9472b5bec008f7c1e948265"
+    },
+    {
+      "path": "app.config.js",
+      "sha256": "1685774a7f4d26b54110be34b38c585a1aabeb8bb267632cd6e5c114e2470ae4"
+    },
+    {
+      "path": "android/app/src/main/AndroidManifest.xml",
+      "sha256": "05fc508dd6145405779f3b255f7191e15df9f9c601bcabb31e1471dd5dd4ec83"
+    },
+    {
+      "path": "android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml",
+      "sha256": "5ae23d0ed70c7f0b889d4a85494681ca7514e269efbadd136333e9bea0c9a00f"
+    },
+    {
+      "path": "app/_layout.tsx",
+      "sha256": "091610303886cd8eb12e6111f844818761f2ba6a6e5ee408d038385479123b1f"
+    },
+    {
+      "path": "contexts/AuthContext.tsx",
+      "sha256": "145662a4df6a7c4081c1f5cd7a8b105f52f16897c65037e4d49aeeda96a7d524"
+    },
+    {
+      "path": "contexts/ConvexContext.tsx",
+      "sha256": "3ccd3865b8ef7d4dc3450e6cb5be38d3fea85fd5ec7392f4c706e686954f2f7a"
+    },
+    {
+      "path": "lib/supabase.ts",
+      "sha256": "878d9b86f5bcc11523b6e3b8188a3c9e59a3e74763ad6fb867dd11e78f822b38"
+    },
+    {
+      "path": "lib/profile.ts",
+      "sha256": "1b7bf415a2a334500e58e488363058e8d3756db30b95a9e57520507b64ab55b2"
+    },
+    {
+      "path": "lib/revenuecat.ts",
+      "sha256": "f9d0b7214b791072a71f308a4036a4a9cfc1fcb8c6ce019c1888dd68dd5ff140"
+    },
+    {
+      "path": "lib/weatherService.ts",
+      "sha256": "13185c6e4365cfa058a0601328fb50470ed831aa4e1766b97f7fefe487297d11"
+    },
+    {
+      "path": "lib/advisor/advisorStorage.ts",
+      "sha256": "0d19692987db3be7fb308a8982fa89c4609cfe3d8348e16990989668baba69c3"
+    },
+    {
+      "path": "lib/askLotti/chatStore.ts",
+      "sha256": "cae9b7b0787289cfea3ae2bce52a56f7e737d9fd6f76b034afff69d1d64b7183"
+    },
+    {
+      "path": "lib/calendarService.ts",
+      "sha256": "2ae0b00a48d226c0be204b17bd0578887dd1775241c27ab65efc58233c7fd51b"
+    },
+    {
+      "path": "lib/dataExport.ts",
+      "sha256": "cdb272b124a187a97533d8584aedd587a782cfa485bcc147d446e4c142e04a61"
+    },
+    {
+      "path": "app/prints-shop.tsx",
+      "sha256": "f5875d645b9a36ecdd78e0f21114721e48ca362145576d716c63309e02c3cd6e"
+    },
+    {
+      "path": "app/support.tsx",
+      "sha256": "15dd1d6121206d6a6872b6c26f5df0ff47a515f41fb55cab47a9b3ae17113bcb"
+    },
+    {
+      "path": "supabase/functions/ask-lotti/index.ts",
+      "sha256": "90215667a75c2640f1dc4d2c2bc7ea7acc1298bd5a3d9b957f7738aa4afb42c8"
+    },
+    {
+      "path": "supabase/functions/voice-log-parse/index.ts",
+      "sha256": "c66155c7199489f9fa6689ace476013b4c1ebf46567a69ff03bc316c4a1917df"
+    },
+    {
+      "path": "supabase/migrations/20261226000001_fix_delete_user_data_and_partner_fk.sql",
+      "sha256": "d4d7a0295039960619729bab09f61288cfaa0fe5fc7a622e149ec9d0413f869d"
+    }
+  ],
+  "lockfile_versions": {
+    "expo": "57.0.14",
+    "react-native": "0.86.2",
+    "@supabase/supabase-js": "2.98.0",
+    "@sentry/react-native": "7.11.0",
+    "react-native-purchases": "9.10.5",
+    "convex": "1.42.1",
+    "expo-notifications": "57.0.12",
+    "expo-location": "57.0.11",
+    "expo-audio": "57.0.3",
+    "expo-camera": "57.0.3",
+    "expo-calendar": "57.0.2",
+    "expo-image-picker": "57.0.11",
+    "expo-updates": "57.0.15",
+    "react-native-webview": "13.16.1",
+    "@react-native-async-storage/async-storage": "2.2.0"
+  },
+  "qa_images": [
+    {
+      "file": "material/qa-step05/01-login.png",
+      "source": "docs/android-play/step-05-screenshots/01-login.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "4beda19f36c7b21c6d65b388b780e5de1c5c795041ba825f0740e9b6767e1a9c",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/02-keyboard-130.png",
+      "source": "docs/android-play/step-05-screenshots/02-keyboard-130.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "ddc059f5b39c9219c104fd6516f5b90624fda75fe1a7447217999fb83c951258",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/03-onboarding-back-fixed.png",
+      "source": "docs/android-play/step-05-screenshots/03-onboarding-back-fixed.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "aa1e5be1aa787c06047b7ffac6bf02b23b2d286f3c5d7ba9cec43ee4a0d2cdb0",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/04-date-picker.png",
+      "source": "docs/android-play/step-05-screenshots/04-date-picker.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "bc2e29c2b37994ec27c7aed6936404f1c5ebcc6c7d0d064ba6d6f1a64494d5e8",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/05-camera-permission.png",
+      "source": "docs/android-play/step-05-screenshots/05-camera-permission.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "ae06c87df48563dcd252a28805f008b89145bf61dc9005123f2f50baec110157",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/06-paywall-disabled.png",
+      "source": "docs/android-play/step-05-screenshots/06-paywall-disabled.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "82b6734803a3a821aa362469e7b8ff9ea3870a7eec0a4a8b7cf3c97a0615506c",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    },
+    {
+      "file": "material/qa-step05/07-onboarding-summary.png",
+      "source": "docs/android-play/step-05-screenshots/07-onboarding-summary.png",
+      "width": 1080,
+      "height": 2400,
+      "png_color_type": 6,
+      "sha256": "e00290816938b61ab02f85cb1a8596ff763c04ed1790b9e1ef0f6ccb4c920223",
+      "status": "QA_ONLY_NOT_FOR_UPLOAD"
+    }
+  ],
+  "icon_source": {
+    "file": "material/source/icon-1024-source.png",
+    "source": "assets/images/icon.png",
+    "width": 1024,
+    "height": 1024,
+    "sha256": "4398f481086c729fd84ec83312bc8ff80d15567ab1422028752354546bf72d8a",
+    "status": "SOURCE_NOT_FINAL_STORE_ICON"
+  }
+}

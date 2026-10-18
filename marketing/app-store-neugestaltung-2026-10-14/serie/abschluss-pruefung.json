@@ -1,0 +1,38 @@
+{
+  "generated": "2026-10-14T21:34:10.227Z",
+  "passed": true,
+  "rawCaptures": 42,
+  "pngExports": 63,
+  "videoSeconds": 24,
+  "videoSha256": "15f67d749a7c2a1f5153787e057044bdbca3769616f67a1612c5d52192cf2771",
+  "videoDecoded": true,
+  "sourceHashesCurrent": true,
+  "storeMappingComplete": true,
+  "visualReviewComplete": true,
+  "visualNotes": [
+    {
+      "captures": [
+        "es-ES/iphone/02-gemeinsam.png"
+      ],
+      "finding": "In der echten Kennzahlenkarte bleibt Stillen 1x deutsch. Die übrige Last-bottle-Zeile ist nach Neustart spanisch."
+    },
+    {
+      "captures": [
+        "de-DE/iphone/05-erinnerungen.png",
+        "en-US/iphone/05-erinnerungen.png",
+        "en-US/iphone/02-gemeinsam.png"
+      ],
+      "finding": "Vorhandene App-Umbrüche bei VERÄNDERUNG, MEASUREMENTS und Breastfeeding bleiben in den echten Aufnahmen erhalten."
+    },
+    {
+      "captures": [
+        "en-US/iphone/06-familienalltag.png",
+        "en-US/ipad/06-familienalltag.png",
+        "es-ES/iphone/06-familienalltag.png",
+        "es-ES/ipad/06-familienalltag.png"
+      ],
+      "finding": "Die Demo-Personenzuordnung Ich wird im echten Planer auch nach Sprachwechsel angezeigt."
+    }
+  ],
+  "uploaded": false
+}

@@ -1,0 +1,51 @@
+{
+  "erstellt": "2026-10-15",
+  "film": "export/lotti-baby-vorschau-motion-de.mp4",
+  "sha256": "78b02ab6de64b2e4ea22ff9f6165d17256ffffa18a66108f8389558ef3353116",
+  "stumm": "export/lotti-baby-vorschau-motion-de-ohne-musik.mp4",
+  "sha256_stumm": "65166b9108d6ef88cd2401903058175dd41c98fc39abd126747218aff8a91669",
+  "technik": {
+    "programs": [
+
+    ],
+    "stream_groups": [
+
+    ],
+    "streams": [
+        {
+            "codec_name": "h264",
+            "profile": "High",
+            "width": 886,
+            "height": 1920,
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "bit_rate": "10424140",
+            "nb_frames": "825"
+        },
+        {
+            "codec_name": "aac",
+            "profile": "LC",
+            "sample_rate": "48000",
+            "channels": 2,
+            "r_frame_rate": "0/0",
+            "avg_frame_rate": "0/0",
+            "bit_rate": "256160",
+            "nb_frames": "1293"
+        }
+    ],
+    "format": {
+        "duration": "27.520000",
+        "size": "36745337",
+        "bit_rate": "10681784"
+    }
+},
+  "lautheit_lufs": -19.4,
+  "spitze_dbfs": -6.2,
+  "schwarze_bilder": 0,
+  "harte_wechsel_s": [8.33, 15.17, 16.67, 18.9],
+  "hyperframes_check": "bestanden, 0 Fehler, 25/25 WCAG AA",
+  "quelle_version": "1.0.24 (1.0.51)",
+  "apple_quellen": ["https://developer.apple.com/app-store/app-previews/", "https://developer.apple.com/help/app-store-connect/reference/app-information/app-preview-specifications/"]
+}

@@ -24,6 +24,36 @@ const tertiaryTextDark = '#E9D8C2'; // Lighter beige - for less important text (
 const disabledTextDark = '#B8A99A'; // Lighter muted beige - for disabled text (contrast ratio > 3:1)
 const accentTextDark = '#A5D6D9'; // Light turquoise - for highlights and accents (contrast ratio > 4.5:1)
 
+/** Opaque action pairs; feature/status colors remain independent. */
+export const ActionColors = {
+  light: {
+    primary: '#8E4EC6',
+    primaryPressed: '#793DB0',
+    onPrimary: '#FFFFFF',
+    secondary: '#FFFFFF',
+    secondaryPressed: '#F0EDF4',
+    onSecondary: primaryTextLight,
+    destructive: '#B3261E',
+    destructivePressed: '#941E18',
+    onDestructive: '#FFFFFF',
+    disabled: '#E6E1DE',
+    onDisabled: secondaryTextLight,
+  },
+  dark: {
+    primary: '#8E4EC6',
+    primaryPressed: '#793DB0',
+    onPrimary: '#FFFFFF',
+    secondary: '#3D3330',
+    secondaryPressed: '#5C4033',
+    onSecondary: secondaryTextDark,
+    destructive: '#B3261E',
+    destructivePressed: '#941E18',
+    onDestructive: '#FFFFFF',
+    disabled: '#3D3330',
+    onDisabled: tertiaryTextDark,
+  },
+} as const;
+
 // Legacy variables for backward compatibility
 const darkTextColor = secondaryTextLight;
 const lightTextColor = primaryTextDark;
@@ -112,3 +142,84 @@ export const Colors = {
     card: '#2A2321', // Very dark brown for cards
   },
 };
+/** Opaque form fields on the existing shared glass material. */
+/** Readable content above the wallpaper; category tints may sit on top. */
+export const ContentColors = {
+  light: {
+    surface: 'rgba(255,255,255,0.50)',
+    photoSurface: 'rgba(255,255,255,0.28)',
+    readableSurface: 'rgba(255,255,255,0.94)',
+    border: 'rgba(255,255,255,0.70)',
+    innerBorder: 'rgba(255,255,255,0.26)',
+    sheetSurface: 'rgba(255,255,255,0.74)',
+    gloss: ['rgba(255,255,255,0.28)', 'rgba(255,255,255,0.06)', 'rgba(228,235,255,0.05)'],
+    timerSurface: 'rgba(225,244,252,0.42)',
+    photoTimerSurface: 'rgba(225,244,252,0.24)',
+    selected: '#F0E4FA',
+  },
+  dark: {
+    surface: 'rgba(24,25,34,0.50)',
+    photoSurface: 'rgba(24,25,34,0.34)',
+    readableSurface: 'rgba(24,25,34,0.94)',
+    border: 'rgba(255,255,255,0.26)',
+    innerBorder: 'rgba(255,255,255,0.10)',
+    sheetSurface: 'rgba(24,25,34,0.76)',
+    gloss: ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.03)', 'rgba(170,190,235,0.03)'],
+    timerSurface: 'rgba(28,47,62,0.50)',
+    photoTimerSurface: 'rgba(28,47,62,0.30)',
+    selected: '#493357',
+  },
+} as const;
+
+export const FormColors = {
+  light: {
+    text: '#5C4033', secondary: '#7D5A50', placeholder: '#80675F',
+    field: '#FFFFFF', border: '#E0DCE4', handle: '#BBA79B',
+    backdrop: 'rgba(35,25,20,0.40)',
+  },
+  dark: {
+    text: '#F8F0E5', secondary: '#E9D8C2', placeholder: '#CCBBAF',
+    field: '#332A28', border: '#766052', handle: '#A68F80',
+    backdrop: 'rgba(0,0,0,0.62)',
+  },
+} as const;
+
+export type SurfaceTone = 'default' | 'lavender';
+
+/** Cool glass treatment, shared by the switcher's surface, actions and reveal. */
+export const LavenderColors = {
+  light: {
+    text: '#40304F', secondary: '#665675',
+    field: 'rgba(255,255,255,0.58)', border: 'rgba(114,82,150,0.22)',
+    backdrop: 'rgba(29,20,44,0.40)',
+    action: 'rgba(142,78,198,0.12)', actionPressed: 'rgba(142,78,198,0.22)',
+    onAction: '#4F3869', disabled: '#E6E0ED', onDisabled: '#6A5A79',
+    surface: 'rgba(244,239,252,0.96)', surfaceBorder: 'rgba(255,255,255,0.90)',
+    gradient: ['rgba(255,255,255,0.78)', 'rgba(248,244,255,0.48)', 'rgba(217,196,244,0.28)'],
+    transition: ['#F1EAF9', '#E6DCF5', '#F8F4FE'],
+  },
+  dark: {
+    text: '#F4EDFC', secondary: '#D7C9E8',
+    field: 'rgba(226,208,252,0.07)', border: 'rgba(218,191,247,0.24)',
+    backdrop: 'rgba(0,0,0,0.62)',
+    action: 'rgba(196,159,234,0.14)', actionPressed: 'rgba(196,159,234,0.24)',
+    onAction: '#F0E5FC', disabled: '#393044', onDisabled: '#C4B5D4',
+    surface: 'rgba(33,26,43,0.96)', surfaceBorder: 'rgba(225,209,255,0.22)',
+    gradient: ['rgba(231,215,255,0.10)', 'rgba(36,28,49,0.16)', 'rgba(153,111,195,0.12)'],
+    transition: ['#211B2B', '#312440', '#251D33'],
+  },
+} as const;
+
+export function getActionColors(scheme: 'light' | 'dark', tone: SurfaceTone = 'default') {
+  const colors = ActionColors[scheme];
+  if (tone === 'default') return colors;
+  const lavender = LavenderColors[scheme];
+  return {
+    ...colors,
+    secondary: lavender.action,
+    secondaryPressed: lavender.actionPressed,
+    onSecondary: lavender.onAction,
+    disabled: lavender.disabled,
+    onDisabled: lavender.onDisabled,
+  };
+}

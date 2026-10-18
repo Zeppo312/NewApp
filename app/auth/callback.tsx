@@ -1,142 +1,108 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, View, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { AuthTransitionScreen } from '@/components/auth/auth-transition-screen';
+import { useLocale } from '@/contexts/LocaleContext';
 import { supabase } from '@/lib/supabase';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedBackground } from '@/components/ThemedBackground';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { invalidateAllCaches } from '@/lib/appCache';
+import { getOnboardingCompletionState } from '@/lib/onboarding';
+import { translateAuthText, type AuthTranslationKey } from '@/lib/authTranslations';
 
 export default function Callback() {
+  const { locale } = useLocale();
   const router = useRouter();
-  const [status, setStatus] = useState('Bestätigung wird verarbeitet...');
-  const colorScheme = useColorScheme() ?? 'light';
-  const theme = Colors[colorScheme];
+  const [status, setStatus] = useState<AuthTranslationKey>('callback.confirming');
+  const [failure, setFailure] = useState<AuthTranslationKey | null>(null);
+  const searchParams = useLocalSearchParams();
+  const rawUrl = Linking.useURL();
+  const t = (key: AuthTranslationKey) => translateAuthText(locale, key);
+
+  const rawUrlParams = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (!rawUrl) return params;
+    const [withoutHash, hashSegment] = rawUrl.split('#');
+    for (const segment of [withoutHash.split('?')[1], hashSegment]) {
+      if (segment) new URLSearchParams(segment).forEach((value, key) => { params[key] = value; });
+    }
+    return params;
+  }, [rawUrl]);
+
+  const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
+  const code = first(searchParams.code ?? rawUrlParams.code);
+  const token = first(searchParams.token ?? rawUrlParams.token ?? searchParams.token_hash ?? rawUrlParams.token_hash);
+  const type = first(searchParams.type ?? rawUrlParams.type);
+  const accessToken = first(searchParams.access_token ?? rawUrlParams.access_token);
+  const refreshToken = first(searchParams.refresh_token ?? rawUrlParams.refresh_token);
+  const providerError = first(searchParams.error ?? rawUrlParams.error);
+  const errorCode = first(searchParams.error_code ?? rawUrlParams.error_code);
 
   useEffect(() => {
+    let active = true;
+    const showError = (key: AuthTranslationKey) => { if (active) setFailure(key); };
     const handleAuthCallback = async () => {
+      await Promise.resolve();
+      if (!active) return;
+      setFailure(null);
+      setStatus('callback.confirming');
+      // Supabase can fall back to this generic route when OAuth state expires.
+      // Handle that error before considering any unrelated existing session.
+      if (providerError || errorCode) {
+        if (providerError === 'access_denied') showError('authTransition.cancelled');
+        else if (['bad_oauth_state', 'flow_state_expired', 'flow_state_not_found', 'otp_expired'].includes(errorCode ?? '')) {
+          showError('authTransition.expired');
+        } else showError('authTransition.failedMessage');
+        return;
+      }
+
       try {
-        // Prüfen des aktuellen Auth-Status
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Auth callback error:', error);
-          setStatus('Fehler bei der Bestätigung');
-          Alert.alert(
-            'Bestätigung fehlgeschlagen',
-            'Die E-Mail-Bestätigung konnte nicht verarbeitet werden.',
-            [
-              { 
-                text: 'Zurück zum Login', 
-                onPress: () => router.replace('/(auth)/login')
-              }
-            ]
-          );
+        const codeOrToken = code ?? token;
+        if (codeOrToken) {
+          setStatus('callback.processingLink');
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeOrToken);
+          if (!active) return;
+          if (exchangeError) {
+            // Existing email links may carry token_hash instead of a PKCE code.
+            if (type && token) {
+              const { error: verifyError } = await supabase.auth.verifyOtp({ type: type as any, token_hash: token });
+              if (!active) return;
+              if (verifyError) { showError('callback.invalidLinkMessage'); return; }
+            } else { showError('callback.invalidLinkMessage'); return; }
+          }
+        } else if (accessToken && refreshToken) {
+          setStatus('callback.processingLink');
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (!active) return;
+          if (error) { showError('callback.invalidLinkMessage'); return; }
+        }
+
+        if (type?.toLowerCase() === 'recovery') {
+          router.replace('/auth/reset-password');
           return;
         }
 
-        if (session?.user) {
-          setStatus('E-Mail erfolgreich bestätigt!');
-          
-          // Prüfen ob Profil vollständig ist
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('first_name, is_baby_born')
-            .eq('id', session.user.id)
-            .single();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (!active) return;
+        if (error) { showError('authTransition.failedMessage'); return; }
+        if (!session?.user) { showError('authTransition.noSession'); return; }
 
-          // Kurz warten für bessere UX
-          setTimeout(() => {
-            if (!profileData?.first_name) {
-              // Neuer User -> Onboarding
-              router.replace('/(auth)/getUserInfo');
-            } else {
-              // Bestehender User -> App
-              if (profileData.is_baby_born) {
-                router.replace('/(tabs)/home');
-              } else {
-                router.replace('/(tabs)/countdown');
-              }
-            }
-          }, 2000);
-        } else {
-          setStatus('Keine gültige Session gefunden');
-          setTimeout(() => {
-            router.replace('/(auth)/login');
-          }, 2000);
-        }
-      } catch (err) {
-        console.error('Callback processing error:', err);
-        setStatus('Unerwarteter Fehler');
-        setTimeout(() => {
-          router.replace('/(auth)/login');
-        }, 2000);
+        await invalidateAllCaches();
+        if (!active) return;
+        const onboardingComplete = await getOnboardingCompletionState(session.user.id);
+        if (!active) return;
+        // No artificial success screen or delay: continue as soon as ready.
+        router.replace(onboardingComplete ? '/' : '/(auth)/getUserInfo');
+      } catch {
+        showError('authTransition.failedMessage');
       }
     };
 
-    // Auth State Listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email_confirmed_at);
-      
-      if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
-        handleAuthCallback();
-      } else if (event === 'TOKEN_REFRESHED') {
-        handleAuthCallback();
-      }
-    });
+    void handleAuthCallback();
+    return () => { active = false; };
+  }, [accessToken, code, errorCode, providerError, refreshToken, router, token, type]);
 
-    // Initial check
-    handleAuthCallback();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
-
-  return (
-    <ThemedBackground style={styles.backgroundImage} resizeMode="repeat">
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <ThemedText style={styles.icon}>✅</ThemedText>
-          <ThemedText type="title" style={styles.title}>
-            E-Mail-Bestätigung
-          </ThemedText>
-          <ThemedText style={styles.status}>
-            {status}
-          </ThemedText>
-        </View>
-      </SafeAreaView>
-    </ThemedBackground>
-  );
+  return <AuthTransitionScreen
+    title={t(failure ? 'authTransition.failedTitle' : 'authTransition.title')}
+    message={t(failure ?? status)} backLabel={t('common.backToLogin')}
+    onBack={failure ? () => router.replace('/(auth)/login') : undefined}
+  />;
 }
-
-const styles = StyleSheet.create({
-  backgroundImage: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  content: {
-    alignItems: 'center',
-  },
-  icon: {
-    fontSize: 64,
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 24,
-    marginBottom: 16,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  status: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.8,
-  },
-});

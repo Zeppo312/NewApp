@@ -1,20 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, SafeAreaView, StatusBar, FlatList, Linking, useWindowDimensions, Platform } from 'react-native';
-import { Text as RNText } from 'react-native';
-import { router, useRouter } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, ScrollView, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Switch, SafeAreaView, StatusBar } from 'react-native';
+import { useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedBackground } from '@/components/ThemedBackground';
-import { LiquidGlassCard, GLASS_OVERLAY, LAYOUT_PAD, RADIUS, PRIMARY, TEXT_PRIMARY, TIMELINE_INSET } from '@/constants/DesignGuide';
+import { LiquidGlassCard, GLASS_OVERLAY, GLASS_OVERLAY_DARK, LAYOUT_PAD } from '@/constants/DesignGuide';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { useBabyStatus } from '@/contexts/BabyStatusContext';
+import { useLocale } from '@/contexts/LocaleContext';
+import {
+  localizeBirthPlanOptionValue,
+  translateBirthPlanText,
+  type BirthPlanLocale,
+  type BirthPlanTranslationKey,
+} from '@/lib/birthPlanTranslations';
 
 // TIMELINE_INSET zentral aus DesignGuide
-import { supabase } from '@/lib/supabase';
-import { getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
+import { supabase, getCurrentUser, getGeburtsplan, saveGeburtsplan, saveStructuredGeburtsplan } from '@/lib/supabase';
 import { GeburtsplanData, defaultGeburtsplan } from '@/types/geburtsplan';
 import { Asset } from 'expo-asset';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { generateAndDownloadPDF } from '@/lib/geburtsplan-utils';
 import Header from '@/components/Header';
 
@@ -29,66 +36,69 @@ import { SonstigeWuenscheSection } from '@/components/geburtsplan/SonstigeWuensc
 // Die Formatierungsfunktionen wurden in eine separate Datei ausgelagert: components/geburtsplan/formatHelpers.ts
 
 // Funktion zum Generieren eines Textes aus den strukturierten Daten
-const generateTextFromStructuredData = (data: GeburtsplanData): string => {
+const generateTextFromStructuredData = (data: GeburtsplanData, locale: BirthPlanLocale): string => {
+  const t = (key: BirthPlanTranslationKey) => translateBirthPlanText(locale, key);
+  const option = (value: string) => localizeBirthPlanOptionValue(locale, value);
+  const list = (values: string[]) => values.map(option).join(', ');
   let text = '';
 
   // 1. Allgemeine Angaben
-  text += 'GEBURTSPLAN\n\n';
-  text += '1. Allgemeine Angaben\n';
-  if (data.allgemeineAngaben.mutterName) text += `Name der Mutter: ${data.allgemeineAngaben.mutterName}\n`;
-  if (data.allgemeineAngaben.entbindungstermin) text += `Entbindungstermin: ${data.allgemeineAngaben.entbindungstermin}\n`;
-  if (data.allgemeineAngaben.geburtsklinik) text += `Geburtsklinik / Hausgeburt: ${data.allgemeineAngaben.geburtsklinik}\n`;
-  if (data.allgemeineAngaben.begleitpersonen) text += `Begleitperson(en): ${data.allgemeineAngaben.begleitpersonen}\n`;
+  text += `${t('export.documentTitle')}\n\n`;
+  text += `${t('section.general')}\n`;
+  if (data.allgemeineAngaben.mutterName) text += `${t('general.motherName')}: ${data.allgemeineAngaben.mutterName}\n`;
+  if (data.allgemeineAngaben.entbindungstermin) text += `${t('general.dueDate')}: ${data.allgemeineAngaben.entbindungstermin}\n`;
+  if (data.allgemeineAngaben.geburtsklinik) text += `${t('general.place')}: ${data.allgemeineAngaben.geburtsklinik}\n`;
+  if (data.allgemeineAngaben.begleitpersonen) text += `${t('general.companions')}: ${data.allgemeineAngaben.begleitpersonen}\n`;
   text += '\n';
 
   // 2. Wünsche zur Geburt
-  text += '2. Wünsche zur Geburt\n';
+  text += `${t('section.birthWishes')}\n`;
   if (data.geburtsWuensche.geburtspositionen.length > 0) {
-    text += `Geburtspositionen: ${data.geburtsWuensche.geburtspositionen.join(', ')}\n`;
+    text += `${t('birthWishes.positions')}: ${list(data.geburtsWuensche.geburtspositionen)}\n`;
   }
   if (data.geburtsWuensche.schmerzmittel.length > 0) {
-    text += `Schmerzmittel: ${data.geburtsWuensche.schmerzmittel.join(', ')}\n`;
+    text += `${t('birthWishes.painRelief')}: ${list(data.geburtsWuensche.schmerzmittel)}\n`;
   }
   if (data.geburtsWuensche.rolleBegleitperson) {
-    text += `Rolle der Begleitperson: ${data.geburtsWuensche.rolleBegleitperson}\n`;
+    text += `${t('birthWishes.companionRole')}: ${option(data.geburtsWuensche.rolleBegleitperson)}\n`;
   }
   if (data.geburtsWuensche.musikAtmosphaere.length > 0) {
-    text += `Musik / Atmosphäre: ${data.geburtsWuensche.musikAtmosphaere.join(', ')}\n`;
+    text += `${t('birthWishes.atmosphere')}: ${list(data.geburtsWuensche.musikAtmosphaere)}\n`;
   }
   if (data.geburtsWuensche.sonstigeWuensche) {
-    text += `Sonstige Wünsche: ${data.geburtsWuensche.sonstigeWuensche}\n`;
+    text += `${t('birthWishes.other')}: ${data.geburtsWuensche.sonstigeWuensche}\n`;
   }
   text += '\n';
 
   // 3. Medizinische Eingriffe & Maßnahmen
-  text += '3. Medizinische Eingriffe & Maßnahmen\n';
-  if (data.medizinischeEingriffe.wehenfoerderung) text += `Wehenförderung: ${data.medizinischeEingriffe.wehenfoerderung}\n`;
-  if (data.medizinischeEingriffe.dammschnitt) text += `Dammschnitt / -massage: ${data.medizinischeEingriffe.dammschnitt}\n`;
-  if (data.medizinischeEingriffe.monitoring) text += `Monitoring: ${data.medizinischeEingriffe.monitoring}\n`;
-  if (data.medizinischeEingriffe.notkaiserschnitt) text += `Notkaiserschnitt: ${data.medizinischeEingriffe.notkaiserschnitt}\n`;
-  if (data.medizinischeEingriffe.sonstigeEingriffe) text += `Sonstige Eingriffe: ${data.medizinischeEingriffe.sonstigeEingriffe}\n`;
+  text += `${t('section.interventions')}\n`;
+  if (data.medizinischeEingriffe.wehenfoerderung) text += `${t('interventions.induction')}: ${option(data.medizinischeEingriffe.wehenfoerderung)}\n`;
+  if (data.medizinischeEingriffe.dammschnitt) text += `${t('interventions.episiotomy')}: ${option(data.medizinischeEingriffe.dammschnitt)}\n`;
+  if (data.medizinischeEingriffe.monitoring) text += `${t('interventions.monitoring')}: ${option(data.medizinischeEingriffe.monitoring)}\n`;
+  if (data.medizinischeEingriffe.notkaiserschnitt) text += `${t('interventions.emergencyCSection')}: ${option(data.medizinischeEingriffe.notkaiserschnitt)}\n`;
+  if (data.medizinischeEingriffe.sonstigeEingriffe) text += `${t('interventions.other')}: ${data.medizinischeEingriffe.sonstigeEingriffe}\n`;
   text += '\n';
 
   // 4. Nach der Geburt
-  text += '4. Nach der Geburt\n';
-  text += `Bonding: ${data.nachDerGeburt.bonding ? 'Ja' : 'Nein'}\n`;
-  text += `Stillen: ${data.nachDerGeburt.stillen ? 'Ja' : 'Nein'}\n`;
-  if (data.nachDerGeburt.plazenta) text += `Plazenta: ${data.nachDerGeburt.plazenta}\n`;
-  if (data.nachDerGeburt.vitaminKGabe) text += `Vitamin-K-Gabe fürs Baby: ${data.nachDerGeburt.vitaminKGabe}\n`;
-  if (data.nachDerGeburt.sonstigeWuensche) text += `Sonstige Wünsche: ${data.nachDerGeburt.sonstigeWuensche}\n`;
+  text += `${t('section.afterBirth')}\n`;
+  text += `${t('afterBirth.bonding')}: ${t(data.nachDerGeburt.bonding ? 'common.yes' : 'common.no')}\n`;
+  text += `${t('afterBirth.breastfeeding')}: ${t(data.nachDerGeburt.stillen ? 'common.yes' : 'common.no')}\n`;
+  if (data.nachDerGeburt.plazenta) text += `${t('afterBirth.placenta')}: ${option(data.nachDerGeburt.plazenta)}\n`;
+  if (data.nachDerGeburt.vitaminKGabe) text += `${t('afterBirth.vitaminK')}: ${option(data.nachDerGeburt.vitaminKGabe)}\n`;
+  if (data.nachDerGeburt.sonstigeWuensche) text += `${t('afterBirth.other')}: ${data.nachDerGeburt.sonstigeWuensche}\n`;
   text += '\n';
 
   // 5. Für den Notfall / Kaiserschnitt
-  text += '5. Für den Notfall / Kaiserschnitt\n';
-  if (data.notfall.begleitpersonImOP) text += `Begleitperson im OP: ${data.notfall.begleitpersonImOP}\n`;
-  text += `Bonding im OP: ${data.notfall.bondingImOP ? 'Ja' : 'Nein'}\n`;
-  if (data.notfall.fotoerlaubnis) text += `Fotoerlaubnis: ${data.notfall.fotoerlaubnis}\n`;
-  if (data.notfall.sonstigeWuensche) text += `Sonstige Wünsche: ${data.notfall.sonstigeWuensche}\n`;
+  text += `${t('section.emergency')}\n`;
+  if (data.notfall.begleitpersonImOP) text += `${t('emergency.companion')}: ${option(data.notfall.begleitpersonImOP)}\n`;
+  text += `${t('emergency.bonding')}: ${t(data.notfall.bondingImOP ? 'common.yes' : 'common.no')}\n`;
+  if (data.notfall.fotoerlaubnis) text += `${t('emergency.photos')}: ${option(data.notfall.fotoerlaubnis)}\n`;
+  if (data.notfall.sonstigeWuensche) text += `${t('emergency.other')}: ${data.notfall.sonstigeWuensche}\n`;
   text += '\n';
 
   // 6. Sonstige Wünsche / Hinweise
   if (data.sonstigeWuensche.freitext) {
-    text += '6. Sonstige Wünsche / Hinweise\n';
+    text += `${t('section.other')}\n`;
     text += `${data.sonstigeWuensche.freitext}\n`;
   }
 
@@ -96,11 +106,25 @@ const generateTextFromStructuredData = (data: GeburtsplanData): string => {
 };
 
 export default function GeburtsplanScreen() {
+  const { locale } = useLocale();
+  const t = (key: BirthPlanTranslationKey) => translateBirthPlanText(locale, key);
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
+  const iconAccentColor = isDark ? adaptiveColors.accent : theme.accent;
+  const iconSecondaryColor = isDark ? adaptiveColors.iconSecondary : theme.tabIconDefault;
+  const heroIconBackground = isDark ? 'rgba(142,78,198,0.7)' : 'rgba(142,78,198,0.9)';
   const router = useRouter();
+  const { isReadOnlyPreviewMode } = useBabyStatus();
   const [user, setUser] = useState<any>(null);
-  const styles = React.useMemo(() => createStyles(theme), [theme]);
+  const styles = React.useMemo(
+    () => createStyles({ textPrimary, textSecondary, isDark }),
+    [textPrimary, textSecondary, isDark]
+  );
 
   // State für den Geburtsplan
   const [geburtsplan, setGeburtsplan] = useState('');
@@ -111,6 +135,19 @@ export default function GeburtsplanScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [babyIconBase64, setBabyIconBase64] = useState<string | null>(null);
+  const headerSubtitle = isReadOnlyPreviewMode
+    ? t('screen.previewSubtitle')
+    : t('screen.subtitle');
+
+  const showReadOnlyPreviewAlert = () => {
+    Alert.alert(t('preview.alertTitle'), t('preview.description'));
+  };
+
+  const ensureWritableInCurrentMode = () => {
+    if (!isReadOnlyPreviewMode) return true;
+    showReadOnlyPreviewAlert();
+    return false;
+  };
 
   // Lade das Baby-Icon beim Start
   useEffect(() => {
@@ -188,7 +225,7 @@ export default function GeburtsplanScreen() {
             setGeburtsplan(data.textContent);
           } else {
             // Ansonsten generieren wir den Text aus den strukturierten Daten
-            const generatedContent = generateTextFromStructuredData(data.structured_data);
+            const generatedContent = generateTextFromStructuredData(data.structured_data, locale);
             setGeburtsplan(generatedContent);
           }
         } else {
@@ -209,17 +246,18 @@ export default function GeburtsplanScreen() {
   // Funktion zum Generieren und Herunterladen des Geburtsplans als PDF
   const handleGeneratePDF = async () => {
     if (!user) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan als PDF zu speichern.');
+      Alert.alert(t('common.notice'), t('alert.signInPdf'));
       return;
     }
 
     // Verwende die ausgelagerte Funktion
-    await generateAndDownloadPDF(babyIconBase64, setIsGeneratingPDF);
+    await generateAndDownloadPDF(babyIconBase64, setIsGeneratingPDF, locale);
   };
 
   const handleSaveGeburtsplan = async () => {
+    if (!ensureWritableInCurrentMode()) return;
     if (!user) {
-      Alert.alert('Hinweis', 'Bitte melde dich an, um deinen Geburtsplan zu speichern.');
+      Alert.alert(t('common.notice'), t('alert.signInSave'));
       return;
     }
 
@@ -232,7 +270,7 @@ export default function GeburtsplanScreen() {
       if (useStructuredEditor) {
         // Strukturierten Geburtsplan speichern
         // Wir generieren auch einen Textinhalt aus den strukturierten Daten
-        const generatedContent = generateTextFromStructuredData(structuredData);
+        const generatedContent = generateTextFromStructuredData(structuredData, locale);
         result = await saveStructuredGeburtsplan(structuredData, generatedContent);
         // Auch den Textinhalt aktualisieren
         setGeburtsplan(generatedContent);
@@ -245,11 +283,11 @@ export default function GeburtsplanScreen() {
 
       if (error) {
         console.error('Error saving geburtsplan:', error);
-        Alert.alert('Fehler', 'Der Geburtsplan konnte nicht gespeichert werden.');
+        Alert.alert(t('common.error'), t('alert.saveFailed'));
       } else {
-        Alert.alert('Erfolg', 'Dein Geburtsplan wurde gespeichert.', [
+        Alert.alert(t('common.success'), t('alert.saved'), [
           {
-            text: 'OK',
+            text: t('common.ok'),
             onPress: () => {
               // Nach erfolgreichem Speichern zur Countdown-Seite zurückkehren
               router.push('/(tabs)/countdown');
@@ -262,7 +300,7 @@ export default function GeburtsplanScreen() {
       }
     } catch (err) {
       console.error('Failed to save geburtsplan:', err);
-      Alert.alert('Fehler', 'Der Geburtsplan konnte nicht gespeichert werden.');
+      Alert.alert(t('common.error'), t('alert.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -271,48 +309,61 @@ export default function GeburtsplanScreen() {
   return (
     <ThemedBackground style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         
         <Header 
-          title="Geburtsplan" 
-          subtitle={"Plane deine ideale Geburt\nIndividuell. Klar. Teilbar."}
+          title={t('screen.title')}
+          subtitle={headerSubtitle}
           showBackButton 
         />
+
+        {isReadOnlyPreviewMode && (
+          <View style={styles.readOnlyPreviewBanner}>
+            <ThemedText style={styles.readOnlyPreviewTitle}>{t('preview.title')}</ThemedText>
+            <ThemedText style={styles.readOnlyPreviewText}>
+              {t('preview.description')}
+            </ThemedText>
+          </View>
+        )}
         
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <View style={styles.heroHeader}>
-                    <View style={[styles.heroIcon, { backgroundColor: 'rgba(142,78,198,0.9)' }]}>
+                    <View style={[styles.heroIcon, { backgroundColor: heroIconBackground }]}>
                       <IconSymbol name="doc.text.fill" size={24} color="#FFFFFF" />
                     </View>
                     <ThemedText style={[styles.sectionTitle, styles.centerText]}>
-                      Über den Geburtsplan
+                      {t('intro.title')}
                     </ThemedText>
                     <ThemedText style={[styles.infoText, styles.centerText]}>
-                      Hier kannst du deinen persönlichen Geburtsplan erstellen und speichern. Notiere deine Wünsche und Vorstellungen für die Geburt, damit du sie mit deinem Geburtsteam teilen kannst.
+                      {t('intro.description')}
                     </ThemedText>
                   </View>
                 </LiquidGlassCard>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={styles.sectionTitle}>
-                    Editor-Modus
+                    {t('editor.title')}
                   </ThemedText>
                   <View style={styles.switchContainer}>
-                    <ThemedText style={styles.switchLabel}>Strukturierter Editor</ThemedText>
+                    <ThemedText style={styles.switchLabel}>{t('editor.structured')}</ThemedText>
                     <Switch
                       value={useStructuredEditor}
-                      onValueChange={setUseStructuredEditor}
+                      onValueChange={(value) => {
+                        if (!ensureWritableInCurrentMode()) return;
+                        setUseStructuredEditor(value);
+                      }}
                       trackColor={{ false: '#D1D1D6', true: '#9DBEBB' }}
                       thumbColor={useStructuredEditor ? '#FFFFFF' : '#F4F4F4'}
                       ios_backgroundColor="#D1D1D6"
+                      disabled={isReadOnlyPreviewMode}
                     />
                   </View>
                 </LiquidGlassCard>
 
                 {isLoading ? (
-                  <ActivityIndicator size="large" color={theme.accent} style={styles.loader} />
+                  <ActivityIndicator size="large" color={iconAccentColor} style={styles.loader} />
                 ) : useStructuredEditor ? (
                   // Strukturierter Editor
                   <>
@@ -323,6 +374,7 @@ export default function GeburtsplanScreen() {
                         allgemeineAngaben: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <GeburtsWuenscheSection
@@ -332,6 +384,7 @@ export default function GeburtsplanScreen() {
                         geburtsWuensche: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <MedizinischeEingriffeSection
@@ -341,6 +394,7 @@ export default function GeburtsplanScreen() {
                         medizinischeEingriffe: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <NachDerGeburtSection
@@ -350,6 +404,7 @@ export default function GeburtsplanScreen() {
                         nachDerGeburt: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <NotfallSection
@@ -359,6 +414,7 @@ export default function GeburtsplanScreen() {
                         notfall: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
 
                     <SonstigeWuenscheSection
@@ -368,44 +424,46 @@ export default function GeburtsplanScreen() {
                         sonstigeWuensche: newData
                       })}
                       containerStyle={styles.fullWidthCard}
+                      readOnly={isReadOnlyPreviewMode}
                     />
                   </>
                 ) : (
                   // Einfacher Texteditor
-                  <LiquidGlassCard style={styles.textAreaGlass} intensity={26} overlayColor={GLASS_OVERLAY}>
+                  <LiquidGlassCard style={styles.textAreaGlass} intensity={26} overlayColor={glassOverlay}>
                     <TextInput
                       style={[
                         styles.textArea,
-                        { color: colorScheme === 'dark' ? theme.text : theme.text }
+                        { color: textPrimary }
                       ]}
                       multiline
                       numberOfLines={20}
-                      placeholder="Schreibe hier deinen Geburtsplan..."
-                      placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
+                      placeholder={t('editor.freePlaceholder')}
+                      placeholderTextColor={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}
                       value={geburtsplan}
                       onChangeText={setGeburtsplan}
+                      editable={!isReadOnlyPreviewMode}
                     />
                   </LiquidGlassCard>
                 )}
 
                 {/* Quick Actions im More-Style */}
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <TouchableOpacity
-                    style={styles.menuItem}
+                    style={[styles.menuItem, isReadOnlyPreviewMode && styles.actionDisabled]}
                     onPress={handleSaveGeburtsplan}
-                    disabled={isSaving}
+                    disabled={isSaving || isReadOnlyPreviewMode}
                   >
                     <View style={styles.menuItemIcon}>
-                      <IconSymbol name="tray.and.arrow.down.fill" size={24} color={theme.accent} />
+                      <IconSymbol name="tray.and.arrow.down.fill" size={24} color={iconAccentColor} />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <ThemedText style={styles.menuItemTitle}>Speichern</ThemedText>
-                      <ThemedText style={styles.menuItemDescription}>Geburtsplan</ThemedText>
+                      <ThemedText style={styles.menuItemTitle}>{t('action.save')}</ThemedText>
+                      <ThemedText style={styles.menuItemDescription}>{t('action.plan')}</ThemedText>
                     </View>
                     {isSaving ? (
-                      <ActivityIndicator size="small" color={theme.accent} />
+                      <ActivityIndicator size="small" color={iconAccentColor} />
                     ) : (
-                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                      <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
                     )}
                   </TouchableOpacity>
 
@@ -415,29 +473,29 @@ export default function GeburtsplanScreen() {
                     disabled={isGeneratingPDF}
                   >
                     <View style={styles.menuItemIcon}>
-                      <IconSymbol name="arrow.down.doc" size={24} color={theme.accent} />
+                      <IconSymbol name="arrow.down.doc" size={24} color={iconAccentColor} />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <ThemedText style={styles.menuItemTitle}>PDF</ThemedText>
-                      <ThemedText style={styles.menuItemDescription}>Herunterladen</ThemedText>
+                      <ThemedText style={styles.menuItemTitle}>{t('action.pdf')}</ThemedText>
+                      <ThemedText style={styles.menuItemDescription}>{t('action.download')}</ThemedText>
                     </View>
                     {isGeneratingPDF ? (
-                      <ActivityIndicator size="small" color={theme.accent} />
+                      <ActivityIndicator size="small" color={iconAccentColor} />
                     ) : (
-                      <IconSymbol name="chevron.right" size={20} color={colorScheme === 'dark' ? '#ddd' : '#8b756d'} />
+                      <IconSymbol name="chevron.right" size={20} color={iconSecondaryColor} />
                     )}
                   </TouchableOpacity>
                 </LiquidGlassCard>
 
-                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={GLASS_OVERLAY}>
+                <LiquidGlassCard style={styles.sectionCard} intensity={26} overlayColor={glassOverlay}>
                   <ThemedText style={styles.sectionTitle}>
-                    Tipps für deinen Geburtsplan
+                    {t('tips.title')}
                   </ThemedText>
-                  <ThemedText style={styles.tipText}>• Gebärposition: Welche Positionen bevorzugst du?</ThemedText>
-                  <ThemedText style={styles.tipText}>• Schmerzlinderung: Welche Methoden möchtest du nutzen?</ThemedText>
-                  <ThemedText style={styles.tipText}>• Atmosphäre: Musik, Licht, Anwesende Personen</ThemedText>
-                  <ThemedText style={styles.tipText}>• Medizinische Eingriffe: Welche akzeptierst du, welche nicht?</ThemedText>
-                  <ThemedText style={styles.tipText}>• Nach der Geburt: Wünsche für die ersten Stunden mit deinem Baby</ThemedText>
+                  <ThemedText style={styles.tipText}>• {t('tips.position')}</ThemedText>
+                  <ThemedText style={styles.tipText}>• {t('tips.painRelief')}</ThemedText>
+                  <ThemedText style={styles.tipText}>• {t('tips.atmosphere')}</ThemedText>
+                  <ThemedText style={styles.tipText}>• {t('tips.interventions')}</ThemedText>
+                  <ThemedText style={styles.tipText}>• {t('tips.afterBirth')}</ThemedText>
                 </LiquidGlassCard>
         </ScrollView>
       </SafeAreaView>
@@ -445,7 +503,15 @@ export default function GeburtsplanScreen() {
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const createStyles = ({
+  textPrimary,
+  textSecondary,
+  isDark,
+}: {
+  textPrimary: string;
+  textSecondary: string;
+  isDark: boolean;
+}) => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -458,27 +524,47 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   contentContainer: { paddingHorizontal: LAYOUT_PAD, paddingBottom: 40, paddingTop: 10 },
   fullWidthCard: {
-    marginHorizontal: TIMELINE_INSET, // identisch zur Timeline
+  },
+  readOnlyPreviewBanner: {
+    marginHorizontal: LAYOUT_PAD,
+    marginTop: 10,
+    marginBottom: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 248, 225, 0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(229, 180, 77, 0.45)',
+  },
+  readOnlyPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#8A5A00',
+    marginBottom: 4,
+  },
+  readOnlyPreviewText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#8A5A00',
   },
   sectionCard: {
     marginBottom: 16,
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
     paddingHorizontal: 16,
+    color: textPrimary,
   },
-  infoText: { fontSize: 14, lineHeight: 20, color: TEXT_PRIMARY, paddingHorizontal: 16, marginBottom: 16 },
+  infoText: { fontSize: 14, lineHeight: 20, color: textSecondary, paddingHorizontal: 16, marginBottom: 16 },
   switchContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 16 },
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: TEXT_PRIMARY,
+    color: textPrimary,
   },
   centerText: { textAlign: 'center' },
   heroHeader: { alignItems: 'center', paddingVertical: 6 },
@@ -490,13 +576,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.6)'
+    borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.6)'
   },
   textAreaGlass: {
     borderRadius: 22,
     overflow: 'hidden',
-    // gleiche Innenbreite wie Timeline:
-    marginHorizontal: TIMELINE_INSET,
     padding: 12,
     marginBottom: 16
   },
@@ -509,9 +593,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   // Action cards row
   cardsRow: {
     flexDirection: 'row',
-    // gleiche Innenbreite wie Timeline:
     alignSelf: 'stretch',
-    marginHorizontal: TIMELINE_INSET,
     justifyContent: 'center',
     marginBottom: 16
   },
@@ -525,12 +607,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderWidth: 2, borderColor: 'rgba(255,255,255,0.6)'
   },
   cardTitle: { fontSize: 16, fontWeight: '800' },
-  cardDesc: { fontSize: 12, opacity: 0.9 },
+  cardDesc: { fontSize: 12, opacity: 0.9, color: textSecondary },
   tipText: {
     fontSize: 15,
     lineHeight: 24,
     marginBottom: 5,
-    color: TEXT_PRIMARY,
+    color: textSecondary,
     paddingHorizontal: 16,
   },
   menuItem: {
@@ -540,8 +622,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     gap: 12,
+  },
+  actionDisabled: {
+    opacity: 0.45,
   },
   menuItemIcon: {
     width: 44,
@@ -549,9 +634,9 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(142, 78, 198, 0.15)',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(142, 78, 198, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.35)',
   },
   menuItemContent: {
     flex: 1,
@@ -559,11 +644,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   menuItemTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: TEXT_PRIMARY,
+    color: textPrimary,
   },
   menuItemDescription: {
     fontSize: 12,
-    color: 'rgba(125,90,80,0.75)',
+    color: textSecondary,
+    opacity: 0.8,
     marginTop: 2,
   },
   loader: {

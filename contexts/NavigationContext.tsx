@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'expo-router';
+import { animateBack } from '@/lib/navigation/zoomTransition';
 
 interface NavigationContextType {
   goBack: () => void;
@@ -35,6 +36,13 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
 
   const goBack = () => {
     try {
+      // A real back step keeps the swipe-back animation; the tracked history
+      // only steps in when the navigator itself has nothing to go back to.
+      if (router.canGoBack()) {
+        void animateBack(() => router.back());
+        return;
+      }
+
       // Try to use the navigation history first
       if (navigationHistory.current.length > 0) {
         const previousRoute = navigationHistory.current.pop();
@@ -44,13 +52,7 @@ export function NavigationProvider({ children }: { children: React.ReactNode }) 
         }
       }
 
-      // Fallback to router.back()
-      if (router.canGoBack?.()) {
-        router.back();
-        return;
-      }
-
-      // Last resort: go to fallback route
+      // Last resort: go to fallback route without dispatching a blind GO_BACK.
       router.push(fallbackRoute as any);
     } catch (error) {
       console.warn('Navigation error, going to fallback:', error);
@@ -81,7 +83,7 @@ export function useNavigation() {
 
 // Helper hook for smart back navigation with context-aware fallbacks
 export function useSmartBack(contextualFallback?: string) {
-  const { goBack, setFallbackRoute, getCurrentRoute } = useNavigation();
+  const { goBack, setFallbackRoute } = useNavigation();
   
   React.useEffect(() => {
     if (contextualFallback) {

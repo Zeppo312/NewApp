@@ -1,17 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import DateTimePicker from '@/components/ui/DateTimePicker';
+import { FormField,FormSection,FormSheet,FormTextInput } from '@/components/ui/form-sheet';
+import { Colors } from '@/constants/Colors';
+import { useLocale } from '@/contexts/LocaleContext';
+import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
+import { getSafePickerDate } from '@/lib/safeDate';
+import React,{ useCallback,useEffect,useState } from 'react';
 import {
-  Modal,
-  View,
-  StyleSheet,
-  TouchableOpacity,
-  Text,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Platform,
-  TextInput,
+Platform,
+StyleSheet,
+Text,
+TouchableOpacity,
+View
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { BlurView } from 'expo-blur';
+
+const ACCENT_LIGHT = '#8E4EC6';
+const ACCENT_DARK = '#A26BFF';
 
 export type SleepQuality = 'good' | 'medium' | 'bad' | null;
 
@@ -24,317 +27,317 @@ export type SleepQuickEntry = {
 
 type Props = {
   visible: boolean;
+  saving?: boolean;
   initialStart?: Date;
+  initialEntry?: SleepQuickEntry;
+  onDelete?: () => void;
   onClose: () => void;
   onSave: (entry: SleepQuickEntry) => void;
 };
 
+const formatClockTime = (date: Date, localeTag: string) =>
+  date.toLocaleTimeString(localeTag, { hour: '2-digit', minute: '2-digit' });
+
+const formatShortDayDate = (date: Date, localeTag: string) =>
+  date.toLocaleDateString(localeTag, {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+  });
+
+const resolvePickerDate = (value?: Date | null, fallback?: Date) =>
+  getSafePickerDate(value, fallback ?? new Date());
+
+// ─── Reusable time picker button + modal ────────────────────
+export const TimePickerField = ({
+  label,
+  time,
+  onConfirm,
+  accentColor,
+  isDark,
+  textPrimary,
+  textSecondary,
+  placeholder,
+  localeTag,
+  cancelLabel,
+  doneLabel,
+  tapLabel,
+}: {
+  label: string;
+  time: Date | null;
+  onConfirm: (date: Date) => void;
+  accentColor: string;
+  isDark: boolean;
+  textPrimary: string;
+  textSecondary: string;
+  placeholder?: string;
+  localeTag: string;
+  cancelLabel: string;
+  doneLabel: string;
+  tapLabel: string;
+}) => {
+  const [showIOS, setShowIOS] = useState(false);
+
+  const [androidStep, setAndroidStep] = useState<'date' | 'time' | null>(null);
+  const [draft, setDraft] = useState<Date>(resolvePickerDate(time));
+
+  useEffect(() => {
+    if (!showIOS) setDraft(resolvePickerDate(time));
+  }, [showIOS, time]);
+
+  const commit = useCallback(() => {
+    onConfirm(draft);
+    setShowIOS(false);
+  }, [draft, onConfirm]);
+
+  return (
+    <>
+      <FormField isDark={isDark} label={label}
+ value={time ? formatShortDayDate(time, localeTag) + ' · ' + formatClockTime(time, localeTag) : undefined}
+ placeholder={placeholder ?? tapLabel} onPress={() => {
+          setDraft(resolvePickerDate(time));
+          if (Platform.OS === 'ios') setShowIOS(true);
+          else setAndroidStep('date');
+        }} />
+
+      {/* iOS – spinner modal am unteren Bildschirmrand */}
+      {Platform.OS === 'ios' && (
+        <FormSheet
+            visible={showIOS}
+            isDark={isDark}
+            title={label}
+            onClose={() => setShowIOS(false)}
+            onCancel={() => setShowIOS(false)}
+            cancelLabel={cancelLabel}
+            confirmLabel={doneLabel}
+            onConfirm={commit}
+            scrollable={false}
+          >
+            <DateTimePicker
+              value={resolvePickerDate(draft)}
+              mode="datetime"
+              display="spinner"
+              locale={localeTag}
+              onChange={(_, d) => {
+                if (d) setDraft(d);
+              }}
+              accentColor={accentColor}
+              themeVariant={isDark ? 'dark' : 'light'}
+              style={styles.spinner}
+            />
+          </FormSheet>
+      )}
+
+      {/* Android – native picker */}
+      {Platform.OS === 'android' && androidStep && (
+        <DateTimePicker
+          key={androidStep}
+          value={resolvePickerDate(draft)}
+          mode={androidStep}
+          is24Hour
+          onChange={(event, d) => {
+            if (event.type === 'dismissed' || !d) { setAndroidStep(null); return; }
+            if (androidStep === 'date') {
+              setDraft(d);
+              setAndroidStep('time');
+            } else {
+              setAndroidStep(null);
+              onConfirm(d);
+            }
+          }}
+        />
+      )}
+    </>
+  );
+};
+
+// ─── Main Modal ─────────────────────────────────────────────
 const SleepQuickAddModal: React.FC<Props> = ({
   visible,
   initialStart,
+  initialEntry,
+  onDelete,
   onClose,
   onSave,
+  saving = false,
 }) => {
-  const [startTime, setStartTime] = useState<Date>(initialStart ?? new Date());
+  const { locale, localeTag } = useLocale();
+  const c = {
+    de: { cancel: 'Abbrechen', done: 'Fertig', tap: 'Tippen zum Eingeben', editTitle: 'Schlaf bearbeiten', delete: 'Eintrag löschen', title: 'Schlaf hinzufügen', subtitle: 'Zeitraum und Qualität festhalten', period: '⏰ Zeitraum', asleep: 'Eingeschlafen', awake: 'Aufgewacht', open: 'Offen', quality: '😴 Schlafqualität', good: 'Gut', medium: 'Mittel', bad: 'Schlecht', notes: '📝 Notizen', notesPlaceholder: 'Optionale Notiz hinzufügen…', save: 'Speichern' },
+    en: { cancel: 'Cancel', done: 'Done', tap: 'Tap to enter', editTitle: 'Edit sleep', delete: 'Delete entry', title: 'Add sleep', subtitle: 'Record the time and quality', period: '⏰ Time period', asleep: 'Fell asleep', awake: 'Woke up', open: 'Ongoing', quality: '😴 Sleep quality', good: 'Good', medium: 'Okay', bad: 'Poor', notes: '📝 Notes', notesPlaceholder: 'Add an optional note…', save: 'Save' },
+    es: { cancel: 'Cancelar', done: 'Listo', tap: 'Toca para introducir', editTitle: 'Editar sueño', delete: 'Eliminar registro', title: 'Añadir sueño', subtitle: 'Registra el horario y la calidad', period: '⏰ Periodo', asleep: 'Se durmió', awake: 'Se despertó', open: 'En curso', quality: '😴 Calidad del sueño', good: 'Buena', medium: 'Regular', bad: 'Mala', notes: '📝 Notas', notesPlaceholder: 'Añade una nota opcional…', save: 'Guardar' },
+  }[locale];
+  const adaptiveColors = useAdaptiveColors();
+  const isDark = adaptiveColors.effectiveScheme === 'dark' || adaptiveColors.isDarkBackground;
+  const textPrimary = isDark ? Colors.dark.textPrimary : '#5C4033';
+  const textSecondary = isDark ? Colors.dark.textSecondary : '#7D5A50';
+  const accentColor = isDark ? ACCENT_DARK : ACCENT_LIGHT;
+
+  const [startTime, setStartTime] = useState<Date>(() => resolvePickerDate(initialStart));
   const [endTime, setEndTime] = useState<Date | null>(null);
   const [quality, setQuality] = useState<SleepQuality>('good');
   const [notes, setNotes] = useState('');
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      const baseStart = initialStart ?? new Date();
-      setStartTime(baseStart);
-      setEndTime(null);
-      setQuality('good');
-      setNotes('');
-      setShowStartPicker(false);
-      setShowEndPicker(false);
+      setStartTime(resolvePickerDate(initialEntry?.start ?? initialStart));
+      setEndTime(initialEntry?.end ?? null);
+      setQuality(initialEntry ? initialEntry.quality : 'good');
+      setNotes(initialEntry?.notes ?? '');
     }
-  }, [visible, initialStart?.valueOf()]);
+  }, [visible, initialStart?.valueOf(), initialEntry?.start.valueOf(), initialEntry?.end?.valueOf(), initialEntry?.quality, initialEntry?.notes]);
 
   const handleSave = () => {
-    onSave({
-      start: startTime,
-      end: endTime,
-      quality,
-      notes: notes.trim(),
-    });
+    onSave({ start: startTime, end: endTime, quality, notes: notes.trim() });
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
+    <FormSheet
+        visible={visible}
+        isDark={isDark}
+        title={initialEntry ? c.editTitle : c.title}
+        subtitle={c.subtitle}
+        onClose={onClose}
+        onCancel={onClose}
+        cancelLabel={c.cancel}
+        confirmLabel={c.save}
+        busy={saving}
+        onConfirm={handleSave}
+      >
+        {/* Header */}
 
-        <BlurView style={styles.modal} tint="extraLight" intensity={80}>
-          <View style={styles.header}>
-            <TouchableOpacity style={[styles.headerButton, styles.headerGhost]} onPress={onClose}>
-              <Text style={styles.headerGhostText}>✕</Text>
-            </TouchableOpacity>
-            <View style={styles.headerCenter}>
-              <Text style={styles.title}>Schlaf hinzufügen</Text>
-              <Text style={styles.subtitle}>Zeitraum und Qualität festhalten</Text>
-            </View>
-            <TouchableOpacity style={[styles.headerButton, styles.headerPrimary]} onPress={handleSave}>
-              <Text style={styles.headerPrimaryText}>✓</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Zeit */}
 
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <FormSection isDark={isDark} label={c.period}>
+          <View style={styles.timeRow}>
             <View style={{ flex: 1 }}>
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>⏰ Zeitraum</Text>
-                <View style={styles.timeRow}>
-                  <TouchableOpacity style={styles.timeButton} onPress={() => setShowStartPicker(true)}>
-                    <Text style={styles.timeLabel}>Start</Text>
-                    <Text style={styles.timeValue}>
-                      {startTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.timeButton} onPress={() => setShowEndPicker(true)}>
-                    <Text style={styles.timeLabel}>Ende</Text>
-                    <Text style={styles.timeValue}>
-                      {endTime
-                        ? endTime.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-                        : 'Offen'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {showStartPicker && (
-                  <View style={styles.pickerBlock}>
-                    <DateTimePicker
-                      value={startTime}
-                      mode="datetime"
-                      display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                      onChange={(_, date) => {
-                        if (date) setStartTime(date);
-                      }}
-                      style={styles.picker}
-                    />
-                    <View style={styles.pickerActions}>
-                      <TouchableOpacity style={styles.pickerDone} onPress={() => setShowStartPicker(false)}>
-                        <Text style={styles.pickerDoneText}>Fertig</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                {showEndPicker && (
-                  <View style={styles.pickerBlock}>
-                    <DateTimePicker
-                      value={endTime ?? new Date()}
-                      mode="datetime"
-                      display={Platform.OS === 'ios' ? 'compact' : 'default'}
-                      onChange={(_, date) => {
-                        if (date) setEndTime(date);
-                      }}
-                      style={styles.picker}
-                    />
-                    <View style={styles.pickerActions}>
-                      <TouchableOpacity style={styles.pickerDone} onPress={() => setShowEndPicker(false)}>
-                        <Text style={styles.pickerDoneText}>Fertig</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>😴 Schlafqualität</Text>
-                <View style={styles.qualityRow}>
-                  {(['good', 'medium', 'bad'] as SleepQuality[]).map((item) => {
-                    const isActive = quality === item;
-                    const background =
-                      item === 'good'
-                        ? '#38A169'
-                        : item === 'medium'
-                        ? '#F5A623'
-                        : '#E53E3E';
-                    const icon = item === 'good' ? '😴' : item === 'medium' ? '😐' : '😵';
-                    const label = item === 'good' ? 'Gut' : item === 'medium' ? 'Mittel' : 'Schlecht';
-                    return (
-                      <TouchableOpacity
-                        key={item ?? 'none'}
-                        style={[
-                          styles.qualityButton,
-                          { backgroundColor: isActive ? background : 'rgba(230,230,230,0.85)' },
-                        ]}
-                        onPress={() => setQuality(item)}
-                      >
-                        <Text style={styles.qualityIcon}>{icon}</Text>
-                        <Text style={[styles.qualityLabel, { color: isActive ? '#FFFFFF' : '#333333' }]}>{label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📝 Notizen</Text>
-                <TextInput
-                  style={styles.notesInput}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Optionale Notiz hinzufügen..."
-                  placeholderTextColor="#A8978E"
-                  multiline
-                />
-              </View>
+              <TimePickerField
+                label={c.asleep}
+                time={startTime}
+                onConfirm={setStartTime}
+                accentColor={accentColor}
+                isDark={isDark}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                localeTag={localeTag}
+                cancelLabel={c.cancel}
+                doneLabel={c.done}
+                tapLabel={c.tap}
+              />
             </View>
-          </TouchableWithoutFeedback>
-        </BlurView>
-      </View>
-    </Modal>
+            <View style={{ flex: 1 }}>
+              <TimePickerField
+                label={c.awake}
+                time={endTime}
+                onConfirm={setEndTime}
+                accentColor={accentColor}
+                isDark={isDark}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                placeholder={c.open}
+                localeTag={localeTag}
+                cancelLabel={c.cancel}
+                doneLabel={c.done}
+                tapLabel={c.tap}
+              />
+            </View>
+          </View>
+        </FormSection>
+
+        {/* Qualität */}
+
+        <FormSection isDark={isDark} label={c.quality}>
+          <View style={styles.qualityRow}>
+            {(['good', 'medium', 'bad'] as SleepQuality[]).map((item) => {
+              const isActive = quality === item;
+              const bg = item === 'good' ? '#38A169' : item === 'medium' ? '#F5A623' : '#E53E3E';
+              const icon = item === 'good' ? '😴' : item === 'medium' ? '😐' : '😵';
+              const lbl = item === 'good' ? c.good : item === 'medium' ? c.medium : c.bad;
+              return (
+                <TouchableOpacity
+                  key={item ?? 'none'}
+                  style={[
+                    styles.qualityBtn,
+                    {
+                      backgroundColor: isActive
+                        ? bg
+                        : isDark
+                          ? 'rgba(255,255,255,0.08)'
+                          : 'rgba(230,230,230,0.85)',
+                    },
+                  ]}
+                  onPress={() => setQuality(item)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.qualityIcon}>{icon}</Text>
+                  <Text style={[styles.qualityLabel, { color: isActive ? '#FFF' : textSecondary }]}>
+                    {lbl}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </FormSection>
+
+        {/* Notizen */}
+
+        <FormSection isDark={isDark} label={c.notes}>
+          <FormTextInput
+            isDark={isDark}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder={c.notesPlaceholder}
+            multiline
+          />
+        </FormSection>
+
+        {onDelete && (
+          <TouchableOpacity
+            accessibilityRole="button"
+            disabled={saving}
+            onPress={onDelete}
+            style={{
+              minHeight: 48,
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginVertical: 12,
+            }}
+          >
+            <Text style={{ color: '#E05263', fontWeight: '600' }}>{c.delete}</Text>
+          </TouchableOpacity>
+        )}
+      </FormSheet>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  modal: {
-    width: '100%',
-    maxHeight: 640,
-    minHeight: 560,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    padding: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  headerButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerGhost: {
-    backgroundColor: 'rgba(230,230,230,0.8)',
-  },
-  headerGhostText: {
-    fontSize: 20,
-    color: '#888888',
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#7D5A50',
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: '#A8978E',
-  },
-  headerPrimary: {
-    backgroundColor: '#8E4EC6',
-  },
-  headerPrimaryText: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#7D5A50',
-    marginBottom: 12,
-  },
+
   timeRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 20,
   },
-  timeButton: {
-    flex: 1,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.4)',
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  timeLabel: {
-    fontSize: 12,
-    color: '#A8978E',
-    marginBottom: 6,
-  },
-  timeValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#7D5A50',
-  },
-  pickerBlock: {
-    marginTop: 12,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    padding: 12,
-  },
-  picker: {
-    width: '100%',
-  },
-  pickerActions: {
-    marginTop: 6,
-    alignItems: 'flex-end',
-  },
-  pickerDone: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(142,78,198,0.1)',
-  },
-  pickerDoneText: {
-    color: '#8E4EC6',
-    fontWeight: '600',
-  },
+
+  // Picker modal (bottom)
+
+  spinner: { marginTop: 4, height: 180 },
+  // Quality
   qualityRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
+    marginBottom: 20,
   },
-  qualityButton: {
+  qualityBtn: {
     flex: 1,
-    paddingVertical: 14,
-    borderRadius: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
   },
-  qualityIcon: {
-    fontSize: 24,
-  },
-  qualityLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  notesInput: {
-    minHeight: 90,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    borderColor: 'rgba(255,255,255,0.45)',
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    padding: 16,
-    fontSize: 14,
-    color: '#7D5A50',
-    textAlignVertical: 'top',
-  },
+  qualityIcon: { fontSize: 22 },
+  qualityLabel: { fontSize: 13, fontWeight: '600' },
+  // Notes
+
 });
 
 export default SleepQuickAddModal;
-

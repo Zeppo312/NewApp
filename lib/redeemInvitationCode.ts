@@ -192,9 +192,10 @@ export const redeemInvitationCode = async (userId: string, invitationCode: strin
     }
   } catch (error) {
     console.error('Unexpected error in redeemInvitationCode:', error);
+    const message = error instanceof Error ? error.message : 'Unbekannter Fehler';
     return {
       success: false,
-      error: { message: `Ein unerwarteter Fehler ist aufgetreten: ${error.message || 'Unbekannter Fehler'}. Bitte versuche es später erneut.` }
+      error: { message: `Ein unerwarteter Fehler ist aufgetreten: ${message}. Bitte versuche es später erneut.` }
     };
   }
 };

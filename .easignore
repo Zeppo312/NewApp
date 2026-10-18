@@ -1,0 +1,56 @@
+# Dependencies and local Expo state
+node_modules/
+.expo/
+.expo-shared/
+node_local/
+
+# Local environment files (provided by EAS environments in cloud builds)
+.env
+.env.*
+build.*.env
+
+# Generated app and web build artifacts
+dist*/
+web-build/
+
+# Native generated files
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+# Also exclude a local build-directory symlink (e.g. external QA storage).
+android/app/build
+android/app/.cxx/
+android/.gradle/
+android/build/
+
+# Local-only tooling, metadata, and reports
+.git/
+.git.backup-corrupt-*/
+.github/
+.vscode/
+.claude/
+venv/
+docs/
+backup/
+output/
+tmp/
+# Store screenshots/videos and marketing projects are not application inputs.
+store/
+marketing/
+artifacts/
+credentials.json
+*.jks
+*.keystore
+!android/app/debug.keystore
+*.p8
+*.p12
+*.key
+*.pem
+android/app/eas-build.gradle
+android/app 2/
+android/gradle 2/
+ownership-map-out/
+.family-qa/
+# Local connector settings and database CLI state are not build inputs.
+.mcp.json
+supabase/.temp/

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Lotti Baby Store-Motiv</title>
+<style>
+  /* Gestaltungsraster der Store-Serie. Alle Maße in --u (1 --u = 1 px auf dem 6,9-Zoll-Master 1320 px bzw. iPad-Master 2064 px). */
+  :root {
+    --cream: #FCF7F1;
+    --cream-2: #F7EFEA;
+    --lavender: #EEE5F3;
+    --glow: rgba(176, 148, 214, 0.30);
+    --ink: #33263A;
+    --accent: #75489E;
+    --muted: #6A5B70;
+    --frame: #2B2430;
+    --frame-edge: #4A4150;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: var(--w); height: var(--h); overflow: hidden; background: var(--cream); }
+  body {
+    font-family: -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--ink);
+  }
+  .canvas {
+    position: relative; width: var(--w); height: var(--h); overflow: hidden;
+    background:
+      radial-gradient(ellipse 70% 42% at 50% 74%, var(--glow), transparent 70%),
+      linear-gradient(180deg, var(--cream) 0%, var(--cream-2) 46%, var(--lavender) 100%);
+  }
+  .copy {
+    position: absolute; left: var(--side); right: var(--side); top: var(--copy-top);
+    text-align: center;
+  }
+  .brand {
+    font-size: calc(var(--u) * var(--brand-size)); font-weight: 600; letter-spacing: 0.02em;
+    color: var(--accent); opacity: 0.85; margin-bottom: calc(var(--u) * var(--brand-gap));
+  }
+  h1 {
+    font-size: calc(var(--u) * var(--title-size)); line-height: 1.07; font-weight: 700;
+    letter-spacing: -0.022em; color: var(--ink);
+  }
+  h1 .line { display: block; white-space: nowrap; }
+  h1 .accent { color: var(--accent); }
+  p.support {
+    margin-top: calc(var(--u) * var(--support-gap));
+    font-size: calc(var(--u) * var(--support-size)); line-height: 1.3; font-weight: 500;
+    color: var(--muted); white-space: nowrap;
+  }
+  .device {
+    position: absolute; left: 50%; top: var(--device-top);
+    width: calc(var(--u) * var(--device-w)); transform: translateX(-50%);
+    padding: calc(var(--u) * var(--bezel));
+    background: var(--frame);
+    border-radius: calc(var(--u) * var(--device-radius));
+    box-shadow:
+      0 0 0 calc(var(--u) * 3) var(--frame-edge) inset,
+      0 calc(var(--u) * 40) calc(var(--u) * 90) rgba(58, 38, 72, 0.20),
+      0 calc(var(--u) * 8) calc(var(--u) * 20) rgba(58, 38, 72, 0.12);
+  }
+  .screen {
+    position: relative; overflow: hidden; background: #fff;
+    border-radius: calc(var(--u) * var(--screen-radius));
+    aspect-ratio: var(--screen-ratio);
+  }
+  .screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .island {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    top: calc(var(--u) * var(--island-top));
+    width: calc(var(--u) * var(--island-w)); height: calc(var(--u) * var(--island-h));
+    border-radius: 999px; background: #000;
+  }
+  body[data-device="ipad"] .island { display: none; }
+  /* Videomodus: Grundebene ohne Aufnahme; die echte Bildschirmaufnahme legt ffmpeg in die Bildschirmfläche.
+     Die Ebene "island" enthält nur die Kamerainsel, damit sie über dem Video liegt. */
+  body.hollow .screen img { visibility: hidden; }
+  html.island-layer, html.island-layer body { background: transparent; }
+  body.island-layer .canvas { background: none; }
+  body.island-layer .copy, body.island-layer .screen img { visibility: hidden; }
+  body.island-layer .device { background: transparent; box-shadow: none; }
+  body.island-layer .screen { background: transparent; }
+  /* App-Vorschau: echte App im Vollbild, gemeinsame Typografie als kurze Einblendung. */
+  html.caption-layer, html.caption-layer body { background: transparent; }
+  body.caption-layer .canvas { background: none; }
+  body.caption-layer .device { display: none; }
+  body.caption-layer .copy {
+    left: 0; right: 0; top: 0; padding: 34px 42px 30px;
+    min-height: 290px; background: #FCF7F1;
+    border-bottom: 2px solid rgba(117,72,158,0.18);
+  }
+  body.caption-layer .brand { font-size: 26px; margin-bottom: 14px; }
+  body.caption-layer h1 { font-size: 50px; line-height: 1.08; }
+  body.caption-layer p.support { font-size: 28px; line-height: 1.25; margin-top: 14px; white-space: normal; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="copy">
+    <div class="brand" id="brand">Lotti Baby</div>
+    <h1 id="title"></h1>
+    <p class="support" id="support"></p>
+  </div>
+  <div class="device"><div class="screen"><img id="shot" alt=""><div class="island"></div></div></div>
+</div>
+<script>
+  // Wird vom Renderer aufgerufen. spec = { w, h, device, layout, title: [[text, accent?], ...], support, brand, image }
+  window.renderSpec = (spec) => {
+    const s = document.documentElement.style;
+    const L = spec.layout;
+    document.body.dataset.device = spec.device;
+    s.setProperty('--w', spec.w + 'px');
+    s.setProperty('--h', spec.h + 'px');
+    s.setProperty('--u', (spec.w / L.masterWidth) + 'px');
+    const u = spec.w / L.masterWidth;
+    s.setProperty('--side', (L.side * u) + 'px');
+    s.setProperty('--copy-top', (L.copyTop * u) + 'px');
+    // Gerät bleibt unten verankert: gleiche Anschnitthöhe auf allen Formaten.
+    s.setProperty('--device-top', (spec.h - L.deviceBottomFromEdge * u) + 'px');
+    for (const k of ['brandSize','brandGap','titleSize','supportGap','supportSize','deviceW','bezel','deviceRadius','screenRadius','islandTop','islandW','islandH']) {
+      s.setProperty('--' + k.replace(/[A-Z]/g, m => '-' + m.toLowerCase()), L[k]);
+    }
+    s.setProperty('--screen-ratio', L.screenRatio);
+    document.getElementById('brand').textContent = spec.brand;
+    const h1 = document.getElementById('title');
+    h1.innerHTML = '';
+    for (const line of spec.title) {
+      const span = document.createElement('span');
+      span.className = 'line' + (line[1] ? ' accent' : '');
+      span.textContent = line[0];
+      h1.appendChild(span);
+    }
+    document.getElementById('support').textContent = spec.support;
+    document.documentElement.lang = spec.lang;
+    document.body.classList.toggle('hollow', !spec.image);
+    document.body.classList.toggle('island-layer', spec.layer === 'island');
+    document.documentElement.classList.toggle('island-layer', spec.layer === 'island');
+    document.body.classList.toggle('caption-layer', spec.layer === 'caption');
+    document.documentElement.classList.toggle('caption-layer', spec.layer === 'caption');
+    const img = document.getElementById('shot');
+    if (!spec.image) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Aufnahme nicht ladbar: ' + spec.image));
+      img.src = spec.image;
+    });
+  };
+  // Prüft, ob Text über den Satzspiegel hinausläuft oder mit dem Gerät kollidiert.
+  window.measure = () => {
+    const copy = document.querySelector('.copy').getBoundingClientRect();
+    const device = document.querySelector('.device').getBoundingClientRect();
+    const lines = [...document.querySelectorAll('h1 .line, p.support')].map(el => {
+      const r = document.createRange(); r.selectNodeContents(el);
+      const b = r.getBoundingClientRect();
+      return { text: el.textContent, left: b.left, right: b.right, width: b.width };
+    });
+    const screen = document.querySelector('.screen').getBoundingClientRect();
+    return { screen: { x: screen.left, y: screen.top, w: screen.width, h: screen.height },
+             copyLeft: copy.left, copyRight: copy.right, copyBottom: copy.bottom, deviceTop: device.top, lines,
+             fontFamily: getComputedStyle(document.querySelector('h1')).fontFamily };
+  };
+</script>
+</body>
+</html>

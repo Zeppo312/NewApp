@@ -1,0 +1,69 @@
+project_id = "LottiBaby"
+
+# Authenticated app endpoint: keep the Supabase gateway JWT check enabled.
+[functions.ask-lotti]
+verify_jwt = true
+
+# External RevenueCat endpoint: no Supabase JWT exists. The function itself
+# requires both the configured Authorization value and RevenueCat's HMAC.
+[functions.revenuecat-webhook]
+verify_jwt = false
+
+# These functions validate the caller JWT inside the handler. Preserve the
+# production gateway setting during CLI deploys.
+[functions.advisor-generate]
+verify_jwt = false
+
+[functions.voice-log-parse]
+verify_jwt = false
+
+# Cron endpoint authenticated with ADVISOR_CRON_SECRET.
+[functions.advisor-daily]
+verify_jwt = false
+
+# Database webhook endpoint: the gateway cannot validate the custom shared
+# secret as a user JWT. The function itself requires MODERATION_WEBHOOK_SECRET.
+[functions.moderation-report-notify]
+verify_jwt = false
+
+# Handler validates the user token and recent authentication itself.
+[functions.request-account-deletion]
+verify_jwt = false
+
+# Direct deletion of standalone accounts; handler validates the user token.
+[functions.delete-own-account]
+verify_jwt = false
+
+# Internal scheduler only; a dedicated 32+ character secret is required.
+[functions.process-account-deletion]
+verify_jwt = false
+
+[functions.family-subscription-access]
+verify_jwt = true
+
+[functions.reconcile-family-subscriptions]
+verify_jwt = false
+
+# Internal aggregate alarm; same strong dedicated scheduler authentication as the worker.
+[functions.account-deletion-alert]
+verify_jwt = false
+
+# Internal database sender uses the dedicated notification token.
+[functions.send-partner-notification]
+verify_jwt = false
+
+# Internal database sender uses the dedicated notification token.
+[functions.send-planner-notification]
+verify_jwt = false
+
+# Internal database sender uses the dedicated notification token.
+[functions.send-baby-reminder-notification]
+verify_jwt = false
+
+# Internal database sender uses the dedicated notification token.
+[functions.send-direct-message-notification]
+verify_jwt = false
+
+# Internal database sender uses the dedicated notification token.
+[functions.send-group-message-notification]
+verify_jwt = false

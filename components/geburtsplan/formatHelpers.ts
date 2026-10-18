@@ -1,3 +1,46 @@
+import {
+  translateBirthPlanText,
+  type BirthPlanLocale,
+  type BirthPlanTranslationKey,
+} from '@/lib/birthPlanTranslations';
+
+const SOURCE_LOCALES: readonly BirthPlanLocale[] = ['de', 'en', 'es'];
+type SectionKey = Extract<
+  BirthPlanTranslationKey,
+  | 'section.general'
+  | 'section.birthWishes'
+  | 'section.interventions'
+  | 'section.afterBirth'
+  | 'section.emergency'
+  | 'section.other'
+>;
+
+const localizedCandidates = (key: BirthPlanTranslationKey) =>
+  SOURCE_LOCALES.map((locale) => translateBirthPlanText(locale, key));
+
+const localizeStandardHeading = (
+  section: string,
+  key: BirthPlanTranslationKey,
+  locale: BirthPlanLocale,
+) => {
+  const sourceHeading = localizedCandidates(key).find((heading) => section.includes(heading));
+  return sourceHeading
+    ? section.replace(sourceHeading, translateBirthPlanText(locale, key))
+    : section;
+};
+
+const findSection = (
+  sections: string[],
+  key: SectionKey,
+  locale: BirthPlanLocale,
+) => {
+  const headings = localizedCandidates(key);
+  const section = sections.find((candidate) =>
+    headings.some((heading) => candidate.includes(heading)),
+  );
+  return section ? localizeStandardHeading(section, key, locale) : '';
+};
+
 // Hilfsfunktion zum Formatieren des Inhalts
 export const formatContent = (content: string): string => {
   // Ersetze Zeilenumbrüche durch <br>
@@ -17,32 +60,23 @@ export const formatContent = (content: string): string => {
 };
 
 // Funktion zum Formatieren der linken Spalte (Abschnitte 1-3)
-export const formatContentForHTMLLeftColumn = (content: string): string => {
+export const formatContentForHTMLLeftColumn = (
+  content: string,
+  locale: BirthPlanLocale = 'de',
+): string => {
   // Extrahiere die ersten drei Abschnitte (1-3)
   const sections = content.split(/\n\n/);
   let leftColumnContent = '';
   
   // Abschnitt 1: Allgemeine Angaben
-  if (sections.length > 0 && sections[0].includes('GEBURTSPLAN')) {
-    leftColumnContent += sections[0] + '\n\n';
+  const documentTitles = localizedCandidates('export.documentTitle');
+  if (sections.length > 0 && documentTitles.some((title) => sections[0].includes(title))) {
+    leftColumnContent += localizeStandardHeading(sections[0], 'export.documentTitle', locale) + '\n\n';
   }
-  
-  // Abschnitt 1: Allgemeine Angaben
-  const section1Index = sections.findIndex(s => s.includes('1. Allgemeine Angaben'));
-  if (section1Index !== -1) {
-    leftColumnContent += sections[section1Index] + '\n\n';
-  }
-  
-  // Abschnitt 2: Wünsche zur Geburt
-  const section2Index = sections.findIndex(s => s.includes('2. Wünsche zur Geburt'));
-  if (section2Index !== -1) {
-    leftColumnContent += sections[section2Index] + '\n\n';
-  }
-  
-  // Abschnitt 3: Medizinische Eingriffe
-  const section3Index = sections.findIndex(s => s.includes('3. Medizinische Eingriffe'));
-  if (section3Index !== -1) {
-    leftColumnContent += sections[section3Index] + '\n\n';
+
+  for (const key of ['section.general', 'section.birthWishes', 'section.interventions'] as const) {
+    const section = findSection(sections, key, locale);
+    if (section) leftColumnContent += section + '\n\n';
   }
   
   // Formatiere den Inhalt
@@ -61,27 +95,17 @@ export const formatContentForHTMLLeftColumn = (content: string): string => {
 };
 
 // Funktion zum Formatieren der rechten Spalte (Abschnitte 4-5)
-export const formatContentForHTMLRightColumn = (content: string): string => {
+export const formatContentForHTMLRightColumn = (
+  content: string,
+  locale: BirthPlanLocale = 'de',
+): string => {
   // Extrahiere die letzten zwei Abschnitte (4-5)
   const sections = content.split(/\n\n/);
   let rightColumnContent = '';
   
-  // Abschnitt 4: Nach der Geburt
-  const section4Index = sections.findIndex(s => s.includes('4. Nach der Geburt'));
-  if (section4Index !== -1) {
-    rightColumnContent += sections[section4Index] + '\n\n';
-  }
-  
-  // Abschnitt 5: Für den Notfall / Kaiserschnitt
-  const section5Index = sections.findIndex(s => s.includes('5. Für den Notfall'));
-  if (section5Index !== -1) {
-    rightColumnContent += sections[section5Index] + '\n\n';
-  }
-  
-  // Abschnitt 6: Sonstige Wünsche / Hinweise
-  const section6Index = sections.findIndex(s => s.includes('6. Sonstige Wünsche'));
-  if (section6Index !== -1) {
-    rightColumnContent += sections[section6Index] + '\n\n';
+  for (const key of ['section.afterBirth', 'section.emergency', 'section.other'] as const) {
+    const section = findSection(sections, key, locale);
+    if (section) rightColumnContent += section + '\n\n';
   }
   
   // Formatiere den Inhalt

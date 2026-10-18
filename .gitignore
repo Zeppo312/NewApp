@@ -8,14 +8,28 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+dist 6/
+node_local/
 
 # Native
 *.orig.*
 *.jks
+*.keystore
+!android/app/debug.keystore
+!android/app 2/debug.keystore
+credentials.json
+android/app/eas-build.gradle
+artifacts/
 *.p8
 *.p12
 *.key
 *.mobileprovision
+ios/Pods/
+ios/build/
+ios/.xcode.env.local
+android/.gradle/
+android/app/build/
+android/build/
 
 # Metro
 .metro-health-check*
@@ -31,6 +45,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+server/stripe/.env
 
 # typescript
 *.tsbuildinfo
@@ -40,3 +56,23 @@ app-example
 .env.local
 
 .env.local
+
+# accidental local git backups
+.git.backup-*/
+.git.backup-*
+
+# locally disabled features
+.local-disabled/
+
+# Isolated family QA credentials and generated environment files
+.family-qa/
+
+# Generated reports, exports, and local operational evidence
+/output/
+/tmp/
+__pycache__/
+*.pyc
+/supabase/.temp/
+**/supabase/.temp/
+# Also exclude the local build-directory symlink.
+/android/app/build

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { ThemedText } from './ThemedText';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 
 interface ProgressCircleProps {
   progress: number; // 0 to 100
@@ -10,6 +10,7 @@ interface ProgressCircleProps {
   backgroundColor?: string;
   progressColor?: string;
   textColor?: string;
+  showPercentage?: boolean;
 }
 
 export const ProgressCircle: React.FC<ProgressCircleProps> = ({
@@ -19,6 +20,7 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
   backgroundColor = '#F2E6DD',
   progressColor = '#E9C9B6',
   textColor = '#5C4033',
+  showPercentage = true,
 }) => {
   // Ensure progress is between 0 and 100
   const validProgress = Math.min(100, Math.max(0, progress));
@@ -63,12 +65,14 @@ export const ProgressCircle: React.FC<ProgressCircleProps> = ({
         />
       </Svg>
       
-      {/* Percentage Text */}
-      <View style={[styles.textContainer, { width: size, height: size }]}>
-        <ThemedText style={[styles.progressText, { color: textColor, fontSize: size * 0.3 }]}>
-          {Math.round(validProgress)}%
-        </ThemedText>
-      </View>
+      {/* Omit decorative labels entirely: transparent text can still render on Android. */}
+      {showPercentage && (
+        <View style={[styles.textContainer, { width: size, height: size }]}>
+          <ThemedText style={[styles.progressText, { color: textColor, fontSize: size * 0.3 }]}>
+            {Math.round(validProgress)}%
+          </ThemedText>
+        </View>
+      )}
     </View>
   );
 };

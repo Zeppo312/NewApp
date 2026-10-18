@@ -1,0 +1,23 @@
+[
+  {
+    "file": "01-flaeschchen.png",
+    "width": 1242,
+    "height": 2688,
+    "space": "srgb",
+    "alpha": false
+  },
+  {
+    "file": "02-gemeinsam.png",
+    "width": 1242,
+    "height": 2688,
+    "space": "srgb",
+    "alpha": false
+  },
+  {
+    "file": "03-schlaf.png",
+    "width": 1242,
+    "height": 2688,
+    "space": "srgb",
+    "alpha": false
+  }
+]

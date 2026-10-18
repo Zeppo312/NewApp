@@ -1,28 +1,52 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import { SLEEP_OFFLINE_ENABLED } from '@/lib/sleepSyncContract';
+import { confirmPendingSleepLogout } from '@/lib/sleepLogout';
+import { readStartupDisplaySession, revokeStartupAccess } from '@/lib/startupAccess';
+import { setConsentIdentity } from '@/lib/dataConsentRuntime';
+import { clearPersonalDeviceData, waitForPersonalDeviceCleanup } from '@/lib/accountDeletionCleanup';
+import React, { createContext, useState, useEffect, useContext, useCallback, useRef } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import {
   supabase,
+  supabaseUrl,
+  supabaseAuthStorageKey,
   signInWithEmail,
   signUpWithEmail,
   signInWithApple,
+  signInWithGoogle,
   resendOTPToken,
   verifyOTPToken,
   checkEmailVerification,
   signOut,
-  checkSupabaseConnection,
-  isSupabaseReady
+  isSupabaseReady,
+  invalidateUserCache
 } from '@/lib/supabase';
+import { invalidateAllCaches } from '@/lib/appCache';
+import { setRevenueCatSessionUser } from '@/lib/revenuecat';
+import {
+  clearGoogleSignIn,
+  completeGoogleSignIn as exchangeGoogleSignIn,
+  type GoogleAuthOptions,
+  type GoogleAuthResult,
+  type GoogleStartResult,
+} from '@/lib/google-auth';
 
 // Typdefinitionen für den Kontext
 type AuthContextType = {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  refreshSession: () => Promise<Session | null>;
   // E-Mail-Authentifizierung
   signInWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
-  signUpWithEmail: (email: string, password: string) => Promise<{ data?: any, error: any }>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => Promise<{ data?: any, error: any }>;
   // Apple Sign-In
   signInWithApple: () => Promise<{ data?: any, error: any }>;
+  signInWithGoogle: (options: GoogleAuthOptions) => Promise<GoogleStartResult>;
+  completeGoogleSignIn: (url: string) => Promise<GoogleAuthResult>;
   // OTP-Verifikation
   resendOTPToken: (email: string) => Promise<{ data?: any, error: any }>;
   verifyOTPToken: (email: string, token: string) => Promise<{ data?: any, error: any }>;
@@ -39,64 +63,103 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const signOutPromiseRef = useRef<Promise<{ error: any }> | null>(null);
+  const sessionRevisionRef = useRef(0);
+  const refreshPromiseRef = useRef<Promise<Session | null> | null>(null);
+  const mountedRef = useRef(true);
+  const lastSessionUserIdRef = useRef<string | null | undefined>(undefined);
+
+  const applySession = useCallback((nextSession: Session | null, localDisplay = false) => {
+    if (!localDisplay) sessionRevisionRef.current++;
+    const nextUserId = nextSession?.user?.id ?? null;
+    const previousUserId = lastSessionUserIdRef.current;
+
+    // Beim ersten Wiederherstellen derselben persistierten Sitzung bleiben die
+    // nutzerspezifischen Offline-Caches erhalten. Nur ein echter Wechsel nach
+    // initialer Auflösung darf sie verwerfen.
+    if (previousUserId !== undefined && previousUserId !== nextUserId) {
+      if (previousUserId) void revokeStartupAccess({ backendHost: new URL(supabaseUrl).host, userId: previousUserId }).catch(() => {
+        console.warn('Startup access could not be cleared after account change');
+      });
+      void invalidateAllCaches().catch((cacheError) => {
+        console.error('Error invalidating caches after auth user change:', cacheError);
+      });
+    }
+    if (previousUserId && nextUserId === null) {
+      // Also handles a remote revocation/expired session. Never await Supabase
+      // auth methods inside its auth-state callback (the auth lock is held).
+      invalidateUserCache();
+      void clearGoogleSignIn().catch(() => { console.warn('Google login cleanup failed'); });
+      void clearPersonalDeviceData().then((failures) => {
+        if (failures.length) console.warn('Local cleanup incomplete:', failures);
+      });
+    }
+    lastSessionUserIdRef.current = nextUserId;
+    setConsentIdentity(nextUserId);
+    setRevenueCatSessionUser(nextUserId);
+
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+  }, []);
+
+  const refreshSession = useCallback((): Promise<Session | null> => {
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
+    if (signOutPromiseRef.current) return Promise.resolve(null);
+    const revision = sessionRevisionRef.current;
+    const operation = (async () => {
+      try {
+        const result = isSupabaseReady()
+          ? await supabase.auth.getSession()
+          : { data: { session: null }, error: null };
+        if (!mountedRef.current || revision !== sessionRevisionRef.current) return null;
+        if (result.error) {
+          // A failed refresh is unresolved, not a signed-out session. Keep a
+          // restored local display session; without one, retain recovery.
+          console.error('Error refreshing session:', result.error);
+          return null;
+        }
+        const nextSession = result.data.session ?? null;
+        applySession(nextSession);
+        setLoading(false);
+        return nextSession;
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        return null;
+      }
+    })();
+    refreshPromiseRef.current = operation;
+    void operation.finally(() => {
+      if (refreshPromiseRef.current === operation) refreshPromiseRef.current = null;
+    });
+    return operation;
+  }, [applySession]);
 
   // Initialisierung und Überwachung des Authentifizierungsstatus
   useEffect(() => {
+    let isMounted = true;
+    mountedRef.current = true;
+
+    const applySessionSafe = (nextSession: Session | null) => {
+      if (!isMounted) return;
+      applySession(nextSession);
+      setLoading(false);
+    };
+
     // Prüfen, ob wir im Browser sind und Supabase bereit ist
     if (!isSupabaseReady()) {
       console.log('Supabase is not ready yet (server-side rendering)');
-      // Wir setzen einen Timeout, um sicherzustellen, dass die App nicht hängen bleibt
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      if (isMounted) setLoading(false);
       return;
     }
 
-    const initAuth = async () => {
-      try {
-        // Simulierte Verzögerung für stabileres Laden auf mobilen Geräten
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Prüfen der Supabase-Verbindung
-        const connectionCheck = await checkSupabaseConnection();
-        console.log('Supabase connection check:', connectionCheck);
-
-        // Wenn die Supabase-Verbindung fehlschlägt, setzen wir den Benutzer auf null
-        if (!connectionCheck.success) {
-          console.log('Supabase connection failed, setting user to null');
-          setSession(null);
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-
-        // Abrufen der aktuellen Session beim Start
-        const { data } = await supabase.auth.getSession();
-        console.log('Got session:', data.session ? 'session exists' : 'no session');
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        // Bei einem Fehler setzen wir den Benutzer auf null
-        setSession(null);
-        setUser(null);
-      } finally {
-        // Sicherstellen, dass der Ladeindikator ausgeblendet wird
-        setLoading(false);
-      }
-    };
-
-    // Initialisierung starten
-    initAuth();
-
-    // Überwachung von Authentifizierungsänderungen
+    // Überwachung von Authentifizierungsänderungen früh registrieren
     let subscription: { unsubscribe: () => void } | null = null;
-
     try {
-      const authListener = supabase.auth.onAuthStateChange((_event, session) => {
-        console.log('Auth state changed:', _event, session ? 'session exists' : 'no session');
-        setSession(session);
-        setUser(session?.user ?? null);
+      const authListener = supabase.auth.onAuthStateChange((event, nextSession) => {
+        // INITIAL_SESSION can be null after a transient SDK recovery failure.
+        // Only getSession without an error establishes anonymous startup.
+        if (event === 'INITIAL_SESSION' && !nextSession) return;
+        applySessionSafe(nextSession);
       });
 
       subscription = authListener.data.subscription;
@@ -104,29 +167,131 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error setting up auth state change:', error);
     }
 
+    // SDK getSession can wait for an expired token's network refresh. Read the
+    // already persisted session in parallel, guarded by a bounded display grant
+    // and by auth revision so a late disk read cannot undo sign-out/account change.
+    const revision = sessionRevisionRef.current;
+    void readStartupDisplaySession(new URL(supabaseUrl).host, supabaseAuthStorageKey).then(savedSession => {
+      if (!isMounted || revision !== sessionRevisionRef.current || !savedSession || signOutPromiseRef.current) return;
+      applySession(savedSession, true);
+      setLoading(false);
+    });
+    void refreshSession();
+
     // Cleanup-Funktion
     return () => {
+      isMounted = false;
+      mountedRef.current = false;
       if (subscription) {
         subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [applySession, refreshSession]);
 
   // E-Mail-Authentifizierung
   const handleSignInWithEmail = async (email: string, password: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
     const { data, error } = await signInWithEmail(email, password);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
-  const handleSignUpWithEmail = async (email: string, password: string) => {
-    const { data, error } = await signUpWithEmail(email, password);
+  const handleSignUpWithEmail = async (
+    email: string,
+    password: string,
+    termsConsent: { version: string; acceptedAt: string },
+  ) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    const { data, error } = await signUpWithEmail(email, password, termsConsent);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleSignInWithApple = async () => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    const { data, error } = await signInWithApple();
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
+    return { data, error };
+  };
+
+  const handleSignInWithGoogle = async (options: GoogleAuthOptions) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    return signInWithGoogle(options);
+  };
+
+  const handleCompleteGoogleSignIn = async (url: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    const result = await exchangeGoogleSignIn(supabase, url);
+    applySession(result.session);
+    return result;
+  };
+
+  const handleVerifyOTPToken = async (email: string, token: string) => {
+    await signOutPromiseRef.current;
+    await waitForPersonalDeviceCleanup();
+    const { data, error } = await verifyOTPToken(email, token);
+    if (!error && data?.session) {
+      applySession(data.session);
+    }
     return { data, error };
   };
 
   // Abmeldung
-  const handleSignOut = async () => {
-    const { error } = await signOut();
-    return { error };
+  const logoutUserRef = useRef(user); logoutUserRef.current = user;
+  const logoutChoiceRef = useRef<Promise<{ error: any }> | null>(null);
+  const handleSignOut = (): Promise<{ error: any }> => {
+    if (logoutChoiceRef.current) return logoutChoiceRef.current;
+    if (!SLEEP_OFFLINE_ENABLED || !user?.id) return performSignOut();
+    const id = user.id;
+    const choice = (async () => {
+      try { if (!await confirmPendingSleepLogout(id)) return { error: new Error('Sign-out cancelled') }; }
+      catch (error) { return { error }; }
+      if (logoutUserRef.current?.id !== id) return { error: new Error('Account changed') };
+      return performSignOut();
+    })().finally(() => { logoutChoiceRef.current = null; });
+    logoutChoiceRef.current = choice; return choice;
+  };
+  const performSignOut = (): Promise<{ error: any }> => {
+    if (signOutPromiseRef.current) return signOutPromiseRef.current;
+    sessionRevisionRef.current++;
+    if (user?.id) void revokeStartupAccess({ backendHost: new URL(supabaseUrl).host, userId: user.id }).catch(() => {
+      console.warn('Startup access could not be cleared during sign-out');
+    });
+    // Hide private screens immediately, while preserving the persisted token
+    // until Supabase has attempted remote session revocation.
+    setSession(null);
+    setUser(null);
+    setConsentIdentity(null);
+    setRevenueCatSessionUser(null);
+    invalidateUserCache();
+    const operation = (async () => {
+      let error: unknown = null;
+      try {
+        await clearGoogleSignIn().catch(() => { console.warn('Google login cleanup failed'); });
+        ({ error } = await signOut());
+      }
+      catch (failure) { error = failure; }
+      finally {
+        applySession(null);
+        const failures = await clearPersonalDeviceData();
+        if (failures.length) console.warn('Local cleanup incomplete:', failures);
+      }
+      return { error };
+    })();
+    signOutPromiseRef.current = operation;
+    void operation.finally(() => { signOutPromiseRef.current = null; });
+    return operation;
   };
 
   // Bereitstellung des Kontexts
@@ -136,11 +301,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         user,
         loading,
+        refreshSession,
         signInWithEmail: handleSignInWithEmail,
         signUpWithEmail: handleSignUpWithEmail,
-        signInWithApple,
+        signInWithApple: handleSignInWithApple,
+        signInWithGoogle: handleSignInWithGoogle,
+        completeGoogleSignIn: handleCompleteGoogleSignIn,
         resendOTPToken,
-        verifyOTPToken,
+        verifyOTPToken: handleVerifyOTPToken,
         checkEmailVerification,
         signOut: handleSignOut,
       }}

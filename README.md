@@ -1,117 +1,233 @@
-# Wehen-Tracker App
+# Lotti Baby 🍼
 
-Eine React Native App zum Aufzeichnen und Verfolgen von Wehen während der Schwangerschaft. Die App verwendet Supabase für Authentifizierung und Datenspeicherung.
+Lotti Baby begleitet Eltern durch die Schwangerschaft und den Alltag mit Baby. Die App verbindet Schwangerschaftsbegleitung, gemeinsame Baby-Tracker, Familienorganisation und Austausch mit anderen Eltern. Dazu kommen „Frag Lotti“, Spracheingaben und persönliche Hinweise aus den erfassten Alltagsdaten.
 
-## 🚀 Funktionen
+Die App wird mit React Native und Expo für iOS und Android entwickelt. Ein Web-Einstieg ist ebenfalls vorhanden; native Funktionen wie iOS-Widgets und Live Activities stehen dort nicht zur Verfügung. Die Oberfläche unterstützt **Deutsch, Englisch und Spanisch** sowie helle und dunkle Darstellung.
 
-- **Wehen-Tracking**: Starten und Stoppen eines Timers für Wehen
-- **Verlaufsanzeige**: Anzeige der aufgezeichneten Wehen mit Dauer und Abständen
-- **Warnungen**: Benachrichtigungen, wenn Wehen in kurzen Abständen auftreten
-- **Benutzerkonten**: Registrierung und Anmeldung mit E-Mail und Passwort
-- **Cloud-Speicherung**: Speicherung der Wehen in Supabase für Zugriff auf verschiedenen Geräten
+## Funktionen
 
-## 🛠️ Technologien
+### Schwangerschaft und Geburtsvorbereitung
 
-- [React Native](https://reactnative.dev/) - Mobile App Framework
-- [Expo](https://expo.dev/) - React Native Toolchain
-- [Expo Router](https://docs.expo.dev/router/introduction/) - Routing und Navigation
-- [Supabase](https://supabase.com/) - Backend-as-a-Service für Authentifizierung und Datenbank
-- [TypeScript](https://www.typescriptlang.org/) - Typsicheres JavaScript
+- **Schwangerschafts-Startseite:** aktuelle Schwangerschaftswoche, Countdown, Größenvergleiche und Wochenmomente.
+- **Schwangerschaftsverlauf:** Werte und Check-ins festhalten sowie ein persönliches Schwangerschaftsbriefing aufrufen.
+- **Geburtsvorbereitung:** Wehen messen, Geburtsplan erstellen, Klinik-Checkliste pflegen, Babynamen sammeln und Fragen für Arzttermine notieren.
+- **Zyklus-Tracker:** Zyklus und Periode dokumentieren.
 
-## 📋 Voraussetzungen
+### Baby und gemeinsamer Alltag
 
-- [Node.js](https://nodejs.org/) (v18 oder höher)
-- [npm](https://www.npmjs.com/) oder [yarn](https://yarnpkg.com/)
-- [Expo CLI](https://docs.expo.dev/workflow/expo-cli/)
-- Ein [Supabase](https://supabase.com/)-Konto
+- **Baby-Profile:** mehrere Babys verwalten und zwischen ihnen wechseln.
+- **Tagesübersicht:** Stillen, Flasche, Wickeln und weitere Aktivitäten dokumentieren; Erinnerungen unterstützen den Alltag.
+- **Schlaf-Tracker:** laufende Schlafphasen, Verlauf, Auswertungen und Hinweise zu Schlaffenstern.
+- **Entwicklung:** Gewicht, Größe, Meilensteine, Zähne und Tagebucheinträge festhalten.
+- **Partner-Verknüpfung:** ein weiteres Elternteil einladen und Baby-Daten gemeinsam nutzen.
+- **Planer:** gemeinsame Termine und Erinnerungen mit Kalender-Synchronisierung.
+- **Einkauf und Vorräte:** Einkaufslisten, Bestände und Produkte per Barcode erfassen; Kundenkarten verwalten.
+- **Rezepte und Baby-Wetter:** Rezeptideen und eigene Rezepte sowie wetterbezogene Kleidungshinweise.
 
-## 🚀 Entwicklung
+### Lotti als Begleitung
+
+- **Frag Lotti:** Fragen im Kontext der Schwangerschaft oder des Babys stellen und Gespräche fortführen.
+- **Spracheingaben:** Alltagseinträge aus Sprache erfassen und vor der Übernahme prüfen.
+- **Lottis Fürsorge:** persönliche Hinweise auf Grundlage der erfassten Daten.
+- **Selfcare, Blog und Empfehlungen:** Inhalte und Anregungen für Eltern.
+
+### Community und Gerätefunktionen
+
+- **Community:** Beiträge, Gruppen, private Chats und Gruppen-Chats mit Sprachnachrichten sowie Melde- und Blockierfunktionen.
+- **Benachrichtigungen:** Erinnerungen und Hinweise zu gemeinsamen Aktivitäten, Terminen und Nachrichten.
+- **iOS-Widgets:** Schlaf, Einkaufsliste und Planer direkt auf dem Home-Bildschirm.
+- **iOS Live Activities:** laufende Aktivitäten auf dem Sperrbildschirm.
+- **Konto:** E-Mail-Anmeldung mit OTP-Verifizierung, Sign in with Apple, Profil- und Spracheinstellungen.
+
+Einzelne Funktionen hängen vom Abo, der Plattform, erteilten Berechtigungen und eingerichteten Backend-Diensten ab.
+
+## Technischer Stand
+
+Die Versionsangaben beziehen sich auf [package.json](package.json); App-Version und native Konfiguration stehen in [app.json](app.json) und [app.config.js](app.config.js).
+
+| Bereich | Umsetzung |
+| --- | --- |
+| App-Framework | Expo SDK 57, React Native 0.86.2, React 19.2.3 |
+| Navigation | Expo Router mit dateibasierten Routen |
+| Sprache | TypeScript 6 |
+| Backend | Supabase: Auth, Postgres, Realtime, Storage und Edge Functions |
+| Abonnements | RevenueCat mit `react-native-purchases` |
+| Oberfläche | Reanimated und eigene UI-Komponenten |
+| Native Erweiterungen | Expo Config Plugins, Swift-Module und WidgetKit-Targets |
+| Fehlerberichte | Sentry |
+| Prüfung | ESLint, TypeScript und Jest mit `jest-expo` |
+
+### Backend
+
+**Supabase ist das aktive Backend.** Der `BackendContext` setzt beim Start bzw. beim Benutzerwechsel Supabase als Backend. Der `ConvexProvider` ist deaktiviert und erzeugt weder Client noch Verbindung oder Benutzersynchronisierung.
+
+Das Verzeichnis `convex/`, die Dependency und frühere Integrationsdokumente sind weiterhin vorhanden. Sie beschreiben keine aktuell aktive alternative Backend-Konfiguration; ein Convex-Projekt ist für den aktuellen App-Start nicht erforderlich.
+
+- [lib/supabase.ts](lib/supabase.ts): Supabase-Client und zentrale Datenzugriffe.
+- `lib/`, `hooks/` und `services/`: Fachlogik, Synchronisierung und Anbindung der App.
+- `supabase/migrations/`: Datenbankschema und Migrationen.
+- `supabase/functions/`: serverseitige Funktionen unter anderem für Lotti, Benachrichtigungen, Moderation und RevenueCat.
+
+## Lokal entwickeln
+
+### Voraussetzungen
+
+- Node.js gemäß `engines` in [package.json](package.json): mindestens **20.19.4**. `.nvmrc` und `.node-version` sind ebenfalls auf 20.19.4 gesetzt.
+- npm; das Repository enthält ein `package-lock.json`.
+- Für lokale iOS-Builds: macOS, Xcode und CocoaPods.
+- Für lokale Android-Builds: Android Studio mit SDK und Emulator oder ein angeschlossenes Gerät.
+- Zugriff auf das vorgesehene Supabase-Projekt; für EAS-Builds und Updates zusätzlich EAS CLI und Zugriff auf das verknüpfte Expo-Projekt.
+
+### Installation und Konfiguration
 
 ```sh
-# Starten der Entwicklungsumgebung
+npm ci
+```
+
+Der Postinstall-Schritt wendet die Repository-Patches aus `patches/` mit `patch-package` an.
+
+**Supabase:** Projekt-URL und öffentlicher Anon-Key sind derzeit direkt in [lib/supabase.ts](lib/supabase.ts) hinterlegt. Ein frischer Checkout verbindet sich dadurch mit dem dort konfigurierten Projekt. Für ein eigenes Backend müssen diese Werte und weitere projektspezifische Verweise geprüft sowie Schema, Storage, Auth und benötigte Edge Functions eingerichtet werden. `EXPO_PUBLIC_SUPABASE_URL` wird in Teilen der App verwendet, ersetzt aber nicht die Konfiguration des zentralen Clients.
+
+**RevenueCat:** Für die jeweilige Plattform die öffentlichen SDK-Keys in einer lokalen, nicht versionierten `.env.local` setzen:
+
+```dotenv
+EXPO_PUBLIC_RC_IOS_KEY=appl_DEIN_PUBLIC_SDK_KEY
+EXPO_PUBLIC_RC_ANDROID_KEY=goog_DEIN_PUBLIC_SDK_KEY
+```
+
+Die App akzeptiert außerdem die älteren Variablennamen `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` und `EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY`. Serverseitige Schlüssel gehören in die Konfiguration der jeweiligen Edge Function. `EXPO_PUBLIC_*`-Werte werden in das App-Bundle übernommen und dürfen keine privaten Schlüssel enthalten.
+
+Für Android wird ein eigener öffentlicher Google-Play-SDK-Key aus RevenueCat benötigt; ein iOS-Key ersetzt ihn nicht. `build.development.env` wird von Metro nicht automatisch geladen und enthält für Android nur einen Platzhalter. Nach Änderungen an `.env.local` Metro neu starten und die App vollständig neu laden. Für EAS-Builds und Updates den Key außerdem in der jeweils verwendeten EAS-Umgebung setzen. Ohne Key bleibt der Abo-Status „nicht verfügbar“; im Entwicklungsbetrieb wird der Konfigurationshinweis nur einmal im Terminal protokolliert.
+
+**Android-Benachrichtigungen:** Wenn Expo Go beim Anlegen eines Kanals mit `null cannot be cast ... NotificationsChannelsProvider` scheitert, fehlt der native Kanal-Provider im Expo-Go-Host. Die App fängt ausschließlich diesen Fehler in Android Expo Go ab und setzt die Berechtigungsprüfung fort. Kanalverhalten und Zustellung müssen mit einem funktionierenden Expo-Go-Host oder einem eigenen Development Build geprüft werden. In eigenen App-Builds wird derselbe Fehler weiterhin gemeldet; dort ist ein zur installierten Expo-Version passender nativer Neubau erforderlich.
+
+### Startbefehle
+
+```sh
+# Metro starten
 npm start
 
-# Starten auf Android
-npm run android
+# Metro für einen vorhandenen Development Build über localhost starten
+npm run start:dev-client:localhost
 
-# Starten auf iOS
+# Lokal für iOS bauen und starten (Hermes, eigener Start-Wrapper)
 npm run ios
 
-# Starten im Web-Browser
+# Auf einem iOS-Gerät starten, ohne erzwungenen localhost-Proxy
+npm run ios:device
+
+# Lokal für Android bauen und starten
+npm run android
+
+# Web-Entwicklung starten
 npm run web
 ```
 
-## 📱 EAS Update
+Für die vollständige native App einen **Development Build** verwenden. Expo Go bietet keine vollständige Unterstützung für die eigenen nativen Module, Widgets und Live Activities. Die RevenueCat-Anbindung verlangt in Expo Go unter iOS einen Test-Store-Key (`test_…`); echte Käufe werden dort nicht unterstützt. Für TestFlight und App Store muss der iOS-Key mit `appl_` beginnen.
 
-Dieses Projekt ist für EAS Update konfiguriert, was Over-the-Air Updates ermöglicht, ohne neue App-Versionen in den App Stores veröffentlichen zu müssen.
-
-### Updates veröffentlichen
+### Code prüfen
 
 ```sh
-# Veröffentlichen eines Updates für alle Kanäle
-eas update
+npm run lint
+npm run typecheck
+npm test
 
-# Veröffentlichen eines Updates für einen bestimmten Kanal
-eas update --channel production
+# Tests während der Entwicklung beobachten
+npm run test:watch
 ```
 
-### Builds erstellen
+## Abonnements
+
+Lotti Baby unterstützt **Lite, Standard und Premium**, jeweils monatlich oder jährlich. Die Zuordnung der Funktionen wird über eine konfigurierbare Feature-Policy gesteuert. Die lokale Standardbelegung liegt in [lib/subscriptionFeaturePolicy.ts](lib/subscriptionFeaturePolicy.ts):
+
+| Tarif | Standardmäßig enthalten |
+| --- | --- |
+| Lite | Basis-Tracker, Partner-Verknüpfung, Planer, Einkaufsliste und Rezepte |
+| Standard | Zusätzlich Wochenmomente, PDF-Export, vollständiger Verlauf und Monatsansichten für Schlaf und Tagesübersicht |
+| Premium | Zusätzlich Spracheingaben, Lottis Fürsorge, Frag Lotti und Schwangerschaftsbriefing |
+
+Die serverseitige Policy kann diese Zuordnung ändern. Details zur Freischaltung und Durchsetzung stehen in [subscription-feature-policy-rollout.md](docs/subscription-feature-policy-rollout.md).
+
+- **Entitlements:** `LottiBabyLite`, `LottiBabyAbo` (Standard), `LottiBabyPremium`.
+- **Offering:** `default`.
+- **Produkte:** `lottibaby_{lite|standard|premium}_{monthly|yearly}`.
+- **Legacy-Standardprodukte:** `lottibaby_monthly`, `lottibaby_yearly`.
+- **Serverseitige Verarbeitung:** `supabase/functions/revenuecat-webhook/`.
+
+Die öffentlichen RevenueCat-Keys für Builds und OTA-Updates im passenden EAS-Environment hinterlegen. Preview und Production müssen für iOS den App-Store-Key verwenden.
+
+## Builds und Updates
+
+Die Profile sind in [eas.json](eas.json) definiert:
+
+| Profil | Zweck |
+| --- | --- |
+| `development` | Interner Development Build |
+| `development-simulator` | iOS-Simulator mit Development Client |
+| `preview` | Interne Vorschau auf dem Preview-Kanal |
+| `preview-testflight` | iOS-Store-Build für TestFlight auf dem Preview-Kanal |
+| `production` | Produktionsbuild auf dem Production-Kanal |
 
 ```sh
-# Erstellen einer Entwicklungsversion
-eas build --profile development
+# Development Build für iOS
+eas build --platform ios --profile development
 
-# Erstellen einer Vorschauversion
-eas build --profile preview
+# TestFlight-Build auf dem Preview-Kanal
+eas build --platform ios --profile preview-testflight
 
-# Erstellen einer Produktionsversion
-eas build --profile production
+# Produktionsbuild für iOS
+eas build --platform ios --profile production
 ```
 
-## 🔄 Git-Workflow
+OTA-Updates über die vorhandenen Skripte veröffentlichen:
 
-Das Projekt verwendet einen Master-Branch für die Hauptentwicklung. Wenn Sie Code zum Master-Branch pushen, wird automatisch ein neues EAS Update veröffentlicht (wenn GitHub Actions konfiguriert ist).
+```sh
+npm run update:preview -- --message "Beschreibung der Änderung"
 
-## 📝 Weitere Ressourcen
-
-- [Expo Router: Dokumentation](https://docs.expo.dev/router/introduction/)
-- [EAS Update: Dokumentation](https://docs.expo.dev/eas-update/introduction/)
-- [EAS Build: Dokumentation](https://docs.expo.dev/build/introduction/)
-- [Supabase: Dokumentation](https://supabase.com/docs)
-
-## 🔧 Supabase-Einrichtung
-
-Für detaillierte Anweisungen zur Einrichtung von Supabase für dieses Projekt, siehe die Datei `SUPABASE_SETUP.md`.
-
-When you run `expo start`, you can open the app in:
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+# Nach erfolgreichem Test in TestFlight
+npm run update:production -- --message "Beschreibung der Änderung"
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Diese beiden Skripte zielen ausdrücklich auf **iOS**. Der Wrapper verlangt Kanal, gleichnamiges EAS-Environment und eine Beschreibung, lehnt `--auto` und `--branch` ab und bereinigt vor dem Export `dist/`. Änderungen am Expo SDK, an nativen Modulen oder Berechtigungen benötigen einen neuen Build mit passender Runtime-Version.
 
-## Learn more
+**Bestehende CI-Abweichung:** [.github/workflows/eas-update.yml](.github/workflows/eas-update.yml) reagiert auf Pushes nach `master` und ruft noch direkt `eas update --auto` auf. Damit verwendet die Action nicht die Prüfungen des npm-Wrappers. Für diesen automatischen Veröffentlichungsweg ist eine gesonderte Anpassung erforderlich.
 
-To learn more about developing your project with Expo, look at the following resources:
+## Projektstruktur
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```text
+app/                  Screens und Expo-Router-Routen
+  (auth)/             Anmeldung und OTP-Verifizierung
+  (tabs)/             Schwangerschaft, Baby-Alltag, Tracker und weitere Bereiche
+  planner/            Familienplaner
+  chat/, group-chat/  Private Chats und Gruppen-Chats
+components/           Wiederverwendbare UI und Feature-Komponenten
+contexts/             Auth, aktives Baby, Sprache, Theme und Abo-Zugriff
+hooks/                Hooks für Daten und UI-Verhalten
+lib/                  Fachlogik, Übersetzungen, Caches und Backend-Zugriffe
+services/             Weitere Service-Anbindungen
+supabase/             Migrationen und Edge Functions
+convex/               Frühere, aktuell deaktivierte Backend-Integration
+native-modules/       Native Bridges für Live Activities und Widgets
+plugins/              Expo Config Plugins
+targets/widget/       iOS-Widgets und Live-Activity-Target
+ios/, android/        Native Projekte
+assets/               Bilder, Fonts und Plattform-Lokalisierungen
+patches/              Dependency-Patches für den Postinstall-Schritt
+scripts/              Lokale Entwicklung, Updates und Wartung
+docs/                 Feature- und technische Dokumentation
+store/                Store-Materialien
+```
 
-## Join the community
+## Weiterführende Dokumentation
 
-Join our community of developers creating universal apps.
+Die Detaildokumente stammen aus unterschiedlichen Entwicklungsständen. Bei Abweichungen sind der aktuelle Code, die Konfigurationsdateien und die Migrationen maßgeblich.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- [Supabase-Einrichtung](SUPABASE_SETUP.md) und [Tabellenübersicht](docs/supabase_tables.md).
+- [Authentifizierung](docs/AUTHENTICATION_SETUP.md) und [OTP-Einrichtung](docs/OTP_SETUP_GUIDE.md).
+- [Frag Lotti](docs/FRAG_LOTTI_SUPABASE_SETUP.md) und [Lottis Fürsorge](docs/ANLEITUNG_SUPABASE_FUERSORGE.md).
+- [Termine und Planer](docs/termine.md) und [Schlaf-Synchronisierung](docs/sleep_tracking_sync_implementation.md).
+- [Community](docs/Community.md) und [Babynamen-Übersetzungen](docs/BABY_NAMES_TRANSLATIONS.md).
+- [Abo-Feature-Policy](docs/subscription-feature-policy-rollout.md).
+- [Design-Richtlinien](docs/DesignGuidelines.md).
+
+Die Dokumente `CONVEX_IMPLEMENTATION.md`, `CONVEX_DEPLOYMENT_STEPS.md` sowie die älteren Expo-SDK-Update-Guides dienen als historische Referenz.

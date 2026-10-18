@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="430" height="932" viewBox="0 0 430 932">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#29211e"/><stop offset="1" stop-color="#4a3832"/></linearGradient><filter id="shadow"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000" flood-opacity=".3"/></filter></defs>
+  <rect width="430" height="932" fill="url(#bg)"/><circle cx="370" cy="125" r="140" fill="#8e4ec6" opacity=".23"/><circle cx="0" cy="740" r="150" fill="#a8c4c1" opacity=".18"/>
+  <text x="215" y="67" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#f8f0e5">03:17</text>
+  <text x="215" y="160" text-anchor="middle" font-family="Arial, sans-serif" font-size="25" font-weight="700" fill="white">Eine Nacht. Ein Team.</text>
+  <text x="215" y="191" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#e9d8c2">Auch wenn gerade nur eine:r wach ist.</text>
+  <rect x="20" y="266" width="390" height="138" rx="27" fill="#fff" fill-opacity=".92" filter="url(#shadow)"/>
+  <circle cx="61" cy="312" r="19" fill="#8e4ec6"/><text x="61" y="318" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="white">L</text>
+  <text x="91" y="306" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#5c4033">LOTTI BABY</text><text x="367" y="306" text-anchor="end" font-family="Arial, sans-serif" font-size="12" fill="#7d5a50">jetzt</text>
+  <text x="44" y="346" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#5c4033">Jonas hat Emilias Schlaf beendet.</text><text x="44" y="374" font-family="Arial, sans-serif" font-size="13" fill="#7d5a50">Gesamtdauer: 2 Std. 06 Min.</text>
+  <rect x="20" y="448" width="390" height="168" rx="27" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".24"/>
+  <text x="48" y="491" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#f8f0e5">Was du nicht mehr fragen musst:</text>
+  <text x="48" y="534" font-family="Arial, sans-serif" font-size="17" fill="white">„Wann hat sie zuletzt geschlafen?“</text>
+  <line x1="48" y1="560" x2="382" y2="560" stroke="#fff" stroke-opacity=".22"/><text x="48" y="596" font-family="Arial, sans-serif" font-size="14" fill="#e9d8c2">Lotti Baby hält euch beide auf dem Laufenden.</text>
+  <rect x="20" y="702" width="390" height="80" rx="24" fill="#a8c4c1"/><text x="215" y="751" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#2d2522">Gemeinsam entspannt bleiben</text>
+</svg>

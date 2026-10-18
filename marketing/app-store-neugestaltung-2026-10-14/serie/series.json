@@ -1,0 +1,585 @@
+{
+  "note": "Editierbare Quelle der Store-Serie. Texte, Reihenfolge und Raster werden hier gepflegt; render.cjs erzeugt daraus alle Exporte. Ein Titel ist eine Liste von Zeilen [Text, Akzentfarbe?].",
+  "layouts": {
+    "iphone": {
+      "masterWidth": 1320,
+      "side": 70,
+      "copyTop": 150,
+      "brandSize": 40,
+      "brandGap": 26,
+      "titleSize": 112,
+      "supportGap": 30,
+      "supportSize": 50,
+      "deviceW": 1000,
+      "deviceBottomFromEdge": 2230,
+      "bezel": 20,
+      "deviceRadius": 168,
+      "screenRadius": 148,
+      "screenRatio": "1206 / 2622",
+      "islandTop": 26,
+      "islandW": 300,
+      "islandH": 88
+    },
+    "ipad": {
+      "masterWidth": 2064,
+      "side": 140,
+      "copyTop": 150,
+      "brandSize": 54,
+      "brandGap": 32,
+      "titleSize": 136,
+      "supportGap": 36,
+      "supportSize": 64,
+      "deviceW": 1500,
+      "deviceBottomFromEdge": 2050,
+      "bezel": 34,
+      "deviceRadius": 76,
+      "screenRadius": 44,
+      "screenRatio": "2064 / 2752",
+      "islandTop": 0,
+      "islandW": 0,
+      "islandH": 0
+    }
+  },
+  "formats": [
+    {
+      "id": "APP_IPHONE_67",
+      "device": "iphone",
+      "w": 1320,
+      "h": 2868,
+      "label": "iPhone 6,9 Zoll"
+    },
+    {
+      "id": "APP_IPHONE_65",
+      "device": "iphone",
+      "w": 1284,
+      "h": 2778,
+      "label": "iPhone 6,5 Zoll"
+    },
+    {
+      "id": "APP_IPAD_PRO_3GEN_129",
+      "device": "ipad",
+      "w": 2064,
+      "h": 2752,
+      "label": "iPad 13 Zoll"
+    }
+  ],
+  "motifs": [
+    {
+      "id": "01-mahlzeiten",
+      "capture": "Mahlzeitenübersicht mit Demo-Einträgen; Uhrzeit und Menge sichtbar",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Wann war das"
+            ],
+            [
+              "letzte Fläschchen?",
+              true
+            ]
+          ],
+          "support": "Mahlzeiten und Uhrzeiten im Blick."
+        },
+        "en-US": {
+          "title": [
+            [
+              "When was the"
+            ],
+            [
+              "last bottle?",
+              true
+            ]
+          ],
+          "support": "Feeds and times at a glance."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "¿Cuándo fue el"
+            ],
+            [
+              "último biberón?",
+              true
+            ]
+          ],
+          "support": "Tomas y horarios de un vistazo."
+        }
+      }
+    },
+    {
+      "id": "02-gemeinsam",
+      "capture": "Gefüllte Tagesübersicht (Unser Tag) mit Mahlzeit, Windel und Schlaf",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Euer Tag."
+            ],
+            [
+              "Auf einen Blick.",
+              true
+            ]
+          ],
+          "support": "Mahlzeiten, Windeln und Schlaf."
+        },
+        "en-US": {
+          "title": [
+            [
+              "Your day."
+            ],
+            [
+              "At a glance.",
+              true
+            ]
+          ],
+          "support": "Feeds, diapers and sleep."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "Vuestro día."
+            ],
+            [
+              "De un vistazo.",
+              true
+            ]
+          ],
+          "support": "Tomas, pañales y sueño."
+        }
+      }
+    },
+    {
+      "id": "03-schlaf",
+      "capture": "Schlaftracker mit erfassten Zeiten und sichtbarer Steuerung",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Schlaf festhalten."
+            ],
+            [
+              "Verlauf im Blick.",
+              true
+            ]
+          ],
+          "support": "Schlafphasen starten und beenden."
+        },
+        "en-US": {
+          "title": [
+            [
+              "Track sleep."
+            ],
+            [
+              "See the history.",
+              true
+            ]
+          ],
+          "support": "Start and stop sleep phases."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "Registra el sueño."
+            ],
+            [
+              "Mira el historial.",
+              true
+            ]
+          ],
+          "support": "Inicia y termina cada siesta."
+        }
+      }
+    },
+    {
+      "id": "04-schwangerschaft",
+      "capture": "Aktuelle Schwangerschafts-Startseite mit Countdown",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Schon vor der Geburt"
+            ],
+            [
+              "an eurer Seite.",
+              true
+            ]
+          ],
+          "support": "Countdown, Geburtsplan und Vorbereitung."
+        },
+        "en-US": {
+          "title": [
+            [
+              "By your side"
+            ],
+            [
+              "before birth.",
+              true
+            ]
+          ],
+          "support": "Countdown, birth plan and preparation."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "A vuestro lado"
+            ],
+            [
+              "antes del parto.",
+              true
+            ]
+          ],
+          "support": "Cuenta atrás, plan de parto y más."
+        }
+      }
+    },
+    {
+      "id": "05-erinnerungen",
+      "capture": "Entwicklung: Meilensteine bzw. Gewicht und Größe mit Demo-Inhalten",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Kleine Schritte."
+            ],
+            [
+              "Große Erinnerungen.",
+              true
+            ]
+          ],
+          "support": "Meilensteine, Gewicht und Größe festhalten."
+        },
+        "en-US": {
+          "title": [
+            [
+              "Little steps."
+            ],
+            [
+              "Big memories.",
+              true
+            ]
+          ],
+          "support": "Save milestones, weight and height."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "Pequeños pasos."
+            ],
+            [
+              "Grandes recuerdos.",
+              true
+            ]
+          ],
+          "support": "Guarda hitos, peso y talla."
+        }
+      }
+    },
+    {
+      "id": "06-familienalltag",
+      "capture": "Planer oder Einkaufsliste mit Demo-Einträgen",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Euer Familienalltag"
+            ],
+            [
+              "an einem Ort.",
+              true
+            ]
+          ],
+          "support": "Termine und Aufgaben im Blick."
+        },
+        "en-US": {
+          "title": [
+            [
+              "Family life"
+            ],
+            [
+              "in one place.",
+              true
+            ]
+          ],
+          "support": "Appointments and tasks at a glance."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "La vida familiar,"
+            ],
+            [
+              "en un solo lugar.",
+              true
+            ]
+          ],
+          "support": "Citas y tareas de un vistazo."
+        }
+      }
+    },
+    {
+      "id": "07-babywetter",
+      "capture": "Aktuelle Babywetter-Ansicht mit Kleidungsvorschlag",
+      "text": {
+        "de-DE": {
+          "title": [
+            [
+              "Was zieht unser"
+            ],
+            [
+              "Baby heute an?",
+              true
+            ]
+          ],
+          "support": "Babywetter für euren Alltag."
+        },
+        "en-US": {
+          "title": [
+            [
+              "What should baby"
+            ],
+            [
+              "wear today?",
+              true
+            ]
+          ],
+          "support": "Baby weather for your day."
+        },
+        "es-ES": {
+          "title": [
+            [
+              "¿Qué se pone hoy"
+            ],
+            [
+              "nuestro bebé?",
+              true
+            ]
+          ],
+          "support": "El tiempo para el día a día del bebé."
+        }
+      }
+    }
+  ],
+  "video": {
+    "note": "App-Vorschau 886 × 1920, 30 fps, 24 s, echte Simulator-Bildschirmaufnahmen mit Text-Overlay, ohne Ton verständlich. Anmeldung/Abo-Hinweis in der Schluss-Szene.",
+    "format": {
+      "w": 886,
+      "h": 1920,
+      "fps": 30,
+      "device": "iphone"
+    },
+    "crossfade": 0.4,
+    "scenes": [
+      {
+        "id": "v1-frage",
+        "duration": 3.4,
+        "clip": "v1-mahlzeiten.mp4",
+        "start": 0.4,
+        "text": {
+          "de-DE": {
+            "title": [
+              [
+                "Wann war das"
+              ],
+              [
+                "letzte Fläschchen?",
+                true
+              ]
+            ],
+            "support": "Mahlzeiten und Uhrzeiten im Blick."
+          },
+          "en-US": {
+            "title": [
+              [
+                "When was the"
+              ],
+              [
+                "last bottle?",
+                true
+              ]
+            ],
+            "support": "Feeds and times at a glance."
+          },
+          "es-ES": {
+            "title": [
+              [
+                "¿Cuándo fue el"
+              ],
+              [
+                "último biberón?",
+                true
+              ]
+            ],
+            "support": "Tomas y horarios de un vistazo."
+          }
+        }
+      },
+      {
+        "id": "v2-eintrag",
+        "duration": 5.4,
+        "clip": "v2-eintrag.mp4",
+        "start": 4.2,
+        "text": {
+          "de-DE": {
+            "title": [
+              [
+                "Mahlzeiten. Schlaf."
+              ],
+              [
+                "Windeln.",
+                true
+              ]
+            ],
+            "support": "Mit wenigen Fingertipps festgehalten."
+          },
+          "en-US": {
+            "title": [
+              [
+                "Feeds. Sleep."
+              ],
+              [
+                "Diapers.",
+                true
+              ]
+            ],
+            "support": "Logged in a few taps."
+          },
+          "es-ES": {
+            "title": [
+              [
+                "Tomas. Sueño."
+              ],
+              [
+                "Pañales.",
+                true
+              ]
+            ],
+            "support": "Registrado en pocos toques."
+          }
+        }
+      },
+      {
+        "id": "v3-gemeinsam",
+        "duration": 4.4,
+        "clip": "v3-gemeinsam.mp4",
+        "start": 42,
+        "text": {
+          "de-DE": {
+            "title": [
+              [
+                "Euer Tag."
+              ],
+              [
+                "Auf einen Blick.",
+                true
+              ]
+            ],
+            "support": "Mahlzeiten, Windeln und Schlaf."
+          },
+          "en-US": {
+            "title": [
+              [
+                "Your day."
+              ],
+              [
+                "At a glance.",
+                true
+              ]
+            ],
+            "support": "Feeds, diapers and sleep."
+          },
+          "es-ES": {
+            "title": [
+              [
+                "Vuestro día."
+              ],
+              [
+                "De un vistazo.",
+                true
+              ]
+            ],
+            "support": "Tomas, pañales y sueño."
+          }
+        }
+      },
+      {
+        "id": "v4-schlaf",
+        "duration": 8.4,
+        "clip": "v4-schlaf.mp4",
+        "start": 0,
+        "text": {
+          "de-DE": {
+            "title": [
+              [
+                "Schlafphasen einfach"
+              ],
+              [
+                "festhalten.",
+                true
+              ]
+            ],
+            "support": "Starten, beenden, nachsehen."
+          },
+          "en-US": {
+            "title": [
+              [
+                "Track sleep"
+              ],
+              [
+                "with one tap.",
+                true
+              ]
+            ],
+            "support": "Start, stop, look back."
+          },
+          "es-ES": {
+            "title": [
+              [
+                "Registra el sueño"
+              ],
+              [
+                "con un toque.",
+                true
+              ]
+            ],
+            "support": "Inicia, termina y consulta."
+          }
+        }
+      },
+      {
+        "id": "v5-marke",
+        "duration": 4,
+        "clip": "v5-start.mp4",
+        "start": 0.4,
+        "text": {
+          "de-DE": {
+            "title": [
+              [
+                "Lotti Baby",
+                true
+              ]
+            ],
+            "support": "Anmeldung erforderlich. Funktionen je nach Abo."
+          },
+          "en-US": {
+            "title": [
+              [
+                "Lotti Baby",
+                true
+              ]
+            ],
+            "support": "Sign-in required. Features depend on subscription."
+          },
+          "es-ES": {
+            "title": [
+              [
+                "Lotti Baby",
+                true
+              ]
+            ],
+            "support": "Requiere iniciar sesión. Funciones según suscripción."
+          }
+        }
+      }
+    ]
+  }
+}

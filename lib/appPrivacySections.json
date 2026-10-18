@@ -1,0 +1,233 @@
+{
+  "de": [
+    {
+      "title": "Lotti Baby: App-Daten und Cloud-Speicherung",
+      "paragraphs": [
+        "Lotti Baby richtet sich an Eltern und Betreuungspersonen. Die App speichert Daten sowohl auf Ihrem Gerät als auch in der Cloud. Ein Konto, die Synchronisierung zwischen Geräten und das Teilen mit anderen Personen werden über Supabase bereitgestellt. Das Deinstallieren der App entfernt deshalb nicht die in der Cloud gespeicherten Daten.",
+        "Je nach verwendeter Funktion verarbeiten wir E-Mail-Adresse, Nutzerkennung, Anmeldedaten, Profilname und Profilbild; Angaben zum Baby wie Name und Geburtsdatum; Schwangerschafts- und Geburtsterminangaben; Schlaf, Stillen, Mahlzeiten, Windeln, Gewicht, Größe, Entwicklung und eigene Aktivitäten; Termine, Aufgaben, Einkaufslisten, Tagebuch, Notizen, Fotos sowie Community-Beiträge, Nachrichten und Sprachnachrichten. Diese Angaben können Gesundheitsdaten von Ihnen oder Ihrem Kind enthalten. Hinzu kommen Freigaben, Einstellungen, Geräte- und Verbindungsdaten sowie Abo-Informationen.",
+        "Auf dem Gerät werden unter anderem die Anmeldesitzung, Einstellungen und zwischengespeicherte Inhalte gehalten. Freigegebene Familieninhalte sind für verknüpfte Partner oder eingeladene Betreuungspersonen entsprechend ihrer Berechtigungen zugänglich. Community-Inhalte sind für die jeweilige Zielgruppe sichtbar; öffentlich bereitgestellte Bilder können über ihre URL erreichbar sein."
+      ]
+    },
+    {
+      "title": "Supabase – Konto, Datenbank und Dateien",
+      "paragraphs": [
+        "Wir nutzen Supabase (Supabase Inc.) für Anmeldung und Kontoverwaltung, Datenbank, Dateispeicherung, Synchronisierung und serverseitige Funktionen. Dabei werden die oben beschriebenen Konto-, Familien-, Tracking- und Kommunikationsdaten sowie hochgeladene Dateien an Supabase übermittelt und dort gespeichert. Technische Anfragen enthalten außerdem Verbindungsdaten wie IP-Adresse, Zeitstempel und Authentifizierungsinformationen.",
+        "Die Verarbeitung ermöglicht die von Ihnen genutzten App-Funktionen und die Wiederverfügbarkeit Ihrer Daten auf weiteren Geräten. Netzwerkverbindungen erfolgen über HTTPS/TLS; Konto- und Freigabeberechtigungen steuern den Zugriff. Eine Ende-zu-Ende-Verschlüsselung der Cloud-Inhalte wird damit nicht zugesichert: serverseitige Funktionen verarbeiten Inhalte, etwa für Synchronisierung, Benachrichtigungen und KI-Anfragen.",
+        "Rechtsgrundlage für die erforderliche Kontoverwaltung und Leistungserbringung ist Art. 6 Abs. 1 lit. b DSGVO; für den Schutz vor Missbrauch Art. 6 Abs. 1 lit. f DSGVO. Für Gesundheitsdaten gelten zusätzlich die unten erläuterten Anforderungen. Anbieterinformationen: https://supabase.com/privacy und https://supabase.com/dpa."
+      ]
+    },
+    {
+      "title": "OpenAI – Frag Lotti, Fürsorge und Spracheingaben",
+      "paragraphs": [
+        "KI-Funktionen verwenden die API von OpenAI. Die App übermittelt die benötigten Inhalte zunächst an eine Supabase-Serverfunktion, die sie zur Verarbeitung an OpenAI weitergibt. Bei Frag Lotti sind dies Ihre Frage, der mitgesendete Gesprächsverlauf und die für die Frage ausgewählten Tracking-Auswertungen bzw. Angaben zu Alter oder Schwangerschaft. Freitext kann Namen und Gesundheitsangaben enthalten.",
+        "Lottis Fürsorge kann für personalisierte Texte den Vornamen und das Alter des Babys, ausgewählte Fakten zu Schlaf, Ernährung, Windeln und Wetter bzw. in der Schwangerschaft den Vornamen, Schwangerschaftswoche, Trimester und Tage bis zum Geburtstermin übermitteln. Neue Fürsorge-Anfragen werden nur beim Öffnen von Lottis Fürsorge in der aktiven App gestartet. Es gibt keine automatische tägliche Auswertung und keine automatisch erzeugten Fürsorge-Pushnachrichten. Beim Wechsel in den Hintergrund wird die laufende Anfrage auf dem Gerät abgebrochen; bereits an den Server oder OpenAI übermittelte Inhalte können dort noch fertig verarbeitet werden. Die Auswahl des Am-Limit-Modus wird im Konto gespeichert, aber nicht als solche an OpenAI übermittelt.",
+        "Bei Spracheingaben werden Ihre Aufnahme zur Transkription und der erkannte Text zur Erstellung von Eintragsvorschlägen an OpenAI gesendet. Dazu können Babyname, Gerätezeit, Sprache, jüngste Still-/Flaschenpräferenz und Bezeichnungen eigener Aktivitäten kommen. Auch ausdrücklich zur Übernahme ausgewählte Texte können zur Erkennung von Aufgaben, Terminen oder Einkaufsartikeln verarbeitet werden. Bestätigte Einträge und Fürsorge-Nachrichten werden in Supabase gespeichert.",
+        "Laut OpenAI werden API-Inhalte standardmäßig nicht zum Modelltraining verwendet. Für Textanfragen können Missbrauchsprotokolle grundsätzlich bis zu 30 Tage aufbewahrt werden, bei rechtlicher Verpflichtung länger. Für den verwendeten Transkriptions-Endpunkt nennt OpenAI keine Speicherung von Anwendungsdaten oder Missbrauchsprotokollen. Daraus folgt keine allgemeine Zusage einer sofortigen Löschung aller KI-Daten. Anbieterinformationen: https://openai.com/policies/privacy-policy/ und https://developers.openai.com/api/docs/guides/your-data.",
+        "Zweck ist die Beantwortung Ihrer Fragen, die Formulierung von Fürsorge-Hinweisen und die Verarbeitung Ihrer Eingaben. Für angeforderte Leistungen gilt Art. 6 Abs. 1 lit. b DSGVO. Soweit eine Einwilligung erforderlich ist, insbesondere bei Gesundheitsdaten, gelten Art. 6 Abs. 1 lit. a und Art. 9 Abs. 2 lit. a DSGVO. Sie können auf KI-Anfragen, Spracheingaben und das Öffnen der KI-gestützten Fürsorge verzichten. Einwilligungen können Sie für die Zukunft auch über support@lottibaby.de widerrufen."
+      ]
+    },
+    {
+      "title": "Sentry – Fehlerdiagnose",
+      "paragraphs": [
+        "Die App initialisiert Sentry (Functional Software, Inc.) beim Start zur Erkennung und Behebung von Fehlern. Übermittelt werden können Absturzberichte, Fehlermeldungen und Aufrufstapel, App- und Betriebssystemversion, Geräteinformationen, Zeitstempel, technische Kennungen sowie vorangegangene Bedien- und Netzwerkereignisse. Bei Fehlern der Abo-Prüfung wird zusätzlich eine gekürzte, gehashte Nutzerkennung übermittelt. Diese Kennung ist pseudonym und nicht mit anonymen Daten gleichzusetzen.",
+        "In dieser App-Version sind Sitzungsaufzeichnungen deaktiviert. Die Replay-Integration ist entfernt; beide Aufzeichnungsraten sind auf null gesetzt. Die automatische Anreicherung um Standard-PII ist ebenfalls ausgeschaltet. Das schließt personenbezogene Angaben in Fehlermeldungen, URLs, Protokollen oder freiwilligem Feedback nicht vollständig aus; bei der Übertragung fallen zudem Verbindungsdaten an.",
+        "Der konfigurierte Sentry-Endpunkt liegt in den USA. Zweck ist die technische Diagnose und Verbesserung der Stabilität. Notwendige Fehlerdiagnose stützt sich auf Art. 6 Abs. 1 lit. f DSGVO. Diagnosedaten und gegebenenfalls bereits aus älteren App-Versionen gespeicherte Aufzeichnungen unterliegen dem jeweiligen Verarbeitungszweck und der im Sentry-Projekt eingestellten Aufbewahrungsdauer. Die Deaktivierung löscht ältere Daten nicht automatisch. Auskunft und Löschung können Sie über support@lottibaby.de verlangen. Anbieterinformationen: https://sentry.io/privacy/ und https://sentry.io/legal/dpa/."
+      ]
+    },
+    {
+      "title": "RevenueCat, Apple und Google – Käufe und Abonnements",
+      "paragraphs": [
+        "Für die Prüfung, Wiederherstellung und Zuordnung von Abonnements nutzen wir RevenueCat, Inc. Die App verwendet Ihre Supabase-Nutzerkennung als RevenueCat-App-User-ID. RevenueCat verarbeitet diese Kennung sowie Kaufbelege bzw. Google-Play-Kauftoken, Produkt- und Transaktionskennungen, Tarif, Kauf- und Ablaufzeitpunkte, Verlängerungs- und Erstattungsstatus sowie technische App- und Geräteinformationen. Eine Verbindung zu RevenueCat kann bereits bei der Prüfung Ihres Zugangs entstehen, auch wenn Sie gerade keinen Kauf tätigen.",
+        "RevenueCat übermittelt Abo-Ereignisse an unser Supabase-Backend. Dort werden Status und Zugangsberechtigungen dem Konto zugeordnet, damit die gebuchten Funktionen freigeschaltet werden. Diese Angaben sind mit Ihrem Konto verknüpft. Tracking-Einträge, Babyfotos oder KI-Fragen gehören nicht zu den von uns für die Abo-Prüfung vorgesehenen Daten.",
+        "Käufe werden über den Apple App Store oder Google Play abgewickelt; der jeweilige Store verarbeitet die Zahlungsdaten nach seinen eigenen Bedingungen. Wir erhalten dadurch keine vollständigen Kreditkarten- oder Bankdaten. RevenueCat verarbeitet Daten auch in den USA. Rechtsgrundlagen sind Art. 6 Abs. 1 lit. b DSGVO für die Abo-Verwaltung und Art. 6 Abs. 1 lit. f DSGVO für die Missbrauchsabwehr. Erforderliche gesetzliche Aufbewahrung beruht auf Art. 6 Abs. 1 lit. c DSGVO. Anbieterinformationen: https://www.revenuecat.com/privacy und https://www.revenuecat.com/dpa; https://www.apple.com/legal/privacy/ und https://policies.google.com/privacy."
+      ]
+    },
+    {
+      "title": "Weitere funktionsabhängige Übermittlungen und Berechtigungen",
+      "paragraphs": [
+        "Push-Nachrichten werden über Expo und die Zustelldienste von Apple bzw. Google versendet. Dabei werden Push-Token, technische Zustellinformationen und je nach Nachricht Titel, Vorschautext und zugehörige Kennungen verarbeitet. Vorschauen können Nachrichten- oder Familieninhalte enthalten und auf dem Sperrbildschirm sichtbar sein. Sie können Benachrichtigungen in der App und in den Geräteeinstellungen steuern.",
+        "Für Babywetter werden bei Nutzung der Standortfunktion Koordinaten oder ein von Ihnen eingegebener Ort an OpenWeather übermittelt. Für Fürsorge-Wetterdaten erhält Open-Meteo gerundete Koordinaten mit ungefähr einem Kilometer Genauigkeit. Die Rundung für Open-Meteo gilt nicht pauschal für alle Wetteranfragen. Die Anbieter erhalten bei direkten Anfragen auch Ihre IP-Adresse. Standortberechtigungen können Sie in den Geräteeinstellungen entziehen.",
+        "Kamera, Fotomediathek und Mikrofon werden für die jeweils gewählte Aufnahme- oder Uploadfunktion verwendet. Freigegebene Fotos und Sprachnachrichten können in Supabase gespeichert werden; bei KI-Spracheingaben gilt zusätzlich der OpenAI-Abschnitt. Beim Abruf eingebundener Rezeptvideos, Vorschaubilder und externer Bilder erhalten YouTube/Google bzw. Unsplash technische Verbindungsdaten. Bei einer Produktsuche per Barcode wird der Code an Open Food Facts, Open Beauty Facts oder Open Products Facts übertragen."
+      ]
+    },
+    {
+      "title": "Gesundheitsdaten, Einwilligung und internationale Verarbeitung",
+      "paragraphs": [
+        "Angaben zur Schwangerschaft, Entwicklung, Ernährung oder Gesundheit können besonders geschützte Daten nach Art. 9 DSGVO sein. Für deren Verarbeitung ist zusätzlich zu einer Rechtsgrundlage nach Art. 6 DSGVO eine Ausnahme nach Art. 9 Abs. 2 DSGVO erforderlich, insbesondere Ihre ausdrückliche Einwilligung. Die Zustimmung zu Nutzungsbedingungen, eine Geräteberechtigung oder das bloße Lesen dieser Erklärung ersetzt eine erforderliche gesonderte Einwilligung nicht. Angaben zu Ihrem Kind oder anderen Personen dürfen Sie nur im Rahmen Ihrer Berechtigung machen.",
+        "Bei den genannten Cloud-Diensten ist eine Verarbeitung außerhalb der EU/des EWR, insbesondere in den USA, möglich; eine ausschließlich deutsche oder europäische Speicherung wird nicht zugesichert. Für solche Übermittlungen sind ein anwendbarer Angemessenheitsbeschluss oder geeignete Garantien nach Art. 46 DSGVO, insbesondere EU-Standardvertragsklauseln, erforderlich. Eine DPF-Zertifizierung ist nur für den konkret zertifizierten Empfänger und ihren Geltungsbereich relevant. Informationen zu den für Ihre Daten eingesetzten Garantien und eine Kopie können Sie über support@lottibaby.de anfordern."
+      ]
+    },
+    {
+      "title": "App-Daten aufbewahren, exportieren und löschen",
+      "paragraphs": [
+        "Konto- und gespeicherte App-Inhalte werden für die Bereitstellung Ihres Kontos und der gewählten Funktionen aufbewahrt, bis Sie Inhalte löschen oder die Löschung von Konto und Daten verlangen. Das Ausschalten einer Funktion beendet nicht automatisch die Speicherung bereits angelegter Einträge. Für technische Protokolle ist die Erforderlichkeit zur Fehlerbehebung und Sicherheit maßgeblich; für Abo-Daten die Zugangsprüfung, Kaufwiederherstellung und Abwicklung von Ansprüchen. Gesetzlich aufzubewahrende Geschäftsbelege werden nur für diese Pflichten weiterverarbeitet; daraus folgt keine pauschale Aufbewahrung sämtlicher Baby- und Gesundheitsdaten.",
+        "In der App können Sie unter Profil Ihr Konto löschen oder in den App-Einstellungen unter Daten & Datenschutz alle Daten und auf Wunsch das Konto löschen. Auch ohne aktives Abo ist die Kontolöschung über Konto & Daten verwalten erreichbar. Ein Datenexport ist dort ebenfalls verfügbar. Die Kontolöschung betrifft auch die damit verbundenen personenbezogenen App-Daten; rechtlich erforderliche Ausnahmen bleiben auf den jeweiligen Zweck beschränkt.",
+        "Ohne die App können Sie die Löschung Ihres Lotti-Baby-Kontos und der zugehörigen Daten per E-Mail an support@lottibaby.de mit dem Betreff „Lotti Baby – Konto löschen“ verlangen. Nennen Sie die E-Mail-Adresse Ihres Kontos; senden Sie kein Passwort. Zur Vermeidung unberechtigter Löschungen kann eine Bestätigung der Kontoinhaberschaft erforderlich sein. Über diesen Kontakt können Sie auch Auskunft, Berichtigung, Datenübertragbarkeit, Einschränkung oder Löschung bei unseren Dienstleistern verlangen.",
+        "Ein Löschvorgang in der App löst nicht zwangsläufig eine sofortige Löschung aller bereits bei OpenAI, Sentry oder RevenueCat verarbeiteten Daten aus. Solche Daten unterliegen den jeweiligen Aufbewahrungs- und Löschverfahren; auch Sicherungskopien können erst im Sicherungszyklus entfallen. Wir bearbeiten Ihre Anfrage einschließlich der betroffenen Auftragsverarbeiter. Über eine notwendige weitere Aufbewahrung und ihren Grund informieren wir Sie im Rahmen der Anfrage.",
+        "Das Löschen des Kontos oder der App kündigt ein Store-Abonnement nicht automatisch. Verwalten oder kündigen Sie dieses separat im Apple App Store bzw. bei Google Play. Sie haben außerdem die im Abschnitt Rechte beschriebenen Widerrufs-, Widerspruchs- und Beschwerderechte."
+      ]
+    },
+    {
+      "title": "Google – freiwillige Anmeldung mit Google",
+      "paragraphs": [
+        "Wenn Sie „Mit Google anmelden“ wählen, werden Sie zur Google-Anmeldung weitergeleitet. Google bestätigt Ihre Identität gegenüber Supabase; dabei erhalten wir Ihre Google-Kontokennung, E-Mail-Adresse und Profilinformationen wie Name und gegebenenfalls Profilbild. Wir erhalten Ihr Google-Passwort nicht und fordern keinen Zugriff auf Ihre Google-Dateien, Kontakte oder Kalender an.",
+        "Die Anmeldung dient dem Zugang zu Ihrem Lotti-Baby-Konto. Supabase kann die Google-Identität einem vorhandenen Konto mit derselben bestätigten E-Mail-Adresse zuordnen. Eine andere Adresse, etwa eine private Apple-Relay-Adresse, wird nicht automatisch mit Ihrem bisherigen Konto zusammengeführt. Sie können weiterhin die angebotene E-Mail-Anmeldung verwenden.",
+        "Google verarbeitet im Rahmen der Anmeldung auch technische Verbindungsdaten. Anbieterinformationen: https://policies.google.com/privacy. Die Authentifizierungsdaten werden bei Supabase im Rahmen der Kontoverwaltung gespeichert; die Angaben zu Supabase und zur Kontolöschung gelten auch für diese Anmeldung."
+      ]
+    }
+  ],
+  "en": [
+    {
+      "title": "Lotti Baby: app data and cloud storage",
+      "paragraphs": [
+        "Lotti Baby is for parents and caregivers. Data is stored both on your device and in the cloud. Accounts, synchronization across devices and sharing use Supabase. Uninstalling the app therefore does not remove your cloud data.",
+        "Depending on the features used, we process email address, user ID, login information, profile name and image; baby name and birth date; pregnancy and due-date information; sleep, breastfeeding, meals, diapers, weight, height, development and custom activities; appointments, tasks, shopping lists, diary entries, notes, photos, community posts, messages and voice messages. This can include your or your child's health data. Permissions to share, settings, device and connection data and subscription information are also processed.",
+        "Local storage includes the login session, settings and cached content. Linked partners and invited caregivers can access shared family content according to their permissions. Community content is visible to its audience; publicly hosted images may be accessible through their URL."
+      ]
+    },
+    {
+      "title": "Supabase – accounts, database and files",
+      "paragraphs": [
+        "We use Supabase (Supabase Inc.) for authentication, account management, database and file storage, synchronization and server functions. The account, family, tracking and communication data described above and uploaded files are sent to and stored with Supabase. Technical requests also include connection data such as IP address, timestamps and authentication information.",
+        "This supports the features you use and access from other devices. Network connections use HTTPS/TLS and access is controlled through account and sharing permissions. This is not a promise of end-to-end encryption: server functions process content for synchronization, notifications and AI requests.",
+        "Necessary account and service processing is based on Art. 6(1)(b) GDPR; abuse prevention on Art. 6(1)(f). Additional requirements for health data are explained below. Provider information: https://supabase.com/privacy and https://supabase.com/dpa."
+      ]
+    },
+    {
+      "title": "OpenAI – Ask Lotti, Care and voice input",
+      "paragraphs": [
+        "AI features use the OpenAI API through Supabase server functions. Ask Lotti sends your question, the included conversation history and selected tracking summaries or age and pregnancy information relevant to the question. Free text can contain names and health information.",
+        "Care can send the baby's first name and age, selected sleep, feeding, diaper and weather facts, or the parent's first name, pregnancy week, trimester and days until the due date to personalize messages. New Care requests start only when you open Care in the active app. There is no automatic daily analysis or automatically generated Care push notification. Moving the app to the background aborts the running request on your device; content already sent to the server or OpenAI may still finish processing there. The at-my-limit selection is stored in the account but is not itself sent to OpenAI.",
+        "Voice input sends your recording for transcription and the resulting text for entry suggestions. Context may include baby name, device time, language, recent breast/bottle preference and custom activity names. Text you choose to turn into tasks, appointments or shopping items may also be processed. Confirmed entries and Care messages are stored in Supabase.",
+        "OpenAI states that API content is not used for training by default. Text-request abuse logs may normally remain for up to 30 days, longer if legally required; the transcription endpoint lists no application or abuse-log retention. This does not promise immediate deletion of all AI data. Details: https://openai.com/policies/privacy-policy/ and https://developers.openai.com/api/docs/guides/your-data.",
+        "Purposes are answering questions, wording Care messages and processing input. Requested services rely on Art. 6(1)(b) GDPR. Where consent is required, particularly for health data, Art. 6(1)(a) and Art. 9(2)(a) apply. You can avoid AI and voice requests and opening AI-assisted Care. You may also withdraw consent for the future through support@lottibaby.de."
+      ]
+    },
+    {
+      "title": "Sentry – diagnostics",
+      "paragraphs": [
+        "The app initializes Sentry (Functional Software, Inc.) at startup to detect and fix errors. Data may include crash reports, error messages and stack traces, app and operating-system versions, device information, timestamps, technical identifiers and preceding interaction and network events. Subscription-check failures additionally include a shortened, hashed user ID. This is pseudonymous, not anonymous.",
+        "Session recordings are disabled in this app version. The replay integration is removed and both recording rates are set to zero. Default PII enrichment is also disabled. This does not fully exclude personal information in errors, URLs, logs or voluntary feedback; transmissions also involve connection data.",
+        "The configured Sentry endpoint is in the USA. Necessary diagnostics for stability rely on Art. 6(1)(f) GDPR. Diagnostic data and any recordings previously stored by older app versions are retained according to their purpose and the Sentry project's retention settings. Disabling recordings does not automatically delete older data. Contact support@lottibaby.de for access or deletion. Provider information: https://sentry.io/privacy/ and https://sentry.io/legal/dpa/."
+      ]
+    },
+    {
+      "title": "RevenueCat, Apple and Google – purchases and subscriptions",
+      "paragraphs": [
+        "RevenueCat, Inc. verifies, restores and associates subscriptions with your account. Your Supabase user ID is used as the RevenueCat App User ID. Data includes this ID, purchase receipts or Google Play purchase tokens, product and transaction IDs, plan, purchase and expiry dates, renewal and refund status, and technical app and device information. Access checks may contact RevenueCat even when you are not making a purchase.",
+        "RevenueCat sends subscription events to our Supabase backend, where account-linked status and entitlements unlock purchased features. Tracking entries, baby photos and AI questions are not part of the data we designate for subscription checks.",
+        "Apple App Store or Google Play processes payments under its own terms. We do not receive full card or bank details through these purchases. RevenueCat also processes data in the USA. Legal bases: Art. 6(1)(b) GDPR for subscriptions, Art. 6(1)(f) for abuse prevention and Art. 6(1)(c) for required statutory retention. Provider information: https://www.revenuecat.com/privacy and https://www.revenuecat.com/dpa; https://www.apple.com/legal/privacy/ and https://policies.google.com/privacy."
+      ]
+    },
+    {
+      "title": "Other feature-specific transfers and permissions",
+      "paragraphs": [
+        "Push notifications use Expo and Apple's or Google's delivery services, processing push tokens, delivery information and, depending on the notification, titles, previews and related IDs. Previews may contain message or family content and appear on your lock screen. Manage notifications in the app and device settings.",
+        "Baby Weather sends coordinates when you use device location, or a place you enter, to OpenWeather. Care weather uses Open-Meteo with coordinates rounded to approximately one kilometre. This rounding does not apply to all weather requests. Direct requests also disclose your IP address to the provider. You can revoke location permission in device settings.",
+        "Camera, photo-library and microphone access support the recording or upload feature you choose. Shared photos and voice messages can be stored in Supabase; AI voice input also follows the OpenAI section. Embedded recipe videos, thumbnails and external images disclose technical connection data to YouTube/Google or Unsplash. Barcode product searches send the code to Open Food Facts, Open Beauty Facts or Open Products Facts."
+      ]
+    },
+    {
+      "title": "Health data, consent and international processing",
+      "paragraphs": [
+        "Pregnancy, development, nutrition and health information may be special-category data under Art. 9 GDPR. Processing requires both an Art. 6 legal basis and an exception under Art. 9(2), particularly explicit consent. Accepting terms, granting a device permission or reading this policy does not replace required separate consent. Only provide information about your child or others where you are authorized to do so.",
+        "Cloud providers may process data outside the EU/EEA, particularly in the USA. We do not promise exclusively German or European storage. Transfers require an applicable adequacy decision or safeguards under Art. 46 GDPR, particularly EU Standard Contractual Clauses. DPF certification is relevant only to the particular certified recipient and its scope. Request information and a copy of the safeguards for your data through support@lottibaby.de."
+      ]
+    },
+    {
+      "title": "Retaining, exporting and deleting app data",
+      "paragraphs": [
+        "Account and saved app content is retained to provide your account and chosen features until you delete content or request deletion of the account and data. Disabling a feature does not automatically delete existing entries. Technical logs are retained as needed for troubleshooting and security; subscription data for access checks, restoring purchases and resolving claims. Statutory retention of business records does not justify retaining all baby or health data.",
+        "Delete your account from Profile or delete all data and optionally your account in App Settings under Data & privacy. Manage account & data provides account deletion even without an active subscription and also offers export. Account deletion covers associated personal app data, subject to purpose-limited legal exceptions.",
+        "Outside the app, request deletion of your Lotti Baby account and associated data by emailing support@lottibaby.de with the subject “Lotti Baby – delete account”. Include your account email address, never your password. We may verify account ownership to prevent unauthorized deletion. You can also request access, correction, portability, restriction or deletion involving our providers through this contact.",
+        "In-app deletion does not necessarily immediately erase all data already processed by OpenAI, Sentry or RevenueCat. Their retention and deletion procedures apply; backups may expire on a later cycle. We handle your request including the affected processors and explain any necessary continued retention and its reason.",
+        "Deleting the account or uninstalling does not automatically cancel a store subscription. Manage or cancel it separately in Apple App Store or Google Play. The withdrawal, objection and complaint rights in this policy also apply."
+      ]
+    },
+    {
+      "title": "Google – optional sign-in with Google",
+      "paragraphs": [
+        "If you choose “Sign in with Google”, you are redirected to Google to authenticate. Google confirms your identity to Supabase; we receive your Google account identifier, email address and profile information such as your name and, where available, profile picture. We do not receive your Google password and do not request access to your Google files, contacts or calendars.",
+        "This sign-in provides access to your Lotti Baby account. Supabase may associate your Google identity with an existing account using the same verified email address. A different address, such as a private Apple relay address, is not automatically merged with your existing account. The offered email sign-in remains available.",
+        "Google also processes technical connection data during sign-in. Provider information: https://policies.google.com/privacy. Supabase stores authentication data as part of account management; the information about Supabase and account deletion also applies to this sign-in."
+      ]
+    }
+  ],
+  "es": [
+    {
+      "title": "Lotti Baby: datos de la app y almacenamiento en la nube",
+      "paragraphs": [
+        "Lotti Baby se dirige a madres, padres y personas cuidadoras. Guarda datos tanto en el dispositivo como en la nube. Las cuentas, la sincronización y el uso compartido funcionan mediante Supabase. Desinstalar la app no elimina los datos de la nube.",
+        "Según las funciones utilizadas, tratamos correo electrónico, identificador, datos de acceso, nombre e imagen del perfil; nombre y fecha de nacimiento del bebé; embarazo y fecha prevista de parto; sueño, lactancia, comidas, pañales, peso, talla, desarrollo y actividades propias; citas, tareas, listas de compra, diario, notas, fotos, publicaciones, mensajes y mensajes de voz. Pueden incluir datos de salud tuyos o de tu hijo. También tratamos permisos para compartir, ajustes, datos del dispositivo y de conexión e información de suscripciones.",
+        "El almacenamiento local incluye la sesión, los ajustes y contenidos en caché. Las parejas vinculadas y personas cuidadoras invitadas acceden al contenido compartido según sus permisos. El contenido de la comunidad es visible para su audiencia; las imágenes alojadas públicamente pueden ser accesibles mediante su URL."
+      ]
+    },
+    {
+      "title": "Supabase – cuenta, base de datos y archivos",
+      "paragraphs": [
+        "Usamos Supabase (Supabase Inc.) para autenticación, cuentas, bases de datos, archivos, sincronización y funciones del servidor. Los datos de cuenta, familia, seguimiento y comunicación descritos anteriormente y los archivos subidos se envían y almacenan en Supabase. Las solicitudes incluyen datos de conexión, como IP, fecha y hora e información de autenticación.",
+        "Esto permite prestar las funciones y acceder desde otros dispositivos. Las conexiones usan HTTPS/TLS y el acceso depende de los permisos de cuenta y uso compartido. No se garantiza cifrado de extremo a extremo: el servidor procesa contenidos para sincronización, notificaciones y solicitudes de IA.",
+        "Bases jurídicas: art. 6.1.b del RGPD para cuentas y servicios necesarios; art. 6.1.f para prevenir abusos. Los datos de salud requieren además lo indicado abajo. Información: https://supabase.com/privacy y https://supabase.com/dpa."
+      ]
+    },
+    {
+      "title": "OpenAI – Pregunta a Lotti, Cuidados y entradas de voz",
+      "paragraphs": [
+        "Las funciones de IA usan la API de OpenAI mediante funciones de servidor de Supabase. Pregunta a Lotti envía tu pregunta, el historial de conversación incluido y los resúmenes de seguimiento o datos de edad y embarazo pertinentes. El texto libre puede contener nombres y datos de salud.",
+        "Cuidados puede enviar nombre y edad del bebé, datos seleccionados de sueño, alimentación, pañales y tiempo, o nombre, semana de embarazo, trimestre y días hasta el parto para personalizar mensajes. Las nuevas solicitudes de Cuidados solo se inician al abrir Cuidados con la app activa. No hay análisis diario automático ni notificaciones push de Cuidados generadas automáticamente. Al pasar la app a segundo plano se cancela la solicitud en el dispositivo; el contenido ya enviado al servidor o a OpenAI puede terminar de procesarse allí. La selección del modo al límite se guarda en la cuenta, pero no se envía como tal a OpenAI.",
+        "Las entradas de voz envían la grabación para transcripción y el texto reconocido para proponer registros. El contexto puede incluir nombre del bebé, hora del dispositivo, idioma, preferencia reciente de pecho o biberón y nombres de actividades propias. También pueden procesarse textos que elijas convertir en tareas, citas o artículos de compra. Los registros confirmados y mensajes de Cuidados se guardan en Supabase.",
+        "Según OpenAI, el contenido de la API no se utiliza para entrenamiento por defecto. Los registros de abuso de solicitudes de texto pueden conservarse normalmente hasta 30 días, o más por obligación legal; el servicio de transcripción indica que no conserva datos de aplicación ni registros de abuso. No se garantiza la eliminación inmediata de todos los datos de IA. Información: https://openai.com/policies/privacy-policy/ y https://developers.openai.com/api/docs/guides/your-data.",
+        "Los fines son responder preguntas, redactar mensajes de Cuidados y procesar entradas. Se aplica el art. 6.1.b del RGPD a servicios solicitados. Cuando se requiere consentimiento, especialmente para datos de salud, se aplican los arts. 6.1.a y 9.2.a. Puedes evitar las solicitudes de IA y voz y no abrir Cuidados con IA. También puedes retirar el consentimiento para el futuro en support@lottibaby.de."
+      ]
+    },
+    {
+      "title": "Sentry – diagnóstico",
+      "paragraphs": [
+        "La app inicia Sentry (Functional Software, Inc.) al arrancar para detectar y corregir errores. Puede enviar informes de fallos, mensajes de error, trazas, versiones de app y sistema operativo, información del dispositivo, fechas, identificadores técnicos y eventos previos de interacción y red. Los fallos al comprobar suscripciones incluyen además un identificador de usuario abreviado mediante hash. Es seudónimo, no anónimo.",
+        "Las grabaciones de sesiones están desactivadas en esta versión de la app. Se ha eliminado la integración de grabaciones y ambas tasas de grabación están a cero. El enriquecimiento automático con datos personales estándar también está desactivado. Esto no excluye por completo datos personales en errores, URL, registros o comentarios voluntarios; las transmisiones también generan datos de conexión.",
+        "El servidor Sentry configurado está en Estados Unidos. El diagnóstico necesario para la estabilidad se basa en el art. 6.1.f del RGPD. Los datos de diagnóstico y las grabaciones ya guardadas por versiones anteriores se conservan según su finalidad y los ajustes de retención del proyecto Sentry. La desactivación no elimina automáticamente los datos anteriores. Solicita acceso o eliminación en support@lottibaby.de. Información: https://sentry.io/privacy/ y https://sentry.io/legal/dpa/."
+      ]
+    },
+    {
+      "title": "RevenueCat, Apple y Google – compras y suscripciones",
+      "paragraphs": [
+        "RevenueCat, Inc. comprueba, restaura y vincula suscripciones. Usamos tu identificador de Supabase como App User ID de RevenueCat. Se procesan este identificador, recibos o tokens de compra de Google Play, identificadores de producto y transacción, plan, fechas de compra y vencimiento, renovaciones, reembolsos e información técnica de app y dispositivo. Puede conectarse al comprobar tu acceso aunque no estés comprando.",
+        "RevenueCat envía eventos de suscripción a nuestro servidor Supabase, donde el estado y los permisos vinculados a tu cuenta habilitan funciones. Los registros de seguimiento, fotos del bebé y preguntas de IA no forman parte de los datos previstos para comprobar suscripciones.",
+        "Apple App Store o Google Play tramita pagos según sus propias condiciones. No recibimos datos completos de tarjeta o cuenta bancaria mediante esas compras. RevenueCat también procesa datos en Estados Unidos. Bases jurídicas: art. 6.1.b del RGPD para suscripciones, 6.1.f para prevenir abusos y 6.1.c para conservación legal obligatoria. Información: https://www.revenuecat.com/privacy y https://www.revenuecat.com/dpa; https://www.apple.com/legal/privacy/ y https://policies.google.com/privacy."
+      ]
+    },
+    {
+      "title": "Otras transferencias y permisos según la función",
+      "paragraphs": [
+        "Las notificaciones usan Expo y los servicios de entrega de Apple o Google. Tratan tokens push, información de entrega y, según el aviso, títulos, vistas previas e identificadores. Las vistas previas pueden contener mensajes o información familiar y aparecer en la pantalla bloqueada. Gestiona los avisos en los ajustes de la app y del dispositivo.",
+        "El tiempo del bebé envía a OpenWeather las coordenadas cuando usas ubicación o el lugar introducido. El tiempo de Cuidados usa Open-Meteo con coordenadas redondeadas a aproximadamente un kilómetro; este redondeo no se aplica a todas las consultas meteorológicas. Las solicitudes directas también revelan tu IP al proveedor. Puedes retirar el permiso de ubicación en el dispositivo.",
+        "La cámara, fototeca y micrófono sirven para la grabación o subida elegida. Las fotos y mensajes de voz compartidos pueden guardarse en Supabase; a las entradas de voz de IA se aplica además el apartado OpenAI. Los vídeos de recetas, miniaturas e imágenes externas transmiten datos técnicos de conexión a YouTube/Google o Unsplash. Las búsquedas por código de barras envían el código a Open Food Facts, Open Beauty Facts u Open Products Facts."
+      ]
+    },
+    {
+      "title": "Salud, consentimiento y tratamiento internacional",
+      "paragraphs": [
+        "Los datos de embarazo, desarrollo, nutrición o salud pueden ser categorías especiales según el art. 9 del RGPD. Su tratamiento requiere una base del art. 6 y una excepción del art. 9.2, especialmente consentimiento explícito. Aceptar condiciones, dar un permiso del dispositivo o leer esta política no sustituye el consentimiento separado requerido. Introduce datos de tu hijo u otras personas solo si estás autorizado.",
+        "Los proveedores pueden tratar datos fuera de la UE/EEE, especialmente en Estados Unidos. No se garantiza almacenamiento exclusivamente alemán o europeo. Se requiere una decisión de adecuación aplicable o garantías del art. 46 del RGPD, especialmente cláusulas contractuales tipo de la UE. Una certificación DPF solo se aplica al destinatario certificado y a su alcance. Solicita información y copia de las garantías para tus datos en support@lottibaby.de."
+      ]
+    },
+    {
+      "title": "Conservar, exportar y eliminar datos de la app",
+      "paragraphs": [
+        "Conservamos la cuenta y contenidos para prestar las funciones elegidas hasta que borres contenidos o solicites eliminar cuenta y datos. Desactivar una función no borra registros existentes. Los registros técnicos se conservan según necesidades de diagnóstico y seguridad; los de suscripción para comprobar acceso, restaurar compras y resolver reclamaciones. La conservación legal de documentos comerciales no justifica conservar todos los datos del bebé o de salud.",
+        "Puedes eliminar la cuenta desde Perfil, o todos los datos y opcionalmente la cuenta en Ajustes de la app, Datos y privacidad. Gestionar cuenta y datos permite eliminar la cuenta incluso sin suscripción activa y también ofrece exportación. La eliminación incluye los datos personales asociados, salvo excepciones legales limitadas a su finalidad.",
+        "Sin la app, solicita eliminar tu cuenta Lotti Baby y datos asociados a support@lottibaby.de con el asunto «Lotti Baby – eliminar cuenta». Indica el correo de tu cuenta, nunca la contraseña. Podemos verificar la titularidad para evitar eliminaciones no autorizadas. También puedes solicitar acceso, corrección, portabilidad, limitación o eliminación relativa a nuestros proveedores por este medio.",
+        "Eliminar en la app no borra necesariamente de inmediato todos los datos ya tratados por OpenAI, Sentry o RevenueCat. Se aplican sus procedimientos de conservación y eliminación; las copias de seguridad pueden caducar posteriormente. Tramitamos la solicitud incluyendo los encargados afectados e informamos de cualquier conservación necesaria y su motivo.",
+        "Eliminar la cuenta o desinstalar no cancela automáticamente la suscripción. Gestiónala o cancélala por separado en Apple App Store o Google Play. También se aplican los derechos de retirada, oposición y reclamación indicados en esta política."
+      ]
+    },
+    {
+      "title": "Google – inicio de sesión opcional con Google",
+      "paragraphs": [
+        "Si eliges «Iniciar sesión con Google», se te redirige a Google para autenticarte. Google confirma tu identidad a Supabase; recibimos el identificador de tu cuenta de Google, tu correo electrónico e información del perfil, como tu nombre y, si está disponible, tu imagen de perfil. No recibimos tu contraseña de Google ni solicitamos acceso a tus archivos, contactos o calendarios de Google.",
+        "Este inicio de sesión permite acceder a tu cuenta de Lotti Baby. Supabase puede asociar tu identidad de Google a una cuenta existente con el mismo correo electrónico verificado. Una dirección diferente, como una dirección privada de retransmisión de Apple, no se combina automáticamente con tu cuenta existente. Puedes seguir usando el inicio de sesión por correo electrónico que ofrece la aplicación.",
+        "Google también trata datos técnicos de conexión durante el inicio de sesión. Información del proveedor: https://policies.google.com/privacy. Supabase almacena los datos de autenticación como parte de la gestión de cuentas; la información sobre Supabase y la eliminación de cuentas también se aplica a este inicio de sesión."
+      ]
+    }
+  ]
+}

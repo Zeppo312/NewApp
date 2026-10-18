@@ -1,0 +1,54 @@
+[
+  {
+    "created_at": 1783067332258,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_e0ade10c-055e-4ce0-92aa-a9594ebe8475_16/source/supabase/functions/advisor-generate/index.ts",
+    "ezbr_sha256": "736af5aa14d1f2b738ec3d00ca00fefcc8a4e46e2c09da6e49565c295dc8d184",
+    "id": "e0ade10c-055e-4ce0-92aa-a9594ebe8475",
+    "import_map": false,
+    "name": "advisor-generate",
+    "slug": "advisor-generate",
+    "status": "ACTIVE",
+    "updated_at": 1787428852501,
+    "verify_jwt": false,
+    "version": 16
+  },
+  {
+    "created_at": 1783441196301,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2dba6e35-6638-48d5-ad90-c76691b9003e_24/source/supabase/functions/voice-log-parse/index.ts",
+    "ezbr_sha256": "8bb1856bec58c8d38c17c11775b5cdd9930ec3ac87dc96553d9354e683f6f0d7",
+    "id": "2dba6e35-6638-48d5-ad90-c76691b9003e",
+    "import_map": false,
+    "name": "voice-log-parse",
+    "slug": "voice-log-parse",
+    "status": "ACTIVE",
+    "updated_at": 1788719167985,
+    "verify_jwt": false,
+    "version": 24
+  },
+  {
+    "created_at": 1785846867938,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2322242b-e48a-4b12-aed0-26eeed2b9c0d_25/source/supabase/functions/ask-lotti/index.ts",
+    "ezbr_sha256": "22896c93a6237ae149350b38e8205e4e2112732bdd3c6eca0c9aa06c77236b8f",
+    "id": "2322242b-e48a-4b12-aed0-26eeed2b9c0d",
+    "import_map": false,
+    "name": "ask-lotti",
+    "slug": "ask-lotti",
+    "status": "ACTIVE",
+    "updated_at": 1788719653190,
+    "verify_jwt": true,
+    "version": 25
+  },
+  {
+    "created_at": 1785846881330,
+    "entrypoint_path": "file:///tmp/user_fn_kwniiyayhzgjfqjsjcfu_2a21e234-b4d8-402b-9a56-50f26ee8a06e_7/source/supabase/functions/revenuecat-webhook/index.ts",
+    "ezbr_sha256": "dcaf87cab28cc234419b02026c1cad5430c09b625eeb8e3008a80e78c6e8dd6a",
+    "id": "2a21e234-b4d8-402b-9a56-50f26ee8a06e",
+    "import_map": false,
+    "name": "revenuecat-webhook",
+    "slug": "revenuecat-webhook",
+    "status": "ACTIVE",
+    "updated_at": 1787428852501,
+    "verify_jwt": false,
+    "version": 7
+  }
+]

@@ -1,0 +1,21 @@
+/** @jest-environment node */
+import { webcrypto } from 'node:crypto';
+import { createAlertHandler } from '../../supabase/functions/account-deletion-alert/handler';
+Object.defineProperty(globalThis,'crypto',{value:webcrypto,configurable:true});
+const values:Record<string,string>={SUPABASE_URL:'https://ggyonianphloycmqrwvj.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'test-service-key',ACCOUNT_DELETION_CRON_SECRET:'s'.repeat(40),DELETION_ALARM_SMTP_PASSWORD:'test-password'};
+const healthy={registry_stale_over_3m:0,needs_attention:0,queued_over_15m:0,expired_lease_over_7m:0,lease_exceeds_contract:0,overdue_retention:0};
+const request=(body:unknown={},token='s'.repeat(40))=>new Request('https://qa.test/alert',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:JSON.stringify(body)});
+function setup(health:unknown=healthy){
+ const rpc=jest.fn(async(_name:string,{action}:any)=>({data:action==='health'?health:action==='claim'?{send:true,lease:'lease-test'}:{},error:null}));
+ const send=jest.fn().mockResolvedValue(undefined);const createAdmin=jest.fn(()=>({rpc}));
+ const handle=createAlertHandler({env:k=>values[k],createAdmin,send});return {rpc,send,createAdmin,handle};
+}
+it('rejects a user JWT before creating a privileged client',async()=>{const {handle,send,createAdmin}=setup();expect((await handle(request({},'user-token'))).status).toBe(401);expect(createAdmin).not.toHaveBeenCalled();expect(send).not.toHaveBeenCalled();});
+it('requires its own SMTP secret and never falls back to Auth configuration',async()=>{const send=jest.fn();const handle=createAlertHandler({env:k=>k==='DELETION_ALARM_SMTP_PASSWORD'?undefined:values[k],createAdmin:jest.fn(),send});expect((await handle(request())).status).toBe(503);expect(send).not.toHaveBeenCalled();});
+it('does not send a healthy check and resets the deduplication state',async()=>{const {handle,send,rpc}=setup();expect(await (await handle(request())).json()).toEqual({sent:false,healthy:true});expect(send).not.toHaveBeenCalled();expect(rpc).toHaveBeenLastCalledWith('account_deletion_alarm',{action:'reset',payload:{}});});
+it('sends only aggregate positive counters and records successful relay',async()=>{const {handle,send,rpc}=setup({...healthy,needs_attention:2});expect((await handle(request())).status).toBe(200);expect(send).toHaveBeenCalledWith({subject:expect.stringContaining('(qa)'),text:expect.stringContaining('needs_attention: 2')});expect(rpc).toHaveBeenLastCalledWith('account_deletion_alarm',{action:'finish',payload:{lease:'lease-test',sent:true}});});
+it('does not relay an unchanged already claimed alarm',async()=>{const {handle,send,rpc}=setup({...healthy,needs_attention:1});rpc.mockResolvedValueOnce({data:{...healthy,needs_attention:1},error:null}).mockResolvedValueOnce({data:{send:false} as any,error:null});expect(await (await handle(request())).json()).toEqual({sent:false,deduplicated:true});expect(send).not.toHaveBeenCalled();});
+it('alerts on an unknown or malformed health status',async()=>{const {handle,send}=setup({...healthy,overdue_retention:'unknown'});expect(await (await handle(request())).json()).toMatchObject({sent:true,checkFailed:true});expect(send.mock.calls[0][0].subject).toContain('Statusprüfung fehlgeschlagen');});
+it('releases a failed SMTP relay without recording success or exposing errors',async()=>{const {handle,send,rpc}=setup({...healthy,needs_attention:1});send.mockRejectedValueOnce(new Error('private SMTP password'));const response=await handle(request());expect(response.status).toBe(503);expect(await response.json()).toEqual({error:'alarm_delivery_failed'});expect(rpc).toHaveBeenLastCalledWith('account_deletion_alarm',{action:'finish',payload:{lease:'lease-test',sent:false}});});
+it('tests the real relay with synthetic counters without modifying deduplication or deletion',async()=>{const {handle,send,rpc}=setup();expect(await (await handle(request({test:true}))).json()).toMatchObject({sent:true,test:true});expect(rpc).not.toHaveBeenCalled();expect(send.mock.calls[0][0].subject).toContain('[TEST – kein echter Fehler]');});
+it.each([{to:'foreign@example.test'},{test:'true'},{userId:'a'}])('rejects request customization %j',async(body)=>{const {handle,send}=setup();expect((await handle(request(body))).status).toBe(400);expect(send).not.toHaveBeenCalled();});

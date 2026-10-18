@@ -1,0 +1,61 @@
+{
+  "version": "1.0.25",
+  "versionId": "6943443b-e45e-466a-b556-df7824dbb641",
+  "originalSearchFieldsPreserved": true,
+  "enGbHeldForNextPhase": true,
+  "defaultScreenshots": 63,
+  "groups": [
+    {
+      "locale": "es-ES",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "es-ES",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "es-ES",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "en-US",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "count": 7,
+      "state": "COMPLETE"
+    },
+    {
+      "locale": "de-DE",
+      "count": 7,
+      "state": "COMPLETE"
+    }
+  ],
+  "preview": {
+    "id": "24000019-2113-89ae-8137-9bc3a6ae69e2",
+    "fileName": "lotti-baby-vorschau-motion-de.mp4",
+    "fileSize": 36745337,
+    "state": "COMPLETE",
+    "poster": "00:00:02:27"
+  }
+}
