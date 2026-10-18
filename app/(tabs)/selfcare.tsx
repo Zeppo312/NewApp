@@ -578,7 +578,7 @@ export default function SelfcareScreen() {
           />
 
           <View style={styles.weekHeaderCenter}>
-            <ThemedText style={styles.weekHeaderTitle}>{t('nav.weekOverview')}</ThemedText>
+            <ThemedText style={styles.weekHeaderTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('nav.weekOverview')}</ThemedText>
             <ThemedText style={styles.weekHeaderSubtitle}>
               {weekStart.toLocaleDateString(SELFCARE_LOCALE_TAG, { day: '2-digit', month: 'short' })} –{' '}
               {weekEnd.toLocaleDateString(SELFCARE_LOCALE_TAG, { day: '2-digit', month: 'short' })}
@@ -803,7 +803,7 @@ export default function SelfcareScreen() {
           />
 
           <View style={styles.monthHeaderCenter}>
-            <ThemedText style={styles.monthHeaderTitle}>{t('nav.monthOverview')}</ThemedText>
+            <ThemedText style={styles.monthHeaderTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('nav.monthOverview')}</ThemedText>
             <ThemedText style={styles.monthHeaderSubtitle}>
               {referenceMonth.toLocaleDateString(SELFCARE_LOCALE_TAG, { month: 'long', year: 'numeric' })}
             </ThemedText>
@@ -1007,7 +1007,7 @@ export default function SelfcareScreen() {
               />
 
               <View style={styles.weekHeaderCenter}>
-                <ThemedText style={styles.weekHeaderTitle}>{t('nav.dayOverview')}</ThemedText>
+                <ThemedText style={styles.weekHeaderTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('nav.dayOverview')}</ThemedText>
                 <View style={styles.dateStatusRow}>
                   <ThemedText style={styles.weekHeaderSubtitle}>{selectedDateLabel}</ThemedText>
                   {isLoading && <ActivityIndicator size="small" color={accentColor} />}

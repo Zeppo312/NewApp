@@ -67,6 +67,7 @@ import {
 import Header from '@/components/Header';
 import ActivityCard from '@/components/ActivityCard';
 import { DailyQuickAction } from '@/components/tracking/DailyQuickAction';
+import { useScaledSize } from '@/lib/fontScaling';
 import EmptyState from '@/components/EmptyState';
 import ActivityInputModal from '@/components/ActivityInputModal';
 import CustomActivityDefinitionModal from '@/components/CustomActivityDefinitionModal';
@@ -643,7 +644,11 @@ const QuickActionRow: React.FC<{
   );
   const [isEditMode, setIsEditMode] = useState(false);
 
-  const itemWidth = QUICK_BUTTON_SIZE + QUICK_BUTTON_GAP; // Wrapper width + separator
+  // Wächst wie DailyQuickAction mit der Systemschrift mit.
+  const quickButtonSize = useScaledSize(QUICK_BUTTON_SIZE, 1.7);
+  const circleWrapSize = { width: quickButtonSize, minHeight: quickButtonSize };
+  const circleSize = { width: quickButtonSize, height: quickButtonSize, borderRadius: quickButtonSize / 2 };
+  const itemWidth = quickButtonSize + QUICK_BUTTON_GAP; // Wrapper width + separator
 
   const quickActionItems = useMemo<QuickActionRowItem[]>(
     () =>
@@ -684,9 +689,9 @@ const QuickActionRow: React.FC<{
   }, [hiddenQuickBtns, onRestoreAction]);
 
   const renderAddButton = () => (
-    <View style={s.circleButtonWrap}>
+    <View style={[s.circleButtonWrap, circleWrapSize]}>
       <GlassCard
-        style={[s.circleButton, s.circleButtonRestore]}
+        style={[s.circleButton, circleSize, s.circleButtonRestore]}
         intensity={30}
         overlayColor="rgba(255,255,255,0.32)"
         borderColor="rgba(255,255,255,0.70)"
@@ -719,9 +724,9 @@ const QuickActionRow: React.FC<{
   const renderQuickButton = ({ item, drag }: { item: QuickActionRowItem; drag?: () => void }) => {
     if (item.type === 'restore-toggle') {
       return (
-        <View style={s.circleButtonWrap}>
+        <View style={[s.circleButtonWrap, circleWrapSize]}>
           <GlassCard
-            style={[s.circleButton, s.circleButtonRestore]}
+            style={[s.circleButton, circleSize, s.circleButtonRestore]}
             intensity={30}
             overlayColor="rgba(255,255,255,0.32)"
             borderColor="rgba(255,255,255,0.70)"
@@ -747,7 +752,7 @@ const QuickActionRow: React.FC<{
     }
 
     return (
-      <View style={s.circleButtonWrap}>
+      <View style={[s.circleButtonWrap, circleWrapSize]}>
         <DailyQuickAction emoji={item.item.icon} label={item.item.label} textColor={textSecondary}
           dimmed={disabled && !isEditMode} activeOpacity={isEditMode ? 1 : .9}
           onPress={() => {
@@ -2541,7 +2546,7 @@ export default function DailyScreen() {
           />
 
           <View style={s.weekHeaderCenter}>
-            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.weekTitle')}</Text>
             <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
               {weekStart.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString(DAILY_LOCALE_TAG, { day: 'numeric', month: 'short' })}
             </Text>
@@ -2673,7 +2678,7 @@ export default function DailyScreen() {
         {/* Wochenzusammenfassung - Design Guide konform (EXAKT wie Sleep-Tracker) */}
         <LiquidGlassCard style={s.weekSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('week.summary')}</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('week.summary')}</Text>
             <View style={s.summaryStats}>
                 <View style={s.statItem}>
                   <Text style={s.statEmoji}>🍼</Text>
@@ -2826,7 +2831,7 @@ export default function DailyScreen() {
           />
 
           <View style={s.weekHeaderCenter}>
-            <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
+            <Text style={[s.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.monthTitle')}</Text>
             <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
               {refMonthDate.toLocaleDateString(DAILY_LOCALE_TAG, { month: 'long', year: 'numeric' })}
             </Text>
@@ -2919,7 +2924,7 @@ export default function DailyScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={s.monthSummaryCard}>
           <View style={s.summaryInner}>
-            <Text style={[s.summaryTitle, { color: textSecondary }]}>{t('view.monthTitle')}</Text>
+            <Text style={[s.summaryTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.monthTitle')}</Text>
             <View style={s.summaryStats}>
               <View style={s.statItem}>
                 <Text style={s.statEmoji}>🍼</Text>
@@ -3152,7 +3157,7 @@ export default function DailyScreen() {
                   onPress={() => changeRelativeDate(-1)}
                 />
                 <View style={s.weekHeaderCenter}>
-                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
+                  <Text style={[s.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.dayTitle')}</Text>
                   <Text style={[s.weekHeaderSubtitle, { color: textSecondary }]}>
                     {selectedDate.toLocaleDateString(DAILY_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })}
                   </Text>

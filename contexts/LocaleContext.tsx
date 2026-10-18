@@ -24,6 +24,7 @@ import {
   type LanguagePreference,
 } from '@/lib/localization';
 import { getAppSettings, saveAppSettings } from '@/lib/supabase';
+import { setHyphenationLocale } from '@/lib/hyphenation';
 import { DATA_CONSENTS_ENABLED, runtimeConsentAllowed } from '@/lib/dataConsentRuntime';
 
 type LocaleContextValue = {
@@ -190,6 +191,8 @@ export const LocaleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [persistPreference, userId]);
 
   const locale = resolveAppLocale(preference, deviceLocale);
+  // Synchron im Render, damit Texte schon im selben Durchlauf richtig getrennt werden.
+  setHyphenationLocale(locale);
 
   useEffect(() => {
     if (!userId || !isLocalPreferenceLoaded || !isAccountPreferenceLoaded) return;

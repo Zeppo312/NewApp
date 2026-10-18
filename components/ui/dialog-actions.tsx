@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useLocale } from '@/contexts/LocaleContext';
 import { ActionButton } from '@/components/ui/action-button';
+import { useFontScale } from '@/lib/fontScaling';
 
 type Props = {
   onCancel: () => unknown;
@@ -24,6 +25,10 @@ export function DialogActions({
   isDark = false, bottomInset = 0, style,
 }: Props) {
   const { locale } = useLocale();
+  // Bei großer Schrift passen zwei Buttons nicht nebeneinander, ohne dass
+  // „Abbrechen“ mitten im Wort umbricht – die Basisbreite wächst mit, dann
+  // stapeln sich die Buttons über flexWrap untereinander.
+  const actionBasis = 120 * useFontScale();
   const labels = {
     de: { cancel: 'Abbrechen', save: 'Speichern' },
     en: { cancel: 'Cancel', save: 'Save' },
@@ -35,9 +40,9 @@ export function DialogActions({
       paddingBottom: Math.max(12, bottomInset),
     }, style]}>
       <ActionButton label={cancelLabel ?? labels.cancel} variant={cancelVariant} isDark={isDark}
-        disabled={busy || cancelDisabled} onPress={onCancel} style={styles.action} />
+        disabled={busy || cancelDisabled} onPress={onCancel} style={[styles.action, { flexBasis: actionBasis }]} />
       <ActionButton label={confirmLabel ?? labels.save} isDark={isDark}
-        busy={busy} disabled={confirmDisabled} onPress={onConfirm} style={styles.action} />
+        busy={busy} disabled={confirmDisabled} onPress={onConfirm} style={[styles.action, { flexBasis: actionBasis }]} />
     </View>
   );
 }

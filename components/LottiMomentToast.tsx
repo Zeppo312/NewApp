@@ -213,6 +213,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.1,
+    // Darf umbrechen statt bei großer Schrift aus der Pille zu laufen.
+    flexShrink: 1,
   },
   dot: {
     width: 6,

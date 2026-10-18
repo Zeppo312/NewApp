@@ -1,0 +1,123 @@
+diff --git a/node_modules/react-native/Libraries/Components/TextInput/TextInput.js b/node_modules/react-native/Libraries/Components/TextInput/TextInput.js
+index adca4e3..3aa3b7c 100644
+--- a/node_modules/react-native/Libraries/Components/TextInput/TextInput.js
++++ b/node_modules/react-native/Libraries/Components/TextInput/TextInput.js
+@@ -56,6 +56,7 @@ import flattenStyle from '../../StyleSheet/flattenStyle';
+ import StyleSheet, {type TextStyleProp} from '../../StyleSheet/StyleSheet';
+ import Text from '../../Text/Text';
+ import TextAncestorContext from '../../Text/TextAncestorContext';
++import defaultMaxFontSizeMultiplier from '../../Text/defaultMaxFontSizeMultiplier';
+ import Platform from '../../Utilities/Platform';
+ import useMergeRefs from '../../Utilities/useMergeRefs';
+ import TextInputState from './TextInputState';
+@@ -923,6 +924,11 @@ const TextInput: component(
+   return (
+     <InternalTextInput
+       allowFontScaling={allowFontScaling}
++      // LottiBaby-Patch: wie bei Text wachsen große Schriften weniger stark mit.
++      maxFontSizeMultiplier={
++        restProps.maxFontSizeMultiplier ??
++        defaultMaxFontSizeMultiplier(flattenStyle(restProps.style)?.fontSize)
++      }
+       rejectResponderTermination={rejectResponderTermination}
+       underlineColorAndroid={underlineColorAndroid}
+       editable={readOnly !== undefined ? !readOnly : editable}
+diff --git a/node_modules/react-native/Libraries/Text/Text.js b/node_modules/react-native/Libraries/Text/Text.js
+index 8e7b29c..e2e6129 100644
+--- a/node_modules/react-native/Libraries/Text/Text.js
++++ b/node_modules/react-native/Libraries/Text/Text.js
+@@ -21,7 +21,21 @@ import flattenStyle from '../StyleSheet/flattenStyle';
+ import processColor from '../StyleSheet/processColor';
+ import StyleSheet from '../StyleSheet/StyleSheet';
+ import Platform from '../Utilities/Platform';
++import defaultMaxFontSizeMultiplier from './defaultMaxFontSizeMultiplier';
+ import TextAncestorContext from './TextAncestorContext';
++
++// LottiBaby-Patch: Ein gedeckelter Multiplikator wie 2.0 macht Zeilenhöhen
++// exakt rastergenau (21 pt -> 42 pt). Die Messung rundet dann nicht mehr auf,
++// und Yogas float-Rundung der Position kann den Rahmen um ~0.0001 pt kleiner
++// machen als gemessen. TextKit lässt beim Zeichnen die letzte Zeile weg und
++// schneidet die vorletzte ungebrochen ab. Ein Hauch unter dem Deckel lässt
++// die Messung aufrunden und gibt so Reserve.
++const LAYOUT_SLACK = 0.0001;
++function withLayoutSlack(multiplier: mixed): mixed {
++  return typeof multiplier === 'number' && multiplier > 1 + LAYOUT_SLACK
++    ? multiplier - LAYOUT_SLACK
++    : multiplier;
++}
+ import {
+   NativeSelectableText,
+   NativeText,
+@@ -215,6 +229,27 @@ const TextImpl: component(
+     }
+   }
+ 
++  // LottiBaby-Patch: optionale Umformung des Textinhalts (Silbentrennung bei
++  // großer Systemschrift, registriert in lib/hyphenation.ts).
++  const textChildrenTransform = global.__LOTTI_TEXT_CHILDREN_TRANSFORM__;
++  if (typeof textChildrenTransform === 'function') {
++    children = textChildrenTransform(children, processedStyle?.fontSize);
++  }
++
++  // LottiBaby-Patch: große Schriften wachsen weniger stark mit (siehe
++  // defaultMaxFontSizeMultiplier). Text ohne eigene Größe erbt vom Elterntext.
++  if (
++    processedProps.maxFontSizeMultiplier == null &&
++    typeof processedStyle?.fontSize === 'number'
++  ) {
++    processedProps.maxFontSizeMultiplier = defaultMaxFontSizeMultiplier(
++      processedStyle.fontSize,
++    );
++  }
++  processedProps.maxFontSizeMultiplier = withLayoutSlack(
++    processedProps.maxFontSizeMultiplier,
++  );
++
+   if (ReactNativeFeatureFlags.defaultTextToOverflowHidden()) {
+     _style = [styles.default, _style];
+   }
+@@ -287,6 +322,11 @@ const TextImpl: component(
+ 
+   processedProps.accessible = _accessible;
+   processedProps.allowFontScaling = allowFontScaling !== false;
++  if (processedProps.maxFontSizeMultiplier == null) {
++    processedProps.maxFontSizeMultiplier = withLayoutSlack(
++      defaultMaxFontSizeMultiplier(null),
++    );
++  }
+   processedProps.disabled = _disabled;
+   processedProps.ellipsizeMode = ellipsizeMode ?? 'tail';
+   processedProps.children = children;
+diff --git a/node_modules/react-native/Libraries/Text/defaultMaxFontSizeMultiplier.js b/node_modules/react-native/Libraries/Text/defaultMaxFontSizeMultiplier.js
+new file mode 100644
+index 0000000..dbdce85
+--- /dev/null
++++ b/node_modules/react-native/Libraries/Text/defaultMaxFontSizeMultiplier.js
+@@ -0,0 +1,27 @@
++/**
++ * LottiBaby-Patch: größenabhängige Obergrenze für die Systemschrift-Skalierung.
++ *
++ * React Native skaliert jede Schrift mit demselben Faktor (bis ~3.6x). iOS
++ * selbst skaliert Dynamic Type nichtlinear: Fließtext wächst stark, große
++ * Überschriften nur wenig. Diese Kurve bildet das nach: Text bis 16 pt darf
++ * auf 200 % wachsen, jeder Punkt darüber kommt nur noch zu 60 % dazu.
++ * Ein explizit gesetztes `maxFontSizeMultiplier` hat immer Vorrang.
++ *
++ * Gegenstück für Layout-Berechnungen: lib/fontScaling.ts (maxFontScaleFor).
++ *
++ * @flow strict
++ */
++
++const BODY_SIZE = 16;
++const BODY_MAX_SCALE = 2;
++const HEADING_GROWTH = 0.6;
++const MIN_SCALE = 1.1;
++
++export default function defaultMaxFontSizeMultiplier(fontSize: ?mixed): number {
++  if (typeof fontSize !== 'number' || !(fontSize > BODY_SIZE)) {
++    return BODY_MAX_SCALE;
++  }
++  const maxRendered =
++    BODY_SIZE * BODY_MAX_SCALE + (fontSize - BODY_SIZE) * HEADING_GROWTH;
++  return Math.max(MIN_SCALE, Math.round((maxRendered / fontSize) * 100) / 100);
++}

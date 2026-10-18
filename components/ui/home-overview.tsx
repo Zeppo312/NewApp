@@ -61,7 +61,7 @@ export function HomeCarouselDots({ count, index, dark, onSelect, getLabel }: {
 
 const styles = StyleSheet.create({
   heading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title: { ...TYPOGRAPHY.sectionTitle, flex: 1, minWidth: 0, marginRight: 8 },
+  title: { ...TYPOGRAPHY.sectionTitle, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, marginRight: 8 },
   dots: { flexDirection: 'row', justifyContent: 'center', marginTop: 10 },
   dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 4 },
 });

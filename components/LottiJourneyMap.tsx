@@ -39,6 +39,7 @@ import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import { LOTTI_LEVELS, type LottiLevel } from '@/lib/lottiPoints';
 import { babyImageForLevel } from '@/lib/lottiBabyImages';
 import { useLocale } from '@/contexts/LocaleContext';
+import { useFontScale } from '@/lib/fontScaling';
 import { translateWeeklyMomentText, type WeeklyMomentTranslationKey } from '@/lib/weeklyMomentTranslations';
 
 const ACCENT_PURPLE = '#5E3DB3';
@@ -52,6 +53,10 @@ const CARD_BORDER = 'rgba(255, 255, 255, 0.72)';
 const POINTS_NOUN = 'Lotti-Herzen';
 
 const STATION_SPACING = 118;
+// Die Karte ist eine Illustration mit fest positionierten Stationen und
+// Beschriftungen fester Breite. Wüchsen die Beschriftungen voll mit der
+// Systemschrift, überlagerten sie sich gegenseitig und brächen mitten im Wort um.
+const MAP_LABEL_MAX_FONT_SCALE = 1.3;
 const TOP_PAD = 120;
 const BOTTOM_PAD = 170;
 const PATH_LENGTH_ESTIMATE = 5200;
@@ -545,6 +550,9 @@ function JourneyStationNode({
 }) {
   const { locale } = useLocale();
   const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) => translateWeeklyMomentText(locale, key, params);
+  // Größere Schrift macht die Karte der aktuellen Stufe höher; mit drei Zeilen
+  // Beschreibung ragte sie über die nächste Station.
+  const descriptionLines = useFontScale() >= 1.15 ? 2 : 3;
   const isCurrent = station.state === 'current';
   const isPast = station.state === 'past';
   const isNext = station.state === 'next';
@@ -706,6 +714,7 @@ function JourneyStationNode({
           >
             <ThemedText
               adaptive={false}
+              maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
               style={[
                 styles.levelBadgeText,
                 { color: isCurrent || isPast ? ACCENT_PURPLE : '#FFFFFF' },
@@ -716,7 +725,7 @@ function JourneyStationNode({
           </View>
           {isPast ? (
             <View style={styles.reachedMark}>
-              <ThemedText adaptive={false} style={styles.reachedMarkText}>
+              <ThemedText adaptive={false} maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE} style={styles.reachedMarkText}>
                 ✓
               </ThemedText>
             </View>
@@ -739,17 +748,19 @@ function JourneyStationNode({
               },
             ]}
           >
-            <ThemedText adaptive={false} style={styles.currentStatus}>
+            <ThemedText adaptive={false} maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE} style={styles.currentStatus}>
               {t('journey.current')}
             </ThemedText>
             <ThemedText
               adaptive={false}
+              maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
               style={[styles.currentStage, { color: textTertiary }]}
             >
               {t('journey.stage', { level: station.level })}
             </ThemedText>
             <ThemedText
               adaptive={false}
+              maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
               style={[styles.currentName, { color: textPrimary }]}
               numberOfLines={1}
               adjustsFontSizeToFit
@@ -759,8 +770,9 @@ function JourneyStationNode({
             </ThemedText>
             <ThemedText
               adaptive={false}
+              maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
               style={[styles.currentDescription, { color: textSecondary }]}
-              numberOfLines={3}
+              numberOfLines={descriptionLines}
             >
               {station.description}
             </ThemedText>
@@ -816,6 +828,7 @@ function JourneyStationNode({
             <View style={styles.stationLabelCopy}>
               <ThemedText
                 adaptive={false}
+                maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
                 style={[
                   styles.stationKicker,
                   {
@@ -832,6 +845,7 @@ function JourneyStationNode({
               </ThemedText>
               <ThemedText
                 adaptive={false}
+                maxFontSizeMultiplier={MAP_LABEL_MAX_FONT_SCALE}
                 style={[
                   styles.stationName,
                   {
@@ -839,9 +853,11 @@ function JourneyStationNode({
                     opacity: isFuture ? 0.78 : 1,
                   },
                 ]}
-                numberOfLines={2}
+                // Einzelne lange Wörter („Familienrhythmus“) würden sonst
+                // mitten im Wort auf die zweite Zeile umbrechen.
+                numberOfLines={station.name.includes(' ') ? 2 : 1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.82}
+                minimumFontScale={station.name.includes(' ') ? 0.82 : 0.65}
               >
                 {station.name}
               </ThemedText>

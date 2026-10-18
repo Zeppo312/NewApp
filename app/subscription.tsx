@@ -61,6 +61,7 @@ import {
 } from '@/lib/subscriptionTranslations';
 import { PAYWALL_VISIBLE_TIER_IDS } from '@/lib/paywallContent';
 import { navigateBack } from '@/lib/navigation/backNavigation';
+import { useFontScale } from '@/lib/fontScaling';
 
 // Standard wird als Bestandstier erkannt, aber nicht mehr als neuer Tarif beworben.
 const PLAN_TIER_PILLS = [
@@ -111,6 +112,9 @@ const formatDate = (date: string | null) => {
 export default function SubscriptionScreen() {
   ACTIVE_SUBSCRIPTION_LOCALE = useLocale().locale;
   const adaptiveColors = useAdaptiveColors();
+  // Bei großer Schrift stehen Tarifname, Status und Übersichtswerte in eigenen
+  // Zeilen – nebeneinander brachen sie mitten im Wort um.
+  const isLargeText = useFontScale() >= 1.3;
   const router = useRouter();
   const { session, user } = useAuth();
   const family = useFamilySubscriptionAccess();
@@ -360,6 +364,7 @@ export default function SubscriptionScreen() {
     <View
       style={[
         styles.summaryRow,
+        isLargeText && styles.summaryRowStacked,
         !isLast && { borderBottomColor: dividerColor, borderBottomWidth: 1 },
       ]}
     >
@@ -371,7 +376,11 @@ export default function SubscriptionScreen() {
       </ThemedText>
       <ThemedText
         selectable
-        style={[styles.summaryValue, { color: textPrimary }]}
+        style={[
+          styles.summaryValue,
+          isLargeText && styles.summaryValueStacked,
+          { color: textPrimary },
+        ]}
       >
         {value}
       </ThemedText>
@@ -427,7 +436,7 @@ export default function SubscriptionScreen() {
               ) : (
                 <>
                   <View style={styles.statusContent}>
-                    <View style={styles.statusTopRow}>
+                    <View style={[styles.statusTopRow, isLargeText && styles.wrapRow]}>
                       <View
                         style={[
                           styles.statusIconWrap,
@@ -448,7 +457,7 @@ export default function SubscriptionScreen() {
                           color={hasActiveAccess ? '#6F9F99' : iconAccentColor}
                         />
                       </View>
-                      <View style={styles.statusHeading}>
+                      <View style={[styles.statusHeading, isLargeText && styles.fullWidth]}>
                         <ThemedText
                           style={[styles.eyebrow, { color: textTertiary }]}
                         >
@@ -845,6 +854,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  wrapRow: {
+    flexWrap: 'wrap',
+  },
+  fullWidth: {
+    flexBasis: '100%',
+  },
   statusIconWrap: {
     width: 52,
     height: 52,
@@ -931,6 +946,18 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: '700',
     textAlign: 'right',
+  },
+  summaryRowStacked: {
+    flexWrap: 'wrap',
+    paddingVertical: 10,
+    rowGap: 4,
+  },
+  summaryValueStacked: {
+    flexBasis: '100%',
+    maxWidth: '100%',
+    // Bündig unter der Beschriftung (Icon 31 + Abstand 10).
+    paddingLeft: 41,
+    textAlign: 'left',
   },
   plansCard: {
     minHeight: 315,
@@ -1028,6 +1055,8 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   plansButtonText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#5D3FA9',
     fontSize: 16,
     lineHeight: 21,

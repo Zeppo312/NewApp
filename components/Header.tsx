@@ -12,6 +12,7 @@ import { useLocale } from '@/contexts/LocaleContext';
 import { translateNavigationText } from '@/lib/navigationTranslations';
 import { useAdaptiveColors } from '@/hooks/useAdaptiveColors';
 import BabySwitcherButton from '@/components/BabySwitcherButton';
+import { useFontScale } from '@/lib/fontScaling';
 
 export interface HeaderProps {
   title: string;
@@ -49,6 +50,16 @@ const Header: React.FC<HeaderProps> = ({
   const { locale } = useLocale();
   const adaptiveColors = useAdaptiveColors();
   const insets = useSafeAreaInsets();
+  const fontScale = useFontScale();
+  // Der Kopf bleibt auf vielen Screens fixiert stehen. Bei sehr großer Schrift
+  // würde der Untertitel über mehrere Zeilen den halben Bildschirm belegen –
+  // er ist nur ergänzend, also wird er dort ausgeblendet bzw. gekürzt.
+  const subtitleLineLimit = fontScale >= 1.3 ? 2 : undefined;
+  const showSubtitle = Boolean(subtitle) && fontScale < 1.6;
+  // Zwischen den Aktions-Buttons ist bei großer Schrift kaum Platz: Ein
+  // zweizeiliger Titel bräche lange Wörter („Wochenmoment“) mitten im Wort um.
+  // Stattdessen bleibt er einzeilig und verkleinert sich bei Bedarf.
+  const titleLineLimit = fontScale >= 1.15 ? 1 : 2;
   const [leftWidth, setLeftWidth] = useState(HEADER_ACTION_SIZE);
   const [rightWidth, setRightWidth] = useState(HEADER_ACTION_SIZE);
   // Symmetrischer Platz hält den Titel auch neben mehreren Aktionen mittig.
@@ -104,11 +115,24 @@ const Header: React.FC<HeaderProps> = ({
       
       {/* Mittlerer Bereich - immer bildschirmmittig */}
       <View style={[styles.titleContainer, { paddingHorizontal: titleInset }]} pointerEvents="none">
-        <ThemedText type="pageTitle" style={[styles.title, { color: titleColor }]} numberOfLines={2} ellipsizeMode="tail">
+        <ThemedText
+          type="pageTitle"
+          style={[styles.title, { color: titleColor }]}
+          numberOfLines={titleLineLimit}
+          adjustsFontSizeToFit={titleLineLimit === 1}
+          minimumFontScale={0.6}
+          ellipsizeMode="tail"
+        >
           {title}
         </ThemedText>
-        {subtitle && (
-          <ThemedText type="bodySmall" style={[styles.subtitle, { color: subtitleColor }]}>{subtitle}</ThemedText>
+        {showSubtitle && (
+          <ThemedText
+            type="bodySmall"
+            style={[styles.subtitle, { color: subtitleColor }]}
+            numberOfLines={subtitleLineLimit}
+          >
+            {subtitle}
+          </ThemedText>
         )}
       </View>
       

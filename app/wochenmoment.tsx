@@ -47,6 +47,7 @@ import {
 } from '@/lib/lottiPoints';
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
+import { useFontScale } from '@/lib/fontScaling';
 import { useLocale } from '@/contexts/LocaleContext';
 import {
   formatWeeklyMomentDuration,
@@ -100,6 +101,10 @@ function WochenmomentScreenContent() {
   const t = (key: WeeklyMomentTranslationKey, params?: Record<string, string | number>) =>
     translateWeeklyMomentText(locale, key, params);
   const adaptiveColors = useAdaptiveColors();
+  // Bei großer Schrift steht „Ansehen“ unter dem Banner-Text statt daneben,
+  // und die drei Bereichs-Kacheln werden zu Zeilen (sonst brechen die
+  // Bezeichnungen mitten im Wort um).
+  const stackForLargeText = useFontScale() >= 1.3;
   const {
     areas,
     counts,
@@ -209,6 +214,7 @@ function WochenmomentScreenContent() {
               adaptive={false}
               style={[
                 styles.storyBannerCta,
+                stackForLargeText && styles.storyBannerCtaStacked,
                 { color: isWeekComplete ? '#FFFFFF' : ACCENT_PURPLE },
               ]}
             >
@@ -235,7 +241,7 @@ function WochenmomentScreenContent() {
           />
 
           {/* 2) Bereichs-Tiles */}
-          <View style={styles.tilesRow}>
+          <View style={[styles.tilesRow, stackForLargeText && styles.tilesColumn]}>
             <AreaTile
               emoji="🍼"
               count={counts.feeding}
@@ -245,6 +251,7 @@ function WochenmomentScreenContent() {
               tileBg={tileBg}
               tileBorder={tileBorder}
               textSecondary={textSecondary}
+              stacked={stackForLargeText}
             />
             <AreaTile
               emoji="🤍"
@@ -255,6 +262,7 @@ function WochenmomentScreenContent() {
               tileBg={tileBg}
               tileBorder={tileBorder}
               textSecondary={textSecondary}
+              stacked={stackForLargeText}
             />
             <AreaTile
               emoji="🌙"
@@ -265,6 +273,7 @@ function WochenmomentScreenContent() {
               tileBg={tileBg}
               tileBorder={tileBorder}
               textSecondary={textSecondary}
+              stacked={stackForLargeText}
             />
           </View>
 
@@ -882,6 +891,7 @@ function AreaTile({
   tileBg,
   tileBorder,
   textSecondary,
+  stacked,
 }: {
   emoji: string;
   count: number;
@@ -891,11 +901,13 @@ function AreaTile({
   tileBg: string;
   tileBorder: string;
   textSecondary: string;
+  stacked: boolean;
 }) {
   return (
     <View
       style={[
         styles.tile,
+        stacked && styles.tileStacked,
         {
           backgroundColor: tileBg,
           borderColor: tileBorder,
@@ -903,18 +915,18 @@ function AreaTile({
         },
       ]}
     >
-      <ThemedText adaptive={false} style={styles.tileEmoji}>
+      <ThemedText adaptive={false} style={[styles.tileEmoji, stacked && styles.tileStackedReset]}>
         {emoji}
       </ThemedText>
       <ThemedText
         adaptive={false}
-        style={[styles.tileValue, { color: ACCENT_PURPLE }]}
+        style={[styles.tileValue, stacked && styles.tileStackedReset, { color: ACCENT_PURPLE }]}
       >
         {count}
       </ThemedText>
       <ThemedText
         adaptive={false}
-        style={[styles.tileLabel, { color: textSecondary }]}
+        style={[styles.tileLabel, stacked && styles.tileLabelStacked, { color: textSecondary }]}
       >
         {count === 1 ? singular : plural}
       </ThemedText>
@@ -945,6 +957,7 @@ const styles = StyleSheet.create({
   // Story-Banner
   storyBanner: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: 8,
     borderRadius: 16,
@@ -974,6 +987,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  storyBannerCtaStacked: {
+    width: '100%',
+    textAlign: 'right',
+  },
 
   // Eure Woche
   weekBlur: {
@@ -991,6 +1008,7 @@ const styles = StyleSheet.create({
   },
   weekHeaderRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
@@ -999,6 +1017,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 1,
   },
   weekHeaderEmoji: {
     fontSize: 18,
@@ -1062,6 +1081,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     borderRadius: 14,
     paddingVertical: 11,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#5E3DB3',
@@ -1075,6 +1095,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.2,
+    textAlign: 'center',
   },
   claimCountRow: {
     justifyContent: 'center',
@@ -1102,6 +1123,23 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 10,
     alignItems: 'center',
+  },
+  tilesColumn: {
+    flexDirection: 'column',
+  },
+  tileStacked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  tileStackedReset: {
+    marginBottom: 0,
+  },
+  tileLabelStacked: {
+    flex: 1,
+    textAlign: 'left',
   },
   tileEmoji: {
     fontSize: 22,

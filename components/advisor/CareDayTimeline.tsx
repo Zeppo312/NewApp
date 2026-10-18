@@ -6,6 +6,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useLocale } from '@/contexts/LocaleContext';
 import type { CareDayTimelineItem } from '@/lib/advisor/day-timeline';
 import { translateAdvisor } from '@/lib/advisor/advisorTranslations';
+import { useScaledSize } from '@/lib/fontScaling';
 
 type TimelineColors = {
   textPrimary: string;
@@ -68,6 +69,8 @@ function TimelineSkeleton({ color }: { color: string }) {
 }
 
 export function CareDayTimeline({ items, loading, colors, onOpenPlanner }: Props) {
+  // Uhrzeiten und „Ganztägig“ brauchen bei großer Schrift eine breitere Spalte.
+  const timeColumnWidth = useScaledSize(76, 1.5);
   const { locale } = useLocale();
   const t = (key: Parameters<typeof translateAdvisor>[1], params?: Record<string, string | number>) =>
     translateAdvisor(locale, key, params);
@@ -126,7 +129,7 @@ export function CareDayTimeline({ items, loading, colors, onOpenPlanner }: Props
             const isLast = index === items.length - 1;
             return (
               <View key={item.id} style={styles.row}>
-                <View style={styles.timeColumn}>
+                <View style={[styles.timeColumn, { width: timeColumnWidth }]}>
                   <ThemedText
                     adaptive={false}
                     numberOfLines={1}
@@ -204,7 +207,7 @@ const styles = StyleSheet.create({
   headerCopy: { flex: 1, gap: 7 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerIcon: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  heading: { fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
+  heading: { flexShrink: 1, fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
   hint: { fontSize: 12.5, lineHeight: 18, paddingLeft: 42 },
   plannerButton: { width: 34, height: 34, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   list: { gap: 0 },

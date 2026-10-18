@@ -89,6 +89,7 @@ import {
 } from "@/lib/plannerCalendarSync";
 import { LockedFeatureScreen } from '@/components/LockedFeatureScreen';
 import { useFeatureAccess } from '@/lib/entitlements';
+import { useScaledSize } from '@/lib/fontScaling';
 import {
   DEFAULT_PLANNER_LOCALE,
   getPlannerLocaleTag,
@@ -230,6 +231,8 @@ function PlannerScreenContent() {
   const textSecondary = isDark ? Colors.dark.textSecondary : "#7D5A50";
   const textMuted = isDark ? "rgba(248,240,229,0.72)" : "rgba(92,64,51,0.72)";
   const accentColor = isDark ? lightenHex(PRIMARY, 0.26) : PRIMARY;
+  // Tageskreise im Monatsraster wachsen mit, aber höchstens bis zur Zellbreite.
+  const monthCircleSize = useScaledSize(36, 1.25);
   const accentEventColor = isDark ? lightenHex("#6E4DBD", 0.26) : "#6E4DBD";
   const glassOverlay = isDark ? GLASS_OVERLAY_DARK : GLASS_OVERLAY;
   const glassBorder = isDark
@@ -1401,6 +1404,9 @@ function PlannerScreenContent() {
             <View style={styles.weekHeaderCenter}>
               <ThemedText
                 style={[styles.weekHeaderTitle, { color: textPrimary }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
               >
                 {navTitle}
               </ThemedText>
@@ -2210,6 +2216,9 @@ function PlannerScreenContent() {
                             style={[
                               styles.monthCircle,
                               {
+                                width: monthCircleSize,
+                                height: monthCircleSize,
+                                borderRadius: monthCircleSize / 2,
                                 backgroundColor: isDark
                                   ? "rgba(255,255,255,0.08)"
                                   : "rgba(255,255,255,0.38)",

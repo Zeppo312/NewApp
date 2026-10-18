@@ -27,6 +27,7 @@ import * as Notifications from '@/lib/notifications';
 import { StartupRecovery } from '@/components/StartupRecovery';
 import { StartupMessageModal } from '@/components/StartupMessageModal';
 import { LottiMomentToast } from '@/components/LottiMomentToast';
+import { StoreReviewPrompt } from '@/components/StoreReviewPrompt';
 import { TermsConsentGate } from '@/components/moderation/TermsConsentGate';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,7 @@ import {
   useOnboardingStatus,
 } from '@/contexts/OnboardingStatusContext';
 import { getDeviceAppLocale } from '@/lib/localization';
+import { installTextHyphenation } from '@/lib/hyphenation';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useSleepWindowNotifications } from '@/hooks/useSleepWindowNotifications';
 import { useFeedingReminderNotifications } from '@/hooks/useFeedingReminderNotifications';
@@ -126,6 +128,9 @@ Notifications.setNotificationHandler({
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+// Lange Wörter bei großer Systemschrift nach Silben trennen statt mitten im Wort.
+installTextHyphenation();
 
 
 
@@ -893,6 +898,12 @@ function RootLayoutNav() {
         }}
       />
       <LottiMomentToast />
+      <StoreReviewPrompt userId={userId} canPrompt={
+        pathname === '/home' && primarySegment === '(tabs)' && !isPaywallCheckBlocking &&
+        !startupMessage && !isAcknowledgingStartupMessage &&
+        termsConsent.userId === userId && termsConsent.status === 'accepted' &&
+        !hasActiveSleepEntry && !hasActiveFeedingEntry
+      } />
       {!isPaywallCheckBlocking && <FloatingVoiceButton />}
       <ImageCacheMaintenance />
       <StatusBar hidden={true} />

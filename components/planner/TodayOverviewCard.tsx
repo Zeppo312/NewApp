@@ -14,6 +14,7 @@ import {
   TEXT_PRIMARY,
 } from "@/constants/PlannerDesign";
 import { useLocale } from '@/contexts/LocaleContext';
+import { useFontScale } from '@/lib/fontScaling';
 
 type Props = {
   summary: PlannerDaySummary;
@@ -27,6 +28,9 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
     es: { noTasks: 'Sin tareas', done: 'completadas', open: 'Abiertas', events: 'Citas', sleep: 'Sueño', today: 'Hoy', tasks: 'tareas completadas', hoursSleep: 'horas de sueño', title: 'Resumen del día', progress: 'Progreso', percent: 'por ciento' },
   }[locale];
   const adaptiveColors = useAdaptiveColors();
+  // Bei großer Schrift stehen die Kennzahlen unter dem Fortschritt statt
+  // daneben – sonst bleiben für „Tagesübersicht“ nur wenige Zeichen pro Zeile.
+  const stacked = useFontScale() >= 1.3;
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
     adaptiveColors.isDarkBackground;
@@ -82,11 +86,11 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
         style={StyleSheet.absoluteFill}
       />
       <View
-        style={styles.contentRow}
+        style={[styles.contentRow, stacked && styles.contentStacked]}
         accessibilityRole="summary"
         accessibilityLabel={`${c.today}: ${summary.tasksDone}/${summary.tasksTotal} ${c.tasks}, ${openTasks} ${c.open.toLowerCase()}, ${summary.eventsCount} ${c.events}${summary.babySleepHours ? `, ${summary.babySleepHours} ${c.hoursSleep}` : ""}.`}
       >
-        <View style={styles.progressColumn}>
+        <View style={[styles.progressColumn, stacked && styles.progressColumnStacked]}>
           <View style={styles.titleRow}>
             <ThemedText style={[styles.title, { color: textPrimary }]}>
               {c.title}
@@ -127,6 +131,7 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
           {stats.map((stat) => (
             <StatChip
               key={stat.label}
+              stretch={stacked}
               label={stat.label}
               value={stat.value}
               isDark={isDark}
@@ -141,15 +146,17 @@ export const TodayOverviewCard: React.FC<Props> = ({ summary }) => {
 };
 
 const StatChip: React.FC<{
+  stretch: boolean;
   label: string;
   value: string;
   isDark: boolean;
   textPrimary: string;
   textSecondary: string;
-}> = ({ label, value, isDark, textPrimary, textSecondary }) => (
+}> = ({ stretch, label, value, isDark, textPrimary, textSecondary }) => (
   <View
     style={[
       styles.statChip,
+      stretch && styles.statChipStretched,
       {
         backgroundColor: isDark
           ? "rgba(255,255,255,0.1)"
@@ -179,10 +186,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  contentStacked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
   progressColumn: {
     flex: 1,
     minWidth: 0,
     gap: 5,
+  },
+  progressColumnStacked: {
+    flex: 0,
   },
   titleRow: {
     flexDirection: "row",
@@ -191,6 +205,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
+    flexShrink: 1,
     fontSize: 15,
     fontWeight: "800",
     color: TEXT_PRIMARY,
@@ -235,6 +250,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.6)",
     alignItems: "center",
+  },
+  statChipStretched: {
+    flex: 1,
   },
   statLabel: { fontSize: 10, color: TEXT_PRIMARY, opacity: 0.7 },
   statValue: {

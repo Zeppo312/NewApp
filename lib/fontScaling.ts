@@ -2,11 +2,30 @@ import { useWindowDimensions } from 'react-native';
 
 /**
  * Obergrenze, bis zu der feste Layout-Maße mit der Systemschriftgröße mitwachsen.
- * iOS meldet bei den Accessibility-Größen bis zu ~3.1 – so weit mitzuwachsen würde
- * Kacheln unbedienbar hoch machen. 2.2 deckt die großen Größen ab und lässt
- * mehrzeilige Titel vollständig sichtbar werden.
+ * Entspricht der maximalen Skalierung von Fließtext (siehe maxFontScaleFor):
+ * Weiter wächst Text nicht, also müssen auch Layouts nicht weiter wachsen.
  */
-export const MAX_LAYOUT_FONT_SCALE = 2.2;
+export const MAX_LAYOUT_FONT_SCALE = 2;
+
+/**
+ * Höchster Skalierungsfaktor, den eine Schrift dieser Größe erreicht.
+ * Spiegelt den react-native-Patch (Libraries/Text/defaultMaxFontSizeMultiplier.js),
+ * der für jeden Text ohne eigenes `maxFontSizeMultiplier` greift: bis 16 pt
+ * 200 %, jeder Punkt darüber wächst nur zu 60 % mit – wie Dynamic Type auf iOS.
+ */
+export function maxFontScaleFor(fontSize: number) {
+  if (!(fontSize > 16)) {
+    return 2;
+  }
+  const maxRendered = 32 + (fontSize - 16) * 0.6;
+  return Math.max(1.1, Math.round((maxRendered / fontSize) * 100) / 100);
+}
+
+/** Tatsächlich gerenderte Schriftgröße bei aktueller Systemschrift. */
+export function useScaledFontSize(fontSize: number) {
+  const { fontScale } = useWindowDimensions();
+  return Math.round(fontSize * clampFontScale(fontScale, maxFontScaleFor(fontSize)));
+}
 
 /**
  * Begrenzt den Systemfaktor nach unten auf 1 (kleinere Schrift soll Layouts

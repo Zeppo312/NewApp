@@ -30,6 +30,7 @@ import Header from "@/components/Header";
 import { RecipeVideoCourse } from "@/components/RecipeVideoCourse";
 import { LockedFeatureScreen } from "@/components/LockedFeatureScreen";
 import { ThemedText } from "@/components/ThemedText";
+import { useFontScale } from "@/lib/fontScaling";
 import { IconSymbol } from "@/components/ui/IconSymbol";
 import { GlassSheetSurface } from "@/components/ui/glass-sheet-surface";
 import { Colors } from "@/constants/Colors";
@@ -252,6 +253,8 @@ const RecipeGeneratorContent = () => {
     MAX_CONTENT_WIDTH,
   );
   const isCompact = screenWidth < 380;
+  // Ab ~130 % Systemschrift brechen Kacheltitel und Kopfzeilen sonst mitten im Wort um.
+  const isLargeText = useFontScale() >= 1.3;
   const adaptiveColors = useAdaptiveColors();
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
@@ -278,6 +281,7 @@ const RecipeGeneratorContent = () => {
         glassOverlay,
         glassBorder,
         isCompact,
+        isLargeText,
       }),
     [
       isDark,
@@ -288,6 +292,7 @@ const RecipeGeneratorContent = () => {
       glassOverlay,
       glassBorder,
       isCompact,
+      isLargeText,
     ],
   );
   const { activeBaby, activeBabyId } = useActiveBaby();
@@ -698,17 +703,19 @@ const RecipeGeneratorContent = () => {
               subtitle={t("screen.subtitle")}
               showBackButton
               onBackPress={() => router.back()}
+              // Als Teil des Headers reserviert der Titel Platz für den Button
+              // (sonst lief er bei großer Schrift darunter).
+              rightContent={
+                <TouchableOpacity
+                  style={styles.headerActionButton}
+                  onPress={() => router.push("/my-recipes")}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("screen.myRecipesAccessibility")}
+                >
+                  <IconSymbol name="book.fill" size={22} color={accentColor} />
+                </TouchableOpacity>
+              }
             />
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.headerActionButton}
-                onPress={() => router.push("/my-recipes")}
-                accessibilityRole="button"
-                accessibilityLabel={t("screen.myRecipesAccessibility")}
-              >
-                <IconSymbol name="book.fill" size={22} color={accentColor} />
-              </TouchableOpacity>
-            </View>
           </View>
 
           <ScrollView
@@ -1977,6 +1984,7 @@ export default RecipeGeneratorScreen;
 type RecipeGeneratorStyleParams = {
   isDark: boolean;
   isCompact: boolean;
+  isLargeText: boolean;
   textPrimary: string;
   textSecondary: string;
   textTertiary: string;
@@ -1988,6 +1996,7 @@ type RecipeGeneratorStyleParams = {
 const createStyles = ({
   isDark,
   isCompact,
+  isLargeText,
   textPrimary,
   textSecondary,
   textTertiary,
@@ -2006,14 +2015,6 @@ const createStyles = ({
     overlayContainer: {
       width: "100%",
       position: "relative",
-    },
-    headerActions: {
-      position: "absolute",
-      top: 12,
-      right: 60, // Verschoben nach links, um Platz für den BabySwitcherButton zu lassen
-      flexDirection: "row",
-      gap: 10,
-      zIndex: 10,
     },
     headerActionButton: {
       width: 38,
@@ -2129,16 +2130,16 @@ const createStyles = ({
       marginVertical: 4,
     },
     quickActionRow: {
-      flexDirection: "row",
+      flexDirection: isLargeText ? "column" : "row",
       justifyContent: "space-between",
       gap: 8,
       marginBottom: 22,
     },
     quickActionButton: {
-      flex: 1,
-      minHeight: 112,
+      flex: isLargeText ? 0 : 1,
+      minHeight: isLargeText ? 0 : 112,
       paddingVertical: 13,
-      paddingHorizontal: 6,
+      paddingHorizontal: isLargeText ? 14 : 6,
       borderRadius: 20,
       borderWidth: 1,
       borderColor: glassBorder,
@@ -2156,9 +2157,16 @@ const createStyles = ({
     quickActionOverlayActive: {
       backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.16),
     },
-    quickActionContent: {
-      alignItems: "center",
-    },
+    quickActionContent: isLargeText
+      ? {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          columnGap: 10,
+        }
+      : {
+          alignItems: "center",
+        },
     quickActionIcon: {
       width: 38,
       height: 38,
@@ -2168,7 +2176,7 @@ const createStyles = ({
       backgroundColor: isDark ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.6)",
       borderWidth: 1,
       borderColor: isDark ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.65)",
-      marginBottom: 7,
+      marginBottom: isLargeText ? 0 : 7,
     },
     quickActionLabel: {
       fontSize: isCompact ? 12 : 13,
@@ -2179,7 +2187,7 @@ const createStyles = ({
     quickActionMeta: {
       fontSize: 12,
       color: textSecondary,
-      marginTop: 2,
+      marginTop: isLargeText ? 0 : 2,
       fontWeight: "500",
       textAlign: "center",
     },
@@ -2409,6 +2417,7 @@ const createStyles = ({
     },
     recipeHeader: {
       flexDirection: "row",
+      flexWrap: isLargeText ? "wrap" : "nowrap",
       justifyContent: "space-between",
       alignItems: "flex-start", // Besser für mehrzeilige Titel
       marginBottom: 8,
@@ -2419,6 +2428,7 @@ const createStyles = ({
       fontWeight: "800",
       color: textPrimary,
       flex: 1,
+      flexBasis: isLargeText ? "100%" : 0,
       lineHeight: 24,
       paddingRight: 6,
       paddingLeft: 2,
@@ -2477,6 +2487,7 @@ const createStyles = ({
     favoriteButton: { minWidth: 44, minHeight: 44, alignSelf: "flex-end", alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: toRgba(accentColor, isDark ? 0.28 : 0.10) },
     catalogHeader: {
       flexDirection: "row",
+      flexWrap: isLargeText ? "wrap" : "nowrap",
       alignItems: "center",
       justifyContent: "space-between",
       marginBottom: 12,
@@ -2485,6 +2496,7 @@ const createStyles = ({
     },
     catalogTitleGroup: {
       flex: 1,
+      flexBasis: isLargeText ? "100%" : 0,
       gap: 2,
     },
     catalogTitle: {

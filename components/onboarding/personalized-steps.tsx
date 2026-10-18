@@ -6,6 +6,7 @@ import { SleepTimerFace } from '@/components/tracking/SleepTimerFace';
 import { DailyQuickAction } from '@/components/tracking/DailyQuickAction';
 import { PreviewActivity, exampleCareEntry } from './tracker-preview';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { useFontScale } from '@/lib/fontScaling';
 import { getLocalizedBabySizeForWeek } from '@/lib/babySizeTranslations';
 import { getOnboardingPregnancyProgress } from '@/lib/onboarding-flow';
 import { getOnboardingNeeds, type OnboardingNeed, type OnboardingChallenge, type OnboardingSupport } from '@/lib/onboarding-personalization';
@@ -24,13 +25,16 @@ export function SurveyStep({ locale, kind, isBabyBorn, value, onSelect }: {
 }) {
   const t = (key: OnboardingTranslationKey) => translateOnboardingText(locale, key);
   const options = kind === 'needs' ? getOnboardingNeeds(isBabyBorn) : kind === 'challenge' ? ['remember', 'patterns', 'coordination', 'overload'] as const : ['solo', 'together', 'later'] as const;
+  // Bei großer Schrift braucht der Text die ganze Kartenbreite – sonst bricht
+  // „Schwangerschaft“ mitten im Wort um. Das Symbol ist nur Schmuck.
+  const isLargeText = useFontScale() >= 1.3;
   return <View style={styles.screen}>
     <Text accessibilityRole="header" style={styles.title}>{t(`survey.${kind}Title`)}</Text>
     <Text style={styles.body}>{t(`survey.${kind}Body`)}</Text>
     <View style={styles.options}>
       {options.map((option, index) => <OnboardingChoice key={option} selected={value === option} tone={[brand.softAccent, 'rgba(255,205,206,0.22)', 'rgba(230,204,178,0.25)'][index % 3]}
-        accessibilityLabel={t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}` as OnboardingTranslationKey)} accessibilityHint={t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}Detail` as OnboardingTranslationKey)} onPress={() => onSelect(option)} contentStyle={styles.option}>
-        <View style={styles.choiceIcon}><IconSymbol name={iconNames[option]} size={23} color={brand.accentText} /></View>
+        accessibilityLabel={t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}` as OnboardingTranslationKey)} accessibilityHint={t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}Detail` as OnboardingTranslationKey)} onPress={() => onSelect(option)} contentStyle={[styles.option, isLargeText && styles.optionLargeText]}>
+        {!isLargeText && <View style={styles.choiceIcon}><IconSymbol name={iconNames[option]} size={23} color={brand.accentText} /></View>}
         <View style={styles.optionCopy}>
           <Text style={styles.optionTitle}>{t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}` as OnboardingTranslationKey)}</Text>
           <Text style={styles.optionBody}>{t(`${kind === 'needs' ? 'flow' : 'survey'}.${option}Detail` as OnboardingTranslationKey)}</Text>
@@ -132,7 +136,7 @@ export const styles = StyleSheet.create({
   memoryInput: { alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.24)', borderColor: 'rgba(255,255,255,0.82)', borderWidth: 1, borderRadius: 16, borderCurve: 'continuous', padding: 16, minHeight: 90, fontSize: 16, lineHeight: 23, color: brand.text, textAlignVertical: 'top' },
   screen: { flexGrow: 1, flexShrink: 0, gap: 18, paddingVertical: 14 }, title: { color: brand.text, fontSize: 32, lineHeight: 39, letterSpacing: -0.5, fontWeight: '700' }, body: { color: brand.secondary, fontSize: 17, lineHeight: 25 },
   eyebrow: { fontSize: 11, letterSpacing: 1.5, color: brand.accentText, textAlign: 'center', fontWeight: '700' },
-  options: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 12, paddingVertical: 26 }, option: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, minHeight: 90 }, selected: { borderColor: brand.accent, backgroundColor: brand.selected }, optionCopy: { flex: 1, gap: 5 }, optionTitle: { color: brand.text, fontSize: 16, lineHeight: 21, fontWeight: '600' }, optionBody: { color: brand.secondary, fontSize: 13, lineHeight: 19 }, radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#B4A0B9', alignItems: 'center', justifyContent: 'center' }, radioSelected: { backgroundColor: brand.accentText, borderColor: brand.accentText }, radioDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFFFFF' },
+  options: { flexGrow: 1, flexShrink: 0, justifyContent: 'center', gap: 12, paddingVertical: 26 }, option: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18, minHeight: 90 }, selected: { borderColor: brand.accent, backgroundColor: brand.selected }, optionLargeText: { padding: 14 }, optionCopy: { flex: 1, gap: 5 }, optionTitle: { color: brand.text, fontSize: 16, lineHeight: 21, fontWeight: '600' }, optionBody: { color: brand.secondary, fontSize: 13, lineHeight: 19 }, radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#B4A0B9', alignItems: 'center', justifyContent: 'center' }, radioSelected: { backgroundColor: brand.accentText, borderColor: brand.accentText }, radioDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFFFFF' },
   demo: { padding: 24, gap: 20, alignItems: 'center', marginTop: 10 }, symbol: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'rgba(255,255,255,0.28)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.72)', alignItems: 'center', justifyContent: 'center' }, demoTitle: { color: brand.text, fontSize: 22, lineHeight: 28, textAlign: 'center', fontWeight: '600' }, demoBody: { color: brand.secondary, fontSize: 14, lineHeight: 21, textAlign: 'center' }, timer: { fontSize: 58, lineHeight: 65, fontWeight: '600', fontVariant: ['tabular-nums'], color: brand.text }, action: { minHeight: 52, borderRadius: 26, paddingVertical: 14, paddingHorizontal: 20, backgroundColor: brand.accent, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' }, actionText: { color: brand.white, textAlign: 'center', fontWeight: '600', fontSize: 15, lineHeight: 21 }, reset: { padding: 10, minHeight: 44 }, resetText: { color: brand.accentText, fontSize: 14 }, note: { color: brand.muted, fontSize: 12, lineHeight: 18, textAlign: 'center' }, task: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.24)', borderColor: 'rgba(255,255,255,0.82)', borderWidth: 1, padding: 18, borderRadius: 16, borderCurve: 'continuous', alignSelf: 'stretch' }, taskText: { flex: 1, color: brand.text, fontSize: 16, lineHeight: 23 },
   answerEcho: { padding: 20, borderRadius: 20, flexDirection: 'row', gap: 14, alignItems: 'center' }, echoText: { flex: 1, fontSize: 19, lineHeight: 26, fontWeight: '600', color: brand.text }, explanation: { gap: 10, padding: 20 }, explanationLabel: { color: brand.text, fontSize: 18, fontWeight: '700' }, explanationText: { color: brand.secondary, fontSize: 17, lineHeight: 27 },
 });

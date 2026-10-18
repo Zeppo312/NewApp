@@ -1020,7 +1020,7 @@ export default function HomeScreen() {
         onPress={() => changeRange('prev')}
       />
       <View style={styles.weekHeaderCenter}>
-        <ThemedText style={[styles.weekHeaderTitle, { color: textSecondary }]}>{rangeTitle}</ThemedText>
+        <ThemedText style={[styles.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{rangeTitle}</ThemedText>
         <ThemedText style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>{rangeSubtitle}</ThemedText>
       </View>
       <PeriodNavigationButton direction="next"

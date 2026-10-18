@@ -156,7 +156,12 @@ export function PaywallPlansExperience({
   const { locale, localeTag } = useLocale();
   const subscriptionAccess = useSubscriptionAccess();
   const t = (key: PaywallTranslationKey, params?: Record<string, string | number>) => translatePaywall(locale, key, params);
-  const { width } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  // Nebeneinander bräche „Jährlich · bis zu −17 %“ bei großer Schrift mehrfach um.
+  const stackIntervalToggle = fontScale >= 1.3;
+  // Vergleichstabelle: Neben zwei Häkchen-Spalten blieben für die Beschriftung
+  // nur wenige Zeichen pro Zeile – sie steht dann in einer eigenen Zeile.
+  const stackCompareRows = fontScale >= 1.3;
   const contentMaxWidth = Math.min(width - 40, 640);
 
   const plans = useMemo(
@@ -296,6 +301,7 @@ export function PaywallPlansExperience({
     <View
       style={[
         styles.checkCell,
+        stackCompareRows && styles.compareColumnWide,
         included
           ? emphasized
             ? styles.checkCellPremium
@@ -459,7 +465,7 @@ export function PaywallPlansExperience({
         )}
       </View>
 
-      <View style={styles.intervalToggle}>
+      <View style={[styles.intervalToggle, stackIntervalToggle && styles.intervalToggleStacked]}>
         {(
           [
             { key: 'monthly', label: t('monthly') },
@@ -475,6 +481,7 @@ export function PaywallPlansExperience({
             onPress={() => handleSelectInterval(option.key)}
             style={[
               styles.intervalOption,
+              stackIntervalToggle && styles.intervalOptionStacked,
               interval === option.key && styles.intervalOptionActive,
             ]}
           >
@@ -538,8 +545,12 @@ export function PaywallPlansExperience({
               key={columnTier}
               style={[
                 styles.compareHeaderText,
+                stackCompareRows && styles.compareColumnWide,
                 columnTier === 'premium' && styles.compareHeaderPremium,
               ]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
             >
               {columnTier === 'premium'
                 ? 'Premium'
@@ -554,10 +565,11 @@ export function PaywallPlansExperience({
             key={`compare-row-${index}`}
             style={[
               styles.compareRow,
+              stackCompareRows && styles.compareRowStacked,
               index === plans.comparisonRows.length - 1 && styles.compareRowLast,
             ]}
           >
-            <View style={styles.compareLabelWrap}>
+            <View style={[styles.compareLabelWrap, stackCompareRows && styles.compareLabelWrapStacked]}>
               {renderText(
                 `plans.comparisonRows.${index}.label`,
                 row.label,
@@ -806,6 +818,7 @@ const styles = StyleSheet.create({
   socialProofPill: {
     marginTop: 16,
     alignSelf: 'center',
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -822,6 +835,7 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   socialProofText: {
+    flexShrink: 1,
     fontSize: 13,
     fontWeight: '600',
     color: '#FFF4E8',
@@ -834,6 +848,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.14)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
+  },
+  intervalToggleStacked: {
+    flexDirection: 'column',
+    borderRadius: 26,
+    gap: 4,
+  },
+  intervalOptionStacked: {
+    flexGrow: 0,
+    flexBasis: 'auto',
   },
   intervalOption: {
     flex: 1,
@@ -1079,6 +1102,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(114,83,74,0.16)',
+  },
+  compareRowStacked: {
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    rowGap: 4,
+  },
+  compareLabelWrapStacked: {
+    flexBasis: '100%',
+    paddingRight: 0,
+  },
+  compareColumnWide: {
+    width: 84,
   },
   compareRowLast: {
     borderBottomWidth: 0,

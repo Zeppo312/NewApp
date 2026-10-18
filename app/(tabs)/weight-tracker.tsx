@@ -1295,8 +1295,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 18,
     paddingHorizontal: 18,
+    paddingVertical: 10,
   },
   emptyChartButtonText: {
+    flexShrink: 1,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',

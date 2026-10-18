@@ -4226,7 +4226,7 @@ export default function SleepTrackerScreen() {
           />
 
           <View style={styles.weekHeaderCenter}>
-            <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>{t('view.weekTitle')}</Text>
+            <Text style={[styles.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.weekTitle')}</Text>
             <Text style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>
               {weekStart.toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { day: 'numeric', month: 'short' })} - {weekEnd.toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { day: 'numeric', month: 'short' })}
             </Text>
@@ -4302,7 +4302,7 @@ export default function SleepTrackerScreen() {
         {/* Wochenzusammenfassung - Design Guide konform */}
         <LiquidGlassCard style={styles.weekSummaryCard}>
           <View style={styles.summaryInner}>
-            <Text style={[styles.summaryTitle, { color: textSecondary }]}>{t('week.summary')}</Text>
+            <Text style={[styles.summaryTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('week.summary')}</Text>
             <View style={styles.summaryStats}>
                 <View style={styles.statItem}>
                   <Text style={styles.statEmoji}>🌙</Text>
@@ -4539,7 +4539,7 @@ export default function SleepTrackerScreen() {
           />
 
           <View style={styles.monthHeaderCenter}>
-            <Text style={[styles.monthHeaderTitle, { color: textSecondary }]}>
+            <Text style={[styles.monthHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
               {refMonthDate.toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { month: 'long', year: 'numeric' })}
             </Text>
           </View>
@@ -4644,7 +4644,7 @@ export default function SleepTrackerScreen() {
         {/* Monatsstatistiken - Design Guide konform */}
         <LiquidGlassCard style={styles.monthSummaryCard}>
           <View style={styles.summaryInner}>
-            <Text style={[styles.summaryTitle, isDark && { color: '#FFFFFF' }]}>{t('view.monthTitle')}</Text>
+            <Text style={[styles.summaryTitle, isDark && { color: '#FFFFFF' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.monthTitle')}</Text>
             <View style={styles.summaryStats}>
               <View style={styles.statItem}>
                 <Text style={styles.statEmoji}>📊</Text>
@@ -4743,7 +4743,7 @@ export default function SleepTrackerScreen() {
                   }}
                 />
                 <View style={styles.weekHeaderCenter}>
-                  <Text style={[styles.weekHeaderTitle, { color: textSecondary }]}>{t('view.dayTitle')}</Text>
+                  <Text style={[styles.weekHeaderTitle, { color: textSecondary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{t('view.dayTitle')}</Text>
                   <Text style={[styles.weekHeaderSubtitle, { color: textSecondary }]}>
                     {isSameDay(selectedDate, today)
                       ? new Date().toLocaleDateString(SLEEP_TRACKER_LOCALE_TAG, { weekday: 'long', day: '2-digit', month: 'long' })

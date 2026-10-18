@@ -68,6 +68,7 @@ import type {
 } from '@/lib/advisor/types';
 import { localizeAdvisorAnalysis, localizeStoredAdvisorInsight, translateAdvisor, type AdvisorTranslationKey } from '@/lib/advisor/advisorTranslations';
 import { usePlannerDay } from '@/services/planner';
+import { useFontScale, useLineLimit } from '@/lib/fontScaling';
 
 const BRAND_PURPLE = '#5E3DB3';
 const BRAND_PURPLE_SOFT = '#8E4EC6';
@@ -322,6 +323,10 @@ export default function LottisFuersorgeScreen() {
     [adaptiveColors.textPrimary, adaptiveColors.textSecondary, adaptiveColors.textTertiary, isDark],
   );
   const styles = useMemo(() => createStyles(theme), [theme]);
+  // Bei großer Schrift passen zwei Kacheln nicht nebeneinander, ohne dass
+  // „Ernährung“ mitten im Wort umbricht – dann eine Kachel pro Zeile.
+  const singleColumnCards = useFontScale() >= 1.3;
+  const miniCaptionLines = useLineLimit(1);
   const tileProps = useMemo(
     () =>
       isDark
@@ -831,7 +836,8 @@ export default function LottisFuersorgeScreen() {
             ].map((row) => (
               <View key={row.label} style={styles.horizonRow}>
                 <View style={styles.horizonRowIcon}>
-                  <Text style={styles.horizonRowIconText}>{row.emoji}</Text>
+                  {/* Symbol in fester Kachel: wächst nur begrenzt mit, sonst ragt es heraus. */}
+                  <Text style={styles.horizonRowIconText} maxFontSizeMultiplier={1.4}>{row.emoji}</Text>
                 </View>
                 <View style={styles.horizonRowText}>
                   <ThemedText adaptive={false} style={styles.horizonRowLabel}>
@@ -1000,7 +1006,7 @@ export default function LottisFuersorgeScreen() {
       {(analysis ? analysis.cards : ([0, 1, 2, 3] as const)).map((card, index) => {
         if (typeof card === 'number') {
           return (
-            <View key={card} style={styles.miniCardWrap}>
+            <View key={card} style={[styles.miniCardWrap, singleColumnCards && styles.miniCardWrapFull]}>
               <CareGlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
                 <Skeleton width={38} height={38} radius={13} color={theme.skeleton} />
                 <Skeleton width="70%" height={22} radius={8} color={theme.skeleton} style={{ marginTop: 12 }} />
@@ -1012,7 +1018,11 @@ export default function LottisFuersorgeScreen() {
         }
         const accent = cardAccent(card.key, isDark);
         return (
-          <FadeInUp key={card.key} delay={120 + index * 70} style={styles.miniCardWrap}>
+          <FadeInUp
+            key={card.key}
+            delay={120 + index * 70}
+            style={[styles.miniCardWrap, singleColumnCards && styles.miniCardWrapFull]}
+          >
             <CareGlassCard {...tileProps} radius={22} contentStyle={styles.miniContent}>
               <View style={styles.miniHeader}>
                 <View style={[styles.miniIconChip, { backgroundColor: accent.soft }]}>
@@ -1044,7 +1054,7 @@ export default function LottisFuersorgeScreen() {
                 play={ready}
                 trackColor={theme.divider}
               />
-              <ThemedText adaptive={false} numberOfLines={1} style={styles.miniCaption}>
+              <ThemedText adaptive={false} numberOfLines={miniCaptionLines} style={styles.miniCaption}>
                 {card.caption}
               </ThemedText>
             </CareGlassCard>
@@ -1545,7 +1555,7 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 999,
   },
-  horizonPrimaryText: { color: '#FFFFFF', fontSize: 14.5, fontWeight: '800' },
+  horizonPrimaryText: { flexShrink: 1, textAlign: 'center', color: '#FFFFFF', fontSize: 14.5, fontWeight: '800' },
   timelineContent: { padding: 20 },
 
   /* Sichtbarer Eltern-Copilot: Orientierung und Tagesbriefing gehören zusammen. */
@@ -1596,6 +1606,7 @@ const createStyles = (theme: AdvisorTheme) => StyleSheet.create({
     rowGap: 14,
   },
   miniCardWrap: { width: '48.5%' },
+  miniCardWrapFull: { width: '100%' },
   miniContent: { padding: 16 },
   miniHeader: {
     flexDirection: 'row',

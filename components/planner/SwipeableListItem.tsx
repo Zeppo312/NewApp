@@ -18,6 +18,7 @@ import { Colors } from "@/constants/Colors";
 import { useAdaptiveColors } from "@/hooks/useAdaptiveColors";
 import { PRIMARY, TEXT_PRIMARY } from "@/constants/PlannerDesign";
 import { useLocale } from '@/contexts/LocaleContext';
+import { useLineLimit } from '@/lib/fontScaling';
 
 type Props = {
   id: string;
@@ -66,6 +67,8 @@ export const SwipeableListItem: React.FC<Props> = ({
     es: { done: 'Hecho', delete: 'Eliminar', deleteTitle: 'Eliminar entrada', deleteBody: '¿Seguro que quieres eliminar esta entrada?', cancel: 'Cancelar', actions: 'Acciones', edit: 'Editar', move: 'Mover a un bloque', tags: 'Etiquetas', task: 'Tarea', event: 'Cita', completed: 'completada', recurring: 'recurrente', hint: 'Toca dos veces para ver opciones, desliza a la derecha para completar y a la izquierda para eliminar' },
   }[locale];
   const adaptiveColors = useAdaptiveColors();
+  // Bei großer Schrift passt kaum ein Aufgabentitel in eine Zeile.
+  const titleLineLimit = useLineLimit(1);
   const isDark =
     adaptiveColors.effectiveScheme === "dark" ||
     adaptiveColors.isDarkBackground;
@@ -217,7 +220,7 @@ export const SwipeableListItem: React.FC<Props> = ({
                 completed && styles.titleDone,
                 titleStyle,
               ]}
-              numberOfLines={1}
+              numberOfLines={titleLineLimit}
             >
               {title}
             </Text>
